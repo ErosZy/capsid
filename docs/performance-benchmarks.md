@@ -216,7 +216,9 @@ CPU、queue wait、worker execution、IPC 和 scheduler 数据。
 - 默认调度器 placement；
 - response 前 64 KiB 即时 framing，之后采用有界、credit-charged coalescing；
 - SSE 与 `X-Accel-Buffering: no` 绕过 coalescing；
-- opt-in IPC profile 只用于明确的 CPU/syscall/queue/scheduler 归因。
+- Host 数据面和每个性能优化切片都必须配套 IPC/CPU profile；headline benchmark 关闭
+  profile 探针，另跑同条件诊断轮次用于 CPU/syscall/queue/scheduler 归因，并同时保存
+  优化前后原始数据。
 
 不进入当前路线：
 
@@ -226,6 +228,7 @@ CPU、queue wait、worker execution、IPC 和 scheduler 数据。
 - 默认 mimalloc；
 - 盲目增加 worker 或 inflight。
 
-新的性能改动必须由固定 workload 回归或 profile 热点触发，并同时通过
-conformance、module/global surface、sandbox、cancel/credit 和完整 benchmark
-回归。
+新的性能改动必须由固定 workload 回归和 profile 热点共同触发，并同时通过
+conformance、module/global surface、sandbox、cancel/credit 和完整 benchmark 回归。
+每次报告都保存环境 manifest、commit、命令、至少三轮原始数据和优化前后 profile；
+只有 profile 或只有 headline QPS 都不能形成性能结论。

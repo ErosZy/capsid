@@ -481,6 +481,16 @@ A/B 证明。验收时使用相同 bundle、worker 数、连接数、inflight �
 gateway 与第一方 Host 的 QPS、p99、CPU/response、RSS、queue wait、IPC 时间和
 open-loop 完成率；没有数据就不写性能结论。
 
+若重新 profile 后确认 Go gateway 约占 20 CPU units、workers 占 60–65 units，则
+Gateway 自身成本下降 30%/50%/67% 对应的系统吞吐推演约为 1.08x/1.13–1.14x/
+1.19–1.20x。套入已有 495.8/600/762.5 QPS，合理的 8%–15% 假设约为
+535–570/648–690/824–875 QPS；20% 只作为优秀结果，不作为承诺。
+
+这些数字必须由 profile 转成证据。每个 Host 数据面里程碑和性能优化 PR 都要提交同环境
+before/after benchmark、Gateway/worker 分层 CPU、Go pprof 或 C++ `perf` profile、关键
+queue/IPC/credit trace 和原始数据。没有 profile 指向瓶颈，或者只有 profile 没有端到端
+A/B，都不能形成性能结论。详细门槛见[技术设计 15.7](host-technical-design-review.md)。
+
 Host 至少限制：
 
 - 全局、单 App 和单 worker 的 inflight；

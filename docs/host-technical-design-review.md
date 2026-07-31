@@ -1201,24 +1201,70 @@ secret 按以下顺序驱动实现：
 
 ### 15.7 性能验收
 
-用完全相同的：
+#### 基线推演，不是实测结论
 
-- bundle 和 Runtime build；
-- worker 数、inflight、connection 和 response size；
-- cgroup CPU/memory；
-- loadgen、warmup、时长和到达模型；
+现有 Vue SSR + SQLite 文档记录了 Capsid-16w 的 C32 均值 495.8 QPS、600 QPS 可持续
+开放负载和约 762.5 QPS closed-loop 平台。若同一轮分层 profile 重新确认 Go gateway
+约占 20 CPU units、workers 占 60–65 units，则：
 
-比较当前 Go gateway 基线与第一方 Host：QPS、完成率、p50/p95/p99、CPU/response、Host
-RSS、worker PSS、queue wait、time-to-head、IPC bytes/syscalls 和 cancel/error。
+```text
+系统吞吐倍率 =
+    (gatewayCost + workerCost)
+    / (optimizedGatewayCost + workerCost)
+```
 
-先记录 baseline，再设 regression threshold；不能先写“C++ 必然更快”。如果 profile
-没有指向 event loop/HTTP 层，就不进入 io_uring、zero-copy 或共享内存优化。
+| Gateway 自身 CPU 成本下降 | 推演的系统吞吐倍率 | 495.8 QPS | 600 QPS | 762.5 QPS |
+| ---: | ---: | ---: | ---: | ---: |
+| 30% | 约 1.08x | 约 535 | 约 648 | 约 824 |
+| 50% | 约 1.13–1.14x | 约 560–565 | 约 680–684 | 约 862–869 |
+| 67% | 约 1.19–1.20x | 约 590–595 | 约 714–720 | 约 907–915 |
+
+v1 的合理目标假设是整体提升 8%–15%，20% 只作为优秀结果。该表是 Amdahl 推演，不是
+承诺：C8/C16 还受每请求 50 ms 人工等待形成的 160/320 QPS 上限约束；固定 16 workers
+若已在 Runtime 内饱和，释放 Gateway CPU 也不会自动转化成 QPS。
+
+当前 tree 缺少被文档引用的 `bench/` 原始报告，而且已提交文档尚未保存上述 20/60–65
+分层 profile。M1 开始前必须恢复可运行的 benchmark harness，重新生成 Go baseline 和
+原始 profile；不能把回忆值写成实测基线。
+
+#### 每个性能切片的 profile gate
+
+每个 Host 数据面里程碑和每个声称改善性能的 PR，都必须同时完成函数级 TDD 与以下
+before/after 证据：
+
+1. 完全相同的 bundle、Runtime/worker build、worker 数、inflight、connection、response
+   size、cgroup CPU/memory、CPU affinity、loadgen、warmup、时长和到达模型；
+2. 至少 3 个 measured run，保留全部原始输出，报告 median、离散度、完成率、QPS、
+   p50/p95/p99 和 loadgen schedule lag；
+3. Gateway 与 workers 使用独立 cgroup 或等价 process grouping，记录各自
+   `usage_usec`、CPU/response、RSS/PSS、context switch 和 page fault，不能只给整机 CPU；
+4. 优化前后各保存一次采样 profile：Go baseline 使用 pprof，C++ Host/worker 使用
+   `perf record`/flamegraph 或目标平台等价工具；同时保存 `perf stat` 的 cycles、instructions、
+   IPC、branches、branch-misses、cache-misses、task-clock 和 migrations；
+5. Host trace 同步记录 queue wait、worker execution、time-to-head、IPC read/write wakeup、
+   bytes/frame、credit stall、跨 shard 投递和 allocator 次数；profile instrumentation 的
+   headline benchmark 与诊断 run 分开，避免探针开销污染主结果；
+6. 报告必须指出优化前的 dominant stack/counter、代码为何针对它，以及优化后该成本
+   是否下降；没有 profile 指向目标路径，不进入实现。
+
+原始命令、环境 manifest、commit、构建 flags、数据和报告必须从当前 tree 可追溯。
+profile 只证明“时间花在哪里”，A/B benchmark 才证明“用户结果是否改善”；两者缺一，
+不能合入性能结论。
+
+比较 Go gateway 与第一方 Host 时，必须使用完全相同的 bundle、Runtime build、worker
+数、inflight、connection、response size、cgroup、loadgen、warmup、时长和到达模型。
+结果至少包含 QPS、完成率、p50/p95/p99、CPU/response、Host RSS、worker PSS、queue
+wait、time-to-head、IPC bytes/syscalls 和 cancel/error。
+
+先记录 baseline，再冻结 regression threshold；不能先写“C++ 必然更快”。只有 profile
+持续指向 event loop/HTTP 层，才继续优化该层；io_uring、zero-copy 或共享内存仍需要
+各自独立的 before/after profile。
 
 ### 15.8 发布门
 
 - Release/LTO、ASan、UBSan、TSan 和 fuzz 全绿；
 - Host HTTP/部署/故障注入矩阵全绿；
-- delegated cgroup 与外部网络隔离的正向证据；
+- delegated cgroup 与 Runtime egress policy 的正向证据；
 - 配置 schema、示例、Policy Compiler 和 Runtime descriptor golden 一致；
 - SBOM、依赖 hash、worker/library/Host/build identity 固定；
 - A/B 报告含原始数据并可从当前 tree 追溯；
