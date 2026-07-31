@@ -15,8 +15,8 @@
 - [架构与产品边界](architecture.md)：进程模型、JavaScript 表面和 vendor 策略
 - [宿主嵌入接口](embedding-api.md)：C ABI 生命周期、流控、事件和超时
 - [第三方宿主集成规范](host-integration.md)：线程、SSE、取消、关闭和升级
-- [Capsid Host 架构规划](host-architecture-plan.md)：拟议的应用发现、JSON
-  配置、发布、路由、worker pool 和弹性模型
+- [Capsid Host 架构规划](host-architecture-plan.md)：拟议的目录交付、整机/App 权限、
+  Linux 隔离、预热蓝绿、路由和 worker pool
 - [当前状态与发布门](project-status.md)：唯一活跃事项和冻结决策
 
 ## 正确性与兼容性

@@ -1,422 +1,184 @@
 # Capsid Host 架构规划
 
-> 状态：拟议设计，尚未实现。本文用于约束后续 Host 的产品与架构方向，不代表
-> 当前 `libcapsid_runtime` 已经提供 HTTP listener、应用发现、发布管理或
-> worker pool。当前可用接口与集成要求仍以
+> 状态：拟议设计，尚未实现。当前可用接口仍以
 > [宿主嵌入接口](embedding-api.md)和
 > [第三方宿主集成规范](host-integration.md)为准。
 
-## 目标与核心决定
+## 一句话模型
 
-Capsid Host 应交付为第一方宿主进程，而不是只提供一段 HTTP 到 FetchRPC 的示例。
-它负责 listener、应用发现、发布、权限策略编译、worker pool、调度、背压、过载
-保护和可观测性。Runtime 继续只负责单个隔离 worker 的执行与 IPC。
+Capsid Host v1 只有三个用户需要理解的东西：
 
-Host 的核心调度对象是不可变 Release，而不是 bundle 文件或可以反复换代码的
-worker：
-
-```text
-HTTP 请求
-  → RouteKey
-  → Application
-  → Active Release
-  → Release Worker Pool
-  → READY Worker
-```
-
-约定可以用于发现应用和减少重复配置，但任何会扩大权限、改变租户边界或影响
-资源隔离的行为都必须显式配置。请求数据只能选择已经登记的 Application，不能
-直接指定文件、发布摘要、权限或具体 worker。
-
-建议最终提供：
-
-- `capsid-host`：可以独立部署的数据面与控制面进程；
-- `libcapsid_host_core`：供第一方 executable 和未来 transport adapter 复用的
-  内部组件库，早期不承诺稳定公共 ABI；
-- `capsid host validate|plan|reload|drain`：验证、解释和运维命令；
-- 独立 Unix 管理 socket，管理接口不复用公网 listener。
-
-第一阶段优先支持 loopback/Unix socket 和 HTTP/1.1。生产 TLS、HTTP/2 和 HTTP/3
-可以先由 nginx、Caddy 或 Envoy 终止，避免 Host 在发布、调度和隔离尚未稳定前
-同时维护完整边缘协议栈。
-
-## 产物与应用目录
-
-默认应用根目录为 `/srv/capsid/apps`，目录名就是规范化后的 Application ID：
+1. 一台机器一份 `host.json`：定义整台 Host 的权限上限、Linux 隔离和资源硬上限；
+2. 每个 App 一份 `capsid.json`：只能申请 `host.json` 的子集；
+3. 把版本目录推到固定位置，再调用一个部署接口：Host 自动校验、预热、蓝绿切换和
+   旧版本排空。
 
 ```text
-/srv/capsid/apps/
-├── orders/
-│   ├── capsid.json
-│   ├── current.json
-│   └── releases/
-│       ├── 8f3a9c.../
-│       │   ├── bundle.mjs
-│       │   ├── bundle.qjsb
-│       │   └── release.json
-│       └── 729abe.../
-│           ├── bundle.mjs
-│           └── release.json
-└── catalog/
-    ├── capsid.json
-    ├── current.json
-    └── releases/
-        └── 19c0d2.../
-            ├── bundle.mjs
-            └── release.json
+host.json（整机硬上限）
+          ∩
+capsid.json（App 申请）
+          ↓
+   有效权限与资源限制
+          ↓
+版本目录 → 部署接口 → 预热新池 → 原子切换 → 排空旧池
 ```
 
-各文件职责如下：
+v1 不向用户暴露 realm、tenant、binding、policy directory、资源档位或多层交付策略。
+这些概念不是完成安全部署和蓝绿发布的必要条件。
 
-- `capsid.json`：应用请求的权限、路由例外、资源限制和 pool 策略；
-- `current.json`：当前发布摘要，通过写临时文件再原子 rename 的方式更新；
-- `release.json`：bundle 摘要、source name、可信字节码兼容标识和构建元数据；
-- `releases/<digest>/`：发布后不可原地修改的产物目录。
+## 产品边界
 
-`current.json` 示例：
+Capsid Host 负责：
 
-```json
-{
-  "release": "8f3a9c..."
-}
-```
+- HTTP listener 与应用路由；
+- 固定目录中的版本发现；
+- Host/App 配置校验与权限编译；
+- worker 创建、预热、调度、排空和销毁；
+- Linux 隔离、资源限制、背压和过载保护；
+- 蓝绿发布、失败保持旧版本和显式回滚；
+- 状态、日志、指标和拒绝原因。
 
-`release.json` 示例：
+Runtime 继续只负责单个隔离 worker 的执行与 FetchRPC IPC。Host 不理解应用业务，
+不生成页面，不采集业务行为，也不负责自动决定哪个应用版本更好。
 
-```json
-{
-  "apiVersion": "capsid/release-v1",
-  "bundle": {
-    "source": "bundle.mjs",
-    "sha256": "8f3a9c...",
-    "sourceName": "capsid://orders/8f3a9c/bundle.mjs"
-  },
-  "bytecode": {
-    "file": "bundle.qjsb",
-    "sha256": "4192ac...",
-    "compatibilityId": "capsid-qjs-abc123-linux-x86_64"
-  }
-}
-```
+一个 Host 实例就是一个管理和安全边界。如果两组应用互不信任，使用不同 Host
+进程、服务账号、应用根目录和状态目录；v1 不在一个进程里重新实现多租户控制面。
 
-bundle 是现有 Runtime 接受的自包含 ESM：
+## 1. 整机配置 `host.json`
 
-```js
-export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-
-    return Response.json({
-      app: "orders",
-      path: url.pathname,
-    });
-  },
-};
-```
-
-Host 在启动、目录重扫或显式 reload 时建立 App Registry。高优先级应用可以立即
-读取产物并预热；允许 scale-to-zero 的应用可以只验证 release metadata，在首次
-启动前延迟读取已登记的产物。两种方式都不能在请求处理中把客户端输入拼成文件
-路径。
-
-Application ID 只允许：
+默认位置：
 
 ```text
-[a-z0-9][a-z0-9._-]{0,62}
+/etc/capsid/host.json
 ```
 
-Host 应以固定 apps root 的目录 fd 为起点，使用等价于
-`openat2(RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS)` 的方式读取
-配置和产物，并在进入 Staging 前验证文件类型、大小与 SHA-256。
+它是整台 Capsid Host 唯一的运维配置。应用部署者不能写这个文件。
 
-## App Registry 与执行身份
+### 安全默认值
 
-内存 Registry 保存已经验证的映射，不保存由请求临时计算出的文件名：
+没有 `host.json` 时，Host 使用以下安全约定：
 
-```text
-Registry["orders"]
-  ├── application: orders
-  ├── active release: 8f3a9c
-  ├── artifact descriptor
-  ├── effective policy digest
-  ├── sandbox/resource profile
-  └── worker pool
-```
+- 应用根目录：`/srv/capsid/apps`；
+- Host 状态目录：`/var/lib/capsid`；
+- 应用默认不能读取环境、文件和 secret，也不能出站访问网络；
+- 生产 strict sandbox 固定启用；
+- worker 使用内建的有界默认限制；
+- 只在 loopback/Unix 管理入口接受部署操作。
 
-实际执行池的身份至少包含：
+因此自包含 App 可以零 Host 配置运行。需要开放能力时，运维只修改这一份文件。
 
-```text
-tenant
-+ application
-+ release digest
-+ effective permission digest
-+ sandbox/resource profile digest
-+ Runtime/QuickJS compatibility ID
-```
-
-相同 bundle bytes 可以在 Host artifact cache 中按摘要去重，但默认不能跨应用或
-租户共享 worker。即使 bundle 摘要相同，只要权限、sandbox 或资源限制不同，就
-必须进入不同的 pool。
-
-## Listener 与应用选择
-
-一个 listener 只使用一种主要路由模式，避免 Host、Path 和 Header 同时出现时
-依靠隐含优先级猜测。拟议配置如下：
+### 完整示例
 
 ```json
 {
   "apiVersion": "capsid/host-v1",
-  "appsRoot": "/srv/capsid/apps",
-  "listeners": [
-    {
-      "name": "public",
-      "listen": "0.0.0.0:8080",
-      "routing": {
-        "mode": "subdomain",
-        "suffix": ".apps.example.com"
-      }
-    },
-    {
-      "name": "shared-domain",
-      "listen": "127.0.0.1:8081",
-      "routing": {
-        "mode": "path",
-        "prefix": "/@capsid/",
-        "stripPrefix": true
-      }
-    },
-    {
-      "name": "service-mesh",
-      "unix": "/run/capsid/data.sock",
-      "routing": {
-        "mode": "header",
-        "header": "Capsid-App",
-        "removeBeforeForward": true
-      }
-    }
-  ]
-}
-```
-
-推荐使用范围：
-
-- 公网生产入口默认使用 subdomain；
-- 单域名部署和开发环境使用固定 path prefix；
-- 内部网关和 service mesh 通过受信 listener 使用 Header。
-
-### Subdomain 示例
-
-请求：
-
-```http
-GET /api/orders/123 HTTP/1.1
-Host: orders.apps.example.com
-```
-
-解析过程：
-
-```text
-orders.apps.example.com
-       │
-       └─ 去掉 .apps.example.com
-                ↓
-             AppKey = orders
-                ↓
-          Registry["orders"]
-                ↓
-       Release 8f3a9c worker pool
-```
-
-worker 收到的 URL 路径保持不变：
-
-```text
-https://orders.apps.example.com/api/orders/123
-```
-
-类似地：
-
-```http
-GET /products/42 HTTP/1.1
-Host: catalog.apps.example.com
-```
-
-会映射到 `Registry["catalog"]`，不会进入 orders pool。
-
-### Path prefix 示例
-
-请求：
-
-```http
-GET /@capsid/orders/api/orders/123 HTTP/1.1
-Host: apps.example.com
-```
-
-固定语法为：
-
-```text
-/@capsid/{application}/{application-path}
-```
-
-解析结果：
-
-```text
-AppKey          = orders
-ApplicationPath = /api/orders/123
-```
-
-`stripPrefix: true` 时，worker 收到：
-
-```text
-https://apps.example.com/api/orders/123
-```
-
-`stripPrefix: false` 时，worker 收到原始 URL：
-
-```text
-https://apps.example.com/@capsid/orders/api/orders/123
-```
-
-默认应使用 `stripPrefix: true`，让应用 bundle 不依赖部署挂载位置。需要自己处理
-mount path 的框架才显式关闭。固定的 `/@capsid/` 前缀也避免把业务路径第一段误解
-为 Application ID。
-
-### Trusted Header 示例
-
-内部网关通过 Unix socket 或受信 listener 发送：
-
-```http
-GET /api/orders/123 HTTP/1.1
-Host: capsid-host.internal
-Capsid-App: orders
-```
-
-解析过程：
-
-```text
-Capsid-App: orders
-        ↓
-AppKey = orders
-        ↓
-Registry["orders"]
-        ↓
-orders active release pool
-```
-
-`Capsid-App` 属于宿主控制信息，默认在构造 FetchRPC request 前删除。worker 只
-收到业务请求：
-
-```http
-GET /api/orders/123 HTTP/1.1
-Host: capsid-host.internal
-```
-
-公网 listener 禁止 Header routing。通过 TCP 接入的可信反向代理必须先删除客户端
-提供的同名 Header，再写入经过认证的值；Host 还必须用 source allowlist、mTLS 或
-独立 listener 验证代理身份。普通请求不能通过 Header 指定 release digest 或具体
-worker。
-
-## 从 Application 到 Worker
-
-所有入口最终只产生同一种规范化结果：
-
-```text
-Host / Path / Trusted Header
-              ↓
-           AppKey
-              ↓
-      AppRegistry[AppKey]
-              ↓
-        Active Release
-              ↓
-       Release Worker Pool
-              ↓
-        Scheduled Worker
-```
-
-假设当前 Registry 为：
-
-```text
-orders
-└── Release R42
-    ├── bundle digest: 8f3a9c
-    ├── policy digest: 71bc02
-    └── pool
-        ├── W1 READY, inflight=3
-        ├── W2 READY, inflight=1
-        ├── W3 READY, inflight=5
-        └── W4 READY, inflight=0
-```
-
-`GET /@capsid/orders/api/orders/123` 先固定为：
-
-```text
-AppKey  = orders
-Release = R42
-Pool    = orders/R42
-```
-
-调度器再从该 pool 选择 worker。默认可以采用 Power of Two Choices：从两个候选
-中选择当前负载更低者，而不是每次扫描整个 pool。负载分数至少包含 inflight、
-未确认 response bytes、queue wait 和 unhealthy penalty。本例会优先选择 W4。
-
-默认语义是：
-
-```text
-相同 AppKey
-  → 一定进入相同的 active Release
-  → 一定执行相同的 bundle 和 policy
-  → 不保证进入相同的具体 worker
-```
-
-应用需要 worker 亲和性时显式配置：
-
-```json
-{
-  "pool": {
-    "minReady": 2,
-    "maxWorkers": 16,
-    "affinity": {
-      "source": "cookie",
-      "name": "session_id",
-      "mode": "bounded"
-    }
+  "applicationsRoot": "/srv/capsid/apps",
+  "stateRoot": "/var/lib/capsid",
+  "secretRootTemplate": "/run/capsid/secrets/{application}",
+  "permissions": {
+    "modules": [
+      "capsid:permissions",
+      "capsid:env",
+      "capsid:fs",
+      "capsid:storage",
+      "capsid:stdio",
+      "capsid:hashing"
+    ],
+    "environmentNames": ["APP_MODE", "API_TOKEN"],
+    "fsReadRoots": ["/srv/capsid/data/{application}"],
+    "fetchTargets": ["*.internal.example.com:443"],
+    "storageNamespaces": ["{application}-*"],
+    "stdioStreams": ["stdout", "stderr"],
+    "protectedAddresses": "deny-unless-explicit-cidr"
+  },
+  "isolation": {
+    "mode": "strict",
+    "required": [
+      "no_new_privs",
+      "landlock",
+      "seccomp",
+      "user_namespace",
+      "mount_namespace"
+    ],
+    "networkNamespace": "per-worker",
+    "cgroupRoot": "/sys/fs/cgroup/capsid-host"
+  },
+  "workerDefaults": {
+    "jsHeap": "64MiB",
+    "processAddressSpace": "256MiB",
+    "memoryMax": "256MiB",
+    "cpuQuota": "50%",
+    "fileDescriptors": 64,
+    "pidsMax": 8,
+    "requestTimeout": "5s",
+    "maxInflight": 32,
+    "minReady": 1,
+    "maxWorkers": 16
+  },
+  "workerMaximums": {
+    "jsHeap": "256MiB",
+    "processAddressSpace": "1GiB",
+    "memoryMax": "1GiB",
+    "cpuQuota": "200%",
+    "fileDescriptors": 256,
+    "pidsMax": 32,
+    "requestTimeout": "30s",
+    "maxInflight": 128,
+    "minReady": 16,
+    "maxWorkers": 64
   }
 }
 ```
 
-Host 使用带私有随机密钥的 Rendezvous Hash，把 `session_id=user-123` 优先映射到
-一个 READY worker；preferred worker 过载、drain、崩溃或属于旧 Release 时允许
-spill 到其他 worker。Affinity 只是性能提示，不是状态正确性保证。
+这里没有 `small`、`medium`、`large`。限制使用明确数值：
 
-当前 `capsid:storage` 只存活于单 worker 私有内存。应用启用 storage 且
-`maxWorkers > 1` 时，Host 配置验证应明确警告：worker affinity 不能替代外部持久
-存储，扩缩容、崩溃和发布切换都会改变映射。
+- `workerDefaults`：App 没写时采用的值；
+- `workerMaximums`：App 最多可以申请到的值；
+- App 只能申请更小或相等的值；
+- Linux isolation 只由 Host 决定，App 不能覆盖。
 
-## JSON 权限与配置分层
+上例的 `workerDefaults` 是拟议的 v1 内建默认值，不只是标签背后的隐藏示例。实现前
+可以通过压测调整；一旦 `capsid/host-v1` 冻结，就不能在同一 API version 下静默改变。
 
-权限配置分为三层：
+如果 Host 没有显式配置 `workerMaximums`，最大值等于相应默认值。这样默认不会因为
+某个 App 修改配置而扩大整机资源授权。
 
-1. Runtime restricted build 中实际存在的能力；
-2. Host/tenant 运维策略允许的上限；
-3. 应用 `capsid.json` 声明的需求。
+## 2. App 配置 `capsid.json`
 
-有效权限为三者交集。应用申请超过运维上限时，发布应失败并报告具体字段，不能
-静默删减后继续运行。CLI、URL 和请求 Header 都不能临时扩大权限。
+每个版本目录中放一份 `capsid.json`。App 名来自父目录，版本名来自版本目录，不在
+JSON 中重复填写。
 
-应用配置应隐藏当前 C ABI 中不必要的重复描述：
+### 最小配置
+
+如果入口文件使用约定名 `bundle.mjs`，且 App 不需要外部能力：
+
+```json
+{
+  "apiVersion": "capsid/app-v1"
+}
+```
+
+### 申请 Host 能力
 
 ```json
 {
   "apiVersion": "capsid/app-v1",
+  "entry": "bundle.mjs",
   "permissions": {
     "modules": [
       "capsid:hashing",
-      "capsid:permissions"
+      "capsid:permissions",
+      "capsid:env",
+      "capsid:fs",
+      "capsid:storage",
+      "capsid:stdio"
     ],
     "env": {
-      "APP_MODE": { "value": "production" },
+      "APP_MODE": {
+        "value": "production"
+      },
       "API_TOKEN": {
-        "valueFrom": "/run/secrets/orders-api-token"
+        "valueFrom": "orders-api-token"
       }
     },
     "fs": {
@@ -426,247 +188,354 @@ spill 到其他 worker。Affinity 只是性能提示，不是状态正确性保�
       }
     },
     "fetch": {
-      "allow": ["https://api.example.com:443"]
+      "allow": ["https://orders-api.internal.example.com:443"]
     },
     "storage": {
       "namespaces": ["orders-cache"]
     },
     "stdio": ["stdout", "stderr"]
   },
-  "pool": {
-    "class": "latency",
-    "minReady": 1,
-    "warmSpare": 1,
-    "maxWorkers": 16,
-    "idleTtl": "5m"
+  "limits": {
+    "jsHeap": "64MiB",
+    "memoryMax": "256MiB",
+    "requestTimeout": "3s",
+    "maxInflight": 16
+  },
+  "workers": {
+    "minReady": 4,
+    "maxWorkers": 16
+  },
+  "healthCheck": {
+    "path": "/_capsid/health",
+    "timeout": "1s"
   }
 }
 ```
 
-Config Compiler 自动展开为 Runtime descriptor：
+所有字段都是申请：
 
-- `env` 生成 `capsid:env`、ENV rule 和不可变 environment snapshot；
-- `fs.read` 生成 `capsid:fs` 和 READ allow/deny rules；
-- `storage` 生成 `capsid:storage` 和精确 namespace rules；
-- `stdio` 生成 `capsid:stdio` 和 STDIO rules；
-- `fetch` 同时生成 direct egress policy 与 capability net policy；
-- rule ID 从规范化 JSON pointer 稳定生成，Host 保存 ID 到配置位置的反查表。
+- `permissions` 必须是 `host.json.permissions` 的子集；
+- `limits` 和 `workers` 不能超过 Host 的 `workerMaximums`；
+- 省略限制时使用 Host 的 `workerDefaults`；
+- App 不能声明或关闭 seccomp、Landlock、namespace、cgroup 根和
+  `no_new_privs`；
+- 超出 Host 上限时部署整体失败并返回具体差异，不做静默裁剪。
 
-所有 `tjs:*`、FFI、raw socket、write、相对/绝对/远程 module import 继续
-fail closed。应用 manifest 声明权限只是请求授权，不能绕过运维策略上限。
-
-## Release 与 Worker 生命周期
-
-Release 状态机：
+有效权限只有一个公式：
 
 ```text
-DISCOVERED
-  → VALIDATING
-  → STAGING
-  → WARMING
-  → ACTIVE
-  → DRAINING
-  → RETIRED
+Runtime 实际能力 ∩ host.json 上限 ∩ capsid.json 申请
 ```
 
-校验、加载或健康检查失败进入 `FAILED`，记录失败阶段并使用带抖动的指数退避。
-配置或产物变化总是创建新 generation，不修改已有 worker。
+`env.valueFrom` 是 secret key，不是文件路径。Host 只在
+`secretRootTemplate` 展开的 App 专属目录中读取，并且不会把 secret 路径或内容交给
+worker。
 
-发布步骤：
+## 3. 版本目录
 
-1. 读取并验证新 release artifact；
-2. 编译有效权限与 sandbox/resource profile；
-3. 创建新 generation；
-4. 启动至少 `minReady` 个 worker；
-5. 验证 READY flags 和可选内部健康请求；
-6. 原子切换 Registry snapshot；
-7. 旧 generation 停止接收新请求；
-8. 等待 inflight 清零，再执行 shutdown/terminate/destroy。
-
-例如：
+用户把每个待部署版本放到固定应用目录下：
 
 ```text
-切换前：orders → R42 → [W1, W2, W3, W4]
-
-预热中：orders → R42 → [W1, W2, W3, W4]
-                  R43 → [W5, W6] warming
-
-切换后：orders → R43 → [W5, W6]
-                  R42 → [W1, W2, W3, W4] draining
+/srv/capsid/apps/
+└── orders/
+    ├── 2026-07-31-001/
+    │   ├── capsid.json
+    │   ├── bundle.mjs
+    │   └── bundle.qjsb
+    └── 2026-07-31-002/
+        ├── capsid.json
+        └── bundle.mjs
 ```
 
-worker 状态机：
+约定如下：
+
+- Application ID：`[a-z0-9][a-z0-9._-]{0,62}`；
+- Version ID：`[A-Za-z0-9][A-Za-z0-9._-]{0,127}`；
+- 一个 Version ID 对应一个不可变输入目录；
+- 已经成功部署的目录不得原地修改，更新必须使用新 Version ID；
+- `bundle.mjs` 是默认入口；
+- `bundle.qjsb` 是可选的可信预编译产物；
+- App 和 Version 只能作为规范化 ID，部署接口不能接收任意文件路径。
+
+上传工具不受 Capsid 限制，可以是 `rsync`、`scp`、CI 发布系统、共享卷或容器镜像。
+用户只需先完成目录同步，再调用部署接口。
+
+## 4. 唯一部署接口
+
+默认通过独立 Unix 管理 socket 提供：
+
+```http
+POST /v1/deploy HTTP/1.1
+Content-Type: application/json
+
+{
+  "app": "orders",
+  "version": "2026-07-31-002"
+}
+```
+
+这是 v1 唯一改变应用线上版本的接口。部署行为固定，不再要求用户选择一组策略：
+
+1. 从固定 `applicationsRoot` 解析 App/Version；
+2. 安全打开 `capsid.json`、源码和可选字节码；
+3. 计算摘要并复制到 Host 管理的不可变 staging 目录；
+4. 校验 App 权限和资源申请没有超过 Host；
+5. 编译 Runtime capability、Landlock、egress、cgroup 和 resource limits；
+6. 为新版本启动 `minReady` 个 worker；
+7. 等待 READY，并执行可选 `healthCheck`；
+8. 全部成功后原子切换该 App 的 active version；
+9. 旧版本停止接收新请求，完成在途请求后退出；
+10. 返回新版本已激活的结果。
+
+```json
+{
+  "app": "orders",
+  "version": "2026-07-31-002",
+  "status": "active",
+  "previousVersion": "2026-07-31-001",
+  "digest": "8f3a9c..."
+}
+```
+
+固定失败语义：
+
+- 目录不存在或格式无效：拒绝部署；
+- 权限或资源越过 Host 上限：拒绝部署并返回字段差异；
+- worker 启动、READY 或健康检查失败：拒绝切换；
+- 任何失败都保持旧版本继续服务；
+- 相同 App/Version 重复请求是幂等操作；
+- 回滚就是对旧 Version 再调用同一个接口。
+
+上传目录本身不是运行目录。部署成功后，即使上传目录被误删，当前 worker 仍使用
+Host 已复制并校验的内部快照。停止或删除 App 必须使用单独的显式运维动作，不能把
+一次文件同步错误直接解释为下线。
+
+## 5. 蓝绿和 worker 映射
+
+用户只看见 App 和 Version；Host 内部维护每个版本自己的 worker pool：
 
 ```text
-SPAWNING → LOADING → READY → BUSY
-                         └→ IDLE
-READY/BUSY → DRAINING → STOPPED
-任意状态 → FAILED
+切换前
+orders → V1 → [W1, W2, W3, W4] ACTIVE
+
+预热中
+orders → V1 → [W1, W2, W3, W4] ACTIVE
+         V2 → [W5, W6, W7, W8] WARMING
+
+切换后
+orders → V2 → [W5, W6, W7, W8] ACTIVE
+         V1 → [W1, W2, W3, W4] DRAINING
 ```
 
-每个 worker 一生只属于一个 Release，其 bundle、policy 和 sandbox 不原地变更。
+每个 worker 一生只属于一个 App Version。它的 bundle、有效权限、Linux sandbox、
+secret snapshot 和资源限制在 READY 后不能原地修改。
 
-## 热池、冷启动与并发启动
+同一 App 的普通请求都进入 active version 的 pool，再由负载调度器选择 READY
+worker。默认不保证相同客户端落到相同 worker；需要外部持久状态的应用不能依赖
+worker 私有内存。
 
-Host 使用以下术语：
+冷版本首次启动使用 singleflight：并发请求只触发一次启动过程，其他请求在有界队列
+中等待，不能为每个请求分别 spawn worker。新 App 默认 `minReady=1`，所以正常部署
+完成后已经有可用 worker，不应把冷启动延迟暴露给第一个生产请求。
 
-- Hot：READY 且参与调度；
-- Standby：READY，但主要用作预留容量；
-- Cold：artifact 已登记或缓存，但当前没有 READY worker。
+## 6. URL、Header 与 App 的映射
 
-建议提供三个高层 service class：
-
-- `latency`：默认 `minReady=1` 并保留 spare capacity；
-- `elastic`：允许 `minReady=0`，首次请求承担冷启动；
-- `batch`：默认不保留 worker，并允许更长 queue deadline。
-
-当前实测单 worker READY 后约 6–7 MiB PSS，真实 Hono bundle 的 READY
-median 约 30 ms；parse-heavy 大 bundle 源码冷启动会显著高于可信字节码。因此
-交互式服务默认保留一个 READY worker，scale-to-zero 必须显式选择。
-
-Cold Release 的并发请求使用 singleflight：
+请求只能选择已经登记的 App，不能选择 Version、文件或 worker：
 
 ```text
-首个请求 → 创建一次 startup flight
-后续请求 → 等待同一个 startup future
+HTTP Host / 固定 Path / 受信 Header
+                  ↓
+                AppKey
+                  ↓
+          active version pool
+                  ↓
+             READY worker
 ```
 
-不能为每个排队请求分别 spawn worker。通用的“未加载 spare worker”也不能在应用
-之间复用，因为 policy、sandbox 和资源配置在 spawn 时已经固定。并发启动池实际
-是有界的 startup executor，预热 worker pool 则必须属于具体 Release。
-
-启动许可同时受以下约束：
-
-- Host 全局 startup concurrency；
-- tenant startup concurrency；
-- 单 Release startup concurrency；
-- CPU affinity 与 cgroup CPU quota；
-- worker memory reservation；
-- 请求剩余 deadline。
-
-容量按 slot 而不是只按 worker 数量计算：
+支持三种 Host 级路由约定：
 
 ```text
-desiredWorkers =
-  ceil((inflight + queued) / targetInflightPerWorker)
-  + warmSpare
+orders.apps.example.com            → orders
+/@capsid/orders/api/orders/123     → orders
+Capsid-App: orders                 → orders（仅受信内部 listener）
 ```
 
-结果再限制到 `minReady..maxWorkers`。`targetInflightPerWorker` 是 Host 软限制，
-Runtime `max_inflight_requests` 是不可突破的硬限制。CPU-heavy 应用从每 worker
-一个 inflight 开始；I/O-heavy 应用可以允许更多并发。自适应模式必须基于
-queue wait、worker execution latency 和尾延迟缓慢增大、快速收缩，不能把某次
-benchmark 的最优 worker 数硬编码成产品默认值。
+Path 模式默认从传给 worker 的 URL 中移除 `/@capsid/orders` 前缀。Header 模式只能用于
+Unix socket、mTLS 内部入口或严格代理 allowlist；公网客户端提供的同名 Header 必须
+删除。请求参数永远不能拼接成磁盘路径。
 
-缩容只处理超过 idle TTL 的 worker，不低于 `minReady`，每个控制周期最多缩减
-一个，且必须先 drain。
+## 7. Host 内部状态
 
-## Reactor、背压与过载
+用户不维护 Host 状态目录。建议结构：
 
-数据面使用多个 reactor shard。每个 worker 从接管到销毁只属于一个 owner
-shard；其他线程通过队列投递命令，不能并发调用同一个 `capsid_worker`。控制面向
-各 shard 发布不可变 Registry snapshot。
+```text
+/var/lib/capsid/apps/orders/
+├── active.json
+└── versions/
+    ├── 8f3a9c.../
+    │   ├── capsid.json
+    │   ├── effective.json
+    │   ├── bundle.mjs
+    │   └── bundle.qjsb
+    └── 729abe.../
+        ├── capsid.json
+        ├── effective.json
+        └── bundle.mjs
+```
 
-spawn、bundle load 和等待 READY 可以在 bootstrap executor 中完成；READY 后以
-明确的串行 ownership handoff 交给数据面 shard，避免同步启动阻塞 HTTP I/O loop。
+目录名使用内容摘要。`active.json` 只保存当前摘要，通过临时文件加原子 rename 更新。
+内部快照至少固定：
 
-Request/response body 沿用 Runtime credit 模型：
+- 源码和可信字节码摘要；
+- 规范化后的 `capsid.json`；
+- Host 配置摘要；
+- 有效 permission、sandbox 和 resource limits；
+- 不含 secret 明文的 secret revision；
+- Runtime/QuickJS compatibility ID。
 
-- 没有 request credit 时，不继续从客户端读取 body；
-- 下游成功消费 response bytes 后才归还 response credit；
-- 冷启动排队只保留有界 headers 和元数据，不完整缓存大 request body；
-- 客户端断开、Host deadline 或 body 读取失败立即 cancel；
-- SSE 和慢客户端不能绕过队列、连接与未确认字节上限。
+Host 配置改变后，已有 READY worker 不原地修改。运维先执行 plan/reload，Host 对当前
+App 重新校验和预热，再逐 App 原子切换。
 
-Admission control 至少分为 global、tenant、application/release 三层，并分别限制
-并发请求、排队请求、排队字节和 queue deadline。应用之间使用 weighted fair
-queue 或 DRR，避免单一应用占满全局 startup 和请求额度。
+## 8. 文件与字节码安全
 
-建议错误语义：
+Host 以 `applicationsRoot` 的目录 fd 为根，使用等价于
+`openat2(RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS)` 的方式读取
+App/Version。必须拒绝：
 
-- 未找到应用：`404`；
-- Release 不可用、启动失败或 pool 饱和：`503`，必要时带 `Retry-After`；
-- tenant quota：`429`；
+- symlink、magic link、device、FIFO 和 socket；
+- `..`、绝对 artifact path 和越过版本目录的路径；
+- 超出大小上限的配置或 bundle；
+- 读取过程中发生 inode、size 或内容变化的输入；
+- JSON/schema 未知字段和摘要不一致。
+
+Host 从已经打开的 fd 计算摘要并复制，不在请求处理阶段再次读取上传目录。
+
+QuickJS bytecode 只有在 compatibility ID 完全匹配时才加载。ID 至少覆盖 Capsid
+worker build、QuickJS commit、编译 flags、architecture 和 bytecode format version。
+不匹配时回退到同版本的 `bundle.mjs`；缺少源码时拒绝部署。
+
+## 9. 权限与 Linux 隔离
+
+JavaScript capability 和 Linux 隔离同时生效：
+
+| 边界 | 来源 | 执行机制 |
+| --- | --- | --- |
+| `capsid:*` module 与操作 | Host 上限 ∩ App 申请 | Runtime capability policy |
+| 文件读取 | 有效 `fs.read` | `capsid:fs` + Landlock + `openat2` |
+| 出站网络 | 有效 `fetch` | 双层 egress policy + netns/firewall |
+| syscall | Host isolation | seccomp BPF |
+| 提权 | Host isolation | `no_new_privs` + user namespace |
+| 内存、CPU、PID、fd | Host 上限 ∩ App 申请 | QuickJS limit + rlimit + cgroup v2 |
+
+所有 `tjs:*`、FFI、raw socket、任意文件写入、相对/绝对/远程 module import 默认继续
+fail closed。公共 API 和文档只使用 `capsid:*` 命名。
+
+App 的 `fs.read` 会同时生成 Runtime operation rule 和 Landlock 只读根。App 的
+`fetch` 会同时生成 direct egress policy 与 capability net policy；hostname、DNS
+结果和 redirect 每次都重新检查。私网、loopback、link-local 和 metadata 地址默认
+拒绝，除非 Host 用精确 CIDR 显式开放。
+
+生产 Host 缺少任何 `isolation.required` feature 时启动失败，不能降级运行。Host
+进程本身使用专用非 root 账号；需要创建 cgroup 或 network namespace 时，通过最小
+权限 supervisor 完成，应用和公网不能访问 supervisor socket。
+
+## 10. 调度、背压与过载
+
+每个 worker 从 READY 到销毁只属于一个 reactor owner。其他线程通过队列投递命令，
+不能同时调用同一 worker。
+
+### 现有 benchmark 与目标实现
+
+当前已发布的完整 Capsid benchmark 使用 Go `capsid-http-gw`：HTTP 层是并发
+`net/http` handler，Go runtime 底层使用自己的 netpoll；它没有实现这里规划的
+Capsid Host owner-shard reactor。因此现有结果是 Runtime + Go gateway 的基线，不能
+声称已经测量了第一方 Host。
+
+第一方 Host 的目标实现是少量 C++ epoll shard：每个客户端连接和 worker IPC fd 在
+其生命周期内固定归属一个 shard，readable/writable 事件批量 drain；跨 shard 操作只
+通过有界队列和 eventfd 投递。spawn、bundle load 和预热放在独立 bootstrap executor，
+READY 后再把 worker ownership 一次性交给数据面。v1 先使用成熟的 epoll，不在没有
+profile 证据时引入 io_uring、shared-memory ring 或自定义 zero-copy 协议。
+
+这个方案预期减少 cgo/goroutine 调度、跨线程锁和无效轮询，但“更快”必须由同条件
+A/B 证明。验收时使用相同 bundle、worker 数、连接数、inflight 和资源限制，对比 Go
+gateway 与第一方 Host 的 QPS、p99、CPU/response、RSS、queue wait、IPC 时间和
+open-loop 完成率；没有数据就不写性能结论。
+
+Host 至少限制：
+
+- 全局、单 App 和单 worker 的 inflight；
+- 单 App 排队请求数、排队字节和 queue deadline；
+- 全局和单 App 启动并发；
+- worker memory reservation 与 cgroup hard limit；
+- request/response 未确认字节和 stream credit。
+
+请求 body 和响应 body 沿用 Runtime credit 模型。客户端断开、deadline 到期或 body
+失败立即 cancel。SSE 和慢客户端不能绕过队列及未确认字节上限。
+
+默认错误语义：
+
+- App 不存在：`404`；
+- pool 不可用、预热失败或过载：`503`；
+- App queue/quota 超限：`429`；
 - Host deadline：`504`。
 
-只有尚未发送 response head、请求可安全重放且属于 worker/IPC 基础设施故障时
-允许重试一次。不能自动重试任意 POST，也不能把应用返回的 HTTP 5xx 当成 worker
-故障。
+只有尚未发送 response head、请求可安全重放且属于 worker/IPC 基础设施故障时，才
+允许自动重试一次。应用返回的 HTTP 5xx 不是 worker 故障。
 
-## 可观测性
+## 11. 可观测性
 
-每个请求至少区分：
+每次部署至少记录：
 
-```text
-route resolve
-queue wait
-cold-start wait
-worker dispatch
-time to response head
-response duration
-total duration
-```
+- App、Version、内容摘要和前一版本；
+- 配置校验与越权差异；
+- 源码/字节码选择和回退原因；
+- worker spawn、load、READY、health check 各阶段耗时；
+- 预热数量、切换时间、排空时间和失败原因。
 
-每个 application/release/pool 应暴露：
+每个 App/Version/pool 至少暴露：
 
-- READY、idle、busy、starting 和 draining worker 数；
-- inflight、queued、rejected 与 retry；
-- spawn、load、READY 分阶段耗时；
-- source/bytecode 选择与回退原因；
-- crash、timeout、cancel 和 circuit breaker；
-- response credit backlog；
-- worker PID RSS/PSS 与 cgroup memory；
-- capability audit deny；
-- config、release、policy 和 runtime compatibility digest。
+- READY、busy、starting、draining worker 数；
+- inflight、queued、rejected、timeout 和 cancel；
+- queue wait、cold-start wait、worker latency 和总延迟；
+- worker PID RSS/PSS、cgroup memory、CPU 和 crash；
+- capability deny 与 Linux sandbox 安装结果；
+- config、bundle、effective policy 和 Runtime compatibility digest。
 
-现有 QuickJS heap memory metrics 会遍历 heap，只用于显式诊断和回归门，不进入
-请求热路径或常规高频采样。
+QuickJS heap 遍历只用于显式诊断和回归门，不进入请求热路径或高频采样。
 
-## Runtime 前置补充
+## 12. 实施顺序
 
-Host v1 的大部分功能可以由当前 ABI 实现。可信字节码进入生产发布前，还需要
-Runtime/worker 暴露明确的 bytecode compatibility ID，至少覆盖：
+### 第一阶段：目录、权限与静态池
 
-```text
-Capsid worker build
-+ QuickJS commit
-+ compile flags
-+ architecture
-+ bytecode format version
-```
+1. `host.json` 与 `capsid.json` schema；
+2. 安全 Version 目录读取、摘要和 Host 内部快照；
+3. 单一部署接口与幂等语义；
+4. Host 权限上限和 App 子集验证；
+5. 固定大小的 per-App-Version worker pool；
+6. subdomain、path 和 trusted header 路由；
+7. 状态、结构化日志和基础 metrics。
 
-`release.json` 中的 compatibility ID 必须与实际 worker HELLO 返回值完全一致；
-不一致时回退到已验证源码，缺少源码时拒绝发布。Capsid 版本号或 C ABI version
-不能单独证明 QuickJS bytecode 兼容。
+### 第二阶段：可靠蓝绿
 
-## 实施顺序
+1. staging、`minReady` 预热和 health check；
+2. active version 原子切换；
+3. 旧版本 drain、超时销毁和显式回滚；
+4. Host 配置变更的 plan/reload；
+5. cgroup、network namespace 和启动失败回滚；
+6. bytecode compatibility ID 与源码回退。
 
-### 第一阶段：可靠的静态 Host
+### 第三阶段：弹性与效率
 
-1. Host/app/release JSON schema 与 Config Compiler；
-2. 安全目录读取、artifact hash 与 App Registry；
-3. subdomain、path prefix、trusted header 三种 listener；
-4. 固定大小的 per-Release worker pool；
-5. reactor ownership、credit、cancel 和 drain；
-6. `validate`、`plan`、结构化日志和基础 metrics。
+1. cold-start singleflight；
+2. 有界自动扩缩容；
+3. startup memory permit 与公平队列；
+4. circuit breaker、过载拒绝和完整 metrics；
+5. HTTP/2、TLS 或第三方 transport adapter。
 
-### 第二阶段：生产发布与弹性
+v1 完成之前不增加多租户 realm、App binding、资源档位、权重发布 DSL 或业务控制面。
 
-1. generation staging、prewarm、健康检查和原子切换；
-2. cold-start singleflight；
-3. startup concurrency 与 memory permits；
-4. admission control、fair queue 和 circuit breaker；
-5. transactional reload、失败回滚与旧 Release 回收。
+## 最终原则
 
-### 第三阶段：自适应与多租户
-
-1. adaptive concurrency 和 autoscaling；
-2. bounded affinity 与稳定 canary；
-3. bytecode compatibility ID、可信编译工具与缓存；
-4. tenant policy ceiling 和资源配额；
-5. 更完整的 HTTP/2、TLS 或第三方 transport adapter。
-
-Host 的设计原则最终归纳为：
-
-> 路由按约定，权限按声明，发布不可变，worker 按 Release 池化，亲和性只作
-> 提示，所有启动、排队和执行都有资源预算与 deadline。
+> Host 定义整机硬边界，App 只能申请子集；版本通过目录交付，通过一个接口完成预热
+> 和蓝绿；失败永远保持旧版本，worker 永远不能越过 Host。
