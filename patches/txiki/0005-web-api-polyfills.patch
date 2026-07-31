@@ -1,0 +1,146 @@
+--- a/src/js/polyfills/event-target.js	2026-07-27 12:57:21.140382992 +0800
++++ b/src/js/polyfills/event-target.js	2026-07-27 19:28:49.441729695 +0800
+@@ -74,6 +74,7 @@
+             eventInit,
+             eventPhase: 2,
+             eventType: String(eventType),
++            target: null,
+             currentTarget: null,
+             canceled: false,
+             stopped: false,
+@@ -99,7 +100,7 @@
+      * @type {EventTarget}
+      */
+     get target() {
+-        return this.currentTarget;
++        return pd(this).target;
+     }
+ 
+     /**
+@@ -241,7 +242,7 @@
+      * @type {any}
+      */
+     get detail() {
+-        return Boolean(pd(this).eventInit.detail);
++        return pd(this).eventInit.detail ?? null;
+     }
+ }
+ 
+@@ -268,6 +269,17 @@
+ }
+ 
+ /**
++ * Set the dispatch target.
++ * @param {Event} event The event to set.
++ * @param {EventTarget} target The dispatch target.
++ * @returns {void}
++ * @private
++ */
++function setTarget(event, target) {
++    pd(event).target = target;
++}
++
++/**
+  * Set the current target of a given event.
+  * @param {Event} event The event to set current target.
+  * @param {EventTarget|null} currentTarget New current target.
+@@ -556,6 +568,7 @@
+         const self = this ?? globalThis;
+ 
+         // Set the current target.
++        setTarget(event, self);
+         setCurrentTarget(event, self);
+ 
+         // If listeners aren't registered, terminate.
+@@ -564,6 +577,8 @@
+         let node = listeners.get(eventName);
+ 
+         if (!node) {
++            setCurrentTarget(event, null);
++            setEventPhase(event, 0);
+             return true;
+         }
+ 
+@@ -589,9 +604,17 @@
+             setPassiveListener(event, node.passive ? node.listener : null);
+ 
+             if (typeof node.listener === 'function') {
+-                node.listener.call(self, event);
++                try {
++                    node.listener.call(self, event);
++                } catch (e) {
++                    reportError(e);
++                }
+             } else if (node.listenerType !== ATTRIBUTE && typeof node.listener.handleEvent === 'function') {
+-                node.listener.handleEvent(event);
++                try {
++                    node.listener.handleEvent(event);
++                } catch (e) {
++                    reportError(e);
++                }
+             }
+ 
+             // Microtask checkpoint: drain microtasks after each listener
+@@ -608,7 +631,7 @@
+ 
+         setPassiveListener(event, null);
+         setEventPhase(event, 0);
+-        // setCurrentTarget(event, null); ?
++        setCurrentTarget(event, null);
+ 
+         return !event.defaultPrevented;
+     }
+--- a/src/js/polyfills/event-target-polyfill.js	2026-07-27 12:57:21.136382992 +0800
++++ b/src/js/polyfills/event-target-polyfill.js	2026-07-27 19:28:49.441729695 +0800
+@@ -76,11 +76,17 @@
+     #promise;
+     #reason;
+ 
+-    constructor(eventTye, promise, reason) {
+-        super(eventTye, { cancelable: true });
++    constructor(eventType, init = {}) {
++        const dictionary = Object(init ?? {});
++        if (!('promise' in dictionary)) {
++            throw new TypeError(
++                "PromiseRejectionEventInit requires a 'promise' member");
++        }
+ 
+-        this.#promise = promise;
+-        this.#reason = reason;
++        super(eventType, dictionary);
++
++        this.#promise = dictionary.promise;
++        this.#reason = dictionary.reason;
+     }
+ 
+     get promise() {
+@@ -177,6 +183,7 @@
+ defineEventAttribute(globalProto, 'load');
+ defineEventAttribute(globalProto, 'beforeunload');
+ defineEventAttribute(globalProto, 'unhandledrejection');
++defineEventAttribute(globalProto, 'rejectionhandled');
+ 
+ // Stash on the internal core object so the worker bootstrap (which has no
+ // other way to reach this module) can pick it up without exposing it to
+--- a/src/js/polyfills/blob.js	2026-07-27 12:57:21.136382992 +0800
++++ b/src/js/polyfills/blob.js	2026-07-27 19:28:49.441729695 +0800
+@@ -50,10 +50,6 @@
+             throw new TypeError('Failed to construct \'Blob\': The provided value cannot be converted to a sequence.');
+         }
+ 
+-        if (typeof blobParts[Symbol.iterator] !== 'function') {
+-            throw new TypeError('Failed to construct \'Blob\': The object must have a callable @@iterator property.');
+-        }
+-
+         if (typeof options !== 'object' && typeof options !== 'function') {
+             throw new TypeError('Failed to construct \'Blob\': parameter 2 cannot convert to dictionary.');
+         }
+@@ -95,7 +91,7 @@
+         this.#endings = `${options.endings === undefined ? 'transparent' : options.endings}`;
+         const type = options.type === undefined ? '' : String(options.type);
+ 
+-        this.#type = /^[\x20-\x7E]*$/.test(type) ? type : '';
++        this.#type = /^[\x20-\x7E]*$/.test(type) ? type.toLowerCase() : '';
+     }
+ 
+     /**

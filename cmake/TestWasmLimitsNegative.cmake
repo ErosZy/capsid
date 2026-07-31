@@ -1,0 +1,55 @@
+if(NOT DEFINED CAPSID_WASM_AUDIT_SCRIPT OR
+   NOT EXISTS "${CAPSID_WASM_AUDIT_SCRIPT}")
+    message(FATAL_ERROR "CAPSID_WASM_AUDIT_SCRIPT is required")
+endif()
+foreach(CAPSID_REQUIRED
+        CAPSID_WASM_C_SOURCE
+        CAPSID_WASM_JS_SOURCE
+        CAPSID_WASM_FIXTURE_SOURCE)
+    if(NOT DEFINED ${CAPSID_REQUIRED} OR
+       NOT EXISTS "${${CAPSID_REQUIRED}}")
+        message(FATAL_ERROR "${CAPSID_REQUIRED} is required")
+    endif()
+endforeach()
+if(NOT DEFINED CAPSID_TEST_WORK_DIR)
+    message(FATAL_ERROR "CAPSID_TEST_WORK_DIR is required")
+endif()
+
+file(REMOVE_RECURSE "${CAPSID_TEST_WORK_DIR}")
+file(MAKE_DIRECTORY "${CAPSID_TEST_WORK_DIR}")
+
+file(READ "${CAPSID_WASM_C_SOURCE}" CAPSID_C_SOURCE)
+string(REPLACE
+    "#define TJS__WASM_MAX_TABLE_ELEMENTS 1024"
+    "#define TJS__WASM_MAX_TABLE_ELEMENTS 1025"
+    CAPSID_MUTATED_C_SOURCE
+    "${CAPSID_C_SOURCE}")
+if(CAPSID_MUTATED_C_SOURCE STREQUAL CAPSID_C_SOURCE)
+    message(FATAL_ERROR
+        "negative control could not mutate TJS__WASM_MAX_TABLE_ELEMENTS")
+endif()
+
+set(CAPSID_MUTATED_C "${CAPSID_TEST_WORK_DIR}/wasm.c")
+file(WRITE "${CAPSID_MUTATED_C}" "${CAPSID_MUTATED_C_SOURCE}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DCAPSID_WASM_C_SOURCE=${CAPSID_MUTATED_C}"
+        "-DCAPSID_WASM_JS_SOURCE=${CAPSID_WASM_JS_SOURCE}"
+        "-DCAPSID_WASM_FIXTURE_SOURCE=${CAPSID_WASM_FIXTURE_SOURCE}"
+        -P "${CAPSID_WASM_AUDIT_SCRIPT}"
+    RESULT_VARIABLE CAPSID_RESULT
+    OUTPUT_VARIABLE CAPSID_STDOUT
+    ERROR_VARIABLE CAPSID_STDERR
+)
+if(CAPSID_RESULT EQUAL 0)
+    message(FATAL_ERROR
+        "WebAssembly limit audit accepted a C/JS Table cap mismatch")
+endif()
+set(CAPSID_OUTPUT "${CAPSID_STDOUT}\n${CAPSID_STDERR}")
+if(NOT CAPSID_OUTPUT MATCHES "WebAssembly table cap mismatch")
+    message(FATAL_ERROR
+        "Table-cap negative control failed for the wrong reason:\n${CAPSID_OUTPUT}")
+endif()
+
+message(STATUS "WebAssembly Table-cap mismatch is rejected")

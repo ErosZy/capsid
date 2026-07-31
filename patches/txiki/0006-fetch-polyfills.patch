@@ -1,0 +1,357 @@
+--- a/src/js/polyfills/fetch/body.js	2026-07-27 12:57:21.140382992 +0800
++++ b/src/js/polyfills/fetch/body.js	2026-07-27 20:17:24.857728661 +0800
+@@ -91,25 +91,12 @@
+             this._bodySize = body.size;
+             this._bodyStream = body.stream();
+         } else if (isPrototypeOf(FormData.prototype, body)) {
+-            // FormData handling - convert to URL encoded string
+-            const pairs = [];
+-
+-            for (const [ key, value ] of body.entries()) {
+-                pairs.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+-            }
+-
+-            const encoded = new TextEncoder().encode(pairs.join('&'));
+-
+-            this._bodySize = encoded.byteLength;
+-            this._bodyStream = new ReadableStream({
+-                start(controller) {
+-                    controller.enqueue(encoded);
+-                    controller.close();
+-                }
+-            });
++            const blob = body._blob();
++            this._bodySize = blob.size;
++            this._bodyStream = blob.stream();
+ 
+             if (!this.headers.get('content-type')) {
+-                this.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
++                this.headers.set('content-type', blob.type);
+             }
+         } else if (isPrototypeOf(URLSearchParams.prototype, body)) {
+             const encoded = new TextEncoder().encode(body.toString());
+@@ -218,6 +205,24 @@
+     },
+ 
+     formData() {
++        const contentType = this.headers.get('content-type') || '';
++        if (/^multipart\/form-data/i.test(contentType)) {
++            const boundary = getBoundary(contentType);
++            if (!boundary) {
++                return Promise.reject(new TypeError(
++                    'multipart/form-data missing boundary'
++                ));
++            }
++            return this.text().then(text => parseMultipart(text, boundary));
++        }
++        if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(contentType)) {
++            return this.text().then(() => {
++                throw new TypeError(
++                    'Content-Type was not multipart/form-data or ' +
++                    'application/x-www-form-urlencoded'
++                );
++            });
++        }
+         return this.text().then(decode);
+     },
+ 
+@@ -226,6 +231,38 @@
+     },
+ };
+ 
++function getBoundary(contentType) {
++    const match = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType);
++    return match ? (match[1] || match[2]) : null;
++}
++
++function parseMultipart(body, boundary) {
++    const form = new FormData();
++    const parts = body.split('--' + boundary);
++    for (let i = 1; i < parts.length - 1; i++) {
++        const part = parts[i];
++        const headerEnd = part.indexOf('\r\n\r\n');
++        if (headerEnd === -1) continue;
++        const headers = part.substring(0, headerEnd);
++        let value = part.substring(headerEnd + 4);
++        if (value.endsWith('\r\n')) value = value.substring(0, value.length - 2);
++        const nameMatch = /name="([^"]+)"/i.exec(headers);
++        if (!nameMatch) continue;
++        const name = nameMatch[1];
++        const filenameMatch = /filename="([^"]+)"/i.exec(headers);
++        if (filenameMatch) {
++            const filename = filenameMatch[1];
++            const typeMatch = /Content-Type:\s*(\S+)/i.exec(headers);
++            const file = new File([value], filename,
++                { type: typeMatch ? typeMatch[1] : 'application/octet-stream' });
++            form.append(name, file);
++        } else {
++            form.append(name, value);
++        }
++    }
++    return form;
++}
++
+ function decode(body) {
+     const form = new FormData();
+ 
+--- a/src/js/polyfills/fetch/headers.js	2026-07-27 12:57:21.140382992 +0800
++++ b/src/js/polyfills/fetch/headers.js	2026-07-27 19:52:45.285727434 +0800
+@@ -1,26 +1,60 @@
+ 
+ export class Headers {
+     #map;
++    #setCookies;
+ 
+     constructor(headers) {
+         this.#map = {};
++        this.#setCookies = [];
+ 
+         if (headers instanceof Headers) {
+             headers.forEach(function (value, name) {
+-                this.append(name, value);
+-            }, this);
+-        } else if (Array.isArray(headers)) {
+-            headers.forEach(function (header) {
+-                if (header.length !== 2) {
+-                    throw new TypeError('Expected name/value pair to be length 2, found' + header.length);
++                if (name !== 'set-cookie') {
++                    this.append(name, value);
+                 }
+-
+-                this.append(header[0], header[1]);
+             }, this);
+-        } else if (headers) {
+-            Object.getOwnPropertyNames(headers).forEach(function (name) {
+-                this.append(name, headers[name]);
++            headers.getSetCookie().forEach(function (value) {
++                this.append('set-cookie', value);
+             }, this);
++        } else if (headers) {
++            const iterator = headers[Symbol.iterator];
++
++            if (iterator !== undefined) {
++                if (typeof iterator !== 'function') {
++                    throw new TypeError('Headers init iterator is not callable');
++                }
++
++                const hasSetCookies = typeof headers.getSetCookie === 'function';
++
++                for (const header of headers) {
++                    if ((typeof header !== 'object' &&
++                         typeof header !== 'function') ||
++                        header === null) {
++                        throw new TypeError('Header entry is not an object');
++                    }
++
++                    const values = Array.from(header);
++                    if (values.length !== 2) {
++                        throw new TypeError(
++                            'Expected name/value pair to be length 2, found' +
++                            values.length
++                        );
++                    }
++                    if (!hasSetCookies || String(values[0]).toLowerCase() !== 'set-cookie') {
++                        this.append(values[0], values[1]);
++                    }
++                }
++
++                if (hasSetCookies) {
++                    headers.getSetCookie().forEach(function (value) {
++                        this.append('set-cookie', value);
++                    }, this);
++                }
++            } else {
++                Object.getOwnPropertyNames(headers).forEach(function (name) {
++                    this.append(name, headers[name]);
++                }, this);
++            }
+         }
+     }
+ 
+@@ -29,11 +63,18 @@
+         value = normalizeValue(value);
+         var oldValue = this.#map[name];
+ 
++        if (name === 'set-cookie') {
++            this.#setCookies.push(value);
++        }
+         this.#map[name] = oldValue ? oldValue + ', ' + value : value;
+     }
+ 
+     delete(name) {
+-        delete this.#map[normalizeName(name)];
++        name = normalizeName(name);
++        delete this.#map[name];
++        if (name === 'set-cookie') {
++            this.#setCookies = [];
++        }
+     }
+ 
+     get(name) {
+@@ -47,7 +88,16 @@
+     }
+ 
+     set(name, value) {
+-        this.#map[normalizeName(name)] = normalizeValue(value);
++        name = normalizeName(name);
++        value = normalizeValue(value);
++        this.#map[name] = value;
++        if (name === 'set-cookie') {
++            this.#setCookies = [ value ];
++        }
++    }
++
++    getSetCookie() {
++        return this.#setCookies.slice();
+     }
+ 
+     forEach(callback, thisArg) {
+--- a/src/js/polyfills/fetch/fetch.js	2026-07-27 12:57:21.140382992 +0800
++++ b/src/js/polyfills/fetch/fetch.js	2026-07-27 19:52:45.285727434 +0800
+@@ -2,7 +2,7 @@
+ 
+ import { HttpClient } from '../http-client.js';
+ 
+-import { Headers, normalizeName, normalizeValue } from './headers.js';
++import { Headers } from './headers.js';
+ import { Request } from './request.js';
+ import { Response } from './response.js';
+ 
+@@ -106,7 +106,7 @@
+ 
+         let responseResolved = false;
+         let streamController = null;
+-        let responseStatus, responseUrl;
++        let responseStatus, responseStatusText, responseUrl;
+         const responseHeaders = new Headers();
+ 
+         function abortClient() {
+@@ -123,8 +123,9 @@
+             }
+         });
+ 
+-        client.onstatus = function(status) {
++        client.onstatus = function(status, statusText) {
+             responseStatus = status;
++            responseStatusText = statusText;
+         };
+ 
+         client.onurl = function(url) {
+@@ -148,7 +149,7 @@
+             setTimeout(function() {
+                 resolve(new Response(responseBody, {
+                     status: responseStatus,
+-                    statusText: '',
++                    statusText: responseStatusText || '',
+                     headers: responseHeaders,
+                     url: responseUrl
+                 }));
+@@ -226,23 +227,9 @@
+ 
+         client.redirectMode = request.redirect;
+ 
+-        if (init && typeof init.headers === 'object' && !(init.headers instanceof Headers)) {
+-            const names = [];
+-
+-            Object.getOwnPropertyNames(init.headers).forEach(function(name) {
+-                names.push(normalizeName(name));
+-                client.setRequestHeader(name, normalizeValue(init.headers[name]));
+-            });
+-            request.headers.forEach(function(value, name) {
+-                if (names.indexOf(name) === -1) {
+-                    client.setRequestHeader(name, value);
+-                }
+-            });
+-        } else {
+-            request.headers.forEach(function(value, name) {
+-                client.setRequestHeader(name, value);
+-            });
+-        }
++        request.headers.forEach(function(value, name) {
++            client.setRequestHeader(name, value);
++        });
+ 
+         if (request.signal) {
+             request.signal.addEventListener('abort', abortClient);
+--- a/src/js/polyfills/fetch/request.js	2026-07-27 12:57:21.140382992 +0800
++++ b/src/js/polyfills/fetch/request.js	2026-07-27 19:52:45.285727434 +0800
+@@ -7,6 +7,12 @@
+         Object.assign(this, BodyMixin);
+ 
+         let body = options.body;
++        /*
++         * Whether `body` was supplied by the caller in `options` rather than
++         * inherited from an existing Request.  Only a caller-supplied stream
++         * body requires the duplex option.
++         */
++        let bodyFromOptions = body !== undefined && body !== null;
+ 
+         if (input instanceof Request) {
+             if (input.bodyUsed) {
+@@ -28,6 +34,7 @@
+             if (!body && input.body !== null) {
+                 body = input.body;
+                 input.bodyUsed = true;
++                bodyFromOptions = false;
+             }
+         } else {
+             this.url = String(input);
+@@ -49,8 +56,13 @@
+             throw new TypeError('Body not allowed for GET or HEAD requests');
+         }
+ 
+-        // Require duplex: 'half' for ReadableStream bodies (spec compliant)
+-        if (body instanceof ReadableStream) {
++        /*
++         * Require duplex: 'half' for caller-supplied ReadableStream bodies
++         * (spec compliant).  A stream body inherited from an existing Request
++         * is exempt: the duplex option constrains what the caller passes in,
++         * and the originating Request already had to satisfy it.
++         */
++        if (bodyFromOptions && body instanceof ReadableStream) {
+             if (options.duplex !== 'half') {
+                 throw new TypeError('ReadableStream body requires duplex: "half" option');
+             }
+@@ -77,7 +89,23 @@
+     }
+ 
+     clone() {
+-        return new Request(this, { body: this.body, duplex: this._bodySize === -1 ? 'half' : undefined });
++        let body2 = this.body;
++        if (this.body instanceof ReadableStream) {
++            const [body1, teeBody] = this.body.tee();
++            this._bodyStream = body1;
++            this.body = body1;
++            body2 = teeBody;
++        }
++        return new Request(this.url, {
++            body: body2,
++            credentials: this.credentials,
++            duplex: body2 ? 'half' : undefined,
++            headers: this.headers,
++            method: this.method,
++            mode: this.mode,
++            redirect: this.redirect,
++            signal: this.signal,
++        });
+     }
+ }
+ 
+--- a/src/js/polyfills/fetch/response.js	2026-07-27 12:57:21.140382992 +0800
++++ b/src/js/polyfills/fetch/response.js	2026-07-27 19:52:45.285727434 +0800
+@@ -56,7 +56,14 @@
+     }
+ 
+     clone() {
+-        return new Response(this.body, {
++        let body2 = this.body;
++        if (this.body instanceof ReadableStream) {
++            const [body1, teeBody] = this.body.tee();
++            this._bodyStream = body1;
++            this.body = body1;
++            body2 = teeBody;
++        }
++        return new Response(body2, {
+             status: this.status,
+             statusText: this.statusText,
+             headers: new Headers(this.headers),

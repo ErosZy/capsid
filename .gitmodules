@@ -1,0 +1,3 @@
+[submodule "vendor/txiki.js"]
+	path = vendor/txiki.js
+	url = https://github.com/saghul/txiki.js

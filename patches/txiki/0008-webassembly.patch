@@ -1,0 +1,2774 @@
+--- a/src/js/polyfills/wasm.js
++++ b/src/js/polyfills/wasm.js
+@@ -9,17 +9,139 @@
+     return ns && typeof ns === 'object' ? ns[kWasiHooks] : undefined;
+ }
+ 
+-// Track the WAMR function index for callable wrappers returned from exports /
+-// table reads. We cannot add a `#private` field to a plain function, so a
+-// WeakMap keyed by the wrapper function is used instead.
+-const funcIndexMap = new WeakMap();
++/*
++ * A funcref is an instance-qualified function index.  A bare WAMR index is
++ * not enough: the same index in two instances can denote different functions.
++ * Keep both pieces of information and intern wrappers so repeated reads of
++ * the same reference preserve JS object identity.
++ */
++const funcRefMap = new WeakMap();
++const instanceFuncRefCache = new WeakMap();
+ 
+ // Module-private invokers, captured from inside each class so Instance can
+ // reach the corresponding `#private` method without exposing it.
+ let getNativeModule;
++let getModuleBytes;
+ let bindMemory;
+ let bindGlobal;
+ let bindTable;
++let describeMemory;
++let describeGlobal;
++let describeTable;
++let getModuleImportDetails;
++let getModuleExportDetails;
++let syncMemoryToInstance;
++let syncMemoryFromInstance;
++let copyMemoryToInstance;
++let syncGlobalToInstance;
++let syncGlobalFromInstance;
++let syncTableToInstance;
++let syncTableFromInstance;
++
++const CAPSID_WASM_MAX_MEMORY_PAGES = 256;
++const CAPSID_WASM_MAX_TABLE_ELEMENTS = 1024;
++
++function toNonWrappingU32(value, label) {
++    let number;
++    try {
++        number = +value;
++    } catch {
++        throw new TypeError(`${label} must be an unsigned long`);
++    }
++    if (!Number.isFinite(number) ||
++        number < 0 ||
++        number > 0xffffffff ||
++        Math.trunc(number) !== number) {
++        throw new TypeError(`${label} must be an unsigned long`);
++    }
++    return number;
++}
++
++function readVarUint32(bytes, cursor) {
++    let value = 0;
++    let shift = 0;
++
++    for (let count = 0; count < 5; count++) {
++        const byte = bytes[cursor.offset++];
++        value |= (byte & 0x7f) << shift;
++        if ((byte & 0x80) === 0) {
++            return value >>> 0;
++        }
++        shift += 7;
++    }
++    throw new CompileError('invalid unsigned LEB128 value');
++}
++
++function skipLimits(bytes, cursor) {
++    const flags = readVarUint32(bytes, cursor);
++    readVarUint32(bytes, cursor);
++    if ((flags & 1) !== 0) {
++        readVarUint32(bytes, cursor);
++    }
++}
++
++function readName(bytes, cursor) {
++    const length = readVarUint32(bytes, cursor);
++    const start = cursor.offset;
++    const end = start + length;
++    cursor.offset = end;
++    return new TextDecoder().decode(bytes.subarray(start, end));
++}
++
++/*
++ * WAMR exposes imports grouped by kind. The JS API instead observes them in
++ * binary import-section order, which is visible through property getters.
++ * Retain only the small amount of binary metadata needed to restore that
++ * ordering; WAMR remains the authority for type validation.
++ */
++function parseImportOrder(source) {
++    const bytes = source instanceof Uint8Array ?
++        source :
++        new Uint8Array(source.buffer ?? source,
++                       source.byteOffset ?? 0,
++                       source.byteLength ?? source.byteLength);
++    const cursor = { offset: 8 };
++    const kinds = [ 'function', 'table', 'memory', 'global', 'tag' ];
++
++    while (cursor.offset < bytes.byteLength) {
++        const sectionId = bytes[cursor.offset++];
++        const sectionSize = readVarUint32(bytes, cursor);
++        const sectionEnd = cursor.offset + sectionSize;
++
++        if (sectionId !== 2) {
++            cursor.offset = sectionEnd;
++            continue;
++        }
++
++        const count = readVarUint32(bytes, cursor);
++        const imports = [];
++        for (let index = 0; index < count; index++) {
++            const module = readName(bytes, cursor);
++            const name = readName(bytes, cursor);
++            const kindCode = bytes[cursor.offset++];
++            const kind = kinds[kindCode];
++
++            if (kindCode === 0) {
++                readVarUint32(bytes, cursor);
++            } else if (kindCode === 1) {
++                cursor.offset++;
++                skipLimits(bytes, cursor);
++            } else if (kindCode === 2) {
++                skipLimits(bytes, cursor);
++            } else if (kindCode === 3) {
++                cursor.offset += 2;
++            } else if (kindCode === 4) {
++                cursor.offset++;
++                readVarUint32(bytes, cursor);
++            } else {
++                throw new CompileError('invalid import kind');
++            }
++            imports.push({ module, name, kind });
++        }
++        return imports;
++    }
++    return [];
++}
+ 
+ 
+ class CompileError extends Error {
+@@ -47,9 +169,9 @@
+ function getWasmError(e) {
+     switch (e.wasmError) {
+         case 'CompileError':
+-            return new CompileError(e.message);
++            return new CompileError('' + (e.message || 'unknown'));
+         case 'LinkError':
+-            return new LinkError(e.message);
++            return new LinkError('' + (e.message || 'unknown'));
+         case 'RuntimeError':
+             return new RuntimeError(e.message);
+         default:
+@@ -57,41 +179,123 @@
+     }
+ }
+ 
++// Track shared Memory/Global/Table objects imported by each Instance
++// so that callWasmFunction can sync canonical → instance state before calls
++// and instance → canonical after.
++const instanceMemoryImports = new WeakMap();
++const instanceGlobalImports = new WeakMap();
++const instanceTableImports = new WeakMap();
++
++function registerMemoryImport(instance, mem) {
++    let list = instanceMemoryImports.get(instance);
++    if (!list) { list = []; instanceMemoryImports.set(instance, list); }
++    if (!list.includes(mem)) { list.push(mem); }
++}
++function registerGlobalImport(instance, g) {
++    let list = instanceGlobalImports.get(instance);
++    if (!list) { list = []; instanceGlobalImports.set(instance, list); }
++    if (!list.includes(g)) { list.push(g); }
++}
++function registerTableImport(instance, t) {
++    let list = instanceTableImports.get(instance);
++    if (!list) { list = []; instanceTableImports.set(instance, list); }
++    if (!list.includes(t)) { list.push(t); }
++}
++
+ function callWasmFunction(name, ...args) {
+     const instance = this;
++    syncResourcesToInstance(instance);
+ 
+     try {
+         return instance.callFunction(name, ...args);
+     } catch (e) {
+         if (e.wasmError) {
+             throw getWasmError(e);
+-        } else {
+-            throw e;
++        } else { e.message = '' + (e.message || ''); throw e; }
++    } finally {
++        syncResourcesFromInstance(instance);
++    }
++}
++
++function syncResourcesToInstance(instance) {
++    const memories = instanceMemoryImports.get(instance);
++    if (memories) {
++        for (const mem of memories) {
++            syncMemoryToInstance(mem, instance);
++        }
++    }
++    const globals = instanceGlobalImports.get(instance);
++    if (globals) {
++        for (const g of globals) {
++            syncGlobalToInstance(g, instance);
++        }
++    }
++    const tables = instanceTableImports.get(instance);
++    if (tables) {
++        for (const t of tables) {
++            syncTableToInstance(t, instance);
++        }
++    }
++}
++
++function syncResourcesFromInstance(instance) {
++    const memories = instanceMemoryImports.get(instance);
++    if (memories) {
++        for (const mem of memories) {
++            syncMemoryFromInstance(mem, instance);
++        }
++    }
++    const globals = instanceGlobalImports.get(instance);
++    if (globals) {
++        for (const g of globals) {
++            syncGlobalFromInstance(g, instance);
++        }
++    }
++    const tables = instanceTableImports.get(instance);
++    if (tables) {
++        for (const t of tables) {
++            syncTableFromInstance(t, instance);
+         }
+     }
+ }
+ 
+ function callWasmFuncByIndex(instance, funcIndex, ...args) {
++    syncResourcesToInstance(instance);
++
+     try {
+         return wasm.callFuncByIndex(instance, funcIndex, ...args);
+     } catch (e) {
+         if (e.wasmError) {
+             throw getWasmError(e);
+-        } else {
+-            throw e;
+-        }
++        } else { e.message = '' + (e.message || ''); throw e; }
++    } finally {
++        syncResourcesFromInstance(instance);
+     }
+ }
+ 
++function getWasmFunction(instance, funcIndex) {
++    let cache = instanceFuncRefCache.get(instance);
++    if (!cache) {
++        cache = new Map();
++        instanceFuncRefCache.set(instance, cache);
++    }
++
++    let fn = cache.get(funcIndex);
++    if (!fn) {
++        fn = (...args) => callWasmFuncByIndex(instance, funcIndex, ...args);
++        funcRefMap.set(fn, { instance, index: funcIndex });
++        cache.set(funcIndex, fn);
++    }
++    return fn;
++}
++
+ function buildInstance(mod) {
+     try {
+         return wasm.buildInstance(mod);
+     } catch (e) {
+         if (e.wasmError) {
+             throw getWasmError(e);
+-        } else {
+-            throw e;
+-        }
++        } else { e.message = '' + (e.message || ''); throw e; }
+     }
+ }
+ 
+@@ -101,69 +305,121 @@
+     } catch (e) {
+         if (e.wasmError) {
+             throw getWasmError(e);
+-        } else {
+-            throw e;
+-        }
++        } else { e.message = '' + (e.message || ''); throw e; }
+     }
+ }
+ 
+ class Module {
+     #module;
++    #importOrder;
++    #bytes;
+ 
+     constructor(buf) {
++        if (buf instanceof Uint8Array) {
++            this.#bytes = new Uint8Array(buf);
++        } else if (ArrayBuffer.isView(buf)) {
++            this.#bytes = new Uint8Array(
++                buf.buffer.slice(buf.byteOffset,
++                                 buf.byteOffset + buf.byteLength));
++        } else if (buf instanceof ArrayBuffer) {
++            this.#bytes = new Uint8Array(buf.slice(0));
++        } else {
++            this.#bytes = new Uint8Array(buf);
++        }
++        this.#importOrder = parseImportOrder(this.#bytes);
+         this.#module = parseModule(buf);
+     }
+ 
+     static {
+         getNativeModule = m => m.#module;
++        getModuleBytes = m => m.#bytes;
++        getModuleExportDetails = m => wasm.moduleExports(m.#module);
++        getModuleImportDetails = m => {
++            const details = wasm.moduleImportDetails(m.#module);
++            const buckets = new Map();
++
++            for (const detail of details) {
++                const key = `${detail.module}\0${detail.name}\0${detail.kind}`;
++                const bucket = buckets.get(key);
++                if (bucket) {
++                    bucket.push(detail);
++                } else {
++                    buckets.set(key, [ detail ]);
++                }
++            }
++
++            return m.#importOrder.map(item => {
++                const key = `${item.module}\0${item.name}\0${item.kind}`;
++                const bucket = buckets.get(key);
++                return bucket?.shift() ?? item;
++            });
++        };
+     }
+ 
+     static exports(module) {
+-        return wasm.moduleExports(module.#module);
++        return getModuleExportDetails(module).map(
++            ({ name, kind }) => ({ name, kind }),
++        );
+     }
+ 
+     static imports(module) {
+-        return wasm.moduleImports(module.#module);
++        return getModuleImportDetails(module).map(
++            ({ module: moduleName, name, kind }) =>
++                ({ module: moduleName, name, kind }),
++        );
+     }
+ }
+ 
+ /* Import support limitations:
+- * - Table imports are not supported.
+  * - externref/funcref params and returns in imported functions are not
+  *   supported due to WAMR bugs in invoke_native_raw for externref.
+  *   externref works fine for exported functions, globals, and tables.
+- * - Instantiating the same Module with different importObjects reuses
+- *   the first set of imports (WAMR resolves imports at the module level).
+- *   Use WebAssembly.instantiate(bytes, imports) to get independent instances.
+  * - Multi-value returns from imported functions are not supported.
+  */
+ class Instance {
+     #instance;
+     #exports;
+     #moduleRef;
++    #nativeModule;
+ 
+-    constructor(module, importObject = {}) {
+-        const nativeModule = getNativeModule(module);
++    constructor(module, importObject = undefined) {
++        const importObjectProvided =
++            arguments.length >= 2 && importObject !== undefined;
++        if (importObjectProvided &&
++            ((typeof importObject !== 'object' &&
++              typeof importObject !== 'function') ||
++             importObject === null)) {
++            throw new TypeError(
++                'WebAssembly.Instance(): imports argument must be an object',
++            );
++        }
++        if (!importObjectProvided) {
++            importObject = {};
++        }
++        /*
++         * WAMR resolves native symbols at the module level. Re-parsing the
++         * original bytes produces a fresh wasm_module_t per Instance so that
++         * each instantiation can receive independent import bindings.
++         */
++        const nativeModuleBytes = getModuleBytes(module);
++        const nativeModule = parseModule(nativeModuleBytes);
++        this.#nativeModule = nativeModule;
+ 
+-        // Detect a WASI import via its symbol-keyed hook table and configure it
+-        // before instantiation.
+         let wasiHooks = null;
+ 
+-        for (const ns of Object.values(importObject)) {
+-            const hooks = getWasiHooks(ns);
+-
+-            if (hooks) {
+-                hooks.configure(nativeModule);
+-                wasiHooks = hooks;
+-                break;
+-            }
+-        }
+-
+         // Validate and collect imports from importObject
+-        const moduleImports = Module.imports(module);
++        const moduleImports = getModuleImportDetails(module);
+         const funcDescs = [];
+         const globalDescs = [];
+         const memoryImports = [];
++        const tableImports = [];
++        const importedMemoriesByIndex = new Map();
++        const importedTablesByIndex = new Map();
++        const importedGlobalsByIndex = new Map();
++        let globalIndex = 0;
++        let memoryIndex = 0;
++        let tableIndex = 0;
++        let instance = null;
+ 
+         for (const imp of moduleImports) {
+             const ns = importObject[imp.module];
+@@ -174,11 +430,16 @@
+                     continue;
+                 }
+ 
+-                throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} module not found`);
++                throw new TypeError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} module is not an object`);
+             }
+ 
+             // Skip WASI namespaces (resolved by WAMR internally)
+-            if (getWasiHooks(ns)) {
++            const hooks = getWasiHooks(ns);
++            if (hooks) {
++                if (!wasiHooks) {
++                    hooks.configure(nativeModule);
++                    wasiHooks = hooks;
++                }
+                 continue;
+             }
+ 
+@@ -189,25 +450,121 @@
+                     throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} is not a function`);
+                 }
+ 
+-                funcDescs.push({ module: imp.module, name: imp.name, func: value });
++                /*
++                 * Wasm may mutate an imported resource and immediately call
++                 * JS before the outer exported call returns.  Make that
++                 * mutation visible to the canonical JS wrapper before the
++                 * callback, then copy any callback-side writes back before
++                 * Wasm resumes.
++                 */
++                const func = function(...args) {
++                    if (instance === null) {
++                        return Reflect.apply(value, this, args);
++                    }
++                    syncResourcesFromInstance(instance);
++                    try {
++                        return Reflect.apply(value, this, args);
++                    } finally {
++                        syncResourcesToInstance(instance);
++                    }
++                };
++                funcDescs.push({ module: imp.module, name: imp.name, func });
+             } else if (imp.kind === 'global') {
+                 let numValue;
+ 
+                 if (value instanceof Global) {
++                    let descriptor;
++                    try {
++                        descriptor = describeGlobal(value);
++                    } catch {
++                        throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} is not a global`);
++                    }
++                    if (descriptor.type !== imp.type ||
++                        descriptor.mutable !== imp.mutable) {
++                        throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} has an incompatible global type`);
++                    }
+                     numValue = value.value;
+-                } else if (typeof value === 'number' || typeof value === 'bigint') {
++                    globalDescs.push({
++                        module: imp.module,
++                        name: imp.name,
++                        value: numValue,
++                        global: value,
++                        index: globalIndex,
++                        type: imp.type,
++                        mutable: imp.mutable,
++                    });
++                } else if (!imp.mutable &&
++                           ((imp.type === 'i64' && typeof value === 'bigint') ||
++                            (imp.type !== 'i64' && typeof value === 'number'))) {
+                     numValue = value;
+                 } else {
+                     throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} is not a global`);
+                 }
+ 
+-                globalDescs.push({ module: imp.module, name: imp.name, value: numValue });
++                if (!(value instanceof Global)) {
++                    globalDescs.push({
++                        module: imp.module,
++                        name: imp.name,
++                        value: numValue,
++                    });
++                }
++                globalIndex++;
+             } else if (imp.kind === 'memory') {
+                 if (!(value instanceof Memory)) {
+                     throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} is not a memory`);
+                 }
+ 
+-                memoryImports.push(value);
++                let descriptor;
++                try {
++                    descriptor = describeMemory(value);
++                } catch {
++                    throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} is not a memory`);
++                }
++                if (descriptor.current < imp.initial ||
++                    (imp.hasMaximum &&
++                     (descriptor.maximum === undefined ||
++                      descriptor.maximum > imp.maximum))) {
++                    throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} has incompatible memory type or limits`);
++                }
++                memoryImports.push({
++                    memory: value,
++                    bytes: new Uint8Array(value.buffer).slice(),
++                    pages: descriptor.current,
++                    maximum: descriptor.maximum,
++                    index: memoryIndex,
++                });
++                importedMemoriesByIndex.set(memoryIndex, value);
++                memoryIndex++;
++            } else if (imp.kind === 'table') {
++                if (!(value instanceof Table)) {
++                    throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} is not a table`);
++                }
++
++                let descriptor;
++                try {
++                    descriptor = describeTable(value);
++                } catch {
++                    throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} is not a table`);
++                }
++                if (descriptor.element !== imp.element ||
++                    descriptor.current < imp.initial ||
++                    (imp.hasMaximum &&
++                     (descriptor.maximum === undefined ||
++                      descriptor.maximum > imp.maximum))) {
++                    throw new LinkError(`WebAssembly.Instance(): Import #${imp.module}#${imp.name} has incompatible table type or limits`);
++                }
++                tableImports.push({
++                    table: value,
++                    values: Array.from(
++                        { length: descriptor.current },
++                        (_, index) => value.get(index),
++                    ),
++                    length: descriptor.current,
++                    maximum: descriptor.maximum,
++                    index: tableIndex,
++                });
++                importedTablesByIndex.set(tableIndex, value);
++                tableIndex++;
+             }
+         }
+ 
+@@ -218,9 +575,7 @@
+             } catch (e) {
+                 if (e.wasmError) {
+                     throw getWasmError(e);
+-                } else {
+-                    throw e;
+-                }
++                } else { e.message = '' + (e.message || ''); throw e; }
+             }
+         }
+ 
+@@ -231,53 +586,149 @@
+             } catch (e) {
+                 if (e.wasmError) {
+                     throw getWasmError(e);
+-                } else {
+-                    throw e;
+-                }
++                } else { e.message = '' + (e.message || ''); throw e; }
+             }
+         }
+ 
+-        const instance = buildInstance(nativeModule);
++        if (memoryImports.length > 0 || tableImports.length > 0) {
++            wasm.resolveResourceImports(
++                nativeModule,
++                memoryImports,
++                tableImports,
++            );
++        }
++
++        instance = buildInstance(nativeModule);
+ 
+         // Wire up imported Memory objects to the WAMR instance
+-        for (const mem of memoryImports) {
+-            bindMemory(mem, instance);
++        for (const item of memoryImports) {
++            const currentPages =
++                wasm.getMemoryBuffer(instance).byteLength / WASM_PAGE_SIZE;
++            if (item.pages > currentPages) {
++                wasm.growMemory(instance, item.pages - currentPages);
++            }
++            bindMemory(item.memory, instance);
++            registerMemoryImport(instance, item.memory);
++            new Uint8Array(item.memory.buffer).set(item.bytes);
++        }
++
++        for (const item of tableImports) {
++            const currentLength = wasm.tableSize(instance, item.index);
++            if (item.length > currentLength) {
++                wasm.tableGrow(
++                    instance,
++                    item.index,
++                    item.length - currentLength,
++                );
++            }
++            bindTable(item.table, instance, item.index);
++            registerTableImport(instance, item.table);
++            item.values.forEach((value, index) => item.table.set(index, value));
++        }
++
++        for (const item of globalDescs) {
++            if (item.global) {
++                importedGlobalsByIndex.set(item.index, item.global);
++                bindGlobal(
++                    item.global,
++                    instance,
++                    item.index,
++                    item.type,
++                    item.mutable,
++                );
++                registerGlobalImport(instance, item.global);
++            }
+         }
+ 
+         if (wasiHooks) {
+             wasiHooks.postInstantiate(instance);
+         }
+ 
+-        const _exports = Module.exports(module);
++        const _exports = getModuleExportDetails(module);
+         const exports = Object.create(null);
+ 
+         for (const item of _exports) {
+             if (item.kind === 'function') {
+-                const fn = callWasmFunction.bind(instance, item.name);
+-                const funcIdx = wasm.getFuncIndex(instance, item.name);
++                const info = wasm.getFuncInfo(instance, item.name);
++                const fn = info.index >= 0 ?
++                    getWasmFunction(instance, info.index) :
++                    callWasmFunction.bind(instance, item.name);
+ 
+-                if (funcIdx >= 0) {
+-                    funcIndexMap.set(fn, funcIdx);
++                if (info.index >= 0) {
++                    funcRefMap.set(fn, { instance, index: info.index });
+                 }
++                Object.defineProperties(fn, {
++                    name: {
++                        configurable: true,
++                        value: String(info.index),
++                    },
++                    length: {
++                        configurable: true,
++                        value: info.parameters,
++                    },
++                });
+ 
+                 exports[item.name] = fn;
+             } else if (item.kind === 'memory') {
+-                const mem = new Memory({ initial: 0 });
++                const importedMemory = importedMemoriesByIndex.get(item.index);
++                if (importedMemory) {
++                    exports[item.name] = importedMemory;
++                    continue;
++                }
++                const info = wasm.getMemoryInfo(instance, item.name);
++                const descriptor = { initial: 0 };
++                if (info.hasMaximum) {
++                    descriptor.maximum = info.maximum;
++                }
++                const mem = new Memory(descriptor);
+ 
+                 bindMemory(mem, instance);
++                registerMemoryImport(instance, mem);
++                const publicMemory = globalThis.WebAssembly?.Memory;
++                if (publicMemory &&
++                    publicMemory.prototype !== Memory.prototype) {
++                    Object.setPrototypeOf(mem, publicMemory.prototype);
++                }
+                 exports[item.name] = mem;
+             } else if (item.kind === 'global') {
++                const importedGlobal = importedGlobalsByIndex.get(item.index);
++                if (importedGlobal) {
++                    exports[item.name] = importedGlobal;
++                    continue;
++                }
+                 const info = wasm.getGlobalInfo(instance, item.name);
+                 const gType = VALID_GLOBAL_TYPES.includes(info.type) ? info.type : 'i32';
+-                const g = new Global({ value: gType, mutable: info.mutable }, 0);
+-
+-                bindGlobal(g, instance, item.name, info.type, info.mutable);
++                const initialValue = gType === 'i64' ? 0n : 0;
++                const g = new Global(
++                    { value: gType, mutable: info.mutable },
++                    initialValue,
++                );
++
++                bindGlobal(
++                    g,
++                    instance,
++                    item.name,
++                    info.type,
++                    info.mutable,
++                    true,
++                );
++                registerGlobalImport(instance, g);
+                 exports[item.name] = g;
+             } else if (item.kind === 'table') {
++                const importedTable = importedTablesByIndex.get(item.index);
++                if (importedTable) {
++                    exports[item.name] = importedTable;
++                    continue;
++                }
+                 const info = wasm.getTableInfo(instance, item.name);
+-                const tbl = new Table({ element: info.element, initial: 0 });
+-
+-                bindTable(tbl, instance, item.name);
++                const tblDescriptor = { element: info.element,
++                                       initial: info.cur_size };
++                if (info.hasMaximum) {
++                    tblDescriptor.maximum = info.max_size;
++                }
++                const tbl = new Table(tblDescriptor);
++                bindTable(tbl, instance, item.name, true);
++                registerTableImport(instance, tbl);
+                 exports[item.name] = tbl;
+             }
+         }
+@@ -295,7 +746,8 @@
+ const WASM_PAGE_SIZE = 65536;
+ 
+ class Memory {
+-    #instance = null;
++    #bindings = [];
++    #primaryBinding = null;
+     #buffer;
+     #initial;
+     #maximum;
+@@ -326,10 +778,18 @@
+                 throw new RangeError('WebAssembly.Memory(): Property \'maximum\' must be >= \'initial\'');
+             }
+         }
++        if (initial > CAPSID_WASM_MAX_MEMORY_PAGES) {
++            throw new RangeError(
++                `WebAssembly.Memory(): initial exceeds the runtime limit of ${CAPSID_WASM_MAX_MEMORY_PAGES} pages`,
++            );
++        }
++
++        if (maximum !== undefined && maximum > CAPSID_WASM_MAX_MEMORY_PAGES) {
++            throw new RangeError(
++                `WebAssembly.Memory(): maximum exceeds the runtime limit of ${CAPSID_WASM_MAX_MEMORY_PAGES} pages`,
++            );
++        }
+ 
+-        // For standalone Memory objects (not yet backed by a WASM instance),
+-        // back it with a plain ArrayBuffer. bindMemory() flips it over to
+-        // using the WAMR-managed memory.
+         this.#buffer = new ArrayBuffer(initial * WASM_PAGE_SIZE);
+         this.#initial = initial;
+         this.#maximum = maximum;
+@@ -337,16 +797,90 @@
+ 
+     static {
+         bindMemory = (mem, instance) => {
+-            mem.#instance = instance;
++            if (mem.#bindings.length > 0) {
++                copyMemoryToInstance(mem, instance);
++                mem.#bindings.push({ instance });
++                return;
++            }
++            mem.#primaryBinding = { instance };
++            mem.#bindings = [ mem.#primaryBinding ];
++            const initialBuffer = mem.#buffer;
++            if (initialBuffer instanceof ArrayBuffer &&
++                initialBuffer.byteLength > 0) {
++                const instanceBuffer = wasm.getMemoryBuffer(instance);
++                new Uint8Array(instanceBuffer).set(
++                    new Uint8Array(initialBuffer));
++                structuredClone(initialBuffer,
++                    { transfer: [ initialBuffer ] });
++            }
+             mem.#buffer = null;
+         };
++        describeMemory = mem => ({
++            current: mem.buffer.byteLength / WASM_PAGE_SIZE,
++            maximum: mem.#maximum,
++        });
++        copyMemoryToInstance = (mem, instance) => {
++            if (!mem.#primaryBinding) { return; }
++            const primaryBuf = wasm.getMemoryBuffer(
++                mem.#primaryBinding.instance);
++            const instanceBuf = wasm.getMemoryBuffer(instance);
++            const src = new Uint8Array(primaryBuf);
++            const dst = new Uint8Array(instanceBuf);
++            dst.set(src.subarray(0,
++                Math.min(src.byteLength, dst.byteLength)));
++        };
++        syncMemoryToInstance = (mem, instance) => {
++            const primary = mem.#primaryBinding;
++            if (!primary || primary.instance === instance) { return; }
++            const primaryPages = wasm.getMemoryBuffer(
++                primary.instance).byteLength / WASM_PAGE_SIZE;
++            const targetPages = wasm.getMemoryBuffer(
++                instance).byteLength / WASM_PAGE_SIZE;
++            if (targetPages < primaryPages) {
++                wasm.growMemory(instance, primaryPages - targetPages);
++            }
++            const primaryBuf = wasm.getMemoryBuffer(primary.instance);
++            const targetBuf = wasm.getMemoryBuffer(instance);
++            const src = new Uint8Array(primaryBuf);
++            const dst = new Uint8Array(targetBuf);
++            dst.set(src);
++        };
++        syncMemoryFromInstance = (mem, instance) => {
++            const primary = mem.#primaryBinding;
++            if (!primary) { return; }
++            // Propagate page growth to all bindings.
++            const srcPages = wasm.getMemoryBuffer(
++                instance).byteLength / WASM_PAGE_SIZE;
++            for (const b of mem.#bindings) {
++                const bPages = wasm.getMemoryBuffer(
++                    b.instance).byteLength / WASM_PAGE_SIZE;
++                if (bPages < srcPages) {
++                    wasm.growMemory(b.instance, srcPages - bPages);
++                }
++            }
++            if (primary.instance !== instance) {
++                const src = new Uint8Array(
++                    wasm.getMemoryBuffer(instance));
++                const dst = new Uint8Array(
++                    wasm.getMemoryBuffer(primary.instance));
++                dst.set(src);
++            }
++            const primaryBuf = new Uint8Array(
++                wasm.getMemoryBuffer(primary.instance));
++            for (const b of mem.#bindings) {
++                if (b.instance !== primary.instance) {
++                    const dst = new Uint8Array(
++                        wasm.getMemoryBuffer(b.instance));
++                    dst.set(primaryBuf);
++                }
++            }
++        };
+     }
+ 
+     get buffer() {
+-        if (this.#instance) {
+-            return wasm.getMemoryBuffer(this.#instance);
++        if (this.#primaryBinding) {
++            return wasm.getMemoryBuffer(this.#primaryBinding.instance);
+         }
+-
+         return this.#buffer;
+     }
+ 
+@@ -355,28 +889,41 @@
+             throw new TypeError('WebAssembly.Memory.grow(): Argument 0 must be a non-negative integer');
+         }
+ 
+-        if (this.#instance) {
+-            return wasm.growMemory(this.#instance, delta);
+-        }
++        if (this.#bindings.length === 0) {
++            const oldByteLength = this.#buffer.byteLength;
++            const oldPages = oldByteLength / WASM_PAGE_SIZE;
++            const newPages = oldPages + delta;
++
++            if (newPages > CAPSID_WASM_MAX_MEMORY_PAGES ||
++                (this.#maximum !== undefined && newPages > this.#maximum)) {
++                throw new RangeError('WebAssembly.Memory.grow(): Maximum memory size exceeded');
++            }
+ 
+-        // Standalone memory
+-        const oldByteLength = this.#buffer.byteLength;
+-        const oldPages = oldByteLength / WASM_PAGE_SIZE;
+-        const newPages = oldPages + delta;
++            const newBuffer = new ArrayBuffer(newPages * WASM_PAGE_SIZE);
++            new Uint8Array(newBuffer).set(new Uint8Array(this.#buffer));
++            this.#buffer = newBuffer;
++            return oldPages;
++        }
+ 
+-        if (this.#maximum !== undefined && newPages > this.#maximum) {
++        const primary = this.#primaryBinding.instance;
++        const curPages = wasm.getMemoryBuffer(primary).byteLength / WASM_PAGE_SIZE;
++        if (this.#maximum !== undefined &&
++            curPages + delta > this.#maximum) {
+             throw new RangeError('WebAssembly.Memory.grow(): Maximum memory size exceeded');
+         }
+ 
+-        const newBuffer = new ArrayBuffer(newPages * WASM_PAGE_SIZE);
+-
+-        new Uint8Array(newBuffer).set(new Uint8Array(this.#buffer));
+-        this.#buffer = newBuffer;
+-
+-        return oldPages;
++        const result = wasm.growMemory(primary, delta);
++        for (const b of this.#bindings) {
++            if (b.instance !== primary) {
++                wasm.growMemory(b.instance, delta);
++            }
++        }
++        return result;
+     }
+ }
+ 
++
++
+ const VALID_GLOBAL_TYPES = [ 'i32', 'i64', 'f32', 'f64' ];
+ 
+ function coerceGlobalValue(type, v) {
+@@ -384,7 +931,7 @@
+         case 'i32':
+             return v | 0;
+         case 'i64':
+-            return BigInt.asIntN(64, typeof v === 'bigint' ? v : BigInt(v));
++            return toWasmI64(v);
+         case 'f32':
+             return Math.fround(v);
+         case 'f64':
+@@ -394,27 +941,74 @@
+     }
+ }
+ 
++function toPrimitiveNumberHint(value) {
++    if ((typeof value !== 'object' || value === null) &&
++        typeof value !== 'function') {
++        return value;
++    }
++    const exotic = value[Symbol.toPrimitive];
++    if (exotic !== undefined) {
++        const result = exotic.call(value, 'number');
++        if ((typeof result !== 'object' || result === null) &&
++            typeof result !== 'function') {
++            return result;
++        }
++        throw new TypeError('Cannot convert object to primitive value');
++    }
++    for (const name of [ 'valueOf', 'toString' ]) {
++        const method = value[name];
++        if (typeof method === 'function') {
++            const result = method.call(value);
++            if ((typeof result !== 'object' || result === null) &&
++                typeof result !== 'function') {
++                return result;
++            }
++        }
++    }
++    throw new TypeError('Cannot convert object to primitive value');
++}
++
++function toWasmI64(value) {
++    const primitive = toPrimitiveNumberHint(value);
++    if (typeof primitive === 'bigint') {
++        return BigInt.asIntN(64, primitive);
++    }
++    if (typeof primitive === 'boolean') {
++        return primitive ? 1n : 0n;
++    }
++    if (typeof primitive === 'string') {
++        return BigInt.asIntN(64, BigInt(primitive));
++    }
++    throw new TypeError('i64 value must convert to a BigInt');
++}
++
+ class Global {
+     #instance = null;
++    #instances = [];
++    #canonicalValue = undefined;
+     #name = null;
+     #type;
+     #mutable;
+     #value;
+ 
+-    constructor(descriptor, value) {
++    constructor(descriptor, value = undefined) {
+         if (typeof descriptor !== 'object' || descriptor === null) {
+             throw new TypeError('WebAssembly.Global(): Argument 0 must be a global descriptor');
+         }
+ 
+-        const type = descriptor.value;
++        const mutable = Boolean(descriptor.mutable);
++        let type;
++        try {
++            type = `${descriptor.value}`;
++        } catch {
++            throw new TypeError('WebAssembly.Global(): Invalid value type');
++        }
+         const allTypes = [ ...VALID_GLOBAL_TYPES, 'externref', 'funcref' ];
+ 
+         if (!allTypes.includes(type)) {
+             throw new TypeError(`WebAssembly.Global(): Invalid type '${type}'`);
+         }
+ 
+-        const mutable = Boolean(descriptor.mutable);
+-
+         this.#type = type;
+         this.#mutable = mutable;
+         let initialValue;
+@@ -433,20 +1027,69 @@
+     }
+ 
+     static {
+-        bindGlobal = (g, instance, name, type, mutable) => {
+-            g.#instance = instance;
+-            g.#name = name;
++        bindGlobal = (
++            g,
++            instance,
++            name,
++            type,
++            mutable,
++            adoptNativeValue = false,
++        ) => {
++            if (g.#instances.length === 0) {
++                g.#instance = instance;
++                g.#name = name;
++                g.#canonicalValue = adoptNativeValue ?
++                    wasm.getGlobal(instance, name) :
++                    g.#value;
++                g.#value = undefined;
++            }
+             g.#type = type;
+             g.#mutable = mutable;
+-            g.#value = undefined;
++            g.#instances.push({ instance, name, type, mutable });
++        };
++        describeGlobal = g => ({
++            type: g.#type,
++            mutable: g.#mutable,
++        });
++        syncGlobalToInstance = (g, instance) => {
++            if (!g.#mutable) {
++                return;
++            }
++            const canonical = g.#canonicalValue;
++            for (const entry of g.#instances) {
++                if (entry.instance === instance) {
++                    wasm.setGlobal(instance, entry.name,
++                        coerceGlobalValue(entry.type, canonical));
++                    return;
++                }
++            }
++        };
++        syncGlobalFromInstance = (g, instance) => {
++            if (!g.#mutable) {
++                return;
++            }
++            for (const entry of g.#instances) {
++                if (entry.instance === instance) {
++                    g.#canonicalValue = wasm.getGlobal(instance, entry.name);
++                    break;
++                }
++            }
++            for (const entry of g.#instances) {
++                if (entry.instance !== instance && entry.mutable) {
++                    wasm.setGlobal(
++                        entry.instance,
++                        entry.name,
++                        coerceGlobalValue(entry.type, g.#canonicalValue),
++                    );
++                }
++            }
+         };
+     }
+ 
+     get value() {
+-        if (this.#instance) {
+-            return wasm.getGlobal(this.#instance, this.#name);
++        if (this.#instances.length > 0) {
++            return this.#canonicalValue;
+         }
+-
+         return this.#value;
+     }
+ 
+@@ -454,11 +1097,15 @@
+         if (!this.#mutable) {
+             throw new TypeError('WebAssembly.Global.set(): Cannot set value of an immutable global');
+         }
++        const coerced = coerceGlobalValue(this.#type, v);
+ 
+-        if (this.#instance) {
+-            wasm.setGlobal(this.#instance, this.#name, v);
++        if (this.#instances.length > 0) {
++            this.#canonicalValue = coerced;
++            for (const entry of this.#instances) {
++                wasm.setGlobal(entry.instance, entry.name, coerced);
++            }
+         } else {
+-            this.#value = coerceGlobalValue(this.#type, v);
++            this.#value = coerced;
+         }
+     }
+ 
+@@ -471,15 +1118,24 @@
+ 
+ class Table {
+     #instance = null;
++    #instances = [];
++    #canonicalValues = null;
+     #name = null;
+     #element;
++    #values;
++    #maximum;
+ 
+-    constructor(descriptor, _value) {
++    constructor(descriptor, value = null) {
+         if (typeof descriptor !== 'object' || descriptor === null) {
+             throw new TypeError('WebAssembly.Table(): Argument 0 must be a table descriptor');
+         }
+ 
+-        let element = descriptor.element;
++        let element;
++        try {
++            element = `${descriptor.element}`;
++        } catch {
++            throw new TypeError('WebAssembly.Table(): Invalid element type');
++        }
+ 
+         if (!VALID_TABLE_ELEMENTS.includes(element)) {
+             throw new TypeError(`WebAssembly.Table(): Invalid element type '${element}'`);
+@@ -490,100 +1146,353 @@
+             element = 'funcref';
+         }
+ 
+-        const initial = descriptor.initial;
++        const initialValue = descriptor.initial;
+ 
+-        if (initial === undefined) {
++        if (initialValue === undefined) {
+             throw new TypeError('WebAssembly.Table(): Property \'initial\' is required');
+         }
+ 
+-        if (typeof initial !== 'number' || initial < 0 || initial !== (initial >>> 0)) {
+-            throw new TypeError('WebAssembly.Table(): Property \'initial\' must be a non-negative integer');
+-        }
++        const initial = toNonWrappingU32(initialValue, 'initial');
+ 
+-        const maximum = descriptor.maximum;
++        const maximumValue = descriptor.maximum;
++        const maximum = maximumValue === undefined ?
++            undefined :
++            toNonWrappingU32(maximumValue, 'maximum');
+ 
+         if (maximum !== undefined) {
+-            if (typeof maximum !== 'number' || maximum < 0 || maximum !== (maximum >>> 0)) {
+-                throw new TypeError('WebAssembly.Table(): Property \'maximum\' must be a non-negative integer');
+-            }
+-
+             if (maximum < initial) {
+                 throw new RangeError('WebAssembly.Table(): Property \'maximum\' must be >= \'initial\'');
+             }
+         }
++        if (initial > CAPSID_WASM_MAX_TABLE_ELEMENTS) {
++            throw new RangeError(
++                `WebAssembly.Table(): initial exceeds the runtime limit of ${CAPSID_WASM_MAX_TABLE_ELEMENTS} elements`,
++            );
++        }
++
++        if (maximum !== undefined && maximum > CAPSID_WASM_MAX_TABLE_ELEMENTS) {
++            throw new RangeError(
++                `WebAssembly.Table(): maximum exceeds the runtime limit of ${CAPSID_WASM_MAX_TABLE_ELEMENTS} elements`,
++            );
++        }
+ 
+         this.#element = element;
++        this.#validateValue(value);
++        this.#values = Array(initial).fill(value);
++        this.#maximum = maximum;
+     }
+ 
+     static {
+-        bindTable = (t, instance, name) => {
+-            t.#instance = instance;
+-            t.#name = name;
++        const findBinding = (t, instance) =>
++            t.#instances.find(entry => entry.instance === instance);
++
++        const readBindingValue = (t, entry, index) => {
++            const raw = wasm.tableGet(entry.instance, entry.name, index);
++            if (t.#element !== 'funcref' || raw === null) {
++                return raw;
++            }
++            return getWasmFunction(entry.instance, raw);
+         };
+-    }
+ 
+-    get length() {
+-        if (this.#instance) {
+-            return wasm.tableSize(this.#instance, this.#name);
+-        }
++        const writeBindingValue = (t, entry, index, value) => {
++            if (t.#element !== 'funcref') {
++                wasm.tableSet(entry.instance, entry.name, index, value);
++                return;
++            }
++            if (value === null) {
++                wasm.tableSet(entry.instance, entry.name, index, null);
++                return;
++            }
+ 
+-        return 0;
+-    }
++            const ref = funcRefMap.get(value);
++            if (!ref || ref.instance !== entry.instance) {
++                /*
++                 * Non-GC WAMR stores a funcref as an index into the owning
++                 * instance's function array.  Reusing an index from another
++                 * instance silently calls the wrong function, so fail
++                 * explicitly instead of corrupting the table.
++                 */
++                throw new TypeError(
++                    'WebAssembly.Table(): Cross-instance function references ' +
++                    'are not supported by this runtime',
++                );
++            }
++            wasm.tableSet(entry.instance, entry.name, index, ref.index);
++        };
+ 
+-    get(index) {
+-        if (!this.#instance) {
+-            throw new RangeError('WebAssembly.Table.get(): Table is not backed by an instance');
+-        }
++        const growBinding = (entry, oldLength, newLength) => {
++            const current = wasm.tableSize(entry.instance, entry.name);
++            if (current >= newLength) {
++                return;
++            }
++            const result = wasm.tableGrow(
++                entry.instance,
++                entry.name,
++                newLength - current,
++            );
++            if (result < 0) {
++                throw new RangeError(
++                    'WebAssembly.Table.grow(): Maximum table size exceeded',
++                );
++            }
++            if (result !== current || current > oldLength) {
++                throw new RuntimeError(
++                    'WebAssembly.Table(): inconsistent native table size',
++                );
++            }
++        };
+ 
+-        const raw = wasm.tableGet(this.#instance, this.#name, index);
++        bindTable = (t, instance, name, adoptNativeValues = false) => {
++            const entry = { instance, name };
++            if (t.#instances.length === 0) {
++                t.#instance = instance;
++                t.#name = name;
++                if (adoptNativeValues) {
++                    const length = wasm.tableSize(instance, name);
++                    t.#canonicalValues = Array.from(
++                        { length },
++                        (_, index) => readBindingValue(t, entry, index),
++                    );
++                } else {
++                    t.#canonicalValues = t.#values;
++                    growBinding(
++                        entry,
++                        wasm.tableSize(instance, name),
++                        t.#canonicalValues.length,
++                    );
++                    for (let i = 0; i < t.#canonicalValues.length; i++) {
++                        writeBindingValue(
++                            t,
++                            entry,
++                            i,
++                            t.#canonicalValues[i],
++                        );
++                    }
++                }
++                t.#values = null;
++                t.#instances = [ entry ];
++                return;
++            }
+ 
+-        if (this.#element === 'funcref') {
+-            if (raw === null) {
+-                return null;
++            const canonical = t.#canonicalValues;
++            growBinding(
++                entry,
++                wasm.tableSize(instance, name),
++                canonical.length,
++            );
++            for (let i = 0; i < canonical.length; i++) {
++                writeBindingValue(t, entry, i, canonical[i]);
++            }
++            t.#instances.push(entry);
++        };
++        describeTable = t => ({
++            element: t.#element,
++            current: t.length,
++            maximum: t.#maximum,
++        });
++        syncTableToInstance = (t, instance) => {
++            const canonical = t.#canonicalValues;
++            if (!canonical) { return; }
++            const entry = findBinding(t, instance);
++            if (!entry) { return; }
++
++            growBinding(
++                entry,
++                wasm.tableSize(instance, entry.name),
++                canonical.length,
++            );
++            for (let i = 0; i < canonical.length; i++) {
++                writeBindingValue(t, entry, i, canonical[i]);
++            }
++        };
++        syncTableFromInstance = (t, instance) => {
++            const canonical = t.#canonicalValues;
++            if (!canonical) { return; }
++            const source = findBinding(t, instance);
++            if (!source) { return; }
++
++            const sourceLength = wasm.tableSize(instance, source.name);
++            if (sourceLength > CAPSID_WASM_MAX_TABLE_ELEMENTS ||
++                (t.#maximum !== undefined &&
++                 sourceLength > t.#maximum)) {
++                throw new RangeError(
++                    'WebAssembly.Table.grow(): Maximum table size exceeded',
++                );
+             }
+ 
+-            // raw is a function index; create a callable wrapper
+-            const instance = this.#instance;
+-            const funcIdx = raw;
+-            const fn = (...args) => callWasmFuncByIndex(instance, funcIdx, ...args);
++            const oldLength = canonical.length;
++            while (canonical.length < sourceLength) {
++                canonical.push(null);
++            }
++            for (let i = 0; i < sourceLength; i++) {
++                canonical[i] = readBindingValue(t, source, i);
++            }
+ 
+-            funcIndexMap.set(fn, funcIdx);
++            for (const entry of t.#instances) {
++                if (entry === source) { continue; }
++                growBinding(entry, oldLength, sourceLength);
++                for (let i = 0; i < sourceLength; i++) {
++                    writeBindingValue(t, entry, i, canonical[i]);
++                }
++            }
++        };
++    }
+ 
+-            return fn;
++    #validateValue(value) {
++        if (this.#element === 'funcref' &&
++            value !== null &&
++            (typeof value !== 'function' || !funcRefMap.has(value))) {
++            throw new TypeError('WebAssembly.Table(): Value must be null or a WebAssembly function');
+         }
++    }
+ 
+-        // externref: raw is already the JS value or null
+-        return raw;
++    get length() {
++        if (this.#canonicalValues) {
++            return this.#canonicalValues.length;
++        }
++        return this.#values.length;
+     }
+ 
+-    set(index, value) {
+-        if (!this.#instance) {
+-            throw new RangeError('WebAssembly.Table.set(): Table is not backed by an instance');
++    get(index) {
++        const normalizedIndex = toNonWrappingU32(index, 'index');
++        if (this.#values) {
++            if (normalizedIndex >= this.#values.length) {
++                throw new RangeError('WebAssembly.Table.get(): Invalid index');
++            }
++            return this.#values[normalizedIndex];
++        }
++        if (this.#canonicalValues) {
++            if (normalizedIndex >= this.#canonicalValues.length) {
++                throw new RangeError('WebAssembly.Table.get(): Invalid index');
++            }
++            return this.#canonicalValues[normalizedIndex];
+         }
++        throw new RangeError('WebAssembly.Table.get(): Invalid index');
++    }
+ 
+-        if (this.#element === 'funcref') {
+-            if (value === null) {
+-                wasm.tableSet(this.#instance, this.#name, index, null);
+-            } else if (typeof value === 'function' && funcIndexMap.has(value)) {
+-                wasm.tableSet(this.#instance, this.#name, index, funcIndexMap.get(value));
+-            } else {
+-                throw new TypeError('WebAssembly.Table.set(): Argument 1 must be null or a WebAssembly function');
++    set(index, value) {
++        const normalizedIndex = toNonWrappingU32(index, 'index');
++        if (this.#values) {
++            if (normalizedIndex >= this.#values.length) {
++                throw new RangeError('WebAssembly.Table.set(): Invalid index');
+             }
+-        } else {
+-            wasm.tableSet(this.#instance, this.#name, index, value);
++            this.#validateValue(value);
++            this.#values[normalizedIndex] = value;
++            return;
++        }
++        if (this.#canonicalValues) {
++            if (normalizedIndex >= this.#canonicalValues.length) {
++                throw new RangeError('WebAssembly.Table.set(): Invalid index');
++            }
++            this.#validateValue(value);
++            if (this.#element === 'funcref' && value !== null) {
++                const ref = funcRefMap.get(value);
++                if (this.#instances.some(
++                    entry => ref.instance !== entry.instance)) {
++                    throw new TypeError(
++                        'WebAssembly.Table.set(): Cross-instance function ' +
++                        'references are not supported by this runtime',
++                    );
++                }
++            }
++            this.#canonicalValues[normalizedIndex] = value;
++            for (const entry of this.#instances) {
++                if (this.#element === 'funcref') {
++                    if (value === null) {
++                        wasm.tableSet(entry.instance, entry.name,
++                            normalizedIndex, null);
++                    } else {
++                        const ref = funcRefMap.get(value);
++                        wasm.tableSet(entry.instance, entry.name,
++                            normalizedIndex, ref.index);
++                    }
++                } else {
++                    wasm.tableSet(entry.instance, entry.name,
++                        normalizedIndex, value);
++                }
++            }
++            return;
+         }
++        throw new RangeError('WebAssembly.Table.set(): Invalid index');
+     }
+ 
+-    grow(delta) {
+-        if (typeof delta !== 'number' || delta < 0 || delta !== (delta >>> 0)) {
+-            throw new TypeError('WebAssembly.Table.grow(): Argument 0 must be a non-negative integer');
++    grow(delta, value = null) {
++        this.#instance;
++        const normalizedDelta = toNonWrappingU32(delta, 'delta');
++        this.#validateValue(value);
++
++        if (!this.#canonicalValues) {
++            const oldLength = this.#values.length;
++            const newLength = oldLength + normalizedDelta;
++            if (newLength > CAPSID_WASM_MAX_TABLE_ELEMENTS ||
++                (this.#maximum !== undefined && newLength > this.#maximum)) {
++                throw new RangeError('WebAssembly.Table.grow(): Maximum table size exceeded');
++            }
++            for (let index = oldLength; index < newLength; index++) {
++                this.#values.push(value);
++            }
++            return oldLength;
+         }
+ 
+-        if (!this.#instance) {
+-            throw new RangeError('WebAssembly.Table.grow(): Table is not backed by an instance');
++        const oldLength = this.#canonicalValues.length;
++        const newLength = oldLength + normalizedDelta;
++        if (newLength > CAPSID_WASM_MAX_TABLE_ELEMENTS ||
++            (this.#maximum !== undefined && newLength > this.#maximum)) {
++            throw new RangeError(
++                'WebAssembly.Table.grow(): Maximum table size exceeded');
++        }
++        if (this.#element === 'funcref' && value !== null) {
++            const ref = funcRefMap.get(value);
++            if (this.#instances.some(
++                entry => ref.instance !== entry.instance)) {
++                throw new TypeError(
++                    'WebAssembly.Table.grow(): Cross-instance function ' +
++                    'references are not supported by this runtime',
++                );
++            }
+         }
+ 
+-        return wasm.tableGrow(this.#instance, this.#name, delta);
++        for (const entry of this.#instances) {
++            const result =
++                wasm.tableGrow(entry.instance, entry.name, normalizedDelta);
++            if (result < 0 || result !== oldLength) {
++                throw new RangeError(
++                    'WebAssembly.Table.grow(): Maximum table size exceeded');
++            }
++        }
++        for (let index = oldLength; index < newLength; index++) {
++            this.#canonicalValues.push(value);
++        }
++        for (const entry of this.#instances) {
++            for (let index = oldLength; index < newLength; index++) {
++                if (this.#element === 'funcref') {
++                    if (value === null) {
++                        wasm.tableSet(
++                            entry.instance,
++                            entry.name,
++                            index,
++                            null,
++                        );
++                    } else {
++                        const ref = funcRefMap.get(value);
++                        wasm.tableSet(
++                            entry.instance,
++                            entry.name,
++                            index,
++                            ref.index,
++                        );
++                    }
++                } else {
++                    wasm.tableSet(
++                        entry.instance,
++                        entry.name,
++                        index,
++                        value,
++                    );
++                }
++            }
++        }
++        return oldLength;
+     }
+ }
+ 
+@@ -605,9 +1514,20 @@
+         return new Module(src);
+     }
+ 
+-    async instantiate(src, importObject) {
++    async instantiate(src, importObject = undefined) {
++        const importObjectProvided =
++            arguments.length >= 2 && importObject !== undefined;
++
++        if (src instanceof Module) {
++            return importObjectProvided ?
++                new Instance(src, importObject) :
++                new Instance(src);
++        }
++
+         const module = await this.compile(src);
+-        const instance = new Instance(module, importObject);
++        const instance = importObjectProvided ?
++            new Instance(module, importObject) :
++            new Instance(module);
+ 
+         return { module, instance };
+     }
+@@ -627,7 +1547,7 @@
+ 
+         const contentType = response.headers.get('content-type');
+ 
+-        if (contentType && !contentType.includes('application/wasm')) {
++        if (contentType?.trim().toLowerCase() !== 'application/wasm') {
+             throw new TypeError(
+                 `WebAssembly.compileStreaming requires content type application/wasm, got ${contentType}`,
+             );
+@@ -638,9 +1558,13 @@
+         return this.compile(bytes);
+     }
+ 
+-    async instantiateStreaming(source, importObject) {
++    async instantiateStreaming(source, importObject = undefined) {
++        const importObjectProvided =
++            arguments.length >= 2 && importObject !== undefined;
+         const module = await this.compileStreaming(source);
+-        const instance = new Instance(module, importObject);
++        const instance = importObjectProvided ?
++            new Instance(module, importObject) :
++            new Instance(module);
+ 
+         return { module, instance };
+     }
+--- a/src/wasm.c
++++ b/src/wasm.c
+@@ -35,8 +35,11 @@
+ 
+ #define TJS__WASM_MAX_ARGS       32
+ #define TJS__WASM_ERROR_BUF_SIZE 256
++#define TJS__WASM_MAX_MEMORY_PAGES 256
++#define TJS__WASM_MAX_TABLE_ELEMENTS 1024
+ 
+ typedef struct TJSWasmImportGroup TJSWasmImportGroup;
++typedef struct TJSWasmResourceImport TJSWasmResourceImport;
+ 
+ static JSClassID tjs_wasm_module_class_id;
+ 
+@@ -55,11 +58,30 @@
+         uint32_t map_dir_count;
+     } wasi;
+     TJSWasmImportGroup *pending_imports; /* Set by resolveImports, moved to instance by buildInstance */
++    TJSWasmResourceImport *resource_imports;
++    uint32_t resource_import_count;
+ } TJSWasmModule;
+ 
++struct TJSWasmResourceImport {
++    WASMImport *import;
++    char *module_name;
++};
++
++static void tjs__wasm_restore_resource_imports(TJSWasmModule *m) {
++    for (uint32_t i = 0; i < m->resource_import_count; i++) {
++        m->resource_imports[i].import->u.names.module_name =
++            m->resource_imports[i].module_name;
++    }
++}
++
+ static void tjs_wasm_module_finalizer(JSRuntime *rt, JSValue val) {
+     TJSWasmModule *m = JS_GetOpaque(val, tjs_wasm_module_class_id);
+     if (m) {
++        for (uint32_t i = 0; i < m->resource_import_count; i++) {
++            m->resource_imports[i].import->u.names.module_name =
++                m->resource_imports[i].module_name;
++        }
++        js_free_rt(rt, m->resource_imports);
+         if (m->module) {
+             wasm_runtime_unload(m->module);
+         }
+@@ -113,75 +135,82 @@
+ typedef struct {
+     wasm_module_inst_t module_inst;
+     wasm_exec_env_t exec_env;
++    JSValue module_ref;
+     TJSWasmImportGroup *import_groups;
+     bool has_pending_exception;
+     JSValue pending_exception;
+     /* externref: JSValues boxed for WAMR's externref map */
+     JSValue *externrefs;
+     uint32_t externref_count;
+     uint32_t externref_capacity;
+     /* Cached ArrayBuffer aliasing WAMR linear memory. Detached and replaced
+      * whenever WAMR moves or resizes the underlying memory. */
+     JSValue memory_buffer;
+     void *memory_buffer_data;
+     size_t memory_buffer_size;
+ } TJSWasmInstance;
+ 
+ static void tjs_wasm_instance_finalizer(JSRuntime *rt, JSValue val) {
+     TJSWasmInstance *i = JS_GetOpaque(val, tjs_wasm_instance_class_id);
+     if (i) {
+         if (!JS_IsUndefined(i->memory_buffer)) {
+             JS_FreeValueRT(rt, i->memory_buffer);
+         }
+         if (i->exec_env) {
+             wasm_runtime_destroy_exec_env(i->exec_env);
+         }
+         if (i->module_inst) {
+             wasm_runtime_deinstantiate(i->module_inst);
+         }
++        if (!JS_IsUndefined(i->module_ref)) {
++            JS_FreeValueRT(rt, i->module_ref);
++        }
+         /* Free import groups */
+         TJSWasmImportGroup *g = i->import_groups;
+         while (g) {
+             TJSWasmImportGroup *next = g->next;
+             wasm_runtime_unregister_natives(g->module_name, g->symbols);
+             for (uint32_t j = 0; j < g->count; j++) {
+                 JS_FreeValueRT(rt, g->ctxs[j].func);
+                 js_free_rt(rt, (char *) g->symbols[j].symbol);
+                 js_free_rt(rt, (char *) g->symbols[j].signature);
+             }
+             js_free_rt(rt, g->ctxs);
+             js_free_rt(rt, g->symbols);
+             js_free_rt(rt, g->module_name);
+             js_free_rt(rt, g);
+             g = next;
+         }
+         /* Free externref boxes */
+         for (uint32_t j = 0; j < i->externref_count; j++) {
+             JS_FreeValueRT(rt, i->externrefs[j]);
+         }
+         js_free_rt(rt, i->externrefs);
+         js_free_rt(rt, i);
+     }
+ }
+ 
+ static void tjs_wasm_instance_mark(JSRuntime *rt, JSValue val, JS_MarkFunc *mark_func) {
+     TJSWasmInstance *i = JS_GetOpaque(val, tjs_wasm_instance_class_id);
+     if (i) {
++        if (!JS_IsUndefined(i->module_ref)) {
++            JS_MarkValue(rt, i->module_ref, mark_func);
++        }
+         TJSWasmImportGroup *g = i->import_groups;
+         while (g) {
+             for (uint32_t j = 0; j < g->count; j++) {
+                 JS_MarkValue(rt, g->ctxs[j].func, mark_func);
+             }
+             g = g->next;
+         }
+         if (i->has_pending_exception) {
+             JS_MarkValue(rt, i->pending_exception, mark_func);
+         }
+         for (uint32_t j = 0; j < i->externref_count; j++) {
+             JS_MarkValue(rt, i->externrefs[j], mark_func);
+         }
+         if (!JS_IsUndefined(i->memory_buffer)) {
+             JS_MarkValue(rt, i->memory_buffer, mark_func);
+         }
+     }
+ }
+@@ -230,6 +259,7 @@
+     }
+ 
+     i->memory_buffer = JS_UNDEFINED;
++    i->module_ref = JS_UNDEFINED;
+ 
+     JS_SetOpaque(obj, i);
+     return obj;
+@@ -256,11 +278,7 @@
+         case WASM_I32:
+             return JS_NewInt32(ctx, val->of.i32);
+         case WASM_I64:
+-            if (val->of.i64 == (int32_t) val->of.i64) {
+-                return JS_NewInt32(ctx, (int32_t) val->of.i64);
+-            } else {
+-                return JS_NewBigInt64(ctx, val->of.i64);
+-            }
++            return JS_NewBigInt64(ctx, val->of.i64);
+         case WASM_F32:
+             return JS_NewFloat64(ctx, (double) val->of.f32);
+         case WASM_F64:
+@@ -313,6 +331,10 @@
+     switch (type) {
+         case WASM_I32: {
+             int32_t i32;
++            if (JS_IsBigInt(jsval)) {
++                JS_ThrowTypeError(ctx, "cannot convert BigInt to i32");
++                return false;
++            }
+             if (JS_ToInt32(ctx, &i32, jsval)) {
+                 return false;
+             }
+@@ -321,23 +343,18 @@
+         }
+         case WASM_I64: {
+             int64_t i64;
+-            // Try BigInt first
+-            if (!JS_ToBigInt64(ctx, &i64, jsval)) {
+-                val->of.i64 = i64;
+-                return true;
+-            }
+-            // Clear the exception from BigInt attempt
+-            JS_FreeValue(ctx, JS_GetException(ctx));
+-            // Try as regular integer
+-            int32_t i32;
+-            if (JS_ToInt32(ctx, &i32, jsval)) {
++            if (JS_ToBigInt64(ctx, &i64, jsval)) {
+                 return false;
+             }
+-            val->of.i64 = i32;
++            val->of.i64 = i64;
+             return true;
+         }
+         case WASM_F32: {
+             double f64;
++            if (JS_IsBigInt(jsval)) {
++                JS_ThrowTypeError(ctx, "cannot convert BigInt to f32");
++                return false;
++            }
+             if (JS_ToFloat64(ctx, &f64, jsval)) {
+                 return false;
+             }
+@@ -346,6 +363,10 @@
+         }
+         case WASM_F64: {
+             double f64;
++            if (JS_IsBigInt(jsval)) {
++                JS_ThrowTypeError(ctx, "cannot convert BigInt to f64");
++                return false;
++            }
+             if (JS_ToFloat64(ctx, &f64, jsval)) {
+                 return false;
+             }
+@@ -498,46 +519,63 @@
+     }
+ 
+     /* Convert return value back to WASM */
++    bool conversion_failed = false;
+     if (result_count > 0) {
+         wasm_valkind_t ret_kind = wasm_func_type_get_result_valkind(func_type, 0);
+         switch (ret_kind) {
+             case WASM_I32: {
+                 int32_t i32;
+-                JS_ToInt32(ctx, &i32, ret);
+-                args[0] = (uint64_t) (uint32_t) i32;
++                if (JS_IsBigInt(ret)) {
++                    JS_ThrowTypeError(ctx, "cannot convert BigInt to i32");
++                    conversion_failed = true;
++                } else if (JS_ToInt32(ctx, &i32, ret)) {
++                    conversion_failed = true;
++                } else {
++                    args[0] = (uint64_t) (uint32_t) i32;
++                }
+                 break;
+             }
+             case WASM_I64: {
+                 int64_t i64;
+                 if (JS_ToBigInt64(ctx, &i64, ret)) {
+-                    JS_FreeValue(ctx, JS_GetException(ctx));
+-                    int32_t i32;
+-                    JS_ToInt32(ctx, &i32, ret);
+-                    i64 = i32;
++                    conversion_failed = true;
++                } else {
++                    args[0] = (uint64_t) i64;
+                 }
+-                args[0] = (uint64_t) i64;
+                 break;
+             }
+             case WASM_F32: {
+                 double f64;
+-                JS_ToFloat64(ctx, &f64, ret);
+-                union {
+-                    uint32_t i;
+-                    float f;
+-                } u;
+-                u.f = (float) f64;
+-                args[0] = u.i;
++                if (JS_IsBigInt(ret)) {
++                    JS_ThrowTypeError(ctx, "cannot convert BigInt to f32");
++                    conversion_failed = true;
++                } else if (JS_ToFloat64(ctx, &f64, ret)) {
++                    conversion_failed = true;
++                } else {
++                    union {
++                        uint32_t i;
++                        float f;
++                    } u;
++                    u.f = (float) f64;
++                    args[0] = u.i;
++                }
+                 break;
+             }
+             case WASM_F64: {
+                 double f64;
+-                JS_ToFloat64(ctx, &f64, ret);
+-                union {
+-                    uint64_t i;
+-                    double f;
+-                } u;
+-                u.f = f64;
+-                args[0] = u.i;
++                if (JS_IsBigInt(ret)) {
++                    JS_ThrowTypeError(ctx, "cannot convert BigInt to f64");
++                    conversion_failed = true;
++                } else if (JS_ToFloat64(ctx, &f64, ret)) {
++                    conversion_failed = true;
++                } else {
++                    union {
++                        uint64_t i;
++                        double f;
++                    } u;
++                    u.f = f64;
++                    args[0] = u.i;
++                }
+                 break;
+             }
+             default:
+@@ -546,9 +584,23 @@
+         }
+     }
+ 
++    if (conversion_failed) {
++        TJSWasmInstance *inst = wasm_runtime_get_user_data(exec_env);
++        JSValue exception = JS_GetException(ctx);
++        if (inst) {
++            inst->pending_exception = exception;
++            inst->has_pending_exception = true;
++        } else {
++            JS_FreeValue(ctx, exception);
++        }
++        wasm_runtime_set_exception(wasm_runtime_get_module_inst(exec_env),
++                                   "imported function returned an incompatible value");
++    }
++
+     JS_FreeValue(ctx, ret);
+ }
+ 
++#if WASM_ENABLE_LIBC_WASI != 0
+ /* Convert a non-negative integer fd from JS into a raw host handle for WAMR.
+  * Returns true on success; *handle is set to -1 to mean "use the embedder's
+  * default stdio" when js_fd is undefined (WAMR reads that as STDIN_FILENO/etc.
+@@ -778,6 +830,7 @@
+     }
+     return JS_EXCEPTION;
+ }
++#endif
+ 
+ static JSValue tjs__call_wasm_func_inst(JSContext *ctx,
+                                         TJSWasmInstance *inst,
+@@ -916,7 +969,30 @@
+     wasm_runtime_resolve_symbols(m->module);
+ 
+     // Instantiate the module
+-    i->module_inst = wasm_runtime_instantiate(m->module, stack_size, 0, error_buf, sizeof(error_buf));
++    WASMModule *wasm_module = (WASMModule *)m->module;
++    uint32_t module_max_memory_pages = 0;
++    if (wasm_module->import_memory_count > 0) {
++        module_max_memory_pages =
++            wasm_module->import_memories[0].u.memory.mem_type.max_page_count;
++    } else if (wasm_module->memory_count > 0) {
++        module_max_memory_pages =
++            wasm_module->memories[0].max_page_count;
++    }
++
++    InstantiationArgs instantiate_args = {
++        .default_stack_size = stack_size,
++        .host_managed_heap_size = 0,
++        .max_memory_pages =
++            module_max_memory_pages > TJS__WASM_MAX_MEMORY_PAGES
++                ? TJS__WASM_MAX_MEMORY_PAGES
++                : module_max_memory_pages,
++    };
++    i->module_inst = wasm_runtime_instantiate_ex(
++        m->module, &instantiate_args, error_buf, sizeof(error_buf));
++    tjs__wasm_restore_resource_imports(m);
++    js_free(ctx, m->resource_imports);
++    m->resource_imports = NULL;
++    m->resource_import_count = 0;
+     if (!i->module_inst) {
+         JS_FreeValue(ctx, obj);
+         return tjs_throw_wasm_error(ctx, "LinkError", error_buf);
+@@ -923,6 +999,7 @@
+     }
+ 
+     // Create execution environment
++    i->module_ref = JS_DupValue(ctx, argv[0]);
+     i->exec_env = wasm_runtime_create_exec_env(i->module_inst, stack_size);
+     if (!i->exec_env) {
+         wasm_runtime_deinstantiate(i->module_inst);
+@@ -991,6 +1067,12 @@
+             JSValue item = JS_NewObjectProto(ctx, JS_NULL);
+             JS_DefinePropertyValueStr(ctx, item, "name", JS_NewString(ctx, export_type.name), JS_PROP_C_W_E);
+             JS_DefinePropertyValueStr(ctx, item, "kind", JS_NewString(ctx, kind_str), JS_PROP_C_W_E);
++            WASMModule *module = (WASMModule *)m->module;
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "index",
++                                      JS_NewUint32(ctx, module->exports[idx].index),
++                                      JS_PROP_C_W_E);
+             JS_DefinePropertyValueUint32(ctx, exports, j, item, JS_PROP_C_W_E);
+             j++;
+         }
+@@ -1048,6 +1130,264 @@
+     return imports;
+ }
+ 
++static const char *tjs__wasm_valkind_name(wasm_valkind_t kind) {
++    switch (kind) {
++        case WASM_I32:
++            return "i32";
++        case WASM_I64:
++            return "i64";
++        case WASM_F32:
++            return "f32";
++        case WASM_F64:
++            return "f64";
++        case WASM_EXTERNREF:
++            return "externref";
++        case WASM_FUNCREF:
++            return "funcref";
++        default:
++            return "unknown";
++    }
++}
++
++static JSValue tjs_wasm_moduleimportdetails(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    TJSWasmModule *m = tjs_wasm_module_get(ctx, argv[0]);
++    if (!m) {
++        return JS_EXCEPTION;
++    }
++
++    JSValue imports = JS_NewArray(ctx);
++    if (JS_IsException(imports)) {
++        return imports;
++    }
++
++    int32_t import_count = wasm_runtime_get_import_count(m->module);
++    if (import_count < 0) {
++        return imports;
++    }
++
++    for (int32_t idx = 0; idx < import_count; idx++) {
++        wasm_import_t import_type;
++        wasm_runtime_get_import_type(m->module, idx, &import_type);
++
++        const char *kind_str = NULL;
++        switch (import_type.kind) {
++            case WASM_IMPORT_EXPORT_KIND_FUNC:
++                kind_str = "function";
++                break;
++            case WASM_IMPORT_EXPORT_KIND_MEMORY:
++                kind_str = "memory";
++                break;
++            case WASM_IMPORT_EXPORT_KIND_TABLE:
++                kind_str = "table";
++                break;
++            case WASM_IMPORT_EXPORT_KIND_GLOBAL:
++                kind_str = "global";
++                break;
++        }
++
++        if (!kind_str) {
++            continue;
++        }
++
++        JSValue item = JS_NewObjectProto(ctx, JS_NULL);
++        JS_DefinePropertyValueStr(ctx, item, "module", JS_NewString(ctx, import_type.module_name), JS_PROP_C_W_E);
++        JS_DefinePropertyValueStr(ctx, item, "name", JS_NewString(ctx, import_type.name), JS_PROP_C_W_E);
++        JS_DefinePropertyValueStr(ctx, item, "kind", JS_NewString(ctx, kind_str), JS_PROP_C_W_E);
++
++        if (import_type.kind == WASM_IMPORT_EXPORT_KIND_GLOBAL) {
++            wasm_valkind_t kind = wasm_global_type_get_valkind(import_type.u.global_type);
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "type",
++                                      JS_NewString(ctx, tjs__wasm_valkind_name(kind)),
++                                      JS_PROP_C_W_E);
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "mutable",
++                                      JS_NewBool(ctx, wasm_global_type_get_mutable(import_type.u.global_type)),
++                                      JS_PROP_C_W_E);
++        } else if (import_type.kind == WASM_IMPORT_EXPORT_KIND_MEMORY) {
++            WASMMemoryType *type = import_type.u.memory_type;
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "initial",
++                                      JS_NewUint32(ctx, wasm_memory_type_get_init_page_count(type)),
++                                      JS_PROP_C_W_E);
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "maximum",
++                                      JS_NewUint32(ctx, wasm_memory_type_get_max_page_count(type)),
++                                      JS_PROP_C_W_E);
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "hasMaximum",
++                                      JS_NewBool(ctx, (type->flags & 1) != 0),
++                                      JS_PROP_C_W_E);
++        } else if (import_type.kind == WASM_IMPORT_EXPORT_KIND_TABLE) {
++            WASMTableType *type = import_type.u.table_type;
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "element",
++                                      JS_NewString(ctx,
++                                                   tjs__wasm_valkind_name(
++                                                       wasm_table_type_get_elem_kind(type))),
++                                      JS_PROP_C_W_E);
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "initial",
++                                      JS_NewUint32(ctx, wasm_table_type_get_init_size(type)),
++                                      JS_PROP_C_W_E);
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "maximum",
++                                      JS_NewUint32(ctx, wasm_table_type_get_max_size(type)),
++                                      JS_PROP_C_W_E);
++            JS_DefinePropertyValueStr(ctx,
++                                      item,
++                                      "hasMaximum",
++                                      JS_NewBool(ctx, (type->flags & 1) != 0),
++                                      JS_PROP_C_W_E);
++        }
++
++        JS_DefinePropertyValueUint32(ctx, imports, (uint32_t)idx, item, JS_PROP_C_W_E);
++    }
++
++    return imports;
++}
++
++static JSValue tjs_wasm_resourceresolve(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    TJSWasmModule *m = tjs_wasm_module_get(ctx, argv[0]);
++    if (!m) {
++        return JS_EXCEPTION;
++    }
++
++    tjs__wasm_restore_resource_imports(m);
++    js_free(ctx, m->resource_imports);
++    m->resource_imports = NULL;
++    m->resource_import_count = 0;
++
++    WASMModule *module = (WASMModule *)m->module;
++    uint32_t count = 0;
++    for (uint32_t i = 0; i < module->import_count; i++) {
++        if (module->imports[i].kind == WASM_IMPORT_EXPORT_KIND_MEMORY ||
++            module->imports[i].kind == WASM_IMPORT_EXPORT_KIND_TABLE) {
++            count++;
++        }
++    }
++
++    if (count == 0) {
++        return JS_UNDEFINED;
++    }
++
++    m->resource_imports =
++        js_mallocz(ctx, sizeof(*m->resource_imports) * count);
++    if (!m->resource_imports) {
++        return JS_EXCEPTION;
++    }
++
++    uint32_t memory_index = 0;
++    uint32_t table_index = 0;
++    for (uint32_t i = 0, j = 0; i < module->import_count; i++) {
++        WASMImport *import = &module->imports[i];
++        if (import->kind != WASM_IMPORT_EXPORT_KIND_MEMORY &&
++            import->kind != WASM_IMPORT_EXPORT_KIND_TABLE) {
++            continue;
++        }
++        m->resource_imports[j].import = import;
++        m->resource_imports[j].module_name = import->u.names.module_name;
++        if (import->kind == WASM_IMPORT_EXPORT_KIND_MEMORY) {
++            JSValue item =
++                JS_GetPropertyUint32(ctx, argv[1], memory_index++);
++            if (JS_IsException(item)) {
++                tjs__wasm_restore_resource_imports(m);
++                js_free(ctx, m->resource_imports);
++                m->resource_imports = NULL;
++                m->resource_import_count = 0;
++                return JS_EXCEPTION;
++            }
++            JSValue js_initial = JS_GetPropertyStr(ctx, item, "pages");
++            JSValue js_maximum = JS_GetPropertyStr(ctx, item, "maximum");
++            uint32_t initial;
++            uint32_t maximum = TJS__WASM_MAX_MEMORY_PAGES;
++
++            if (JS_IsException(js_initial) ||
++                JS_IsException(js_maximum) ||
++                JS_ToUint32(ctx, &initial, js_initial) ||
++                (!JS_IsUndefined(js_maximum) &&
++                 JS_ToUint32(ctx, &maximum, js_maximum))) {
++                JS_FreeValue(ctx, js_maximum);
++                JS_FreeValue(ctx, js_initial);
++                JS_FreeValue(ctx, item);
++                tjs__wasm_restore_resource_imports(m);
++                js_free(ctx, m->resource_imports);
++                m->resource_imports = NULL;
++                m->resource_import_count = 0;
++                return JS_EXCEPTION;
++            }
++            JS_FreeValue(ctx, js_maximum);
++            JS_FreeValue(ctx, js_initial);
++            JS_FreeValue(ctx, item);
++
++            /*
++             * The native allocation is a per-instance mirror of the JS
++             * Memory.  Give it the canonical object's current and maximum
++             * limits so a Wasm memory.grow cannot escape the wrapper's
++             * declared limit between synchronization points.
++             */
++            import->u.memory.mem_type.init_page_count = initial;
++            import->u.memory.mem_type.max_page_count = maximum;
++        } else {
++            JSValue item =
++                JS_GetPropertyUint32(ctx, argv[2], table_index++);
++            if (JS_IsException(item)) {
++                tjs__wasm_restore_resource_imports(m);
++                js_free(ctx, m->resource_imports);
++                m->resource_imports = NULL;
++                m->resource_import_count = 0;
++                return JS_EXCEPTION;
++            }
++            JSValue js_initial = JS_GetPropertyStr(ctx, item, "length");
++            JSValue js_maximum = JS_GetPropertyStr(ctx, item, "maximum");
++            uint32_t initial;
++            uint32_t maximum = TJS__WASM_MAX_TABLE_ELEMENTS;
++
++            if (JS_IsException(js_initial) ||
++                JS_IsException(js_maximum) ||
++                JS_ToUint32(ctx, &initial, js_initial) ||
++                (!JS_IsUndefined(js_maximum) &&
++                 JS_ToUint32(ctx, &maximum, js_maximum))) {
++                JS_FreeValue(ctx, js_maximum);
++                JS_FreeValue(ctx, js_initial);
++                JS_FreeValue(ctx, item);
++                tjs__wasm_restore_resource_imports(m);
++                js_free(ctx, m->resource_imports);
++                m->resource_imports = NULL;
++                m->resource_import_count = 0;
++                return JS_EXCEPTION;
++            }
++            JS_FreeValue(ctx, js_maximum);
++            JS_FreeValue(ctx, js_initial);
++            JS_FreeValue(ctx, item);
++
++            /*
++             * WAMR otherwise allocates only the declared initial table size
++             * when the module itself has no table.grow instruction. Imported
++             * host tables may already be larger and must remain growable up
++             * to the declaration's maximum.
++             */
++            import->u.table.table_type.init_size = initial;
++            import->u.table.table_type.max_size = maximum;
++            import->u.table.table_type.possible_grow = true;
++        }
++        import->u.names.module_name = "";
++        m->resource_import_count = j + 1;
++        j++;
++    }
++    m->resource_import_count = count;
++
++    return JS_UNDEFINED;
++}
++
+ static char tjs__wasm_valkind_to_sig(wasm_valkind_t kind) {
+     switch (kind) {
+         case WASM_I32:
+@@ -1500,6 +1840,70 @@
+     return buffer;
+ }
+ 
++static JSValue tjs_wasm_getmemoryinfo(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    TJSWasmInstance *i = tjs_wasm_instance_get(ctx, argv[0]);
++    if (!i) {
++        return JS_EXCEPTION;
++    }
++
++    const char *name = JS_ToCString(ctx, argv[1]);
++    if (!name) {
++        return JS_EXCEPTION;
++    }
++
++    WASMModuleInstance *module_inst = (WASMModuleInstance *)i->module_inst;
++    WASMModule *module = module_inst->module;
++    wasm_memory_inst_t memory =
++        wasm_runtime_lookup_memory(i->module_inst, name);
++    uint32_t memory_index = UINT32_MAX;
++
++    for (uint32_t j = 0; j < module->export_count; j++) {
++        if (module->exports[j].kind == WASM_IMPORT_EXPORT_KIND_MEMORY &&
++            strcmp(module->exports[j].name, name) == 0) {
++            memory_index = module->exports[j].index;
++            break;
++        }
++    }
++    JS_FreeCString(ctx, name);
++
++    if (!memory || memory_index >= module_inst->memory_count) {
++        return tjs_throw_wasm_error(ctx, "RuntimeError", "memory not found");
++    }
++
++    WASMMemoryType *type;
++    if (memory_index < module->import_memory_count) {
++        type = &module->import_memories[memory_index].u.memory.mem_type;
++    } else {
++        type = &module->memories[
++            memory_index - module->import_memory_count];
++    }
++
++    JSValue obj = JS_NewObject(ctx);
++    JS_DefinePropertyValueStr(
++        ctx,
++        obj,
++        "current",
++        JS_NewUint32(
++            ctx,
++            (uint32_t)wasm_memory_get_cur_page_count(memory)),
++        JS_PROP_C_W_E);
++    JS_DefinePropertyValueStr(
++        ctx,
++        obj,
++        "maximum",
++        JS_NewUint32(
++            ctx,
++            (uint32_t)wasm_memory_get_max_page_count(memory)),
++        JS_PROP_C_W_E);
++    JS_DefinePropertyValueStr(
++        ctx,
++        obj,
++        "hasMaximum",
++        JS_NewBool(ctx, (type->flags & 1) != 0),
++        JS_PROP_C_W_E);
++    return obj;
++}
++
+ static JSValue tjs_wasm_growmemory(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSWasmInstance *i = tjs_wasm_instance_get(ctx, argv[0]);
+     if (!i) {
+@@ -1534,23 +1938,66 @@
+     return JS_NewUint32(ctx, (uint32_t) old_pages);
+ }
+ 
+-static JSValue tjs_wasm_getglobal(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+-    TJSWasmInstance *i = tjs_wasm_instance_get(ctx, argv[0]);
+-    if (!i) {
+-        return JS_EXCEPTION;
++static wasm_valkind_t tjs__wasm_internal_valkind(uint8_t type) {
++    switch (type) {
++        case VALUE_TYPE_I32:
++            return WASM_I32;
++        case VALUE_TYPE_I64:
++            return WASM_I64;
++        case VALUE_TYPE_F32:
++            return WASM_F32;
++        case VALUE_TYPE_F64:
++            return WASM_F64;
++        case VALUE_TYPE_EXTERNREF:
++            return WASM_EXTERNREF;
++        case VALUE_TYPE_FUNCREF:
++            return WASM_FUNCREF;
++        default:
++            return WASM_V128;
+     }
++}
+ 
+-    const char *name = JS_ToCString(ctx, argv[1]);
++static bool tjs__wasm_get_global_ref(JSContext *ctx,
++                                     TJSWasmInstance *i,
++                                     JSValue ref,
++                                     wasm_global_inst_t *global_inst) {
++    if (JS_IsNumber(ref)) {
++        uint32_t index;
++        if (JS_ToUint32(ctx, &index, ref)) {
++            return false;
++        }
++        WASMModuleInstance *module_inst = (WASMModuleInstance *)i->module_inst;
++        WASMModuleInstanceExtra *extra = (WASMModuleInstanceExtra *)module_inst->e;
++        if (index >= extra->global_count) {
++            return false;
++        }
++        WASMGlobalInstance *global = &extra->globals[index];
++        global_inst->kind = tjs__wasm_internal_valkind(global->type);
++        global_inst->is_mutable = global->is_mutable;
++        global_inst->global_data = module_inst->global_data + global->data_offset;
++        return true;
++    }
++
++    const char *name = JS_ToCString(ctx, ref);
+     if (!name) {
++        return false;
++    }
++    bool found =
++        wasm_runtime_get_export_global_inst(i->module_inst, name, global_inst);
++    JS_FreeCString(ctx, name);
++    return found;
++}
++
++static JSValue tjs_wasm_getglobal(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    TJSWasmInstance *i = tjs_wasm_instance_get(ctx, argv[0]);
++    if (!i) {
+         return JS_EXCEPTION;
+     }
+ 
+     wasm_global_inst_t global_inst;
+-    if (!wasm_runtime_get_export_global_inst(i->module_inst, name, &global_inst)) {
+-        JS_FreeCString(ctx, name);
++    if (!tjs__wasm_get_global_ref(ctx, i, argv[1], &global_inst)) {
+         return tjs_throw_wasm_error(ctx, "RuntimeError", "global not found");
+     }
+-    JS_FreeCString(ctx, name);
+ 
+     switch (global_inst.kind) {
+         case WASM_I32:
+@@ -1592,17 +2039,10 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    const char *name = JS_ToCString(ctx, argv[1]);
+-    if (!name) {
+-        return JS_EXCEPTION;
+-    }
+-
+     wasm_global_inst_t global_inst;
+-    if (!wasm_runtime_get_export_global_inst(i->module_inst, name, &global_inst)) {
+-        JS_FreeCString(ctx, name);
++    if (!tjs__wasm_get_global_ref(ctx, i, argv[1], &global_inst)) {
+         return tjs_throw_wasm_error(ctx, "RuntimeError", "global not found");
+     }
+-    JS_FreeCString(ctx, name);
+ 
+     if (!global_inst.is_mutable) {
+         return JS_ThrowTypeError(ctx, "cannot set an immutable global");
+@@ -1670,17 +2110,10 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    const char *name = JS_ToCString(ctx, argv[1]);
+-    if (!name) {
+-        return JS_EXCEPTION;
+-    }
+-
+     wasm_global_inst_t global_inst;
+-    if (!wasm_runtime_get_export_global_inst(i->module_inst, name, &global_inst)) {
+-        JS_FreeCString(ctx, name);
++    if (!tjs__wasm_get_global_ref(ctx, i, argv[1], &global_inst)) {
+         return tjs_throw_wasm_error(ctx, "RuntimeError", "global not found");
+     }
+-    JS_FreeCString(ctx, name);
+ 
+     const char *type_str;
+     switch (global_inst.kind) {
+@@ -1716,23 +2149,77 @@
+ 
+ /* Table operations using internal WAMR structures */
+ 
++static bool tjs__wasm_get_table_ref(JSContext *ctx,
++                                    TJSWasmInstance *i,
++                                    JSValue ref,
++                                    wasm_table_inst_t *table_inst,
++                                    uint32_t *table_index) {
++    WASMModuleInstance *module_inst = (WASMModuleInstance *)i->module_inst;
++    uint32_t index = UINT32_MAX;
++
++    if (JS_IsNumber(ref)) {
++        if (JS_ToUint32(ctx, &index, ref)) {
++            return false;
++        }
++    } else {
++        const char *name = JS_ToCString(ctx, ref);
++        if (!name) {
++            return false;
++        }
++        int32_t export_count =
++            wasm_runtime_get_export_count((wasm_module_t)module_inst->module);
++        for (int32_t j = 0; j < export_count; j++) {
++            wasm_export_t exp;
++            wasm_runtime_get_export_type(
++                (wasm_module_t)module_inst->module, j, &exp);
++            if (exp.kind == WASM_IMPORT_EXPORT_KIND_TABLE &&
++                strcmp(exp.name, name) == 0) {
++                WASMExport *exports = module_inst->module->exports;
++                index = exports[j].index;
++                break;
++            }
++        }
++        JS_FreeCString(ctx, name);
++    }
++
++    if (index >= module_inst->table_count) {
++        return false;
++    }
++
++    WASMTableInstance *table = module_inst->tables[index];
++    table_inst->elem_kind = tjs__wasm_internal_valkind(table->elem_type);
++    table_inst->cur_size = table->cur_size;
++    table_inst->max_size = table->max_size;
++    table_inst->elems = table->elems;
++    if (table_index) {
++        *table_index = index;
++    }
++    return true;
++}
++
+ static JSValue tjs_wasm_gettableinfo(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSWasmInstance *i = tjs_wasm_instance_get(ctx, argv[0]);
+     if (!i) {
+         return JS_EXCEPTION;
+     }
+ 
+-    const char *name = JS_ToCString(ctx, argv[1]);
+-    if (!name) {
+-        return JS_EXCEPTION;
+-    }
+-
+     wasm_table_inst_t tbl;
+-    if (!wasm_runtime_get_export_table_inst(i->module_inst, name, &tbl)) {
+-        JS_FreeCString(ctx, name);
++    uint32_t table_index;
++    if (!tjs__wasm_get_table_ref(
++            ctx, i, argv[1], &tbl, &table_index)) {
+         return tjs_throw_wasm_error(ctx, "RuntimeError", "table not found");
+     }
+-    JS_FreeCString(ctx, name);
++
++    WASMModuleInstance *module_inst = (WASMModuleInstance *)i->module_inst;
++    WASMModule *module = module_inst->module;
++    WASMTableType *type;
++    if (table_index < module->import_table_count) {
++        type =
++            &module->import_tables[table_index].u.table.table_type;
++    } else {
++        type = &module->tables[
++            table_index - module->import_table_count].table_type;
++    }
+ 
+     const char *elem_kind_str;
+     switch (tbl.elem_kind) {
+@@ -1751,6 +2238,12 @@
+     JS_DefinePropertyValueStr(ctx, obj, "element", JS_NewString(ctx, elem_kind_str), JS_PROP_C_W_E);
+     JS_DefinePropertyValueStr(ctx, obj, "cur_size", JS_NewUint32(ctx, tbl.cur_size), JS_PROP_C_W_E);
+     JS_DefinePropertyValueStr(ctx, obj, "max_size", JS_NewUint32(ctx, tbl.max_size), JS_PROP_C_W_E);
++    JS_DefinePropertyValueStr(
++        ctx,
++        obj,
++        "hasMaximum",
++        JS_NewBool(ctx, (type->flags & MAX_TABLE_SIZE_FLAG) != 0),
++        JS_PROP_C_W_E);
+ 
+     return obj;
+ }
+@@ -1761,17 +2254,10 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    const char *name = JS_ToCString(ctx, argv[1]);
+-    if (!name) {
+-        return JS_EXCEPTION;
+-    }
+-
+     wasm_table_inst_t tbl;
+-    if (!wasm_runtime_get_export_table_inst(i->module_inst, name, &tbl)) {
+-        JS_FreeCString(ctx, name);
++    if (!tjs__wasm_get_table_ref(ctx, i, argv[1], &tbl, NULL)) {
+         return tjs_throw_wasm_error(ctx, "RuntimeError", "table not found");
+     }
+-    JS_FreeCString(ctx, name);
+ 
+     return JS_NewUint32(ctx, tbl.cur_size);
+ }
+@@ -1782,24 +2268,16 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    const char *name = JS_ToCString(ctx, argv[1]);
+-    if (!name) {
+-        return JS_EXCEPTION;
+-    }
+-
+     uint32_t index;
+     if (JS_ToUint32(ctx, &index, argv[2])) {
+-        JS_FreeCString(ctx, name);
+         return JS_EXCEPTION;
+     }
+ 
+     /* Get the public table info for bounds and type */
+     wasm_table_inst_t tbl;
+-    if (!wasm_runtime_get_export_table_inst(i->module_inst, name, &tbl)) {
+-        JS_FreeCString(ctx, name);
++    if (!tjs__wasm_get_table_ref(ctx, i, argv[1], &tbl, NULL)) {
+         return tjs_throw_wasm_error(ctx, "RuntimeError", "table not found");
+     }
+-    JS_FreeCString(ctx, name);
+ 
+     if (index >= tbl.cur_size) {
+         return tjs_throw_wasm_error(ctx, "RangeError", "table index out of bounds");
+@@ -1831,23 +2309,15 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    const char *name = JS_ToCString(ctx, argv[1]);
+-    if (!name) {
+-        return JS_EXCEPTION;
+-    }
+-
+     uint32_t index;
+     if (JS_ToUint32(ctx, &index, argv[2])) {
+-        JS_FreeCString(ctx, name);
+         return JS_EXCEPTION;
+     }
+ 
+     wasm_table_inst_t tbl;
+-    if (!wasm_runtime_get_export_table_inst(i->module_inst, name, &tbl)) {
+-        JS_FreeCString(ctx, name);
++    if (!tjs__wasm_get_table_ref(ctx, i, argv[1], &tbl, NULL)) {
+         return tjs_throw_wasm_error(ctx, "RuntimeError", "table not found");
+     }
+-    JS_FreeCString(ctx, name);
+ 
+     if (index >= tbl.cur_size) {
+         return tjs_throw_wasm_error(ctx, "RangeError", "table index out of bounds");
+@@ -1891,36 +2361,15 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    const char *name = JS_ToCString(ctx, argv[1]);
+-    if (!name) {
+-        return JS_EXCEPTION;
+-    }
+-
+     uint32_t delta;
+     if (JS_ToUint32(ctx, &delta, argv[2])) {
+-        JS_FreeCString(ctx, name);
+         return JS_EXCEPTION;
+     }
+ 
+-    /* Find the table index by name */
+     WASMModuleInstance *module_inst = (WASMModuleInstance *) i->module_inst;
+-    int32_t export_count = wasm_runtime_get_export_count((wasm_module_t) module_inst->module);
+-    uint32_t table_idx = UINT32_MAX;
+-
+-    for (int32_t j = 0; j < export_count; j++) {
+-        wasm_export_t exp;
+-        wasm_runtime_get_export_type((wasm_module_t) module_inst->module, j, &exp);
+-        if (exp.kind == WASM_IMPORT_EXPORT_KIND_TABLE && strcmp(exp.name, name) == 0) {
+-            /* The table index in the export matches the internal table index */
+-            WASMExport *exports = module_inst->module->exports;
+-            table_idx = exports[j].index;
+-            break;
+-        }
+-    }
+-
+-    JS_FreeCString(ctx, name);
+-
+-    if (table_idx == UINT32_MAX) {
++    wasm_table_inst_t table;
++    uint32_t table_idx;
++    if (!tjs__wasm_get_table_ref(ctx, i, argv[1], &table, &table_idx)) {
+         return tjs_throw_wasm_error(ctx, "RuntimeError", "table not found");
+     }
+ 
+@@ -1966,6 +2415,53 @@
+     return JS_NewInt32(ctx, -1);
+ }
+ 
++static JSValue tjs_wasm_getfuncinfo(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    TJSWasmInstance *i = tjs_wasm_instance_get(ctx, argv[0]);
++    if (!i) {
++        return JS_EXCEPTION;
++    }
++
++    const char *name = JS_ToCString(ctx, argv[1]);
++    if (!name) {
++        return JS_EXCEPTION;
++    }
++
++    WASMModuleInstance *module_inst = (WASMModuleInstance *)i->module_inst;
++    int32_t export_count =
++        wasm_runtime_get_export_count((wasm_module_t)module_inst->module);
++    int32_t index = -1;
++    uint32_t parameters = 0;
++
++    for (int32_t j = 0; j < export_count; j++) {
++        wasm_export_t exp;
++        wasm_runtime_get_export_type(
++            (wasm_module_t)module_inst->module, j, &exp);
++        if (exp.kind == WASM_IMPORT_EXPORT_KIND_FUNC &&
++            strcmp(exp.name, name) == 0) {
++            WASMExport *exports = module_inst->module->exports;
++            index = (int32_t)exports[j].index;
++            wasm_function_inst_t func =
++                wasm_runtime_lookup_function(i->module_inst, name);
++            if (func) {
++                parameters =
++                    wasm_func_get_param_count(func, i->module_inst);
++            }
++            break;
++        }
++    }
++
++    JS_FreeCString(ctx, name);
++    JSValue result = JS_NewObject(ctx);
++    JS_DefinePropertyValueStr(
++        ctx, result, "index", JS_NewInt32(ctx, index), JS_PROP_C_W_E);
++    JS_DefinePropertyValueStr(ctx,
++                              result,
++                              "parameters",
++                              JS_NewUint32(ctx, parameters),
++                              JS_PROP_C_W_E);
++    return result;
++}
++
+ /* Call a WASM function by index (for funcref table entries) */
+ static JSValue tjs_wasm_callfuncbyindex(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSWasmInstance *i = tjs_wasm_instance_get(ctx, argv[0]);
+@@ -1990,6 +2486,7 @@
+     return tjs__call_wasm_func_inst(ctx, i, func, argc - 2, argv + 2);
+ }
+ 
++#if WASM_ENABLE_LIBC_WASI != 0
+ static JSValue tjs_wasm_runwasistart(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSWasmInstance *i = tjs_wasm_instance_get(ctx, argv[0]);
+     if (!i) {
+@@ -2027,6 +2524,7 @@
+     wasm_runtime_clear_exception(i->module_inst);
+     return err;
+ }
++#endif
+ 
+ static JSValue tjs_wasm_validate(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     size_t buf_len;
+@@ -2062,20 +2560,28 @@
+ static const JSCFunctionListEntry tjs_wasm_funcs[] = {
+     TJS_CFUNC_DEF("buildInstance", 1, tjs_wasm_buildinstance),
+     TJS_CFUNC_DEF("callFuncByIndex", 3, tjs_wasm_callfuncbyindex),
++    TJS_CFUNC_DEF("getFuncInfo", 2, tjs_wasm_getfuncinfo),
+     TJS_CFUNC_DEF("getFuncIndex", 2, tjs_wasm_getfuncindex),
+     TJS_CFUNC_DEF("getGlobal", 2, tjs_wasm_getglobal),
+     TJS_CFUNC_DEF("getGlobalInfo", 2, tjs_wasm_getglobalinfo),
+     TJS_CFUNC_DEF("getMemoryBuffer", 1, tjs_wasm_getmemorybuffer),
++    TJS_CFUNC_DEF("getMemoryInfo", 2, tjs_wasm_getmemoryinfo),
+     TJS_CFUNC_DEF("getTableInfo", 2, tjs_wasm_gettableinfo),
+     TJS_CFUNC_DEF("growMemory", 2, tjs_wasm_growmemory),
+     TJS_CFUNC_DEF("moduleExports", 1, tjs_wasm_moduleexports),
++    TJS_CFUNC_DEF("moduleImportDetails", 1, tjs_wasm_moduleimportdetails),
+     TJS_CFUNC_DEF("moduleImports", 1, tjs_wasm_moduleimports),
+     TJS_CFUNC_DEF("parseModule", 1, tjs_wasm_parsemodule),
+     TJS_CFUNC_DEF("resolveGlobalImports", 2, tjs_wasm_resolveglobalimports),
+     TJS_CFUNC_DEF("resolveImports", 2, tjs_wasm_resolveimports),
++    TJS_CFUNC_DEF("resolveResourceImports", 3, tjs_wasm_resourceresolve),
++#if WASM_ENABLE_LIBC_WASI != 0
+     TJS_CFUNC_DEF("runWasiStart", 1, tjs_wasm_runwasistart),
++#endif
+     TJS_CFUNC_DEF("setGlobal", 3, tjs_wasm_setglobal),
++#if WASM_ENABLE_LIBC_WASI != 0
+     TJS_CFUNC_DEF("setWasiOptions", 7, tjs_wasm_setwasioptions),
++#endif
+     TJS_CFUNC_DEF("tableGet", 3, tjs_wasm_tableget),
+     TJS_CFUNC_DEF("tableGrow", 3, tjs_wasm_tablegrow),
+     TJS_CFUNC_DEF("tableSet", 4, tjs_wasm_tableset),
+--- a/deps/wamr/core/iwasm/interpreter/wasm_loader.c
++++ b/deps/wamr/core/iwasm/interpreter/wasm_loader.c
+@@ -6503,6 +6503,17 @@
+         }
+     }
+ 
++    /* Check if memory is externally visible (imported or exported).
++     * When JS creates Memory objects or bindings cross the JS/WASM boundary,
++     * the page-count folding optimisation below is unsafe: the embedder can
++     * grow memory externally, and the folded init/max counts would break
++     * Memory.prototype.grow and instantiate-time enforcement. */
++    bool memory_externally_visible = (module->import_memory_count > 0);
++    for (uint32 i = 0; i < module->export_count && !memory_externally_visible; i++) {
++        if (module->exports[i].kind == EXPORT_KIND_MEMORY)
++            memory_externally_visible = true;
++    }
++
+     if (!module->possible_memory_grow) {
+ #if WASM_ENABLE_SHRUNK_MEMORY != 0
+         if (aux_data_end_global && aux_heap_base_global
+@@ -6546,6 +6557,7 @@
+ #endif /* WASM_ENABLE_SHRUNK_MEMORY != 0 */
+ 
+ #if WASM_ENABLE_MULTI_MODULE == 0
++        if (!memory_externally_visible) {
+         if (module->import_memory_count) {
+             WASMMemoryImport *memory_import =
+                 &module->import_memories[0].u.memory;
+@@ -6576,6 +6588,7 @@
+             }
+         }
+ #endif
++        } /* !memory_externally_visible */
+     }
+ 
+ #if WASM_ENABLE_MEMORY64 != 0

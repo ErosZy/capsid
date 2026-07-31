@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "vendor": {
+    "tag": "v26.6.0",
+    "commit": "1a230d31183f062fae7a6c4fd2cff466cecc1787"
+  },
+  "conformance_deviations": {
+    "CAPSID-D001": "接受的 profile 排除",
+    "CAPSID-D002": "接受的 profile 排除",
+    "CAPSID-D003": "已关闭实现缺口",
+    "CAPSID-D004": "已关闭实现缺口",
+    "CAPSID-D005": "已关闭实现缺口",
+    "CAPSID-D006": "已关闭实现缺口",
+    "CAPSID-D007": "接受的 profile 排除",
+    "CAPSID-D008": "接受的 profile 排除",
+    "CAPSID-D009": "暂定引擎偏差",
+    "CAPSID-D010": "接受的 WPT 上游分歧"
+  }
+}

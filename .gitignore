@@ -1,0 +1,50 @@
+# Local agent, editor, and analysis state.
+/.agents/
+/.codex/
+/.claude/
+/.cache/
+/.vscode/
+/.idea/
+.DS_Store
+
+# CMake, CTest, and local build trees.
+/build/
+/build-*/
+/Testing/
+/compile_commands.json
+
+# Reinstallable language dependencies and caches.
+**/node_modules/
+**/__pycache__/
+*.py[cod]
+/.pytest_cache/
+/.coverage
+
+# Patch/editor leftovers.
+*.bak
+*.orig
+*.rej
+*~
+
+# Benchmark runs are local by default. Keep only reviewed authoritative and
+# decision-supporting revisions.
+/bench/results/*
+!/bench/results/README.md
+!/bench/results/external-compare-modern-r39-20260730/
+!/bench/results/external-compare-modern-r39-20260730/**
+!/bench/results/sqlite-modern-r40-20260730/
+!/bench/results/sqlite-modern-r40-20260730/**
+!/bench/results/ipc-placement-unpinned-r35-20260729/
+!/bench/results/ipc-placement-unpinned-r35-20260729/**
+!/bench/results/ipc-placement-pinned-r35-20260729/
+!/bench/results/ipc-placement-pinned-r35-20260729/**
+!/bench/results/ipc-concurrency16x-r35-20260729/
+!/bench/results/ipc-concurrency16x-r35-20260729/**
+!/bench/results/ipc-profile-r35-20260729/
+!/bench/results/ipc-profile-r35-20260729/**
+!/bench/results/capsid-bytecode-startup-r41-20260730.json
+!/bench/results/capsid-bytecode-startup-r41-20260730.md
+!/bench/results/linux-artifact-resource-r42-20260730/
+!/bench/results/linux-artifact-resource-r42-20260730/**
+!/bench/results/vue-ssr-sweep-r3-20260731/
+!/bench/results/vue-ssr-sweep-r3-20260731/**

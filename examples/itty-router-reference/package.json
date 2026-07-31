@@ -1,0 +1,12 @@
+{
+  "name": "@capsid-runtime/itty-router-reference",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "itty-router": "5.0.24"
+  }
+}

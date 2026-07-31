@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "profile": "CAPSID-MIN-2025-subset-v0",
+  "policy_version": 2,
+  "modules": {
+    "built_and_available": [
+      "capsid:assert",
+      "capsid:env",
+      "capsid:fs",
+      "capsid:getopts",
+      "capsid:hashing",
+      "capsid:ipaddr",
+      "capsid:permissions",
+      "capsid:stdio",
+      "capsid:storage",
+      "capsid:system",
+      "capsid:utils",
+      "capsid:uuid"
+    ],
+    "known_but_not_built": [
+      "capsid:ffi",
+      "capsid:net",
+      "capsid:path",
+      "capsid:raw-socket",
+      "capsid:readline",
+      "capsid:sqlite",
+      "capsid:websocket"
+    ],
+    "permanently_forbidden": [
+      "data:",
+      "file:",
+      "http:",
+      "https:",
+      "node:",
+      "relative-or-absolute-path-import",
+      "tjs:child-process",
+      "tjs:http-server",
+      "tjs:internal/*",
+      "tjs:process",
+      "tjs:signals",
+      "tjs:wasi",
+      "tjs:*",
+      "tjs:websocket-server",
+      "tjs:worker",
+      "capsid:http-server",
+      "capsid:internal/*",
+      "capsid:ipc",
+      "capsid:process",
+      "capsid:wasi",
+      "capsid:worker"
+    ]
+  },
+  "module_contracts": {
+    "capsid:assert": {
+      "source": "vendor/txiki.js/src/js/stdlib/assert.js",
+      "implementation_module": "tjs:assert",
+      "source_imports": [],
+      "runtime_imports": [],
+      "exports": [
+        "default"
+      ],
+      "ambient_authority": []
+    },
+    "capsid:getopts": {
+      "source": "vendor/txiki.js/src/js/stdlib/getopts.js",
+      "implementation_module": "tjs:getopts",
+      "source_imports": [
+        "getopts"
+      ],
+      "runtime_imports": [],
+      "exports": [
+        "default"
+      ],
+      "ambient_authority": []
+    },
+    "capsid:hashing": {
+      "source": "vendor/txiki.js/src/js/stdlib/hashing.js",
+      "implementation_module": "tjs:hashing",
+      "source_imports": [
+        "tjs:internal/core"
+      ],
+      "runtime_imports": [
+        "tjs:internal/core"
+      ],
+      "exports": [
+        "SUPPORTED_TYPES",
+        "createHash"
+      ],
+      "ambient_authority": []
+    },
+    "capsid:ipaddr": {
+      "source": "vendor/txiki.js/src/js/stdlib/ipaddr.js",
+      "implementation_module": "tjs:ipaddr",
+      "source_imports": [
+        "ipaddr.js"
+      ],
+      "runtime_imports": [],
+      "exports": [
+        "default"
+      ],
+      "ambient_authority": []
+    },
+    "capsid:utils": {
+      "source": "vendor/txiki.js/src/js/stdlib/utils.js",
+      "implementation_module": "tjs:utils",
+      "source_imports": [],
+      "runtime_imports": [],
+      "exports": [
+        "format",
+        "inspect"
+      ],
+      "ambient_authority": []
+    },
+    "capsid:uuid": {
+      "source": "vendor/txiki.js/src/js/stdlib/uuid.js",
+      "implementation_module": "tjs:uuid",
+      "source_imports": [
+        "uuid"
+      ],
+      "runtime_imports": [],
+      "exports": [
+        "default"
+      ],
+      "ambient_authority": []
+    },
+    "capsid:env": {
+      "source": "src/worker_runtime.cc",
+      "source_imports": [],
+      "runtime_imports": [],
+      "exports": [
+        "env"
+      ],
+      "ambient_authority": [
+        "host-provided-environment-snapshot"
+      ]
+    },
+    "capsid:permissions": {
+      "source": "src/worker_runtime.cc",
+      "source_imports": [],
+      "runtime_imports": [],
+      "exports": [
+        "permissions"
+      ],
+      "ambient_authority": [
+        "query-host-policy"
+      ]
+    },
+    "capsid:system": {
+      "source": "src/worker_runtime.cc",
+      "source_imports": [],
+      "runtime_imports": [],
+      "exports": [
+        "system"
+      ],
+      "ambient_authority": []
+    },
+    "capsid:storage": {
+      "source": "src/worker_runtime.cc",
+      "source_imports": [],
+      "runtime_imports": [],
+      "exports": [
+        "storage"
+      ],
+      "ambient_authority": []
+    },
+    "capsid:stdio": {
+      "source": "src/worker_runtime.cc",
+      "source_imports": [],
+      "runtime_imports": [],
+      "exports": [
+        "stdio"
+      ],
+      "ambient_authority": [
+        "host-log-event"
+      ]
+    },
+    "capsid:fs": {
+      "source": "src/worker_runtime.cc",
+      "source_imports": [],
+      "runtime_imports": [],
+      "exports": [
+        "fs"
+      ],
+      "ambient_authority": [
+        "authorized-read-only-host-paths"
+      ]
+    }
+  },
+  "deferred_modules": {
+    "capsid:path": {
+      "reason": "resolve() and relative() implicitly read tjs.cwd; exposing the complete txiki.js API would restore ambient host state",
+      "required_design": "a capability-scoped virtual working directory without globalThis.tjs"
+    },
+    "capsid:net": {
+      "reason": "the upstream POSIX socket client bypasses Capsid's hostname and resolved-address egress hook and would permit arbitrary application protocols",
+      "required_design": "a brokered client that checks the hostname and every resolved address before connect, with bounded streams and cancellation"
+    },
+    "capsid:websocket": {
+      "reason": "the upstream WebSocket client has no restricted resolved-address egress hook and its long-lived callbacks have no request owner",
+      "required_design": "a client-only implementation with DNS and redirect revalidation, bounded queues, cancellation, and explicit request ownership"
+    },
+    "capsid:sqlite": {
+      "reason": "the upstream API accepts ambient file paths and can load extension code; the benchmark-only fixed database is not a product capability",
+      "required_design": "an in-memory or path-authorized database with extension loading disabled, an SQL authorizer, memory/row/time quotas, and worker-local ownership"
+    },
+    "capsid:readline": {
+      "reason": "readline depends on terminal stdin, which is deliberately unavailable inside request workers",
+      "required_design": "host-provided input over a bounded request-scoped API rather than terminal or process fd access"
+    }
+  },
+  "deferred_operations": {
+    "capsid:fs.write": {
+      "reason": "write access would require reopening the current seccomp and read-only Landlock boundary",
+      "required_design": "write-specific Landlock roots, atomic no-symlink creation, byte quotas, and mutation audit before any write syscall is enabled"
+    },
+    "capsid:fs.watch": {
+      "reason": "persistent callbacks can fire outside the creating request and leak cross-request state",
+      "required_design": "request ownership, cancellation on request end, bounded watcher counts and event queues, and symlink-safe watched roots"
+    }
+  },
+  "permissions": {
+    "net": {
+      "build_state": "available",
+      "operation": "standard fetch",
+      "resource": "host-or-address-and-port"
+    },
+    "read": {
+      "build_state": "available",
+      "operation": "capsid:fs.readText/stat/list",
+      "file_limit_bytes": 1048576,
+      "directory_entry_limit": 1024,
+      "symlink_policy": "deny-all-components",
+      "resource": "canonical-path"
+    },
+    "write": {
+      "build_state": "unavailable",
+      "resource": "canonical-path"
+    },
+    "env": {
+      "build_state": "available",
+      "operation": "capsid:env.get",
+      "resource": "variable-name"
+    },
+    "sys": {
+      "build_state": "partially-available",
+      "operation": "capsid:system.get",
+      "available_resources": [
+        "featureFlags",
+        "runtimeVersion"
+      ],
+      "resource": "fixed-information-kind"
+    },
+    "ffi": {
+      "build_state": "unavailable",
+      "resource": "canonical-library-path"
+    },
+    "rawSocket": {
+      "build_state": "unavailable",
+      "resource": "boolean"
+    },
+    "stdio": {
+      "build_state": "partially-available",
+      "operation": "capsid:stdio.write",
+      "available_resources": [
+        "stderr",
+        "stdout"
+      ],
+      "message_limit_bytes": 16384,
+      "transport": "bounded-host-log-event",
+      "resource": "stream"
+    },
+    "storage": {
+      "build_state": "available",
+      "operation": "capsid:storage.get/set/delete/clear/keys",
+      "lifetime": "worker",
+      "namespace_quota_bytes": 65536,
+      "namespace_entry_limit": 256,
+      "value_limit_bytes": 16384,
+      "resource": "namespace"
+    },
+    "engine": {
+      "build_state": "unavailable",
+      "resource": "fixed-operation"
+    }
+  },
+  "invariants": {
+    "default": "deny",
+    "precedence": "explicit-deny-wins",
+    "policy_mutability": "immutable-after-spawn",
+    "javascript_api": "query-only",
+    "unknown_or_malformed": "fail-closed",
+    "network_policy_combination": "intersection"
+  }
+}

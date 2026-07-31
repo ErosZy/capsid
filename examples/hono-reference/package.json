@@ -1,0 +1,9 @@
+{
+  "name": "@capsid-runtime/hono-reference",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "hono": "4.12.32"
+  }
+}

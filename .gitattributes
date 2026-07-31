@@ -1,0 +1,6 @@
+# Patch payload whitespace is semantic and is covered by application/audit
+# tests rather than Git's generic whitespace checker.
+/patches/txiki/*.patch -whitespace
+
+# Retained benchmark CSV files use the csv module's RFC-style CRLF records.
+/bench/results/**/*.csv -whitespace

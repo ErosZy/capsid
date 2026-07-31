@@ -1,0 +1,350 @@
+name: Testing validity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testing-validity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-wpt-and-delegated-sandbox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out recursively pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          for directory in \
+            vendor/txiki.js \
+            examples/hono-reference \
+            examples/itty-router-reference \
+            examples/h3-v2-reference \
+            bench/apps
+          do
+            npm ci --ignore-scripts --prefix "${directory}"
+          done
+
+      - name: Check out the manifest-pinned WPT revision
+        env:
+          WPT_DIRECTORY: ${{ runner.temp }}/wpt
+        run: |
+          set -euo pipefail
+          repository=$(node -p \
+            "require('./tests/wpt/manifest.json').repository")
+          commit=$(node -p \
+            "require('./tests/wpt/manifest.json').commit")
+          git init "${WPT_DIRECTORY}"
+          git -C "${WPT_DIRECTORY}" remote add origin "${repository}"
+          git -C "${WPT_DIRECTORY}" fetch --depth=1 origin "${commit}"
+          git -C "${WPT_DIRECTORY}" checkout --detach FETCH_HEAD
+          test "$(git -C "${WPT_DIRECTORY}" rev-parse HEAD)" = "${commit}"
+
+      - name: Configure Release/LTO with WPT and benchmarks
+        env:
+          WPT_DIRECTORY: ${{ runner.temp }}/wpt
+        run: |
+          cmake -S . -B build-validity -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCAPSID_ENABLE_LTO=ON \
+            -DCAPSID_USE_MIMALLOC=OFF \
+            -DCAPSID_BUILD_BENCHMARKS=ON \
+            -DCAPSID_GENERATE_LINK_MAP=ON \
+            -DCAPSID_WPT_ROOT="${WPT_DIRECTORY}"
+
+      - name: Build
+        run: cmake --build build-validity --parallel 2
+
+      - name: Run the complete ordinary-host matrix
+        run: |
+          ctest --test-dir build-validity \
+            --output-on-failure \
+            --output-junit ordinary-host-junit.xml \
+            --parallel 2
+
+      - name: Generate txiki.js upgrade gate report
+        run: |
+          python3 tools/generate-txiki-upgrade-report.py \
+            --source-root . \
+            --build-dir build-validity \
+            --junit build-validity/ordinary-host-junit.xml \
+            --baseline docs/txiki-upgrade-baseline.json \
+            --output-json build-validity/txiki-upgrade-report.json \
+            --output-md build-validity/txiki-upgrade-report.md
+
+      - name: Require delegated cgroup v2 and network namespace passes
+        run: |
+          docker run --rm \
+            --privileged \
+            --cgroupns=private \
+            -e CAPSID_DELEGATED_SANDBOX_CONTAINER=1 \
+            -v "${GITHUB_WORKSPACE}:/repo:ro" \
+            -v "${GITHUB_WORKSPACE}/build-validity:/build:ro" \
+            --entrypoint /repo/scripts/run-delegated-sandbox-tests.sh \
+            ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 \
+            /build
+
+      - name: Save hosted Release evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-wpt-hosted-evidence
+          if-no-files-found: error
+          path: |
+            build-validity/ordinary-host-junit.xml
+            build-validity/bench/build-metadata.json
+            build-validity/txiki-upgrade-report.json
+            build-validity/txiki-upgrade-report.md
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: asan
+            cmake_flag: CAPSID_ENABLE_ASAN
+            ctest_exclude: >-
+              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca)$
+          - name: ubsan
+            cmake_flag: CAPSID_ENABLE_UBSAN
+            ctest_exclude: '^wpt_conformance_not_configured$'
+
+    steps:
+      - name: Check out recursively pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Install build and locked JavaScript dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          for directory in \
+            vendor/txiki.js \
+            examples/hono-reference \
+            examples/itty-router-reference \
+            examples/h3-v2-reference \
+            bench/apps
+          do
+            npm ci --ignore-scripts --prefix "${directory}"
+          done
+
+      - name: Configure ${{ matrix.name }}
+        run: |
+          cmake -S . -B "build-${{ matrix.name }}" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -D${{ matrix.cmake_flag }}=ON \
+            -DCAPSID_USE_MIMALLOC=OFF \
+            -DCAPSID_BUILD_BENCHMARKS=ON
+
+      - name: Build ${{ matrix.name }}
+        run: |
+          cmake --build "build-${{ matrix.name }}" --parallel 2
+
+      - name: Run ${{ matrix.name }} matrix
+        run: |
+          ctest --test-dir "build-${{ matrix.name }}" \
+            --output-on-failure \
+            --output-junit "${{ matrix.name }}-junit.xml" \
+            --parallel 2 \
+            -E '${{ matrix.ctest_exclude }}'
+
+      - name: Save sanitizer evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.name }}-hosted-evidence
+          if-no-files-found: error
+          path: build-${{ matrix.name }}/${{ matrix.name }}-junit.xml
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out recursively pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Clang and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-rt-dev ninja-build
+
+      - name: Configure fuzz harnesses
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -S . -B build-fuzz -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCAPSID_BUILD_WORKER=OFF \
+            -DCAPSID_BUILD_FUZZERS=ON \
+            -DCAPSID_USE_MIMALLOC=OFF
+
+      - name: Build fuzz harnesses
+        run: cmake --build build-fuzz --parallel 2
+
+      - name: Run bounded corpus gates
+        run: |
+          ctest --test-dir build-fuzz \
+            --output-on-failure \
+            --output-junit fuzz-junit.xml \
+            -L fuzz
+
+      - name: Save fuzz evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-hosted-evidence
+          if-no-files-found: error
+          path: build-fuzz/fuzz-junit.xml
+
+  posix-host-library:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out recursively pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Configure macOS host library
+        run: |
+          cmake -S . -B build-macos \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCAPSID_BUILD_WORKER=OFF \
+            -DCAPSID_ENABLE_LTO=ON
+
+      - name: Build macOS host library and unit gates
+        run: cmake --build build-macos --parallel 2
+
+      - name: Run POSIX host-side matrix
+        run: |
+          ctest --test-dir build-macos \
+            --output-on-failure \
+            --output-junit macos-junit.xml \
+            -E '^wpt_conformance_not_configured$'
+
+      - name: Save macOS evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-host-library-evidence
+          if-no-files-found: error
+          path: build-macos/macos-junit.xml
+
+  hosted-evidence-index:
+    if: always()
+    needs:
+      - release-wpt-and-delegated-sandbox
+      - sanitizers
+      - fuzz
+      - posix-host-library
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Download all hosted evidence
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: '*-evidence'
+          path: hosted-evidence/inputs
+
+      - name: Generate run and content index
+        env:
+          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
+          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
+          FUZZ_RESULT: ${{ needs.fuzz.result }}
+          MACOS_RESULT: ${{ needs.posix-host-library.result }}
+        run: |
+          set -euo pipefail
+          mkdir -p hosted-evidence/inputs
+          {
+            printf 'run_url=%s/%s/actions/runs/%s\n' \
+              "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
+            printf 'repository=%s\n' "${GITHUB_REPOSITORY}"
+            printf 'commit_sha=%s\n' "${GITHUB_SHA}"
+            printf 'ref=%s\n' "${GITHUB_REF}"
+            printf 'release=%s\n' "${RELEASE_RESULT}"
+            printf 'sanitizers=%s\n' "${SANITIZER_RESULT}"
+            printf 'fuzz=%s\n' "${FUZZ_RESULT}"
+            printf 'macos=%s\n' "${MACOS_RESULT}"
+          } > hosted-evidence/run.txt
+          (
+            cd hosted-evidence
+            find inputs -type f -print0 |
+              sort -z |
+              xargs -0 -r sha256sum > sha256sums.txt
+            sha256sum sha256sums.txt |
+              awk '{print $1}' > evidence-tree.sha256
+          )
+
+      - name: Save hosted evidence index
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-evidence-index
+          if-no-files-found: error
+          path: |
+            hosted-evidence/run.txt
+            hosted-evidence/sha256sums.txt
+            hosted-evidence/evidence-tree.sha256
+
+      - name: Require every hosted job to pass
+        env:
+          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
+          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
+          FUZZ_RESULT: ${{ needs.fuzz.result }}
+          MACOS_RESULT: ${{ needs.posix-host-library.result }}
+        run: |
+          test "${RELEASE_RESULT}" = success
+          test "${SANITIZER_RESULT}" = success
+          test "${FUZZ_RESULT}" = success
+          test "${MACOS_RESULT}" = success

@@ -1,0 +1,61 @@
+--- a/src/builtins.c
++++ b/src/builtins.c
+@@ -24,21 +24,25 @@
+ 
++#ifndef TJS_RESTRICTED_CORE
+ #include "bundles/c/internal/path.c"
++#endif
+ #include "bundles/c/stdlib/assert.c"
+-#ifdef TJS_HAVE_FFI
++#if defined(TJS_HAVE_FFI) && !defined(TJS_RESTRICTED_CORE)
+ #include "bundles/c/stdlib/ffi.c"
+ #endif
+ #include "bundles/c/stdlib/getopts.c"
+ #include "bundles/c/stdlib/hashing.c"
+ #include "bundles/c/stdlib/ipaddr.c"
++#ifndef TJS_RESTRICTED_CORE
+ #include "bundles/c/stdlib/path.c"
+ #include "bundles/c/stdlib/posix-socket.c"
+ #include "bundles/c/stdlib/readline.c"
+-#ifdef TJS_HAVE_SQLITE
++#endif
++#if defined(TJS_HAVE_SQLITE) && (!defined(TJS_RESTRICTED_CORE) || defined(TJS_BENCHMARK_SQLITE_ONLY))
+ #include "bundles/c/stdlib/sqlite.c"
+ #endif
+ #include "bundles/c/stdlib/utils.c"
+ #include "bundles/c/stdlib/uuid.c"
+-#ifdef TJS_HAVE_WASM
++#if defined(TJS_HAVE_WASM) && !defined(TJS_RESTRICTED_CORE)
+ #include "bundles/c/stdlib/wasi.c"
+ #endif
+ #include "private.h"
+@@ -53,22 +57,26 @@
+ static tjs_builtin_t builtins[] = {
+     { "tjs:assert", tjs__assert, sizeof(tjs__assert) },
+-#ifdef TJS_HAVE_FFI
++#if defined(TJS_HAVE_FFI) && !defined(TJS_RESTRICTED_CORE)
+     { "tjs:ffi", tjs__ffi, sizeof(tjs__ffi) },
+ #endif
+     { "tjs:getopts", tjs__getopts, sizeof(tjs__getopts) },
+     { "tjs:hashing", tjs__hashing, sizeof(tjs__hashing) },
++#ifndef TJS_RESTRICTED_CORE
+     { "tjs:internal/path", tjs__internal_path, sizeof(tjs__internal_path) },
++#endif
+     { "tjs:ipaddr", tjs__ipaddr, sizeof(tjs__ipaddr) },
++#ifndef TJS_RESTRICTED_CORE
+     { "tjs:path", tjs__path, sizeof(tjs__path) },
+     { "tjs:posix-socket", tjs__posix_socket, sizeof(tjs__posix_socket) },
+     { "tjs:readline", tjs__readline, sizeof(tjs__readline) },
+-#ifdef TJS_HAVE_SQLITE
++#endif
++#if defined(TJS_HAVE_SQLITE) && (!defined(TJS_RESTRICTED_CORE) || defined(TJS_BENCHMARK_SQLITE_ONLY))
+     { "tjs:sqlite", tjs__sqlite, sizeof(tjs__sqlite) },
+ #endif
+     { "tjs:utils", tjs__utils, sizeof(tjs__utils) },
+     { "tjs:uuid", tjs__uuid, sizeof(tjs__uuid) },
+-#ifdef TJS_HAVE_WASM
++#if defined(TJS_HAVE_WASM) && !defined(TJS_RESTRICTED_CORE)
+     { "tjs:wasi", tjs__wasi, sizeof(tjs__wasi) },
+ #endif
+     { NULL, NULL, 0 },
+ };

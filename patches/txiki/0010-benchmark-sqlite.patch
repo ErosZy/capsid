@@ -1,0 +1,103 @@
+--- a/src/mod_sqlite3.c
++++ b/src/mod_sqlite3.c
+@@ -25,6 +25,7 @@
+ #include "private.h"
+ 
+ #include <sqlite3.h>
++#include <string.h>
+ 
+ 
+ static JSClassID tjs_sqlite3_class_id;
+@@ -117,6 +118,26 @@
+     return JS_Throw(ctx, obj);
+ }
+ 
++#ifdef TJS_BENCHMARK_SQLITE_ONLY
++static int tjs_benchmark_sqlite_authorizer(void *opaque,
++                                           int action,
++                                           const char *detail1,
++                                           const char *detail2,
++                                           const char *database,
++                                           const char *trigger) {
++    (void) opaque;
++    (void) detail1;
++    (void) detail2;
++    (void) database;
++    (void) trigger;
++    return action == SQLITE_SELECT ||
++                   action == SQLITE_READ ||
++                   action == SQLITE_FUNCTION
++               ? SQLITE_OK
++               : SQLITE_DENY;
++}
++#endif
++
+ static JSValue tjs_sqlite3_open(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     const char *db_name = JS_ToCString(ctx, argv[0]);
+ 
+@@ -131,6 +152,15 @@
+         return JS_EXCEPTION;
+     }
+ 
++#ifdef TJS_BENCHMARK_SQLITE_ONLY
++    if (strcmp(db_name, "/tmp/vue-ssr-bench.db") != 0 ||
++        flags != SQLITE_OPEN_READONLY) {
++        JS_FreeCString(ctx, db_name);
++        return JS_ThrowTypeError(
++            ctx, "benchmark SQLite permits one read-only database");
++    }
++#endif
++
+     sqlite3 *handle = NULL;
+     int r = sqlite3_open_v2(db_name, &handle, flags, NULL);
+ 
+@@ -141,8 +171,27 @@
+         return tjs_throw_sqlite3_errno(ctx, r);
+     }
+ 
++#ifdef TJS_BENCHMARK_SQLITE_ONLY
++    r = sqlite3_db_config(
++        handle, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 0, NULL);
++    if (r == SQLITE_OK) {
++        r = sqlite3_exec(
++            handle,
++            "PRAGMA query_only=ON;"
++            "PRAGMA cache_size=2;"
++            "PRAGMA mmap_size=0;",
++            NULL,
++            NULL,
++            NULL);
++    }
++    if (r == SQLITE_OK) {
++        r = sqlite3_set_authorizer(
++            handle, tjs_benchmark_sqlite_authorizer, NULL);
++    }
++#else
+     // Enable sqlite extensions (but only via C calls)
+     r = sqlite3_db_config(handle, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 1, NULL);
++#endif
+     if (r != SQLITE_OK) {
+         sqlite3_close_v2(handle);
+         return tjs_throw_sqlite3_errno(ctx, r);
+@@ -180,6 +229,13 @@
+ }
+ 
+ static JSValue tjs_sqlite3_load_extension(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++#ifdef TJS_BENCHMARK_SQLITE_ONLY
++    (void) this_val;
++    (void) argc;
++    (void) argv;
++    return JS_ThrowTypeError(
++        ctx, "SQLite extensions are disabled in the benchmark worker");
++#else
+     TJSSqlite3Handle *h = tjs_sqlite3_get(ctx, argv[0]);
+ 
+     if (!h) {
+@@ -208,6 +264,7 @@
+     }
+ 
+     return JS_UNDEFINED;
++#endif
+ }
+ 
+ static JSValue tjs_sqlite3_exec(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {

@@ -1,0 +1,277 @@
+{
+  "schema": 1,
+  "profile": "CAPSID-MIN-2025-subset-v0",
+  "repository": "https://github.com/web-platform-tests/wpt.git",
+  "commit": "1985b47aa8972a970f005957f2bfa036da1787c6",
+  "harnessStatus": "minimum-profile-complete",
+  "executionModel": "one upstream file per worker realm",
+  "executedProfile": [
+    "dom/events/EventTarget-constructible.any.js",
+    "dom/events/EventTarget-add-remove-listener.any.js",
+    "dom/events/AddEventListenerOptions-once.any.js",
+    "html/webappapis/timers/clearinterval-from-callback.any.js",
+    "html/webappapis/timers/negative-setinterval.any.js",
+    "html/webappapis/microtask-queuing/queue-microtask.any.js",
+    "html/webappapis/scripting/reporterror.any.js",
+    "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+    "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js",
+    "encoding/textdecoder-fatal.any.js",
+    "encoding/api-basics.any.js",
+    "encoding/api-invalid-label.any.js",
+    "encoding/api-replacement-encodings.any.js",
+    "encoding/api-surrogates-utf8.any.js",
+    "encoding/encodeInto.any.js",
+    "encoding/single-byte-decoder.any.js",
+    "encoding/textdecoder-arguments.any.js",
+    "encoding/textdecoder-byte-order-marks.any.js",
+    "encoding/textdecoder-copy.any.js",
+    "encoding/textdecoder-fatal-single-byte.any.js",
+    "encoding/textdecoder-fatal-streaming.any.js",
+    "encoding/textdecoder-ignorebom.any.js",
+    "encoding/textdecoder-labels.any.js",
+    "encoding/textdecoder-streaming.any.js",
+    "encoding/textdecoder-utf16-surrogates.any.js",
+    "encoding/textencoder-constructor-non-utf.any.js",
+    "encoding/textencoder-utf16-surrogates.any.js",
+    "encoding/legacy-mb-schinese/gbk/gbk-decoder.any.js",
+    "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+    "encoding/iso-2022-jp-decoder.any.js",
+    "encoding/legacy-mb-tchinese/big5/big5-decode.html",
+    "encoding/legacy-mb-japanese/euc-jp/eucjp-decode.html",
+    "encoding/legacy-mb-japanese/shift_jis/sjis-decode.html",
+    "encoding/legacy-mb-korean/euc-kr/euckr-decode.html",
+    "encoding/textdecoder-eof.any.js",
+    "encoding/textdecoder-mistakes.any.js",
+    "encoding/streams/backpressure.any.js",
+    "encoding/streams/decode-attributes.any.js",
+    "encoding/streams/decode-bad-chunks.any.js",
+    "encoding/streams/decode-ignore-bom.any.js",
+    "encoding/streams/decode-incomplete-input.any.js",
+    "encoding/streams/decode-non-utf8.any.js",
+    "encoding/streams/decode-split-character.any.js",
+    "encoding/streams/decode-utf8.any.js",
+    "encoding/streams/encode-bad-chunks.any.js",
+    "encoding/streams/encode-utf8.any.js",
+    "encoding/streams/readable-writable-properties.any.js",
+    "encoding/idlharness.any.js",
+    "url/url-constructor.any.js",
+    "url/urlsearchparams-constructor.any.js",
+    "urlpattern/urlpattern-constructor.any.js",
+    "FileAPI/blob/Blob-constructor.any.js",
+    "FileAPI/file/File-constructor.any.js",
+    "streams/readable-streams/constructor.any.js",
+    "streams/writable-streams/constructor.any.js",
+    "streams/transform-streams/properties.any.js",
+    "streams/queuing-strategies.any.js",
+    "webmessaging/message-channels/basics.any.js",
+    "webmessaging/message-channels/close.any.js",
+    "webmessaging/message-channels/implied-start.any.js",
+    "webmessaging/MessagePort_initial_disabled.any.js",
+    "compression/compression-stream.any.js",
+    "WebCryptoAPI/getRandomValues.any.js",
+    "WebCryptoAPI/randomUUID.https.any.js",
+    "fetch/api/headers/headers-basic.any.js",
+    "fetch/api/headers/headers-errors.any.js",
+    "fetch/api/response/response-init-001.any.js",
+    "fetch/api/response/response-static-json.any.js",
+    "fetch/api/request/request-init-002.any.js",
+    "wasm/jsapi/constructor/compile.any.js",
+    "wasm/jsapi/constructor/instantiate.any.js",
+    "wasm/jsapi/constructor/instantiate-bad-imports.any.js",
+    "wasm/jsapi/constructor/validate.any.js",
+    "wasm/jsapi/memory/constructor.any.js",
+    "wasm/jsapi/memory/grow.any.js",
+    "wasm/jsapi/table/constructor.any.js",
+    "wasm/jsapi/table/grow.any.js",
+    "wasm/jsapi/global/constructor.any.js",
+    "wasm/jsapi/global/value-get-set.any.js",
+    "wasm/webapi/instantiateStreaming-bad-imports.any.js",
+    "wasm/webapi/instantiateStreaming.any.js",
+    "console/console-is-a-namespace.any.js",
+    "hr-time/basic.any.js",
+    "hr-time/monotonic-clock.any.js"
+  ],
+  "expectedFailures": [
+    {
+      "path": "wasm/jsapi/memory/grow.any.js",
+      "subtest": "Growing shared memory does not detach old buffer",
+      "deviation": "CAPSID-D008"
+    },
+    {
+      "path": "webmessaging/MessagePort_initial_disabled.any.js",
+      "subtest": "Untitled test",
+      "deviation": "CAPSID-D010"
+    }
+  ],
+  "tests": [
+    {
+      "group": "events",
+      "paths": [
+        "dom/events/EventTarget-constructible.any.js",
+        "dom/events/EventTarget-add-remove-listener.any.js",
+        "dom/events/AddEventListenerOptions-once.any.js"
+      ]
+    },
+    {
+      "group": "error-reporting",
+      "paths": [
+        "html/webappapis/scripting/reporterror.any.js",
+        "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+        "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js"
+      ],
+      "notExecuted": [
+        "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.html"
+      ],
+      "notExecutedReason": "Upstream file drives unhandledrejection/rejectionhandled ordering through a document-scoped harness that the one-file-per-worker-realm execution model does not reproduce. CAPSID-D005 is therefore evidenced by reportError plus PromiseRejectionEvent construction only; event-ordering semantics are covered by the project-owned p1-platform-contract fixture, not by upstream WPT.",
+      "gap": "CAPSID-D005"
+    },
+    {
+      "group": "timers-and-microtasks",
+      "paths": [
+        "html/webappapis/timers/clearinterval-from-callback.any.js",
+        "html/webappapis/timers/negative-setinterval.any.js",
+        "html/webappapis/microtask-queuing/queue-microtask.any.js"
+      ]
+    },
+    {
+      "group": "encoding",
+      "paths": [
+        "encoding/encodeInto.any.js",
+        "encoding/api-basics.any.js",
+        "encoding/api-invalid-label.any.js",
+        "encoding/api-replacement-encodings.any.js",
+        "encoding/api-surrogates-utf8.any.js",
+        "encoding/textdecoder-fatal.any.js",
+        "encoding/single-byte-decoder.any.js",
+        "encoding/textdecoder-arguments.any.js",
+        "encoding/textdecoder-byte-order-marks.any.js",
+        "encoding/textdecoder-copy.any.js",
+        "encoding/textdecoder-fatal-single-byte.any.js",
+        "encoding/textdecoder-fatal-streaming.any.js",
+        "encoding/textdecoder-ignorebom.any.js",
+        "encoding/textdecoder-labels.any.js",
+        "encoding/textdecoder-streaming.any.js",
+        "encoding/textdecoder-utf16-surrogates.any.js",
+        "encoding/textencoder-constructor-non-utf.any.js",
+        "encoding/textencoder-utf16-surrogates.any.js",
+        "encoding/legacy-mb-schinese/gbk/gbk-decoder.any.js",
+        "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+        "encoding/iso-2022-jp-decoder.any.js",
+        "encoding/legacy-mb-tchinese/big5/big5-decode.html",
+        "encoding/legacy-mb-japanese/euc-jp/eucjp-decode.html",
+        "encoding/legacy-mb-japanese/shift_jis/sjis-decode.html",
+        "encoding/legacy-mb-korean/euc-kr/euckr-decode.html",
+        "encoding/textdecoder-eof.any.js",
+        "encoding/textdecoder-mistakes.any.js",
+        "encoding/streams/backpressure.any.js",
+        "encoding/streams/decode-attributes.any.js",
+        "encoding/streams/decode-bad-chunks.any.js",
+        "encoding/streams/decode-ignore-bom.any.js",
+        "encoding/streams/decode-incomplete-input.any.js",
+        "encoding/streams/decode-non-utf8.any.js",
+        "encoding/streams/decode-split-character.any.js",
+        "encoding/streams/decode-utf8.any.js",
+        "encoding/streams/encode-bad-chunks.any.js",
+        "encoding/streams/encode-utf8.any.js",
+        "encoding/streams/readable-writable-properties.any.js",
+        "encoding/idlharness.any.js"
+      ]
+    },
+    {
+      "group": "url",
+      "paths": [
+        "url/url-constructor.any.js",
+        "url/urlsearchparams-constructor.any.js",
+        "urlpattern/urlpattern-constructor.any.js"
+      ]
+    },
+    {
+      "group": "file-api",
+      "paths": [
+        "FileAPI/blob/Blob-constructor.any.js",
+        "FileAPI/file/File-constructor.any.js"
+      ]
+    },
+    {
+      "group": "streams",
+      "paths": [
+        "streams/readable-streams/constructor.any.js",
+        "streams/writable-streams/constructor.any.js",
+        "streams/transform-streams/properties.any.js",
+        "streams/queuing-strategies.any.js"
+      ]
+    },
+    {
+      "group": "message-channel",
+      "paths": [
+        "webmessaging/message-channels/basics.any.js",
+        "webmessaging/message-channels/close.any.js",
+        "webmessaging/message-channels/implied-start.any.js",
+        "webmessaging/MessagePort_initial_disabled.any.js"
+      ]
+    },
+    {
+      "group": "compression",
+      "paths": [
+        "compression/compression-stream.any.js"
+      ],
+      "excludedFormats": {
+        "brotli": "CAPSID-D007"
+      }
+    },
+    {
+      "group": "crypto",
+      "paths": [
+        "WebCryptoAPI/getRandomValues.any.js",
+        "WebCryptoAPI/randomUUID.https.any.js"
+      ]
+    },
+    {
+      "group": "fetch-minimum",
+      "paths": [
+        "fetch/api/headers/headers-basic.any.js",
+        "fetch/api/headers/headers-errors.any.js",
+        "fetch/api/response/response-init-001.any.js",
+        "fetch/api/response/response-static-json.any.js",
+        "fetch/api/request/request-init-002.any.js"
+      ]
+    },
+    {
+      "group": "wasm-minimum",
+      "paths": [
+        "wasm/jsapi/constructor/compile.any.js",
+        "wasm/jsapi/constructor/instantiate.any.js",
+        "wasm/jsapi/constructor/instantiate-bad-imports.any.js",
+        "wasm/jsapi/constructor/validate.any.js",
+        "wasm/jsapi/memory/constructor.any.js",
+        "wasm/jsapi/memory/grow.any.js",
+        "wasm/jsapi/table/constructor.any.js",
+        "wasm/jsapi/table/grow.any.js",
+        "wasm/jsapi/global/constructor.any.js",
+        "wasm/jsapi/global/value-get-set.any.js",
+        "wasm/webapi/instantiateStreaming-bad-imports.any.js",
+        "wasm/webapi/instantiateStreaming.any.js"
+      ],
+      "excludedFeatures": {
+        "exception-handling-js-api": "CAPSID-D001",
+        "simd": "CAPSID-D002",
+        "shared-memory": "CAPSID-D008"
+      }
+    },
+    {
+      "group": "console",
+      "paths": [
+        "console/console-is-a-namespace.any.js"
+      ],
+      "gap": "CAPSID-D003"
+    },
+    {
+      "group": "performance",
+      "paths": [
+        "hr-time/basic.any.js",
+        "hr-time/monotonic-clock.any.js"
+      ],
+      "gap": "CAPSID-D004"
+    }
+  ]
+}

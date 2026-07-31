@@ -1,0 +1,139 @@
+--- a/CMakeLists.txt	2026-07-27 12:57:21.048382987 +0800
++++ b/CMakeLists.txt	2026-07-27 19:28:49.429729694 +0800
+@@ -65,6 +65,10 @@
+ xoption(BUILD_WITH_STRIP "If ON, strip the tjs binary after linking" OFF)
+ xoption(BUILD_WITH_LTO "If ON, enable link-time optimization" OFF)
+ xoption(BUILD_WITH_GC_SECTIONS "If ON, compile with per-function/data sections and link with dead-code stripping" OFF)
++option(BUILD_TJS_CLI "Build the txiki.js command-line executable" ON)
++option(BUILD_TJS_TEST_LIBS "Build txiki.js native test fixtures" ON)
++option(BUILD_TJS_RESTRICTED_CORE "Register only the native core needed by an embedder" OFF)
++option(BUILD_TJS_BENCHMARK_SQLITE "Expose only read-only SQLite in the restricted benchmark build" OFF)
+ 
+ if(BUILD_WITH_GC_STRESS)
+     message(STATUS "GC stress mode enabled (FORCE_GC_AT_MALLOC)")
+@@ -186,33 +190,45 @@
+ target_compile_options(tjs PRIVATE ${tjs_cflags})
+ target_compile_definitions(tjs PRIVATE TJS__PLATFORM="${TJS_PLATFORM}")
+ 
++if(BUILD_TJS_RESTRICTED_CORE)
++    target_compile_definitions(tjs PRIVATE TJS_RESTRICTED_CORE)
++endif()
++if(BUILD_TJS_BENCHMARK_SQLITE)
++    if(NOT BUILD_TJS_RESTRICTED_CORE OR NOT BUILD_WITH_SQLITE)
++        message(FATAL_ERROR "BUILD_TJS_BENCHMARK_SQLITE requires restricted core and SQLite")
++    endif()
++    target_compile_definitions(tjs PRIVATE TJS_BENCHMARK_SQLITE_ONLY)
++endif()
++
+ if(WIN32)
+     target_compile_definitions(tjs PRIVATE WIN32_LEAN_AND_MEAN)
+ endif()
+ 
+ target_include_directories(tjs PUBLIC src)
+ 
+-add_executable(tjs-cli
+-    src/cli.c
+-)
+-target_link_libraries(tjs-cli tjs)
+-set_target_properties(tjs-cli
+-    PROPERTIES OUTPUT_NAME tjs
+-)
+-# On Windows with MSVC the stack size if by default 1MB, same as our engine.
+-# Bump it up to 8MB.
+-if(WIN32)
+-    target_link_options(tjs-cli PRIVATE "/STACK:8388608")
++if(BUILD_TJS_CLI)
++    add_executable(tjs-cli
++        src/cli.c
++    )
++    target_link_libraries(tjs-cli tjs)
++    set_target_properties(tjs-cli
++        PROPERTIES OUTPUT_NAME tjs
++    )
++    # On Windows with MSVC the stack size if by default 1MB, same as our engine.
++    # Bump it up to 8MB.
++    if(WIN32)
++        target_link_options(tjs-cli PRIVATE "/STACK:8388608")
++    endif()
+ endif()
+ 
+-if(BUILD_WITH_STRIP AND CMAKE_STRIP)
++if(BUILD_TJS_CLI AND BUILD_WITH_STRIP AND CMAKE_STRIP)
+     add_custom_command(TARGET tjs-cli POST_BUILD
+         COMMAND ${CMAKE_STRIP} $<TARGET_FILE:tjs-cli>
+         COMMENT "Stripping tjs"
+     )
+ endif()
+ 
+-if(BUILD_WITH_GC_SECTIONS)
++if(BUILD_TJS_CLI AND BUILD_WITH_GC_SECTIONS)
+     if(MSVC)
+         target_link_options(tjs-cli PRIVATE /OPT:REF /OPT:ICF)
+     elseif(APPLE)
+@@ -255,10 +271,12 @@
+ if(BUILD_WITH_SQLITE)
+     add_subdirectory(deps/sqlite3 EXCLUDE_FROM_ALL)
+     target_link_libraries(tjs PUBLIC sqlite3)
+-    add_library(sqlite-test SHARED
+-        tests/fixtures/sqlite-test-ext.c
+-    )
+-    target_link_libraries(sqlite-test sqlite3)
++    if(BUILD_TJS_TEST_LIBS)
++        add_library(sqlite-test SHARED
++            tests/fixtures/sqlite-test-ext.c
++        )
++        target_link_libraries(sqlite-test sqlite3)
++    endif()
+ endif()
+ 
+ if(BUILD_WITH_FFI)
+@@ -275,16 +293,22 @@
+     endif()
+ endif()
+ 
+-add_library(ffi-test SHARED
+-    tests/fixtures/ffi-test-lib.c
+-)
++if(BUILD_TJS_TEST_LIBS)
++    add_library(ffi-test SHARED
++        tests/fixtures/ffi-test-lib.c
++    )
++endif()
+ 
+ # Set consistent output for test libraries across all platforms (including MSVC multi-config)
+-set(_tjs_test_libs ffi-test)
+-if(BUILD_WITH_SQLITE)
++set(_tjs_test_libs)
++if(BUILD_TJS_TEST_LIBS)
++    list(APPEND _tjs_test_libs ffi-test)
++endif()
++if(BUILD_TJS_TEST_LIBS AND BUILD_WITH_SQLITE)
+     list(APPEND _tjs_test_libs sqlite-test)
+ endif()
+-set_target_properties(${_tjs_test_libs} PROPERTIES
++if(_tjs_test_libs)
++    set_target_properties(${_tjs_test_libs} PROPERTIES
+     PREFIX "lib"
+     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+@@ -298,6 +322,7 @@
+     LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}"
+     LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}"
+ )
++endif()
+ 
+ add_subdirectory(deps/ada EXCLUDE_FROM_ALL)
+ target_link_libraries(tjs PUBLIC ada)
+@@ -347,9 +372,9 @@
+ set(WAMR_BUILD_AOT 0)
+ set(WAMR_BUILD_JIT 0)
+ set(WAMR_BUILD_LIBC_BUILTIN 1)
+-set(WAMR_BUILD_LIBC_WASI 1)
+-set(WAMR_BUILD_MULTI_MODULE 1)
+-set(WAMR_BUILD_SIMD 1)
++set(WAMR_BUILD_LIBC_WASI 0)
++set(WAMR_BUILD_MULTI_MODULE 0)
++set(WAMR_BUILD_SIMD 0)
+ set(WAMR_BUILD_REF_TYPES 1)
+ set(WAMR_BUILD_BULK_MEMORY 1)
+ set(WAMR_BUILD_LIB_PTHREAD 0)

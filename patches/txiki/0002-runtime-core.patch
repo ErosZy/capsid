@@ -1,0 +1,317 @@
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -141,6 +141,7 @@
+ static char **tjs__argv = NULL;
+ 
+ 
++#ifndef TJS_RESTRICTED_CORE
+ static JSValue tjs__set_cookie_jar_path(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSRuntime *qrt = TJS_GetRuntime(ctx);
+     CHECK_NOT_NULL(qrt);
+@@ -174,6 +175,7 @@
+ 
+     return JS_UNDEFINED;
+ }
++#endif
+ 
+ static JSValue tjs__js_drain_microtasks(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSRuntime *qrt = TJS_GetRuntime(ctx);
+@@ -194,6 +196,7 @@
+     return JS_UNDEFINED;
+ }
+ 
++#ifndef TJS_RESTRICTED_CORE
+ static JSValue tjs__sync_read_file(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     const char *filename = JS_ToCString(ctx, argv[0]);
+     if (!filename) {
+@@ -231,8 +234,31 @@
+ 
+     return JS_UNDEFINED;
+ }
++#endif
+ 
+ static void tjs__bootstrap_core(JSContext *ctx, JSValue ns) {
++#ifdef TJS_RESTRICTED_CORE
++    tjs__mod_streams_init(ctx, ns);
++    tjs__mod_engine_init(ctx, ns);
++    tjs__mod_error_init(ctx, ns);
++    tjs__mod_hashing_init(ctx, ns);
++    tjs__mod_os_init(ctx, ns);
++    tjs__mod_sys_init(ctx, ns);
++    tjs__mod_text_coding_init(ctx, ns);
++    tjs__mod_timers_init(ctx, ns);
++    tjs__mod_url_init(ctx, ns);
++    tjs__mod_dns_init(ctx, ns);
++    tjs__mod_tls_init(ctx, ns);
++    tjs__mod_httpclient_init(ctx, ns);
++    tjs__mod_miniz_init(ctx, ns);
++    tjs__webcrypto_init(ctx, ns);
++#ifdef TJS_BENCHMARK_SQLITE_ONLY
++    tjs__mod_sqlite3_init(ctx, ns);
++#endif
++#ifdef TJS_HAVE_WASM
++    tjs__mod_wasm_init(ctx, ns);
++#endif
++#else
+     tjs__mod_dns_init(ctx, ns);
+     tjs__mod_engine_init(ctx, ns);
+     tjs__mod_error_init(ctx, ns);
+@@ -267,6 +292,7 @@
+ #ifndef _WIN32
+     tjs__mod_posix_socket_init(ctx, ns);
+ #endif
++#endif
+ 
+     /* Internal helpers. */
+     JS_DefinePropertyValueStr(ctx,
+@@ -274,6 +300,7 @@
+                               "drainMicrotasks",
+                               JS_NewCFunction(ctx, tjs__js_drain_microtasks, "drainMicrotasks", 0),
+                               JS_PROP_C_W_E);
++#ifndef TJS_RESTRICTED_CORE
+     JS_DefinePropertyValueStr(ctx,
+                               ns,
+                               "setCookieJarPath",
+@@ -294,6 +321,7 @@
+                               "setImportMapResolver",
+                               JS_NewCFunction(ctx, tjs__set_import_map_resolver, "setImportMapResolver", 1),
+                               JS_PROP_C_W_E);
++#endif
+ }
+ 
+ JSValue tjs__get_args(JSContext *ctx) {
+@@ -328,6 +356,12 @@
+     }
+     pr->promise = JS_DupValue(ctx, promise);
+     pr->reason = JS_DupValue(ctx, reason);
++    pr->handled = false;
++    if (qrt->pending_rejections.prev == NULL || qrt->pending_rejections.next == NULL) {
++        const char msg[] = "FATAL: pending_rejections NULL at add time\\n";
++        write(2, msg, sizeof(msg) - 1);
++        abort();
++    }
+     list_add_tail(&pr->link, &qrt->pending_rejections);
+     /* The tracker can fire from inside a libuv callback (e.g. when an
+      * async finally completes during the close phase).  Make sure the loop
+@@ -348,6 +382,14 @@
+             return;
+         }
+     }
++    list_for_each_safe(el, el1, &qrt->outstanding_rejections) {
++        TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
++        if (JS_VALUE_GET_PTR(pr->promise) == JS_VALUE_GET_PTR(promise)) {
++            pr->handled = true;
++            uv__maybe_idle(qrt);
++            return;
++        }
++    }
+ }
+ 
+ static void tjs__promise_rejection_tracker(JSContext *ctx,
+@@ -384,7 +426,13 @@
+ }
+ 
+ void TJS_DefaultOptions(TJSRunOptions *options) {
+-    static TJSRunOptions default_options = { .mem_limit = 0, .stack_size = TJS__DEFAULT_STACK_SIZE };
++    static TJSRunOptions default_options = {
++        .mem_limit = 0,
++        .stack_size = TJS__DEFAULT_STACK_SIZE,
++        .skip_run_main = false,
++        .bootstrap = NULL,
++        .bootstrap_opaque = NULL,
++    };
+ 
+     memcpy(options, &default_options, sizeof(*options));
+ }
+@@ -462,6 +510,11 @@
+     JS_SetModuleLoaderFunc2(rt, tjs_module_normalizer, tjs_module_loader, tjs_module_attr_checker, qrt);
+ 
+     /* unhandled promise rejection tracker */
++    /* Pending rejection tracking — must be initialized before the rejection
++     * tracker is installed and before any bootstrap code evaluates. */
++    init_list_head(&qrt->pending_rejections);
++    init_list_head(&qrt->outstanding_rejections);
++
+     JS_SetHostPromiseRejectionTracker(rt, tjs__promise_rejection_tracker, NULL);
+ 
+     /* start bootstrap */
+@@ -476,8 +529,17 @@
+ 
+     tjs__bootstrap_core(ctx, core);
+ 
++#ifdef TJS_RESTRICTED_CORE
++    CHECK_NOT_NULL(options->bootstrap);
++    CHECK_EQ(options->bootstrap(qrt, ctx, options->bootstrap_opaque), 0);
++#else
++    if (options->bootstrap) {
++        CHECK_EQ(options->bootstrap(qrt, ctx, options->bootstrap_opaque), 0);
++    } else {
+     CHECK_EQ(tjs__eval_bytecode(ctx, tjs__polyfills, tjs__polyfills_size, true), 0);
+     CHECK_EQ(tjs__eval_bytecode(ctx, tjs__core, tjs__core_size, true), 0);
++    }
++#endif
+ 
+     /* Load some builtin references for easy access */
+     qrt->builtins.dispatch_event_func = JS_GetPropertyStr(ctx, global_obj, "dispatchEvent");
+@@ -505,8 +562,8 @@
+     qrt->timers.timers = NULL;
+     qrt->timers.next_timer = 1;
+ 
+-    /* Pending rejection tracking */
+-    init_list_head(&qrt->pending_rejections);
++    /* (pending_rejections / outstanding_rejections were initialized earlier,
++     * before the bootstrap callback.) */
+ 
+     /* libwebsockets initializtion */
+     tjs__lws_setup();
+@@ -571,6 +628,13 @@
+             list_del(&pr->link);
+             js_free(qrt->ctx, pr);
+         }
++        list_for_each_safe(el, el1, &qrt->outstanding_rejections) {
++            TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
++            JS_FreeValue(qrt->ctx, pr->promise);
++            JS_FreeValue(qrt->ctx, pr->reason);
++            list_del(&pr->link);
++            js_free(qrt->ctx, pr);
++        }
+     }
+     JS_FreeContext(qrt->ctx);
+     JS_FreeRuntime(qrt->rt);
+@@ -673,8 +737,20 @@
+     // Noop
+ }
+ 
++static bool tjs__has_handled_rejections(TJSRuntime *qrt) {
++    struct list_head *el;
++    list_for_each(el, &qrt->outstanding_rejections) {
++        TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
++        if (pr->handled) {
++            return true;
++        }
++    }
++    return false;
++}
++
+ static void uv__maybe_idle(TJSRuntime *qrt) {
+-    if (JS_IsJobPending(qrt->rt) || !list_empty(&qrt->pending_rejections)) {
++    if (JS_IsJobPending(qrt->rt) || !list_empty(&qrt->pending_rejections) ||
++        tjs__has_handled_rejections(qrt)) {
+         CHECK_EQ(uv_idle_start(&qrt->jobs.idle, uv__idle_cb), 0);
+     } else {
+         CHECK_EQ(uv_idle_stop(&qrt->jobs.idle), 0);
+@@ -719,21 +795,34 @@
+     list_for_each_safe(el, el1, &qrt->pending_rejections) {
+         TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
+ 
++        list_del(&pr->link);
++        list_add_tail(&pr->link, &qrt->outstanding_rejections);
++
+         JSValue event_name = JS_NewString(ctx, "unhandledrejection");
+-        JSValue args[3];
++        JSValue init = JS_NewObject(ctx);
++        JS_DefinePropertyValueStr(ctx, init, "promise", JS_DupValue(ctx, pr->promise), JS_PROP_C_W_E);
++        JS_DefinePropertyValueStr(ctx, init, "reason", JS_DupValue(ctx, pr->reason), JS_PROP_C_W_E);
++        JS_DefinePropertyValueStr(ctx, init, "cancelable", JS_TRUE, JS_PROP_C_W_E);
++        JSValue args[2];
+         args[0] = event_name;
+-        args[1] = pr->promise;
+-        args[2] = pr->reason;
++        args[1] = init;
+ 
+         JSValue event = JS_CallConstructor(ctx, qrt->builtins.promise_event_ctor, countof(args), args);
+         CHECK_EQ(JS_IsException(event), 0);
+         JSValue ret = tjs__dispatch_event(ctx, &event);
+ 
+         JS_FreeValue(ctx, event);
++        JS_FreeValue(ctx, init);
+         JS_FreeValue(ctx, event_name);
+ 
+         bool should_abort = false;
+ 
++#ifdef TJS_RESTRICTED_CORE
++        /* Web runtimes report unhandledrejection without terminating the
++         * global environment. Keep the outstanding rejection so a handler
++         * attached later can produce rejectionhandled with the same promise. */
++        (void) ret;
++#else
+         if (JS_IsException(ret)) {
+             tjs_dump_error(ctx);
+             should_abort = true;
+@@ -743,6 +832,7 @@
+                 should_abort = true;
+             }
+         }
++#endif
+ 
+         JS_FreeValue(ctx, ret);
+ 
+@@ -763,10 +853,32 @@
+             TJS_Stop(qrt);
+             return;
+         }
++    }
+ 
+-        list_del(&pr->link);
++    list_for_each_safe(el, el1, &qrt->outstanding_rejections) {
++        TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
++        if (!pr->handled) {
++            continue;
++        }
++
++        JSValue event_name = JS_NewString(ctx, "rejectionhandled");
++        JSValue init = JS_NewObject(ctx);
++        JS_DefinePropertyValueStr(ctx, init, "promise", JS_DupValue(ctx, pr->promise), JS_PROP_C_W_E);
++        JS_DefinePropertyValueStr(ctx, init, "reason", JS_DupValue(ctx, pr->reason), JS_PROP_C_W_E);
++        JSValue args[2] = { event_name, init };
++        JSValue event = JS_CallConstructor(ctx, qrt->builtins.promise_event_ctor, countof(args), args);
++        CHECK_EQ(JS_IsException(event), 0);
++        JSValue ret = tjs__dispatch_event(ctx, &event);
++        if (JS_IsException(ret)) {
++            tjs_dump_error(ctx);
++        }
++        JS_FreeValue(ctx, ret);
++        JS_FreeValue(ctx, event);
++        JS_FreeValue(ctx, init);
++        JS_FreeValue(ctx, event_name);
+         JS_FreeValue(ctx, pr->promise);
+         JS_FreeValue(ctx, pr->reason);
++        list_del(&pr->link);
+         js_free(ctx, pr);
+     }
+ }
+@@ -815,8 +927,10 @@
+     if (!qrt->is_worker) {
+         uv_unref((uv_handle_t *) &qrt->stop);
+ 
++#ifndef TJS_RESTRICTED_CORE
+         /* If we are running the main interpreter, run the entrypoint. */
+         ret = tjs__eval_bytecode(qrt->ctx, tjs__run_main, tjs__run_main_size, true);
++#endif
+     }
+ 
+     if (ret != 0) {
+@@ -831,7 +945,7 @@
+         } while (r == 0 && JS_IsJobPending(qrt->rt));
+ 
+         /* Only fire beforeunload for main runtime, not workers. */
+-        if (qrt->is_worker) {
++        if (qrt->is_worker || qrt->options.skip_run_main) {
+             break;
+         }
+ 
+@@ -861,6 +975,14 @@
+     uv_async_send(&qrt->stop);
+ }
+ 
++int TJS_EvalBytecode(JSContext *ctx, const uint8_t *buf, size_t buf_len, bool check_promise) {
++    return tjs__eval_bytecode(ctx, buf, buf_len, check_promise);
++}
++
++JSValue TJS_GetInternalCore(TJSRuntime *qrt) {
++    return qrt->builtins.internal_core;
++}
++
+ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt) {
+     return &qrt->loop;
+ }

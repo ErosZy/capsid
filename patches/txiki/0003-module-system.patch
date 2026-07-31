@@ -1,0 +1,133 @@
+--- a/src/modules.c	2026-07-27 12:57:21.152382992 +0800
++++ b/src/modules.c	2026-07-27 19:28:49.433729694 +0800
+@@ -30,11 +30,13 @@
+ #include <string.h>
+ 
+ 
++#ifndef TJS_RESTRICTED_CORE
+ static int has_suffix(const char *str, const char *suffix) {
+     size_t len = strlen(str);
+     size_t slen = strlen(suffix);
+     return (len >= slen && !memcmp(str + len - slen, suffix, slen));
+ }
++#endif
+ 
+ static int default_module_init(JSContext *ctx, JSModuleDef *m) {
+     JSValue val;
+@@ -56,6 +58,7 @@
+     return m;
+ }
+ 
++#ifndef TJS_RESTRICTED_CORE
+ enum {
+     JS_IMPORT_TYPE_JS,
+     JS_IMPORT_TYPE_JSON,
+@@ -100,6 +103,7 @@
+     JS_FreeCString(ctx, cstr);
+     return res;
+ }
++#endif
+ 
+ /* in order to conform with the specification, only the keys should be
+    tested and not the associated values. */
+@@ -134,6 +138,20 @@
+ }
+ 
+ JSModuleDef *tjs_module_loader(JSContext *ctx, const char *module_name, void *opaque, JSValueConst attributes) {
++#ifdef TJS_RESTRICTED_CORE
++    if (strcmp(module_name, "tjs:internal/core") == 0) {
++        TJSRuntime *qrt = TJS_GetRuntime(ctx);
++        CHECK_NOT_NULL(qrt);
++        return create_default_module(ctx, module_name, JS_DupValue(ctx, qrt->builtins.internal_core));
++    }
++#ifdef TJS_BENCHMARK_SQLITE_ONLY
++    if (strcmp(module_name, "tjs:sqlite") == 0) {
++        return tjs__load_builtin(ctx, module_name);
++    }
++#endif
++    JS_ThrowReferenceError(ctx, "module '%s' is not available in the restricted runtime", module_name);
++    return NULL;
++#else
+     static const char http[] = "http://";
+     static const char https[] = "https://";
+     static const char tjs_prefix[] = "tjs:";
+@@ -243,6 +261,7 @@
+     }
+ 
+     return m;
++#endif
+ }
+ 
+ #define TJS__PATHSEP_POSIX '/'
+--- a/src/private.h	2026-07-27 13:25:47.404695221 +0800
++++ b/src/private.h	2026-07-27 19:28:49.437729695 +0800
+@@ -65,6 +65,7 @@
+     struct list_head link;
+     JSValue promise;
+     JSValue reason;
++    bool handled;
+ } TJSPendingRejection;
+ 
+ struct TJSRuntime {
+@@ -102,6 +103,14 @@
+         uv_async_t keepalive;
+         int active_conns;
+     } lws;
++#ifdef TJS_RESTRICTED_CORE
++    struct {
++        int (*check)(void *opaque, const char *host, uint16_t port,
++                     const struct sockaddr *address,
++                     socklen_t address_len);
++        void *opaque;
++    } egress;
++#endif
+     struct {
+         TJSTimer *timers;
+         int64_t next_timer;
+@@ -119,6 +128,7 @@
+         JSValue internal_message_pipe;
+     } builtins;
+     struct list_head pending_rejections;
++    struct list_head outstanding_rejections;
+ };
+ 
+ void tjs__mod_dns_init(JSContext *ctx, JSValue ns);
+--- a/src/tjs.h	2026-07-27 12:57:21.152382992 +0800
++++ b/src/tjs.h	2026-07-27 19:28:49.437729695 +0800
+@@ -26,13 +26,21 @@
+ #ifndef TJS_H
+ #define TJS_H
+ 
++#include <stdbool.h>
++#include <stddef.h>
+ #include <quickjs.h>
+ 
+ typedef struct TJSRuntime TJSRuntime;
++typedef struct uv_loop_s uv_loop_t;
++
++typedef int (*TJSBootstrapCallback)(TJSRuntime *qrt, JSContext *ctx, void *opaque);
+ 
+ typedef struct TJSRunOptions {
+     int mem_limit;
+     size_t stack_size;
++    bool skip_run_main;
++    TJSBootstrapCallback bootstrap;
++    void *bootstrap_opaque;
+ } TJSRunOptions;
+ 
+ void TJS_DefaultOptions(TJSRunOptions *options);
+@@ -44,5 +52,14 @@
+ TJSRuntime *TJS_GetRuntime(JSContext *ctx);
+ int TJS_Run(TJSRuntime *qrt);
+ void TJS_Stop(TJSRuntime *qrt);
++uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
++JSValue TJS_GetInternalCore(TJSRuntime *qrt);
++int TJS_EvalBytecode(JSContext *ctx, const uint8_t *buf, size_t buf_len, bool check_promise);
++JSValue TJS_EvalModuleContent(JSContext *ctx,
++                              const char *specifier,
++                              bool is_main,
++                              bool use_real_path,
++                              const char *content,
++                              size_t len);
+ 
+ #endif

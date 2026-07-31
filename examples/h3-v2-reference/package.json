@@ -1,0 +1,12 @@
+{
+  "name": "@capsid-runtime/h3-v2-reference",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "h3": "2.0.1-rc.26"
+  }
+}
