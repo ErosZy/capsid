@@ -444,6 +444,7 @@ ctest --test-dir build-release --output-on-failure \
 - [宿主嵌入接口](docs/embedding-api.md)
 - [第三方宿主集成规范](docs/host-integration.md)
 - [Capsid Host 架构规划](docs/host-architecture-plan.md)
+- [Capsid Host 技术评审与 v1 详细方案](docs/host-technical-design-review.md)
 - [能力与安全策略](docs/capability-policy.md)
 - [JavaScript 模块与权限参考](docs/module-permissions.md)
 - [Linux 严格沙箱](docs/linux-sandbox.md)

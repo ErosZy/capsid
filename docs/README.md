@@ -17,6 +17,8 @@
 - [第三方宿主集成规范](host-integration.md)：线程、SSE、取消、关闭和升级
 - [Capsid Host 架构规划](host-architecture-plan.md)：拟议的目录交付、整机/App 权限、
   Linux 隔离、预热蓝绿、路由和 worker pool
+- [Capsid Host 技术评审与 v1 详细方案](host-technical-design-review.md)：规划评审、
+  技术选型、状态与数据路径、实施顺序和验收门
 - [当前状态与发布门](project-status.md)：唯一活跃事项和冻结决策
 
 ## 正确性与兼容性

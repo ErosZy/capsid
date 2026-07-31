@@ -100,8 +100,10 @@ Runtime 继续只负责单个隔离 worker 的执行与 FetchRPC IPC。Host 不�
       "user_namespace",
       "mount_namespace"
     ],
-    "networkNamespace": "per-worker",
     "cgroupRoot": "/sys/fs/cgroup/capsid-host"
+  },
+  "trustedBytecodeKeys": {
+    "release-2026": "/etc/capsid/bytecode-keys/release-2026.pub"
   },
   "workerDefaults": {
     "jsHeap": "64MiB",
@@ -228,8 +230,10 @@ Runtime 实际能力 ∩ host.json 上限 ∩ capsid.json 申请
 ```
 
 `env.valueFrom` 是 secret key，不是文件路径。Host 只在
-`secretRootTemplate` 展开的 App 专属目录中读取，并且不会把 secret 路径或内容交给
-worker。
+`secretRootTemplate` 展开的 App 专属目录中读取，不把文件路径、进程环境或明文持久化
+配置交给 worker；但 secret value 会按设计作为不可变 `capsid:env` 快照进入 worker，
+并能被获得该 key 权限的应用代码读取。轮换 secret 会创建新 generation，不原地修改
+READY worker。
 
 ## 3. 版本目录
 
@@ -241,7 +245,9 @@ worker。
     ├── 2026-07-31-001/
     │   ├── capsid.json
     │   ├── bundle.mjs
-    │   └── bundle.qjsb
+    │   ├── bundle.qjsb
+    │   ├── bytecode.json
+    │   └── bytecode.sig
     └── 2026-07-31-002/
         ├── capsid.json
         └── bundle.mjs
@@ -254,7 +260,7 @@ worker。
 - 一个 Version ID 对应一个不可变输入目录；
 - 已经成功部署的目录不得原地修改，更新必须使用新 Version ID；
 - `bundle.mjs` 是默认入口；
-- `bundle.qjsb` 是可选的可信预编译产物；
+- `bundle.qjsb`、`bytecode.json`、`bytecode.sig` 是可选但不可拆分的可信预编译产物组；
 - App 和 Version 只能作为规范化 ID，部署接口不能接收任意文件路径。
 
 上传工具不受 Capsid 限制，可以是 `rsync`、`scp`、CI 发布系统、共享卷或容器镜像。
@@ -277,7 +283,7 @@ Content-Type: application/json
 这是 v1 唯一改变应用线上版本的接口。部署行为固定，不再要求用户选择一组策略：
 
 1. 从固定 `applicationsRoot` 解析 App/Version；
-2. 安全打开 `capsid.json`、源码和可选字节码；
+2. 安全打开 `capsid.json`、源码和可选的完整字节码产物组；
 3. 计算摘要并复制到 Host 管理的不可变 staging 目录；
 4. 校验 App 权限和资源申请没有超过 Host；
 5. 编译 Runtime capability、Landlock、egress、cgroup 和 resource limits；
@@ -376,7 +382,9 @@ Unix socket、mTLS 内部入口或严格代理 allowlist；公网客户端提供
     │   ├── capsid.json
     │   ├── effective.json
     │   ├── bundle.mjs
-    │   └── bundle.qjsb
+    │   ├── bundle.qjsb
+    │   ├── bytecode.json
+    │   └── bytecode.sig
     └── 729abe.../
         ├── capsid.json
         ├── effective.json
@@ -410,9 +418,15 @@ App/Version。必须拒绝：
 
 Host 从已经打开的 fd 计算摘要并复制，不在请求处理阶段再次读取上传目录。
 
-QuickJS bytecode 只有在 compatibility ID 完全匹配时才加载。ID 至少覆盖 Capsid
-worker build、QuickJS commit、编译 flags、architecture 和 bytecode format version。
-不匹配时回退到同版本的 `bundle.mjs`；缺少源码时拒绝部署。
+QuickJS bytecode 只有完整验证后才是“可信”：构建流水线必须使用与目标发布物同源的
+`capsid-bytecode-compile`，并用 Host 配置信任的 Ed25519 key 签名 attestation。Host
+验证签名、App、Version、精确 source name、源码/字节码 SHA-256 和 compatibility ID。
+ID 至少覆盖 Capsid worker build、QuickJS commit、编译 flags、architecture 和 bytecode
+format version。
+
+签名、摘要、App/Version 或 source name 错误表示 provenance 失败，部署直接失败，不能
+静默回退；签名及摘要有效但 compatibility ID 不匹配时，回退到同版本 `bundle.mjs` 并
+记录原因。源码始终必需。只有完全匹配时才调用 Runtime trusted bytecode API。
 
 ## 9. 权限与 Linux 隔离
 
@@ -422,7 +436,7 @@ JavaScript capability 和 Linux 隔离同时生效：
 | --- | --- | --- |
 | `capsid:*` module 与操作 | Host 上限 ∩ App 申请 | Runtime capability policy |
 | 文件读取 | 有效 `fs.read` | `capsid:fs` + Landlock + `openat2` |
-| 出站网络 | 有效 `fetch` | 双层 egress policy + netns/firewall |
+| 出站网络 | 有效 `fetch` | Runtime 双层 egress policy；外部网络隔离可选 |
 | syscall | Host isolation | seccomp BPF |
 | 提权 | Host isolation | `no_new_privs` + user namespace |
 | 内存、CPU、PID、fd | Host 上限 ∩ App 申请 | QuickJS limit + rlimit + cgroup v2 |
@@ -436,8 +450,13 @@ App 的 `fs.read` 会同时生成 Runtime operation rule 和 Landlock 只读根�
 拒绝，除非 Host 用精确 CIDR 显式开放。
 
 生产 Host 缺少任何 `isolation.required` feature 时启动失败，不能降级运行。Host
-进程本身使用专用非 root 账号；需要创建 cgroup 或 network namespace 时，通过最小
-权限 supervisor 完成，应用和公网不能访问 supervisor socket。
+进程本身使用专用非 root 账号；cgroup 只能来自 systemd `Delegate=yes` 或等价的预先
+委派。Host 不配置或切换 network namespace，worker 自然使用与 Host 相同的网络环境。
+若运维需要更强网络隔离，可以把整个 Host 放进 systemd、容器或 Kubernetes 已准备的
+网络环境；这不是运行 Capsid Host 的前置要求。
+
+第一方 Host 不实现、也不规划 privileged supervisor、root helper、supervisor socket
+或 netns 创建协议，Host/App schema 中也没有 network namespace 配置字段。
 
 ## 10. 调度、背压与过载
 
@@ -506,26 +525,39 @@ QuickJS heap 遍历只用于显式诊断和回归门，不进入请求热路径�
 
 ## 12. 实施顺序
 
-### 第一阶段：目录、权限与静态池
+所有阶段都使用 TDD：先写一个只因目标行为尚不存在而失败的测试，再写最小实现，测试
+保持全绿后才重构。安全能力先写拒绝负控；bug 必须先有可复现的失败测试。不接受功能
+先合入、测试后补。
 
-1. `host.json` 与 `capsid.json` schema；
-2. 安全 Version 目录读取、摘要和 Host 内部快照；
-3. 单一部署接口与幂等语义；
-4. Host 权限上限和 App 子集验证；
-5. 固定大小的 per-App-Version worker pool；
-6. subdomain、path 和 trusted header 路由；
-7. 状态、结构化日志和基础 metrics。
+### 第一阶段：可执行契约
 
-### 第二阶段：可靠蓝绿
+1. 从 schema 负控开始冻结 Host/App 配置和容量，并拒绝 network namespace 配置字段；
+2. 从三方 identity mismatch 测试开始实现 Runtime/worker/compiler compatibility ID；
+3. 从逐字段篡改测试开始实现 bytecode attestation 和 Ed25519 验签；
+4. 从 secret 泄漏 golden 开始冻结 `capsid:env` snapshot、redaction 和 rotation；
+5. 从 crash recovery 不变量开始冻结 generation digest 和 `active.json`；
+6. 建立 Host test target、fake worker/clock/filesystem 和 sanitizer job。
 
-1. staging、`minReady` 预热和 health check；
-2. active version 原子切换；
-3. 旧版本 drain、超时销毁和显式回滚；
-4. Host 配置变更的 plan/reload；
-5. cgroup、network namespace 和启动失败回滚；
-6. bytecode compatibility ID 与源码回退。
+### 第二阶段：单 worker 垂直闭环
 
-### 第三阶段：弹性与效率
+1. compiler round-trip 与真实 worker 字节码加载；
+2. 安全 Version 读取、签名 provenance、摘要、源码回退和 Host 内部快照；
+3. secret safe-read、Host/App 权限交集和 `capsid_env_entry[]`；
+4. 单一部署接口、一个 worker、path 路由、credit、cancel 和 timeout；
+5. 同时验证源码、可信字节码、兼容失配回退源码、secret 进入 worker 四条路径。
+
+### 第三阶段：静态池与可靠蓝绿
+
+1. 固定大小的 per-App-Version worker pool 和完整 admission control；
+2. staging、`minReady` 预热、health check 和 active version 原子切换；
+3. 旧版本 drain、超时销毁、显式回滚和逐边界 crash injection；
+4. secret/key rotation、重启恢复、结构化日志和基础 metrics；
+5. delegated cgroup 和 Runtime egress policy 的真实 Linux 集成测试；外部网络隔离属于
+   部署环境验收，不是 Host feature。
+
+前三个阶段全部完成并通过 fuzz、sanitizer、soak、故障注入和性能门后才称为 v1。
+
+### 后续：弹性与效率
 
 1. cold-start singleflight；
 2. 有界自动扩缩容；
