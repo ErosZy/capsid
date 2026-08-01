@@ -34,7 +34,12 @@
 7. Runtime 尚缺字节码 compatibility ID 和结构化启动错误；这两项必须在可信字节码
    和第一方 Host 之前补齐，worker 回收也不能阻塞 reactor；
 8. Host 必须补齐 HTTP request smuggling、hop-by-hop header、流式 body、慢客户端和
-   自动重试的精确规则。
+   自动重试的精确规则；
+9. active generation 缺少 worker crash replacement、退避、跨 App 公平和 crash budget；
+10. “显式停止或删除 App”缺少管理 API 和 crash-safe 持久状态；
+11. worker 可观察的绝对 URL、path rewrite 和 Forwarded/X-Forwarded 信任边界尚未冻结；
+12. 部署后持续健康和 SSE 长连接的独立容量保护尚未形成最小自愈闭环；
+13. 公网 C++ Host 与全局 Admin socket 的残余权限边界需要显式写入 threat model。
 
 推荐的 v1 技术栈：
 
@@ -335,7 +340,7 @@ v1 不提供 affinity 来掩盖这一事实，也不能把 namespace 命名解�
 
 `capsid-host` 使用：
 
-- 1 个 control thread：配置、部署状态机、active pointer 和 registry 发布；
+- 1 个 control thread：配置、部署/恢复状态机、`active.json` 和 registry 发布；
 - `N` 个 reactor thread：每个线程一个 `boost::asio::io_context`；
 - 小型有界 bootstrap executor：执行安全文件复制、spawn、load 和等待 READY；
 - 小型有界 reaper executor：执行可能等待 child 的 destroy/wait；
@@ -375,7 +380,8 @@ Runtime target 继续保持 C++11；只给 `capsid-host` 和 `capsid_host_core` 
 
 ### 5.1 修订后的 `host.json` 轮廓
 
-以下字段是结构建议，不代表默认数值已经冻结：
+以下字段是结构建议；普通容量值仍需 profile 校准。`recovery` 和 streaming 数值是 v1
+候选值，必须通过 fake-clock、crash-loop、SSE soak 和故障注入验证后才能冻结：
 
 ```json
 {
@@ -390,6 +396,7 @@ Runtime target 继续保持 C++11；只给 `capsid-host` 和 `capsid_host_core` 
     {
       "name": "public",
       "tcp": "127.0.0.1:8080",
+      "publicScheme": "https",
       "routing": {
         "mode": "subdomain",
         "suffix": ".apps.example.com"
@@ -398,7 +405,8 @@ Runtime target 继续保持 C++11；只给 `capsid-host` 和 `capsid_host_core` 
         "connections": 4096,
         "headerBytes": "64KiB",
         "headerTimeout": "5s",
-        "bodyIdleTimeout": "30s"
+        "bodyIdleTimeout": "30s",
+        "streamIdleTimeout": "60s"
       }
     }
   ],
@@ -426,12 +434,16 @@ Runtime target 继续保持 C++11；只给 `capsid-host` 和 `capsid_host_core` 
   },
   "defaults": {
     "worker": {},
-    "request": {},
+    "request": {
+      "maxStreamingInflightPerWorker": 2
+    },
     "pool": {}
   },
   "maximums": {
     "worker": {},
-    "request": {},
+    "request": {
+      "maxStreamingInflightPerWorker": 2
+    },
     "pool": {}
   },
   "capacity": {
@@ -440,6 +452,20 @@ Runtime target 继续保持 C++11；只给 `capsid-host` 和 `capsid_host_core` 
     "queuedRequestsTotal": 4096,
     "queuedHeaderBytesTotal": "64MiB",
     "workerMemoryCommitTotal": "24GiB"
+  },
+  "recovery": {
+    "crashBudget": {
+      "maxEvents": 5,
+      "window": "60s"
+    },
+    "restartBackoff": {
+      "initial": "250ms",
+      "maximum": "30s",
+      "jitter": "20%"
+    },
+    "replacementsConcurrentPerApp": 1,
+    "activeHealthInterval": "30s",
+    "activeHealthFailures": 2
   }
 }
 ```
@@ -469,7 +495,8 @@ App 侧也建议分清边界：
   },
   "request": {
     "timeout": "3s",
-    "maxInflightPerWorker": 8
+    "maxInflightPerWorker": 8,
+    "maxStreamingInflightPerWorker": 2
   },
   "pool": {
     "minReady": 4,
@@ -510,22 +537,38 @@ parser 对重复 key 保留最后一个值，不适合作为安全配置的唯�
 
 ### 6.1 为什么 `active.json` 足够
 
-`active.json` 不是用户配置，它只是 Host 内部的活动版本指针。例如：
+`active.json` 不是用户配置，它是 Host 内部单写的 App 服务状态记录。active 形态例如：
 
 ```json
 {
   "schema": "capsid-active-v1",
   "app": "orders",
+  "state": "active",
   "version": "2026-07-31-002",
   "generation": "sha256:8f3a9c..."
 }
 ```
 
+显式下线使用 retired tombstone，而不是删除文件：
+
+```json
+{
+  "schema": "capsid-active-v1",
+  "app": "orders",
+  "state": "retired",
+  "previousVersion": "2026-07-31-002",
+  "previousGeneration": "sha256:8f3a9c..."
+}
+```
+
+crash budget 超限时保存 `state: "quarantined"`，并保留对应 Version/generation 和稳定
+reason code。三种状态共享同一个原子替换协议，不增加第二份状态文件。
+
 v1 的约束是：
 
 - 一个 Host 进程；
 - 一个 control plane writer；
-- 每个 App 同时最多一个 deploy 操作；
+- 每个 App 同时最多一个 deploy/retire 状态变更操作；
 - request 热路径只读内存 Registry，不读取状态文件；
 - 没有跨 App 原子事务或复杂历史查询。
 
@@ -562,7 +605,8 @@ v1 的约束是：
 `versions/<version>.json` 记录外部 Version ID 到 generation digest 的不可变映射。同一
 App/Version 再次部署：
 
-- 内容和有效配置摘要相同：返回当前或既有结果，属于幂等；
+- 内容和有效配置摘要相同：Version 映射幂等并复用既有 generation；deploy 是否可以短路
+  仍按 7.3 的服务状态判断——已 active 才直接返回，retired/quarantined 必须重新预热；
 - 摘要不同：返回 `VERSION_IMMUTABILITY_CONFLICT`，不能覆盖旧映射。
 
 ### 6.3 generation identity
@@ -613,7 +657,7 @@ opaque revision；最简单的文件 backend 可使用已打开文件的 device�
 请求处理阶段只访问内存中的 bundle/metadata 或 Host 内部 generation，绝不重新读取上传
 目录。
 
-### 6.5 `active.json` 原子切换
+### 6.5 `active.json` 原子状态切换
 
 切换必须在同一文件系统、同一目录完成：
 
@@ -627,11 +671,20 @@ opaque revision；最简单的文件 backend 可使用已打开文件的 device�
 8. 发布新的内存 Registry snapshot；
 9. 返回部署成功，并开始旧 pool drain。
 
+retire 和 quarantine 复用步骤 3–8：先在内存中阻止新路由，再写入对应 tombstone/state。
+它们不需要新 generation READY，但同样必须 `fdatasync`、原子 rename 和 `fsync` 父目录。
+两者的写失败语义不同：retire 在 rename 前失败时恢复原 Registry，让旧版本继续服务；
+quarantine 写失败时仍保持内存 fail closed、停止 replacement，并持续重试落盘及发出不可
+丢弃告警，绝不能为了报告写失败而恢复 crash-loop 流量。存储恢复前不得主动重启 Host；
+若进程仍因节点故障消失，旧 active 状态可能在下次启动再次触发 replacement，因此磁盘
+不可写属于需要运维介入的 durability incident，而不是可静默降级的正常路径。
+
 顺序必须是“持久指针成功后，再发布内存指针”。若进程在两者之间崩溃，重启会从新的
 `active.json` 恢复；若在 rename 前崩溃，旧版本仍 active。临时文件在启动恢复时清理。
 
-启动恢复只信任完整且引用存在 generation 的 `active.json`。无效指针应让该 App
-fail closed 并报告明确错误，不能扫描目录后擅自选择“最新版本”。
+启动恢复只信任完整的 `active.json`：`active` 必须引用存在且完整的 generation；
+`retired` 不恢复 pool；`quarantined` 不自动重启 worker。无效状态让该 App fail closed
+并报告明确错误，不能扫描目录后擅自选择“最新版本”。
 
 ### 6.6 Secret snapshot 读取
 
@@ -655,7 +708,7 @@ fail closed 并报告明确错误，不能扫描目录后擅自选择“最新�
 文件 mode 不等于完整 secret 管理系统；挂载、备份、节点 swap/core dump 和 secret root
 的生命周期仍由部署环境负责。Host 的责任是最小读取、最小传递和不把明文扩散到控制面。
 
-## 7. 部署 API 和状态机
+## 7. 部署、下线 API 和状态机
 
 ### 7.1 管理面
 
@@ -673,7 +726,11 @@ fail closed 并报告明确错误，不能扫描目录后擅自选择“最新�
 - request body、header 和处理时间有小而固定的上限；
 - 不把 secret、bundle bytes 或完整环境写入响应或日志。
 
-唯一能改变 active version 的操作仍是：
+Admin socket 是刻意的全局 trust boundary：通过 `SO_PEERCRED` 获准的 UID 或管理 group
+可以部署、回滚和下线该 Host 中的所有 App。v1 不声称提供 per-App 管理授权；互不信任
+的运维主体必须使用不同 Host 实例和管理 socket。
+
+唯一能激活某个 Version 的操作仍是：
 
 ```http
 POST /v1/deploy
@@ -693,8 +750,8 @@ Content-Type: application/json
 }
 ```
 
-只读的 `GET /v1/operations/{id}`、`GET /v1/apps/{app}` 和健康/指标端点不违反“唯一改变
-版本的接口”原则。
+显式下线使用 `POST /v1/apps/{app}/retire`，但它不能选择另一个 Version。只读的
+`GET /v1/operations/{id}`、`GET /v1/apps/{app}` 和健康/指标端点也不能改变版本。
 
 ### 7.2 状态机
 
@@ -710,6 +767,11 @@ RECEIVED
 
 任意切换前状态 → FAILED（旧版本不变）
 旧 active pool → DRAINING → RETIRED
+
+ACTIVE → RETIRING → RETIRED
+ACTIVE → DEGRADED → QUARANTINED
+QUARANTINED → RETIRING → RETIRED
+QUARANTINED/RETIRED → 显式 deploy → WARMING → ACTIVE
 ```
 
 operation 记录可以是内存对象和有界 JSONL 运维日志，不需要为了查询它引入数据库。
@@ -718,9 +780,12 @@ Host 重启后只需准确恢复 active generation；中断的 deploy 可报告 
 
 ### 7.3 并发和幂等
 
-- 同一 App deploy 串行；
+- 同一 App 的 deploy/retire 串行；
 - 不同 App 可以并发，但共享全局 startup/memory permit；
 - 相同 App/Version/generation 已 active：直接返回 active；
+- 相同 generation 已 quarantined：显式 deploy 重新走预热并在成功后重置 instability
+  budget，不按 active 幂等短路；
+- App 已 retired：显式 deploy 正常创建/恢复 pool 并原子写回 active；
 - 相同 Version 已映射到不同 generation：`409`；
 - warming 中的完全相同请求加入同一个 singleflight；
 - 新请求不会为每个调用分别 spawn 一套 pool。
@@ -736,6 +801,21 @@ Host 重启后只需准确恢复 active generation；中断的 deploy 可报告 
 - 任意 `minReady` worker 失败都不切换；
 - health check 执行真实应用代码，文档要提醒不要产生业务副作用。
 
+激活后继续复用同一探针做低成本主动健康感知：
+
+- 按 pool round-robin 并加 jitter，使每个有空闲 inflight 槽位的 worker 约每 30 秒被检查
+  一次；同一 App 最多一个健康检查并发；
+- busy 或 streaming 已满的 worker 本轮跳过，不让健康检查抢占业务 slot，并记录 skip；
+  skip 不算健康成功，也不重置连续失败计数；其 inflight 仍由 request deadline、stream
+  idle timeout、同步 CPU timeout、IPC/protocol failure 和进程 EXIT 等被动信号兜底，
+  任一被动失败按本节规则立即摘除；
+- 连续 2 次 timeout、非 `2xx`、协议错误或异常退出后，worker 进入 `UNHEALTHY`，先从
+  scheduler 摘除，再交给 reaper；
+- 同步 CPU timeout、IPC/protocol failure 和意外 EXIT 不等待第二次探针，立即摘除；
+- 健康摘除和 crash 都进入同一个 generation instability budget，防止“探针失败 → 无限
+  recycle”绕过 crash budget；
+- 未配置 `healthCheck` 的 App 只有 Runtime/IPC/timeout 等被动健康信号，不伪造业务探针。
+
 ### 7.5 drain
 
 激活新 generation 后：
@@ -747,6 +827,27 @@ Host 重启后只需准确恢复 active generation；中断的 deploy 可报告 
 5. 短暂 cancel grace 后 terminate；
 6. handle 移交 reaper executor 执行 destroy；
 7. 记录总 drain 时间和被强制取消数。
+
+### 7.6 显式下线
+
+```http
+POST /v1/apps/orders/retire
+```
+
+该操作无策略 body，返回 `202 Accepted` 和 operation ID；重复 retire 是幂等成功。固定
+顺序为：
+
+1. 获取 per-App operation mutex，把内存状态置为 `RETIRING`，立即停止接收新请求；
+2. 用 6.5 的协议把 `active.json` 原子替换为 `state: "retired"` tombstone；rename 前
+   失败就恢复旧 Registry，旧版本继续服务；
+3. 发布无 active pool 的 Registry snapshot；普通数据请求统一返回 `404`，管理 API 仍
+   显示 retired 和 previous generation；
+4. 按 7.5 drain 全部 pool；操作在所有 worker 退出后变为 `RETIRED`；
+5. generation 和 Version 映射按 retention/GC 规则保留，retire 本身不删除可回滚产物；
+6. 后续显式 deploy 任一已有或新 Version 都可以重新激活 App。
+
+Host crash 在 tombstone rename 前恢复旧 active，在 rename 后恢复 retired；不会根据上传
+目录是否存在推断下线，也不会出现删除 `active.json` 后擅自选择最新 Version 的行为。
 
 ## 8. 路由和 HTTP 边界
 
@@ -768,7 +869,39 @@ Host 重启后只需准确恢复 active generation；中断的 deploy 可报告 
 - 不能通过 URL/header 选择 Version、generation 或 worker；
 - 控制 header 在构造 FetchRPC headers 前删除。
 
-### 8.2 HTTP/1 安全规则
+### 8.2 Worker 可观察的 URL 与代理头
+
+`Request.url` 是公共 App 契约，v1 固定由 Host 构造，绝不根据转发头猜测：
+
+```text
+request.url = publicScheme + "://" + validatedAuthority + rewrittenTarget
+```
+
+- 每个 TCP data listener 必须显式配置 `publicScheme: "http"|"https"`；这表示用户看到
+  的外部 scheme，不要求 Host 自己终止 TLS；
+- subdomain 路由的 authority 是按 suffix 规则验证后的请求 `Host`；path/header 路由
+  必须配置固定 `publicAuthority`，不能让任意 Host 改变应用可见 origin；
+- 只接受 HTTP origin-form request-target；absolute-form、authority-form 和 `*` 在 v1
+  数据 listener 上拒绝；
+- `Host` 只参与 authority 校验和 URL 构造，不作为普通 Fetch header 交给 worker；
+- query bytes 原样保留，不 decode 后重编码；非法 percent encoding 在路由前拒绝。
+
+路由重写表：
+
+| 模式 | 客户端 target | worker `Request.url` 的 path/query |
+| --- | --- | --- |
+| subdomain | `/api/orders?x=1` | `/api/orders?x=1` |
+| path | `/@capsid/orders` | `/` |
+| path | `/@capsid/orders/api?x=1` | `/api?x=1` |
+| header | `/api/orders?x=1` | `/api/orders?x=1` |
+
+v1 对所有 data listener 使用同一 fail-closed 代理头规则：进入 Host 后总是删除
+`Forwarded`、所有 `X-Forwarded-*` 和 `X-Real-IP`，既不用于路由/URL，也不交给 worker。
+因此公网客户端不能伪造 scheme、authority 或 client IP；v1 也不向 App 暴露真实 client
+IP。外部 TLS proxy 必须覆盖合法 `Host`，Host 的 `publicScheme` 配成 `https`。未来若确有
+需求，再单独设计带 peer CIDR/mTLS 证明的 trusted-forwarding 契约，不在 v1 暗示信任。
+
+### 8.3 HTTP/1 安全规则
 
 Host 需要在进入应用前统一处理：
 
@@ -776,6 +909,7 @@ Host 需要在进入应用前统一处理：
 - 拒绝 `Transfer-Encoding` 与 `Content-Length` 冲突；
 - 只接受 Beast 明确认可的 HTTP/1 framing；
 - 删除 connection-nominated header 及所有 hop-by-hop header；
+- 按 8.2 删除所有代理转发头；
 - 禁止把 `Connection`、`Keep-Alive`、`Proxy-Connection`、`TE`、`Trailer`、
   `Transfer-Encoding`、`Upgrade` 原样交给 worker；
 - 校验 header name/value、总字节和字段数；
@@ -786,7 +920,7 @@ Host 需要在进入应用前统一处理：
 Host 不能假设 Runtime 的 response header decoder 已执行 HTTP 语义过滤；当前 decoder
 主要验证 FetchRPC 二进制结构。因此 response 也必须经过 hop-by-hop、长度和非法值检查。
 
-### 8.3 `Expect: 100-continue`
+### 8.4 `Expect: 100-continue`
 
 只有完成路由、admission、worker 分配并成功 begin request 后，才向客户端发送
 `100 Continue`。被拒绝的请求不读取完整 body。
@@ -831,12 +965,24 @@ App 与 Host 的未确认字节预算。
 
 ### 9.3 SSE 和 streaming
 
-- 收到 response head 后立即发出；
+- 收到 response head 后先检查 `Content-Type`；`text/event-stream` 必须先取得该 worker 的
+  streaming permit，再向客户端发出 head；
+- v1 默认 `maxStreamingInflightPerWorker=2`，App 只能申请更低值；该值必须小于
+  `maxInflightPerWorker` 以至少保留一个普通请求槽位，只有
+  `maxInflightPerWorker == 1` 时允许两者都为 1 并明确失去并发保留；
+- permit 已满且尚未向客户端发出 head 时，Host cancel worker request 并合成 `503`，
+  不能先发 `200 text/event-stream` 再断开；
 - body frame 逐段写，不聚合到 response end；
 - `text/event-stream` 禁止整体压缩和代理 buffering；
 - 成功写下游后才归还 credit；
-- 设置连接数、idle timeout、最大持续时间或产品定义的例外；
+- 默认 stream idle timeout 为 60 秒；应用必须用注释/heartbeat 保持活跃，超时即 cancel；
+- v1 不设强制最大持续时间：streaming permit 已形成确定容量边界，部署者可另行设置
+  `maxStreamDuration`；
 - 客户端断开立即 cancel。
+
+streaming permit 同时计入 App 和 Host connection/inflight 预算，worker 退出、cancel 或
+response end 时必须恰好归还一次。普通 chunked/大响应仍受 credit、idle timeout 和普通
+inflight 约束，不因为没有 `Content-Length` 就自动占用 SSE permit。
 
 ### 9.4 request ID
 
@@ -889,6 +1035,8 @@ worker 长期负载不对称。
 | 场景 | HTTP |
 | --- | --- |
 | App 不存在 | 404 |
+| App 已 retired | 404 |
+| active generation 已 quarantined | 503 |
 | App 自己的 queue/quota 满 | 429 |
 | Host 全局过载、pool 无 READY worker | 503 |
 | queue 或 Host deadline 到期 | 504 |
@@ -908,6 +1056,42 @@ v1 只允许一次重试，并同时满足：
 
 PUT/DELETE 虽有协议幂等含义，但已流式发送的 body 未被 Host 保存，不能自动重放。
 POST 即使带 Idempotency-Key，v1 也不自动重试，除非以后增加明确的 App opt-in 契约。
+
+### 10.5 worker 崩溃替换与 generation quarantine
+
+active worker 出现意外 EXIT、cgroup OOM、同步 CPU timeout、IPC/protocol failure，或被
+7.4 的持续健康检查摘除时，固定执行：
+
+1. owner shard 立即从调度集合移除 worker，并把 handle 交给 reaper executor；
+2. 先把本次事件计入 generation 的滚动 instability budget，再决定任何 retry 或
+   replacement：60 秒内最多 5 次；意外退出、主动健康连续失败导致的 recycle，以及
+   replacement spawn/load/READY 失败都计数，正常 drain、Host shutdown 和运维 retire
+   不计数；
+3. 若本次计数使 budget 超限，立即跳到下述 `QUARANTINING` 流程，不执行后续 retry 或
+   replacement；只有 generation 仍为 active 时，失败 inflight 才可按 10.4 决定是否重试；
+4. pool 低于目标 READY 数时创建 replacement singleflight；每个 App 同时最多一个替换
+   spawn，且必须重新取得全局 startup/memory permit；
+5. active replacement 使用指数退避：250 ms 起步、每次翻倍、最大 30 秒，并加 ±20%
+   jitter；成功 worker 连续稳定 60 秒后重置该 App/generation 的 backoff；
+6. 全局 startup permit 使用按 App 公平的队列，replacement 与 deploy 分 lane 计数；一个
+   crash-loop App 不能持续排在其他 App deploy 前面。
+
+budget 超限时：
+
+- 内存 Registry 先进入 `QUARANTINING` 并停止新流量；从该状态生效起明确禁用 10.4
+  自动重试，尚未取得 response head 的 inflight 一律 cancel 并合成 `503`，不能重新指派
+  给残余 READY/draining worker，也不能为它启动 replacement；已经发出 response head 的
+  inflight 只能有界 drain，超时后 cancel/断开；
+- control plane 用 6.5 的原子协议把 `active.json` 写成 `state: "quarantined"`，包含
+  Version、generation 和稳定 reason code `CRASH_BUDGET_EXCEEDED`；
+- 停止全部自动 replacement，数据请求返回 `503`，并产生不可丢弃的高优先级事件；
+- Host 重启只恢复 quarantine，不因计数器丢失而重新进入 crash loop；
+- 运维可显式 deploy 旧 Version，或显式重新 deploy 同一不可变 Version 来清除 quarantine
+  并开始全新预算；该动作经过完整预热，不是隐式 resume。
+
+v1 不默认自动回滚。旧 generation 在 drain 完成后可能已经销毁，应用也可能对外部系统
+产生与旧代码不兼容的状态；未经 App opt-in 自动切回不是普遍安全操作。以后若增加
+activation-guard rollback，必须单独定义旧池保留窗口、双池容量和外部状态兼容契约。
 
 ## 11. 权限编译与隔离
 
@@ -970,6 +1154,12 @@ capsid-host/
 - worker spawn 前先取得 Host memory/startup permit；
 - 蓝绿预热要同时计入旧、新 pool，容量不足则部署失败，旧版本不受影响。
 
+v1 的 memory permit 按每 worker `memoryMax` 全额记账。这会比实测约 6 MiB 的 READY PSS
+保守很多，但它保证承诺总量不会依赖历史平均值，也不会因 workload 改变突然超卖。
+M4 可评估“硬上限承诺 + measured working-set/PSS 软预算”的两级 admission：必须保留
+cgroup `memoryMax` 和 Host hard ceiling，使用按 workload/profile 更新的高分位 working
+set、增长余量和 OOM 负控；不能直接用一次 benchmark 的平均 PSS 替代硬记账。
+
 ### 11.5 外部隔离边界
 
 Host 主进程使用专用非 root 用户，通过 systemd `Delegate=yes` 或等价容器配置获得受限
@@ -989,10 +1179,11 @@ v1 内建固定、低基数指标，使用 `app`、`generation`、`listener`、`
 
 至少包括：
 
-- worker：starting/ready/busy/draining/crash；
+- worker：starting/ready/busy/unhealthy/draining/crash/replacement；
+- recovery：instability budget、backoff、replacement permit、quarantine 和 retire；
 - request：inflight/queued/rejected/cancel/timeout/retry；
 - latency：queue、startup、worker、time-to-head、total；
-- stream：request/response credit、未确认 bytes、slow-client cancel；
+- stream：request/response credit、未确认 bytes、SSE permit、slow-client cancel；
 - deploy：validate/stage/spawn/load/health/activate/drain 时间和结果；
 - isolation：required/applied feature、delegated cgroup failure、外部网络边界校验结果；
 - log/audit queue drop；
@@ -1022,6 +1213,10 @@ worker_id, request_id, operation_id, stage, result, duration_ms
 Runtime 的 LOG 和 AUDIT 必须持续排空。日志 sink 变慢不能阻塞 reactor：使用有界队列，
 应用日志可丢弃并计数；部署、安全和进程生命周期事件进入独立高优先级 lane。若未来
 要求完整合规审计，需要单独设计本地持久 spool，不能假装普通 stderr 提供 exactly-once。
+
+`CRASH_BUDGET_EXCEEDED`、active state 进入 quarantine/retired、retire drain 超时和管理
+授权失败属于不可丢弃的 control-plane 事件；日志不得包含未清洗 URL、forwarded header
+或 health response body。
 
 ## 13. Runtime 前置改动
 
@@ -1104,6 +1299,28 @@ capsid-host-tests     unit/integration targets
 版本不应写死在架构契约中。当前评审可采用 Boost 1.91、Jansson 2.15 和 OpenSSL 3.5
 LTS 作为初始验证基线，但最终 manifest 固定的是实际审查过的 patch release。
 
+### 14.1 公网 C++ Host 的残余风险
+
+第一方 Host 使用 C++20 解析攻击者可控 HTTP，是本方案最大的单进程内存安全残余风险。
+Beast 减少自写 parser 面，但不能把该风险归零。若 data listener 被远程利用，攻击者将
+获得 Host 服务账号可读的 App/state/secret 面、内存 Registry 和进程内全局部署权限；
+没有 privileged supervisor 意味着这不直接等于 root，但已经等于该 Host 安全边界失守。
+
+v1 固定以下缓解，不把它们描述成形式证明：
+
+- Beast 是唯一 HTTP framing authority；Host 只在解析结果上做语义 gate，不再实现第二
+  套 Content-Length/chunked parser，避免两个 parser 对边界产生分歧；
+- 配置规范化、path/authority、CIDR、attestation 签名消息和 header 清洗写成无副作用
+  纯函数，配 table/property test 与独立 fuzz target；
+- HTTP parser/serializer、URL 重写和生命周期状态机持续跑 ASan/UBSan，owner-shard 与
+  handoff 跑 TSan，smuggling corpus 和随机分片进入 release gate；
+- Host 使用专用非 root 账号、最小文件权限和独立管理 socket；不同信任域使用不同 Host
+  进程，限制一次利用的横向范围。
+
+如果持续 fuzz 仍暴露不可接受的 parser/lifetime 缺陷，保留把公网 HTTP frontend 拆成
+更低权限 transport 进程的选项，通过有界、版本化 IPC 连接 control/worker Host。仅把
+配置 parser 移进 helper 不能隔离公网 HTTP exploit，不作为该风险的主要缓解。
+
 ## 15. 测试与验收
 
 ### 15.1 TDD 是全局交付规则
@@ -1130,20 +1347,34 @@ Host、Runtime 前置改动、编译工具和运维脚本全部遵循同一循�
 - path ancestor、deny、wildcard hostname、CIDR 和 port 交集；
 - generation digest 和 rule ID 可复现；
 - subdomain/path/header 路由正负控；
+- 三种路由模式的 URL rewrite golden，以及所有 Forwarded/X-Forwarded 头剥离 property；
 - pool 选择、queue、permit 和错误映射；
+- fake clock 下的 crash rolling window、指数退避/jitter 边界、per-App replacement
+  singleflight 和 startup fairness；
+- SSE permit 获取/归还恰好一次，stream cap 始终为普通请求保留槽位；
 - deploy/worker 状态机所有非法转移；
-- active pointer 原子恢复。
+- active/retired/quarantined 三种状态的原子恢复。
 
 ### 15.3 HTTP 和流控集成
 
 - chunked、Content-Length、TE/CL 冲突和 smuggling corpus；
 - header 数量/字节、慢头、慢 body 和 early body；
+- 客户端伪造 `Forwarded`/`X-Forwarded-*` 不影响 URL 或 worker headers，proxy 后的
+  `publicScheme=https` 生成稳定绝对 URL；
+- Admin socket 非授权 peer 被所有端点拒绝；获准 UID/group 对所有 App 具有相同全局
+  deploy/retire 权限，不误测成 per-App ACL；
 - `Expect: 100-continue` 的接受与拒绝；
 - 大 request body 在 credit=0 时不继续读取；
 - response credit 只在 client write completion 后归还；
-- 慢客户端、SSE、断开、cancel 和迟到事件；
+- 慢客户端、SSE、stream permit 满时在 head 前返回 503、断开、cancel 和迟到事件；
 - 多 request ID 交错；
 - worker crash 在 response head 前后不同语义；
+- active health 连续失败摘除、replacement backoff、budget quarantine，以及 crash-loop
+  App 不阻塞另一 App deploy；
+- 达到 crash budget 的那个事件先切入 `QUARANTINING`，不重试到残余 READY worker，也不
+  启动 replacement；
+- worker 持续 busy 时主动探针可 skip，但 request/stream deadline 或 IPC/EXIT 被动失败仍
+  会摘除并计入 budget；
 - shutdown/drain/terminate 不阻塞 reactor。
 
 ### 15.4 部署故障注入
@@ -1156,9 +1387,13 @@ Host、Runtime 前置改动、编译工具和运维脚本全部遵循同一循�
 - pool READY 前后；
 - active temp write、fsync、rename 和 parent fsync 前后；
 - Registry publish 前后；
+- retire tombstone rename 和 Registry remove 前后；
+- quarantined App 执行 retire 的 tombstone rename 和幂等恢复；
+- quarantine state rename 和 replacement 停止前后；
 - 旧 pool drain 中。
 
-验收不变量：重启后只可能得到旧 active 或完整的新 active，绝不能指向半个 generation。
+验收不变量：重启后只可能得到旧 active、完整的新 active、retired 或 quarantined，绝不
+能指向半个 generation，也不能复活 retired/quarantined pool。
 
 另测：symlink/magic link/device/FIFO、并发原地修改、digest mismatch、ENOSPC、只读目录、
 相同 Version 不同内容、并发 deploy 和 secret 变化。
@@ -1264,12 +1499,14 @@ wait、time-to-head、IPC bytes/syscalls 和 cancel/error。
 
 - Release/LTO、ASan、UBSan、TSan 和 fuzz 全绿；
 - Host HTTP/部署/故障注入矩阵全绿；
+- crash-loop quarantine、retire tombstone、持续健康和 SSE permit 矩阵全绿；
 - delegated cgroup 与 Runtime egress policy 的正向证据；
 - 配置 schema、示例、Policy Compiler 和 Runtime descriptor golden 一致；
 - SBOM、依赖 hash、worker/library/Host/build identity 固定；
 - A/B 报告含原始数据并可从当前 tree 追溯；
 - 升级旧版本 Host 时，active state 和 App Version 可恢复；
-- 运维文档覆盖 backup、rollback、drain、磁盘满、外部网络边界和 cgroup 委派故障。
+- 运维文档覆盖 backup、rollback、drain、磁盘满、外部网络边界和 cgroup 委派故障；
+- threat model 明确公网 C++ Host 与全局 Admin socket 的残余权限边界。
 
 ## 16. 实施顺序
 
@@ -1288,7 +1525,15 @@ wait、time-to-head、IPC bytes/syscalls 和 cancel/error。
    redaction 和 generation digest；
 5. `active_recovery_never_selects_incomplete_generation` 先失败；冻结 `active.json`、fsync、
    crash recovery 与 fake filesystem 接口；
-6. 建立 Host test target、fake worker、fake clock、sanitizer job 和依赖锁。
+6. `request_url_ignores_all_forwarded_headers` 先失败；冻结 public scheme、authority、URL
+   rewrite 和 proxy header 规则；
+7. `retired_or_quarantined_app_never_reactivates_on_restart` 先失败；冻结 retire 与 crash
+   state machine；
+8. `crash_loop_does_not_starve_other_app_deploy` 先失败；冻结 replacement backoff、budget
+   和 permit fairness；
+9. `quarantining_never_retries_to_a_remaining_worker` 先失败；冻结 budget 判定先于 retry 的
+   顺序；
+10. 建立 Host test target、fake worker、fake clock、sanitizer job 和依赖锁。
 
 完成条件：所有 v1 公共契约都有 golden 和负控，compiler 成为正式 target；生产 Host 代码
 仍可很少，但不能存在未被测试表达的安全分支。
@@ -1302,7 +1547,8 @@ wait、time-to-head、IPC bytes/syscalls 和 cancel/error。
    `capsid_env_entry[]` 快照；
 4. 从 `one_request_waits_for_credit` 开始，实现 Unix admin socket、单一 path listener、
    一个 worker 的 begin/write/end、response credit、cancel 与 timeout；
-5. 同时覆盖四条真实路径：源码、可信字节码、兼容失配回退源码、secret 进入 worker。
+5. 实现固定 `Request.url`/header 清洗契约，覆盖直接 listener 和外部 TLS proxy；
+6. 同时覆盖源码、可信字节码、兼容失配回退源码、secret 进入 worker 四条 artifact 路径。
 
 完成条件：单 worker 端到端测试证明 bytecode 与 secret 的 v1 契约；任一签名/摘要错误
 fail closed，secret canary 不出现在 Host 输出。
@@ -1310,15 +1556,20 @@ fail closed，secret canary 不出现在 Host 输出。
 ### M2：静态池和可靠部署闭环
 
 1. 从 pool/queue 状态机失败测试开始，实现固定 `minReady == maxWorkers`、shard owner、
-   admission、慢客户端和 SSE；
+   admission、慢客户端和 SSE permit；
 2. 从每个持久化边界的 crash test 开始，实现 stage → prewarm → health → active rename
    → drain；
 3. 从 rotation test 开始，实现 secret revision 变化生成新 pool；
 4. 从 bytecode key rotation/restart test 开始，实现 provenance 随 generation 固化；
-5. 增加结构化日志、固定指标和明确回退原因。
+5. 从 crash-loop/fake-clock 测试开始，实现 replacement、backoff、instability budget、
+   quarantine 和跨 App startup fairness；
+6. 从 active health 与 retire crash matrix 开始，实现持续探针、retired tombstone 和有界
+   drain；
+7. 增加结构化日志、固定指标和明确回退原因。
 
 完成条件：失败永远保留旧版本，重启只恢复完整 generation，请求全程有界；字节码和
-secret 在蓝绿、回滚和重启中保持相同语义。
+secret 在蓝绿、回滚和重启中保持相同语义；crash-loop 不能垄断 permit，retired/
+quarantined App 不能因重启复活。
 
 ### M3：生产 v1 发布门
 
@@ -1328,7 +1579,8 @@ secret 在蓝绿、回滚和重启中保持相同语义。
 4. 幂等操作查询、显式 rollback、generation retention/GC；
 5. 结构化 Runtime 错误；
 6. 全量安全、fuzz、sanitizer、soak、性能 A/B 和 crash matrix；
-7. systemd unit、外部网络边界、权限、key rotation、secret rotation、升级和运维文档。
+7. systemd unit、外部网络边界、Admin trust boundary、权限、key/secret rotation、retire、
+   quarantine、升级和运维文档。
 
 完成条件：在目标 Linux 环境完成 strict isolation、可信字节码与 secret 的正向和负向
 证明，并通过生产流量/发布故障门。至此才称为 v1。
@@ -1336,7 +1588,8 @@ secret 在蓝绿、回滚和重启中保持相同语义。
 ### M4：数据驱动的后续能力
 
 - `minReady < maxWorkers` 的有界扩缩容；
-- startup fairness、circuit breaker；
+- endpoint/application circuit breaker、显式 opt-in activation-guard rollback；
+- 基于 profile/PSS 高分位且保留 hard ceiling 的两级 memory admission；
 - 安全 ceiling reload；
 - 可选 OTLP adapter；
 - HTTP/2、内置 TLS 或第三方 transport adapter；
@@ -1349,9 +1602,18 @@ secret 在蓝绿、回滚和重启中保持相同语义。
 2. **secret 通过 `capsid:env` 进入 worker**：按权限交集生成不可变快照，轮换生成新
    generation，任何 Host 输出不含明文；
 3. **C++20 + Asio/Beast**：保留 C++ owner-shard，但不手写 epoll/HTTP parser；
-4. **保持简单**：`active.json` 原子指针，不引入 SQLite；静态池先行，autoscaling 后置；
+4. **保持简单**：`active.json` 是单写原子状态文件，active 形态仍只是 generation 指针，
+   retire/quarantine 使用同文件 tombstone，不引入 SQLite；静态池先行，autoscaling 后置；
 5. **不做 Host netns supervisor**：Host/App 没有 netns 配置；worker 自然使用 Host 的
-   网络环境，额外网络隔离完全属于可选的部署环境措施。
+   网络环境，额外网络隔离完全属于可选的部署环境措施；
+6. **crash-loop fail closed**：v1 自动替换、退避并执行 generation budget；超限后持久化
+   quarantine 和 503，不默认自动回滚；
+7. **显式 retire**：`POST /v1/apps/{app}/retire` 原子写 tombstone、停止路由并 drain，
+   不以目录删除表达下线；
+8. **URL 不猜代理语义**：listener 显式 public scheme/authority，v1 删除且不信任全部
+   Forwarded/X-Forwarded header；
+9. **最小持续健康与 streaming 隔离**：配置健康路径时周期抽样，失败纳入 instability
+   budget；SSE 使用独立 per-worker permit，保留普通请求槽位。
 
 ## 18. 外部选型依据
 
@@ -1371,9 +1633,11 @@ secret 在蓝绿、回滚和重启中保持相同语义。
 Host 规划不需要推倒重来。最重要的调整是把 v1 从“功能列表”改成一个可证明的垂直
 闭环：
 
-> 源码目录安全快照，类型化权限编译，固定池预热，原子 active 指针，旧池有界排空，
-> 可信字节码经完整信任链进入 worker，secret 经最小权限 `capsid:env` 快照进入 worker，
-> 请求和响应始终受 credit、queue、deadline 与 Linux isolation 共同约束。
+> 源码目录安全快照，类型化权限编译，固定池预热，原子 App 状态切换，旧池有界排空，
+> crash-loop 退避并持久 quarantine，显式 retire，稳定的 worker URL 与代理头契约，持续
+> 健康和 SSE 独立容量保护；可信字节码经完整信任链进入 worker，secret 经最小权限
+> `capsid:env` 快照进入 worker，请求和响应始终受 credit、queue、deadline 与 Linux
+> isolation 共同约束。
 
 按 M0 到 M3 的 TDD 切片逐步把这个闭环做小、做严；v1 完成后，再用真实 profile 决定
 扩缩容、HTTP/2 和更复杂控制面。这样既保持当前计划的产品简洁性，也与现有 Runtime

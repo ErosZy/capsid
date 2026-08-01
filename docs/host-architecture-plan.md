@@ -3,6 +3,11 @@
 > 状态：拟议设计，尚未实现。当前可用接口仍以
 > [宿主嵌入接口](embedding-api.md)和
 > [第三方宿主集成规范](host-integration.md)为准。
+>
+> 文档定位：本文只保留产品边界和架构概要。v1 的可实现配置 schema、候选默认值、状态
+> 机、HTTP 契约、错误语义和验收门以
+> [Host 技术评审与 v1 详细方案](host-technical-design-review.md)为唯一规范来源；两者冲突
+> 时以后者为准。尤其是详细方案 5.1/5.2 已取代本文第 1/2 节作为配置实现依据。
 
 ## 一句话模型
 
@@ -45,6 +50,9 @@ Runtime 继续只负责单个隔离 worker 的执行与 FetchRPC IPC。Host 不�
 进程、服务账号、应用根目录和状态目录；v1 不在一个进程里重新实现多租户控制面。
 
 ## 1. 整机配置 `host.json`
+
+> 本节示例只解释 Host/App 上限模型，不再冻结完整 schema 或默认值；实现和测试必须使用
+> [详细方案 5.1](host-technical-design-review.md#51-修订后的-hostjson-轮廓)。
 
 默认位置：
 
@@ -114,8 +122,8 @@ Runtime 继续只负责单个隔离 worker 的执行与 FetchRPC IPC。Host 不�
     "pidsMax": 8,
     "requestTimeout": "5s",
     "maxInflight": 32,
-    "minReady": 1,
-    "maxWorkers": 16
+    "minReady": 4,
+    "maxWorkers": 4
   },
   "workerMaximums": {
     "jsHeap": "256MiB",
@@ -126,7 +134,7 @@ Runtime 继续只负责单个隔离 worker 的执行与 FetchRPC IPC。Host 不�
     "pidsMax": 32,
     "requestTimeout": "30s",
     "maxInflight": 128,
-    "minReady": 16,
+    "minReady": 64,
     "maxWorkers": 64
   }
 }
@@ -137,10 +145,12 @@ Runtime 继续只负责单个隔离 worker 的执行与 FetchRPC IPC。Host 不�
 - `workerDefaults`：App 没写时采用的值；
 - `workerMaximums`：App 最多可以申请到的值；
 - App 只能申请更小或相等的值；
+- 静态池 v1 的有效配置还必须满足 `minReady == maxWorkers`，不能仅因两个字段分别低于
+  maximum 就接受不等值；
 - Linux isolation 只由 Host 决定，App 不能覆盖。
 
-上例的 `workerDefaults` 是拟议的 v1 内建默认值，不只是标签背后的隐藏示例。实现前
-可以通过压测调整；一旦 `capsid/host-v1` 冻结，就不能在同一 API version 下静默改变。
+上例容量只是静态池候选值，必须按详细方案的 profile 和故障测试门验证后再冻结；一旦
+`capsid/host-v1` 冻结，就不能在同一 API version 下静默改变。
 
 如果 Host 没有显式配置 `workerMaximums`，最大值等于相应默认值。这样默认不会因为
 某个 App 修改配置而扩大整机资源授权。
@@ -205,7 +215,7 @@ JSON 中重复填写。
   },
   "workers": {
     "minReady": 4,
-    "maxWorkers": 16
+    "maxWorkers": 4
   },
   "healthCheck": {
     "path": "/_capsid/health",
@@ -268,6 +278,9 @@ READY worker。
 
 ## 4. 唯一部署接口
 
+> 本节只描述产品流程；管理 API、状态机、幂等和 crash-safe retire 的实现契约见
+> [详细方案第 7 节](host-technical-design-review.md)。
+
 默认通过独立 Unix 管理 socket 提供：
 
 ```http
@@ -280,7 +293,7 @@ Content-Type: application/json
 }
 ```
 
-这是 v1 唯一改变应用线上版本的接口。部署行为固定，不再要求用户选择一组策略：
+这是 v1 唯一激活某个应用 Version 的接口。部署行为固定，不再要求用户选择一组策略：
 
 1. 从固定 `applicationsRoot` 解析 App/Version；
 2. 安全打开 `capsid.json`、源码和可选的完整字节码产物组；
@@ -316,6 +329,9 @@ Content-Type: application/json
 Host 已复制并校验的内部快照。停止或删除 App 必须使用单独的显式运维动作，不能把
 一次文件同步错误直接解释为下线。
 
+显式下线固定为 `POST /v1/apps/{app}/retire`。它不选择另一个 Version，而是原子写入
+retired tombstone、停止新路由并有界 drain；完整 crash-safe 语义见详细方案 7.6。
+
 ## 5. 蓝绿和 worker 映射
 
 用户只看见 App 和 Version；Host 内部维护每个版本自己的 worker pool：
@@ -340,9 +356,9 @@ secret snapshot 和资源限制在 READY 后不能原地修改。
 worker。默认不保证相同客户端落到相同 worker；需要外部持久状态的应用不能依赖
 worker 私有内存。
 
-冷版本首次启动使用 singleflight：并发请求只触发一次启动过程，其他请求在有界队列
-中等待，不能为每个请求分别 spawn worker。新 App 默认 `minReady=1`，所以正常部署
-完成后已经有可用 worker，不应把冷启动延迟暴露给第一个生产请求。
+相同 App/Version/generation 的并发 deploy 使用 singleflight，只启动一套预热 pool。
+数据请求本身永远不触发 spawn。v1 使用 `minReady == maxWorkers` 的固定池，只有全部候选
+worker READY 并通过部署健康检查后才激活，不把冷启动延迟暴露给第一个生产请求。
 
 ## 6. URL、Header 与 App 的映射
 
@@ -391,7 +407,9 @@ Unix socket、mTLS 内部入口或严格代理 allowlist；公网客户端提供
         └── bundle.mjs
 ```
 
-目录名使用内容摘要。`active.json` 只保存当前摘要，通过临时文件加原子 rename 更新。
+目录名使用内容摘要。`active.json` 是单写原子 App 状态文件：active 形态保存当前
+generation 指针，retired/quarantined 形态保存 tombstone；三者都通过临时文件、同步和
+原子 rename 更新。详细格式与恢复不变量见详细方案第 6 节。
 内部快照至少固定：
 
 - 源码和可信字节码摘要；
@@ -405,6 +423,9 @@ Host 配置改变后，已有 READY worker 不原地修改。运维先执行 pla
 App 重新校验和预热，再逐 App 原子切换。
 
 ## 8. 文件与字节码安全
+
+> 本节只描述安全目标；可信字节码、generation identity、兼容回退和验收负控见
+> [详细方案第 3.5、6.3 和 15.5 节](host-technical-design-review.md)。
 
 Host 以 `applicationsRoot` 的目录 fd 为根，使用等价于
 `openat2(RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS)` 的方式读取
@@ -459,6 +480,9 @@ App 的 `fs.read` 会同时生成 Runtime operation rule 和 Landlock 只读根�
 或 netns 创建协议，Host/App schema 中也没有 network namespace 配置字段。
 
 ## 10. 调度、背压与过载
+
+> 本节只描述调度概要；credit、admission、retry、crash recovery 和 profile gate 见
+> [详细方案第 9、10 和 15.7 节](host-technical-design-review.md)。
 
 每个 worker 从 READY 到销毁只属于一个 reactor owner。其他线程通过队列投递命令，
 不能同时调用同一 worker。
@@ -545,7 +569,8 @@ QuickJS heap 遍历只用于显式诊断和回归门，不进入请求热路径�
 2. 从三方 identity mismatch 测试开始实现 Runtime/worker/compiler compatibility ID；
 3. 从逐字段篡改测试开始实现 bytecode attestation 和 Ed25519 验签；
 4. 从 secret 泄漏 golden 开始冻结 `capsid:env` snapshot、redaction 和 rotation；
-5. 从 crash recovery 不变量开始冻结 generation digest 和 `active.json`；
+5. 从 crash recovery 不变量开始冻结 generation digest 和 active/retired/quarantined
+   三种 `active.json` 状态；
 6. 建立 Host test target、fake worker/clock/filesystem 和 sanitizer job。
 
 ### 第二阶段：单 worker 垂直闭环
@@ -561,23 +586,25 @@ QuickJS heap 遍历只用于显式诊断和回归门，不进入请求热路径�
 1. 固定大小的 per-App-Version worker pool 和完整 admission control；
 2. staging、`minReady` 预热、health check 和 active version 原子切换；
 3. 旧版本 drain、超时销毁、显式回滚和逐边界 crash injection；
-4. secret/key rotation、重启恢复、结构化日志和基础 metrics；
-5. delegated cgroup 和 Runtime egress policy 的真实 Linux 集成测试；外部网络隔离属于
+4. worker replacement、退避、crash budget、quarantine 和跨 App startup fairness；
+5. 持续健康、SSE 独立 permit、显式 retire 及对应故障矩阵；
+6. secret/key rotation、重启恢复、结构化日志和基础 metrics；
+7. delegated cgroup 和 Runtime egress policy 的真实 Linux 集成测试；外部网络隔离属于
    部署环境验收，不是 Host feature。
 
 前三个阶段全部完成并通过 fuzz、sanitizer、soak、故障注入和性能门后才称为 v1。
 
 ### 后续：弹性与效率
 
-1. cold-start singleflight；
-2. 有界自动扩缩容；
-3. startup memory permit 与公平队列；
-4. circuit breaker、过载拒绝和完整 metrics；
-5. HTTP/2、TLS 或第三方 transport adapter。
+1. 带 cold-start singleflight 的有界自动扩缩容；
+2. endpoint/application circuit breaker 与显式 opt-in activation rollback；
+3. 基于 profile 的两级 memory admission；
+4. HTTP/2、TLS 或第三方 transport adapter。
 
 v1 完成之前不增加多租户 realm、App binding、资源档位、权重发布 DSL 或业务控制面。
 
 ## 最终原则
 
-> Host 定义整机硬边界，App 只能申请子集；版本通过目录交付，通过一个接口完成预热
-> 和蓝绿；失败永远保持旧版本，worker 永远不能越过 Host。
+> Host 定义整机硬边界，App 只能申请子集；版本通过目录交付，通过 deploy 完成预热和
+> 蓝绿，通过 retire 显式下线；部署失败保持旧版本，active crash-loop 则退避并 fail
+> closed，worker 永远不能越过 Host。
