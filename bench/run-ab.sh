@@ -43,13 +43,15 @@
 # perf-records the baseline gateway into baseline-gateway.perf.data instead,
 # and the evidence gate accepts either file for the baseline gateway.
 #
-# IPC mechanism counters: profile runs export CAPSID_HOST_IPC_METRICS=1 and
-# the runner sums the per-pump counter deltas emitted during the profile
-# run's loadgen window (warmup + measured; the loadgen window is identical
-# in shape for both sides). Counters land in manifest.ipc_mechanism per
-# side. --require-ipc-counters turns a side without counters into
-# incomplete evidence (used by the bodyless off/on A/B, where both sides
-# are the same capsid-host binary).
+# IPC mechanism counters: every round exports CAPSID_HOST_IPC_METRICS=1 and
+# the runner sums the per-pump counter deltas emitted during each measured
+# round's loadgen window (warmup + measured), merging rounds 1..3 per side.
+# Counting in the alternating measured rounds (rather than a single
+# sequential profile window per side) keeps the sides volume-balanced, so a
+# machine drift between profile windows cannot skew the counter deltas.
+# Counters land in manifest.ipc_mechanism per side. --require-ipc-counters
+# turns a side without counters into incomplete evidence (used by the
+# bodyless off/on A/B, where both sides are the same capsid-host binary).
 #
 # Exit codes: 0 = complete evidence; 1 = component or correctness failure;
 # 2 = incomplete evidence (missing samples/profiles/manifest fields).
@@ -231,6 +233,9 @@ start_component() {
     : >"$ready_file"
     exec 9>"$ready_file"
 
+    # CAPSID_HOST_IPC_METRICS: the host emits one per-pump delta metrics
+    # line per event pump; the measured rounds feed the IPC mechanism
+    # counters (see the capture below the round loop).
     env \
         CAPSID_BENCH_LISTEN="127.0.0.1:0" \
         CAPSID_BENCH_READY_FD="$ready_fd" \
@@ -245,7 +250,7 @@ start_component() {
         CAPSID_BENCH_CPU_PROFILE="$profile_out" \
         CAPSID_BENCH_IDENTITY_OUT="$identity_file" \
         CAPSID_TCP_NODELAY="${CAPSID_TCP_NODELAY:-1}" \
-        ${profile_out:+CAPSID_HOST_IPC_METRICS=1} \
+        CAPSID_HOST_IPC_METRICS=1 \
         ${side_env} \
         ${CPUSET:+taskset -c "$CPUSET"} \
         "$cmd" >"$OUT/.tmp/$side.round$round.$RUN_ID.log" 2>&1 &
@@ -362,6 +367,42 @@ for ((round = 1; round <= ROUNDS; round++)); do
         start_component "$side" "$cmd" "$round"
         run_loadgen "$side" "$round"
         stop_component "$side"
+
+        # Measured-window IPC mechanism counters: sum the per-pump delta
+        # metrics lines produced during this round's loadgen window (the
+        # lines emitted before the loadgen starts are startup noise and are
+        # skipped). The per-round sums are merged across rounds below.
+        ipc_log="$OUT/.tmp/$side.round$round.$RUN_ID.log"
+        pre_metric_lines="$(grep -c '^{"host":' "$ipc_log" 2>/dev/null || true)"
+        [ -n "$pre_metric_lines" ] || pre_metric_lines=0
+        python3 - "$ipc_log" "$pre_metric_lines" \
+            "$OUT/.tmp/ipc_window.$side.$round.$$.json" <<'PY'
+import json, sys
+log, pre, out = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+totals = {}
+window_lines = 0
+index = 0
+with open(log, "r", encoding="utf-8", errors="replace") as handle:
+    for line in handle:
+        line = line.strip()
+        if not line.startswith('{"host":'):
+            continue
+        index += 1
+        if index <= pre:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        window_lines += 1
+        for section in ("host", "client"):
+            for key, value in (obj.get(section) or {}).items():
+                if isinstance(value, int) and not isinstance(value, bool):
+                    dotted = "{}.{}".format(section, key)
+                    totals[dotted] = totals.get(dotted, 0) + value
+with open(out, "w", encoding="utf-8") as handle:
+    json.dump({"window_lines": window_lines, "counters": totals}, handle)
+PY
     done
 done
 
@@ -453,49 +494,10 @@ if [ "$NO_PROFILE" != "1" ]; then
             >/dev/null 2>&1 &
         worker_stat_pid=$!
 
-        # Measured-window IPC mechanism counters: the host emits one metrics
-        # line (a per-pump delta) per event pump when CAPSID_HOST_IPC_METRICS
-        # is on (profile runs only — headline runs stay probe-free). Count the
-        # lines produced before the loadgen starts, then sum the deltas of the
-        # lines produced during the loadgen window (warmup + measured; the
-        # window shape is identical for both sides).
-        ipc_log="$OUT/.tmp/$side.round0.$RUN_ID.log"
-        pre_metric_lines="$(grep -c '^{"host":' "$ipc_log" 2>/dev/null || true)"
-        [ -n "$pre_metric_lines" ] || pre_metric_lines=0
-
         run_loadgen "$side" 0
 
         snapshot_resource "$local_pid" "gateway"
         snapshot_resource "$worker_pid" "worker"
-
-        python3 - "$ipc_log" "$pre_metric_lines" \
-            "$OUT/.tmp/ipc_mechanism.$side.$$.json" <<'PY'
-import json, sys
-log, pre, out = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-totals = {}
-window_lines = 0
-index = 0
-with open(log, "r", encoding="utf-8", errors="replace") as handle:
-    for line in handle:
-        line = line.strip()
-        if not line.startswith('{"host":'):
-            continue
-        index += 1
-        if index <= pre:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        window_lines += 1
-        for section in ("host", "client"):
-            for key, value in (obj.get(section) or {}).items():
-                if isinstance(value, int) and not isinstance(value, bool):
-                    dotted = "{}.{}".format(section, key)
-                    totals[dotted] = totals.get(dotted, 0) + value
-with open(out, "w", encoding="utf-8") as handle:
-    json.dump({"window_lines": window_lines, "counters": totals}, handle)
-PY
 
         for p in "$gateway_stat_pid" "$worker_stat_pid"; do
             wait "$p" 2>/dev/null || true
@@ -585,17 +587,39 @@ for side in baseline candidate; do
     done
 done
 
-# IPC mechanism counters: with --require-ipc-counters, every side must have
-# produced at least one counter line inside its profile-run loadgen window
-# (the bodyless off/on A/B runs the same capsid-host binary on both sides,
-# so both sides must emit counters).
+# IPC mechanism counters: merge the per-round window sums into one file per
+# side. With --require-ipc-counters, every side must have produced at least
+# one counter line inside its measured-rounds loadgen windows (the bodyless
+# off/on A/B runs the same capsid-host binary on both sides, so both sides
+# must emit counters).
+for side in baseline candidate; do
+    python3 - "$OUT" "$side" "$$" <<'PY'
+import json, sys, glob, os
+out_dir, side, pid = sys.argv[1], sys.argv[2], sys.argv[3]
+files = sorted(glob.glob(os.path.join(
+    out_dir, ".tmp", "ipc_window.%s.*.%s.json" % (side, pid))))
+totals = {}
+window_lines = 0
+for path in files:
+    with open(path, "r", encoding="utf-8") as handle:
+        window = json.load(handle)
+    window_lines += window.get("window_lines", 0)
+    for key, value in (window.get("counters") or {}).items():
+        totals[key] = totals.get(key, 0) + value
+with open(os.path.join(out_dir, ".tmp",
+                       "ipc_mechanism.%s.%s.json" % (side, pid)),
+          "w", encoding="utf-8") as handle:
+    json.dump({"window_lines": window_lines, "counters": totals}, handle)
+PY
+done
+
 IPC_MECHANISM_BASELINE="{}"
 IPC_MECHANISM_CANDIDATE="{}"
 for side in baseline candidate; do
     mechanism_file="$(ls "$OUT"/.tmp/ipc_mechanism.$side.*.json 2>/dev/null | head -1 || true)"
     if [ -z "$mechanism_file" ]; then
         if [ "$REQUIRE_IPC_COUNTERS" = "1" ]; then
-            fail_evidence "no IPC mechanism capture for $side profile run"
+            fail_evidence "no IPC mechanism capture for $side measured rounds"
         fi
         continue
     fi
@@ -604,7 +628,7 @@ for side in baseline candidate; do
         window_lines="$(printf '%s' "$mechanism" | python3 -c \
             'import json,sys; print(json.load(sys.stdin).get("window_lines", 0))')"
         if [ "$window_lines" = "0" ]; then
-            fail_evidence "no IPC mechanism counters for $side profile run"
+            fail_evidence "no IPC mechanism counters for $side measured rounds"
         fi
     fi
     if [ "$side" = "baseline" ]; then

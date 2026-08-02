@@ -373,7 +373,7 @@ def build_report(out, meta, manifest):
             "PASS" if delta_qps >= 5.0 or delta_p50 <= -10.0 else "FAIL"))
     if mech_keys:
         lines.append("")
-        lines.append("### IPC mechanism counters (profile-run loadgen window)")
+        lines.append("### IPC mechanism counters (measured-rounds window)")
         lines.append("")
         lines.append("| counter | baseline | candidate | drop % (positive = fewer) |")
         lines.append("|---------|----------|-----------|----------------------------|")
