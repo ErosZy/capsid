@@ -1,0 +1,9 @@
+DIAGNOSTIC RUN — SUPERSEDED GATE DEFINITION
+
+Generated with the frozen per-request gate as originally committed, whose
+third metric (client.queued_frames) does not measure the fusion for the
+bodyless-GET fixed-1k workload (wire frames are already minimal): verdicts
+FAILed 2-4% on that metric while commands/parsed/next_event all dropped
+20%+. The gate was re-frozen on next_event_calls and the full diagnostic
+window in commit <gate-fix>; acceptance evidence is the rerun after that.
+QPS and per-request counter data remain valid.
