@@ -18,10 +18,17 @@ correctness_out="${CAPSID_BENCH_CORRECTNESS_OUT:?}"
 printf '{"side":"%s","round":%s,"phase":"warmup","qps":0}\n' "$side" "$round" \
     >"$samples_out"
 
+# Honor the warmup/measured window shape like the real loadgen: the runner
+# captures IPC mechanism counters from the lines the gateway emits during
+# the round, so an instant exit would leave a zero-length counter window.
+sleep "${CAPSID_BENCH_WARMUP_S:-0}"
+
 if [ "${CAPSID_BENCH_FAKE_FEWER_ROUNDS:-0}" != "1" ]; then
     printf '{"side":"%s","round":%s,"phase":"measured","qps":12345.6,"p50_ms":0.9,"p95_ms":1.3,"p99_ms":2.1,"dispatch_wait_ms":0.02,"completed":50000,"errors":0,"timeouts":0}\n' \
         "$side" "$round" >>"$samples_out"
 fi
+
+sleep "${CAPSID_BENCH_DURATION_S:-1}"
 
 if [ "${CAPSID_BENCH_FAKE_CORRECTNESS_FAIL:-0}" = "1" ]; then
     printf '{"ok":false,"error":"fake content mismatch","responses_checked":50000,"mismatches":1,"errors_as_success":false}\n' \
