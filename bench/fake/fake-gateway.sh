@@ -54,8 +54,13 @@ fi
 metrics_pid=""
 if [ "${CAPSID_BENCH_FAKE_METRICS:-0}" = "1" ]; then
     emit_metrics() {
+        # command printf: an external process's stderr is unbuffered, so
+        # every line reaches the component log immediately. Bash's builtin
+        # printf block-buffers writes to a file, and the buffer is lost when
+        # the runner kills the component at stop_component — short measured
+        # rounds would then capture zero metric lines.
         while :; do
-            printf '%s\n' '{"host":{"commands_submitted":2,"command_batches":1,"commands_executed":2,"flush_calls":1,"flush_eagain":0,"events_queued":1,"asio_posts":1,"response_heads":1,"response_body_frames":1,"response_ends":1,"grant_commands":1,"credit_bytes_granted":1024,"credit_stall_count":0,"command_queue_hw":1,"event_queue_hw":1},"client":{"queued_frames":2,"queued_wire_bytes":128,"queue_would_block":0,"flush_calls":1,"socket_write_calls":1,"socket_write_bytes":128,"socket_write_eagain":0,"next_event_calls":1,"parsed_frames":2,"parser_payload_copied_bytes":64,"socket_read_calls":1,"socket_read_bytes":128,"socket_read_eagain":0,"queued_bytes_hw":128}}' >&2
+            command printf '%s\n' '{"host":{"commands_submitted":2,"command_batches":1,"commands_executed":2,"flush_calls":1,"flush_eagain":0,"events_queued":1,"asio_posts":1,"response_heads":1,"response_body_frames":1,"response_ends":1,"grant_commands":1,"credit_bytes_granted":1024,"credit_stall_count":0,"command_queue_hw":1,"event_queue_hw":1},"client":{"queued_frames":2,"queued_wire_bytes":128,"queue_would_block":0,"flush_calls":1,"socket_write_calls":1,"socket_write_bytes":128,"socket_write_eagain":0,"next_event_calls":1,"parsed_frames":2,"parser_payload_copied_bytes":64,"socket_read_calls":1,"socket_read_bytes":128,"socket_read_eagain":0,"queued_bytes_hw":128}}' >&2
             sleep 0.1
         done
     }
