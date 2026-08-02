@@ -3016,7 +3016,24 @@ private:
             // immediately, matching the request-end frame semantics. A
             // bridge failure propagates exactly like the standalone
             // request-end frame path: fail closed.
-            if (!call_id_bridge(request_end_, frame.request_id)) {
+            //
+            // CAPSID_TEST_FAIL_REQUEST_END_BRIDGE (test-only injection via
+            // the host-provided environment snapshot): the app layer cannot
+            // make the request-end bridge fail — tjs:internal/* is
+            // capability-forbidden for apps and the bootstrap requestEnd
+            // early-returns for bodyless requests — so the frozen RED
+            // (worker_bodyless_end_failure) injects the failure through the
+            // snapshot and asserts the fused begin propagates it.
+            std::string injected;
+            const bool fail_end =
+                config_.capability_policy.env_value(
+                    "CAPSID_TEST_FAIL_REQUEST_END_BRIDGE",
+                    &injected);
+            const bool end_ok =
+                fail_end
+                    ? false
+                    : call_id_bridge(request_end_, frame.request_id);
+            if (!end_ok) {
                 return false;
             }
         }

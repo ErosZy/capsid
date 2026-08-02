@@ -216,6 +216,57 @@ void wait_for_ready(capsid_worker *worker) {
     }
 }
 
+// Frozen RED (bodyless request-end fail-closed): the fused path calls the
+// request_end bridge synchronously inside begin. A throwing bridge must
+// propagate exactly like the standalone request-end frame path — the worker
+// must surface an error event; swallowing the exception leaves the request
+// hanging with no error (the pre-fix fused path returned the begin result
+// and dropped the end-bridge failure).
+void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
+    require_result(
+        capsid_worker_begin_bodyless_request(
+            worker, 1, "GET", "https://example.test/bodyless", NULL, 0),
+        "begin bodyless request");
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (;;) {
+        const capsid_result flush = capsid_worker_flush(worker);
+        if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
+            fail(std::string("bodyless flush: ") +
+                 capsid_result_string(flush));
+        }
+
+        capsid_event event = {};
+        event.struct_size = sizeof(event);
+        const capsid_result result =
+            capsid_worker_next_event(worker, &event);
+        if (result == CAPSID_OK) {
+            if (event.type == CAPSID_EVENT_ERROR) {
+                return;  // fail closed: the bridge failure surfaced
+            }
+            if (event.type == CAPSID_EVENT_EXIT) {
+                fail("worker exited without reporting the "
+                     "request-end failure");
+            }
+            continue;
+        }
+        if (result != CAPSID_WOULD_BLOCK) {
+            fail(std::string("bodyless event: ") +
+                 capsid_result_string(result));
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            fail("request-end bridge failure was swallowed: "
+                 "no error event surfaced");
+        }
+
+        struct pollfd descriptor = {};
+        descriptor.fd = capsid_worker_fd(worker);
+        descriptor.events =
+            POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
+        poll(&descriptor, 1, 50);
+    }
+}
+
 std::string run_request(capsid_worker *worker, const char *url) {
     require_result(
         capsid_worker_begin_request(worker, 1, "GET", url, NULL, 0),
@@ -304,6 +355,38 @@ int main(int argc, char **argv) {
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = argv[1];
+
+    // Frozen RED: the app layer cannot make the fused request-end bridge
+    // fail (tjs:internal/* is capability-forbidden for apps and the
+    // bootstrap requestEnd early-returns for bodyless requests), so the
+    // failure is injected through the host-provided capability-policy
+    // environment snapshot. The test asserts the fused begin propagates it
+    // (fail closed) — reverting the propagation in the fused path must fail
+    // this test.
+    capsid_env_entry fail_end_entry;
+    capsid_permission_rule fail_end_rule;
+    capsid_capability_policy fail_end_policy;
+    const char *const fail_end_modules[] = { "capsid:env" };
+    if (mode == "bodyless-end-failure") {
+        capsid_env_entry_init(&fail_end_entry);
+        fail_end_entry.name = "CAPSID_TEST_FAIL_REQUEST_END_BRIDGE";
+        fail_end_entry.value = "1";
+
+        capsid_permission_rule_init(&fail_end_rule);
+        fail_end_rule.permission = CAPSID_PERMISSION_ENV;
+        fail_end_rule.action = CAPSID_PERMISSION_ALLOW;
+        fail_end_rule.resource = "CAPSID_TEST_FAIL_REQUEST_END_BRIDGE";
+        fail_end_rule.rule_id = 1;
+
+        capsid_capability_policy_init(&fail_end_policy);
+        fail_end_policy.allowed_modules = fail_end_modules;
+        fail_end_policy.allowed_module_count = 1;
+        fail_end_policy.rules = &fail_end_rule;
+        fail_end_policy.rule_count = 1;
+        fail_end_policy.env_entries = &fail_end_entry;
+        fail_end_policy.env_entry_count = 1;
+        config.capability_policy = &fail_end_policy;
+    }
     LoopbackEgressPolicy egress_policy;
     if (server) {
         egress_policy.attach(&config);
@@ -325,6 +408,13 @@ int main(int argc, char **argv) {
     require_result(load_result, "load bundle");
 
     wait_for_ready(worker);
+
+    if (mode == "bodyless-end-failure") {
+        bodyless_request_end_failure_fails_closed(worker);
+        capsid_worker_destroy(worker);
+        return 0;
+    }
+
     const std::string body = run_request(worker, request_url.c_str());
 
     if (mode == "wasm") {
