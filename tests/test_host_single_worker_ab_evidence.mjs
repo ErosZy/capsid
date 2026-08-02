@@ -218,6 +218,10 @@ const requiredFiles = [
         'candidate env not recorded in manifest');
     assert.equal(manifest.params.require_ipc_counters, true,
         'require_ipc_counters not recorded');
+    // Acceptance verdict is a separate field from evidence_status: complete
+    // evidence must not be mistaken for a PASS.
+    assert.ok([ 'pass', 'fail', 'n/a' ].includes(manifest.acceptance_verdict),
+        'acceptance_verdict missing from manifest');
     for (const side of [ 'baseline', 'candidate' ]) {
         const counters = manifest.ipc_mechanism?.[side]?.counters ?? {};
         assert.ok(counters['host.commands_submitted'] > 0,

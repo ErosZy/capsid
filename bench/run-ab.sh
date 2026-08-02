@@ -506,7 +506,14 @@ with open(log, "r", encoding="utf-8", errors="replace") as handle:
             for key, value in (obj.get(section) or {}).items():
                 if isinstance(value, int) and not isinstance(value, bool):
                     dotted = "{}.{}".format(section, key)
-                    totals[dotted] = totals.get(dotted, 0) + value
+                    # High-water counters are maxima, not deltas: each line
+                    # carries the sub-window's peak, so the window's peak is
+                    # the max across lines, not the sum.
+                    if dotted.endswith("_hw"):
+                        totals[dotted] = max(
+                            totals.get(dotted, 0), value)
+                    else:
+                        totals[dotted] = totals.get(dotted, 0) + value
 with open(out, "w", encoding="utf-8") as handle:
     json.dump({"window_lines": window_lines, "counters": totals}, handle)
 PY

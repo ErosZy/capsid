@@ -398,12 +398,14 @@ def build_report(out, meta, manifest):
         lines.append(f"- bodyless A/B (same binary, CAPSID_BODYLESS off→on): "
                      f"frozen per-request mechanism gate — all three metrics "
                      f"above must drop ≥20%, with no QPS regression")
-        lines.append(f"- verdict: " + (
-            "PASS" if gate_ok and delta_qps >= 0.0 else "FAIL"))
+        verdict = "pass" if gate_ok and delta_qps >= 0.0 else "fail"
+        lines.append(f"- verdict: {verdict.upper()}")
     else:
+        verdict = "pass" if delta_qps >= 5.0 or delta_p50 <= -10.0 else "fail"
         lines.append(f"- M1B acceptance gate: QPS ≥ +5% or p50 ≤ -10%; "
-                     f"verdict: " + (
-            "PASS" if delta_qps >= 5.0 or delta_p50 <= -10.0 else "FAIL"))
+                     f"verdict: {verdict.upper()}")
+    if base_qps is None:
+        verdict = "n/a"  # incomplete samples: no acceptance verdict
     if mech_keys:
         lines.append("")
         lines.append("### IPC mechanism counters (measured-rounds window)")
@@ -479,7 +481,7 @@ def build_report(out, meta, manifest):
     lines.append("")
     lines.append("Profiles: see baseline-gateway.pprof, baseline-worker.perf.data, "
                  "candidate-host.perf.data, candidate-worker.perf.data, perf-stat/.")
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n", verdict
 
 
 def main():
@@ -491,9 +493,16 @@ def main():
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
         handle.write("\n")
-    report = build_report(out, meta, manifest)
+    report, acceptance_verdict = build_report(out, meta, manifest)
     with open(os.path.join(out, "report.md"), "w", encoding="utf-8") as handle:
         handle.write(report)
+    # The acceptance verdict is a separate field from evidence_status:
+    # complete evidence can still fail acceptance, and a run must never be
+    # mistaken for PASS just because its evidence is complete.
+    manifest["acceptance_verdict"] = acceptance_verdict
+    with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2)
+        handle.write("\n")
     # Validate the outputs we just wrote.
     with open(os.path.join(out, "manifest.json"), "r", encoding="utf-8") as handle:
         json.load(handle)
