@@ -131,8 +131,12 @@ def profile_summary(out, label, path):
              "-i", path, "--sort", "overhead,symbol"],
             capture_output=True, text=True, timeout=120)
         count = 0
+        # Flat overhead lines render as "  <percent>%  <command> ..." — the
+        # percent follows the first number directly (the old pattern
+        # required a second number before the %, so it never matched and
+        # every profile was reported as "no symbols resolved").
         for line in run.stdout.splitlines():
-            if re.match(r"^\s+[\d.]+\s+[\d.]+%", line):
+            if re.match(r"^\s+[\d.]+%", line):
                 lines.append(line.strip()[:140])
                 count += 1
                 if count >= 8:
@@ -340,33 +344,55 @@ def build_report(out, meta, manifest):
         if base_p50 and cand_p50 is not None else 0.0
     lines.append(f"- delta QPS: {delta_qps:+.2f}%; delta p50: {delta_p50:+.2f}%")
     # Bodyless off/on A/B: both sides are the same capsid-host binary,
-    # differing only in CAPSID_BODYLESS; acceptance is the mechanism-counter
-    # drop. Otherwise the M1B gate (QPS >= +5% or p50 <= -10%) applies.
+    # differing only in CAPSID_BODYLESS. The gate is frozen on three
+    # per-request mechanism metrics (each counter divided by the completed
+    # requests of its own diagnostic window): every one must drop >= 20%
+    # off→on, with no QPS regression. Per-request ratios make the
+    # sequential per-side diagnostic windows volume-comparable, and the
+    # metrics never mix counters of different units. Otherwise the M1B gate
+    # (QPS >= +5% or p50 <= -10%) applies.
     bodyless_ab = "CAPSID_BODYLESS" in meta.get("BASELINE_ENV", "") or \
         "CAPSID_BODYLESS" in meta.get("CANDIDATE_ENV", "")
     mech = manifest["ipc_mechanism"]
     mech_keys = sorted(set(mech.get("baseline", {}).get("counters", {})) |
                        set(mech.get("candidate", {}).get("counters", {})))
-    mech_gate_keys = [
-        "host.commands_submitted", "host.command_batches", "host.flush_calls",
-        "host.asio_posts", "host.events_queued", "host.grant_commands",
-        "client.queued_frames", "client.flush_calls", "client.socket_write_calls",
-        "client.socket_read_calls", "client.next_event_calls", "client.parsed_frames",
+    # Frozen per-request mechanism metrics (frozen in evidence.py before
+    # any run; the bodyless A/B verdict uses exactly these three).
+    mech_gate_metrics = [
+        "host.commands_submitted",   # commands the host submitted to the worker
+        "client.queued_frames",      # request-direction wire frames
+        "client.parsed_frames",      # worker events parsed back
     ]
-    mech_gate_keys = [k for k in mech_gate_keys if k in mech_keys]
-    if bodyless_ab and mech_gate_keys:
-        base_total = sum(mech.get("baseline", {}).get("counters", {}).get(k, 0)
-                         for k in mech_gate_keys)
-        cand_total = sum(mech.get("candidate", {}).get("counters", {}).get(k, 0)
-                         for k in mech_gate_keys)
-        mech_drop = (base_total - cand_total) / base_total * 100 if base_total else 0.0
-        lines.append(f"- bodyless A/B (same binary, CAPSID_BODYLESS "
-                     f"off→on): aggregate mechanism counters "
-                     f"{base_total} → {cand_total} "
-                     f"(drop {mech_drop:.2f}%); acceptance gate: ≥20% drop "
-                     f"and no QPS regression")
+    completed_by_side = {}
+    for sample in samples:
+        if (sample.get("phase") == "measured" and
+                sample.get("round") == 0 and sample.get("side")):
+            completed_by_side[sample.get("side")] = float(
+                sample.get("completed") or 0)
+    if bodyless_ab and all(k in mech_keys for k in mech_gate_metrics):
+        gate_ok = True
+        for key in mech_gate_metrics:
+            base_total = mech.get("baseline", {}).get("counters", {}).get(key, 0)
+            cand_total = mech.get("candidate", {}).get("counters", {}).get(key, 0)
+            base_req = completed_by_side.get("baseline", 0)
+            cand_req = completed_by_side.get("candidate", 0)
+            if not base_total or not cand_total or not base_req or not cand_req:
+                lines.append(f"- {key}/req: n/a (window counters or completed "
+                             f"requests missing)")
+                gate_ok = False
+                continue
+            base_per_req = base_total / base_req
+            cand_per_req = cand_total / cand_req
+            drop = (base_per_req - cand_per_req) / base_per_req * 100
+            lines.append(f"- {key}/req: {base_per_req:.4f} → {cand_per_req:.4f} "
+                         f"(drop {drop:.2f}%)")
+            if drop < 20.0:
+                gate_ok = False
+        lines.append(f"- bodyless A/B (same binary, CAPSID_BODYLESS off→on): "
+                     f"frozen per-request mechanism gate — all three metrics "
+                     f"above must drop ≥20%, with no QPS regression")
         lines.append(f"- verdict: " + (
-            "PASS" if mech_drop >= 20.0 and delta_qps >= 0.0 else "FAIL"))
+            "PASS" if gate_ok and delta_qps >= 0.0 else "FAIL"))
     else:
         lines.append(f"- M1B acceptance gate: QPS ≥ +5% or p50 ≤ -10%; "
                      f"verdict: " + (
