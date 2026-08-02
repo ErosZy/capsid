@@ -116,7 +116,7 @@ jobs:
 
       - name: Save hosted Release evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-wpt-hosted-evidence
           if-no-files-found: error
@@ -227,7 +227,7 @@ jobs:
 
       - name: Save sanitizer evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ${{ matrix.name }}-hosted-evidence
           if-no-files-found: error
@@ -271,7 +271,7 @@ jobs:
 
       - name: Save fuzz evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: fuzz-hosted-evidence
           if-no-files-found: error
@@ -306,7 +306,7 @@ jobs:
 
       - name: Save macOS evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: macos-host-library-evidence
           if-no-files-found: error
@@ -325,7 +325,7 @@ jobs:
     steps:
       - name: Download all hosted evidence
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           pattern: '*-evidence'
           path: hosted-evidence/inputs
@@ -361,7 +361,7 @@ jobs:
 
       - name: Save hosted evidence index
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: hosted-evidence-index
           if-no-files-found: error
