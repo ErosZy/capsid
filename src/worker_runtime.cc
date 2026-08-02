@@ -3013,8 +3013,12 @@ private:
         }
         if (called && decoded.bodyless) {
             // Notify the JS side that the request direction ended
-            // immediately, matching the request-end frame semantics.
-            call_id_bridge(request_end_, frame.request_id);
+            // immediately, matching the request-end frame semantics. A
+            // bridge failure propagates exactly like the standalone
+            // request-end frame path: fail closed.
+            if (!call_id_bridge(request_end_, frame.request_id)) {
+                return false;
+            }
         }
         return called;
     }
