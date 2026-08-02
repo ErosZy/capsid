@@ -15,7 +15,7 @@
 1. `capsid_worker_config_init()` 后填写 `worker_path`、资源和安全策略；
 2. `capsid_worker_spawn()` 创建 worker；
 3. `capsid_worker_load_bundle()` 或 `capsid_worker_load_bundle_named()` 加载源码 bundle；
-4. 通过 `capsid_worker_fd()` 接入宿主 event loop；
+4. 在当前 POSIX ABI 上通过 `capsid_worker_fd()` 接入宿主 event loop；
 5. 写入请求头/body/end，并按事件补充双向 credit；
 6. 持续调用 `capsid_worker_next_event()` 消费响应、日志、审计和退出事件；
 7. `capsid_worker_shutdown()` 后继续排空，最终调用 `capsid_worker_destroy()`。
@@ -42,6 +42,14 @@ QuickJS 字节码不保证跨版本、编译选项或架构兼容，反序列化
 
 当前 handle 不承诺跨线程并发调用。最稳妥的集成方式是由一个 event-loop
 线程拥有每个 `capsid_worker`，其他线程通过宿主自己的队列投递工作。
+
+`capsid_worker_fd()` 是 ABI v7 的 POSIX 集成面，不应被解释为永久的
+跨平台抽象。Windows 原生开发链路需要可加法扩展的 event-source/waitable
+接口，同时保留既有 fd 符号和 ABI 语义。第一方 Host 必须把两者封装在
+平台 adapter 内；路由、pool、credit 和 lifecycle 代码不得直接调用
+`capsid_worker_fd()` 或包含 POSIX/Windows 条件分支。新接口的具体 C ABI 必须由
+Windows 的 RED 构建和事件循环测试驱动，不在无实现时预设 HANDLE 类型或
+ownership 细节。
 
 ## 请求与流控
 

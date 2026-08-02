@@ -1,42 +1,45 @@
 # 文档导航
 
-除明确标注为拟议设计的规划文档外，文档只维护当前有效契约，不保留一次性审计
-过程或 revision 流水账。事实优先级：
+这里只维护当前契约、使用说明和可复核的证据规则，不保存一次性评审过程、每日状态
+快照或生成报告的副本。事实发生冲突时，优先级如下：
 
-1. 公共头文件、capability/WPT manifest 和构建配置；
-2. 自动生成的测试与 benchmark 原始报告；
-3. Markdown 解释文档。
+1. 公共头文件、manifest、构建配置和测试；
+2. 由当前 commit 生成的原始测试或 benchmark artifact；
+3. Markdown 说明。
 
-如果 Markdown 与前两层冲突，应修正文档并增加防漂移测试。
+截至当前工作树，Runtime 与 worker 是可构建产品；第一方 C++ Host 正在按
+[Host v1 详细设计](host-technical-design-review.md)实现 M0 可执行契约，尚没有可运行的
+`capsid-host` 服务。里程碑状态以源码和测试为准，不单独维护易漂移的状态文档。
 
-## 产品与嵌入
+## 入门与架构
 
-- [项目首页](../README.md)：定位、能力和最短构建路径
-- [架构与产品边界](architecture.md)：进程模型、JavaScript 表面和 vendor 策略
+- [项目首页](../README.md)：定位、构建、应用打包和最短集成路径
+- [架构与产品边界](architecture.md)：进程模型、平台契约、JavaScript 表面和 vendor 策略
+- [Host v1 详细设计](host-technical-design-review.md)：第一方 Host 的唯一权威设计、
+  已冻结契约、实施顺序和验收门
+
+## Runtime 嵌入与安全
+
 - [宿主嵌入接口](embedding-api.md)：C ABI 生命周期、流控、事件和超时
 - [第三方宿主集成规范](host-integration.md)：线程、SSE、取消、关闭和升级
-- [Capsid Host 架构规划](host-architecture-plan.md)：拟议的目录交付、整机/App 权限、
-  Linux 隔离、预热蓝绿、路由和 worker pool
-- [Capsid Host 技术评审与 v1 详细方案](host-technical-design-review.md)：规划评审、
-  技术选型、状态与数据路径、实施顺序和验收门
-- [当前状态与发布门](project-status.md)：唯一活跃事项和冻结决策
+- [宿主能力策略](capability-policy.md)：模块、操作授权、quota 和审计
+- [JavaScript 模块与权限参考](module-permissions.md)：`tjs:*` 门禁、
+  `capsid:*` 模块和 API 到权限的映射
+- [逃逸级能力门禁](escape-capabilities.md)：FFI/raw socket 不提供结论
+- [Linux 严格沙箱](linux-sandbox.md)：seccomp、Landlock、namespace 与 cgroup
 
 ## 正确性与兼容性
 
-- [测试与持续门禁](testing.md)：测试分层、反空跑规则和当前基线
+- [测试与持续门禁](testing.md)：测试分层、反空跑规则和执行方式
 - [标准来源锁](conformance-sources.md)：ECMA-429 与 WPT 固定版本
 - [能力追踪矩阵](standards-matrix.md)：标准能力到自动化证据的映射
 - [合规偏差](conformance-deviations.md)：接受的排除项及退出条件
 - [框架兼容性](framework-compatibility/README.md)：固定版本的 Hono、itty-router
   和 H3
-- [txiki.js 升级报告](txiki-upgrade-report.md)：生成的 vendor、全测和表面摘要
 
-## 安全与性能
+## 性能
 
-- [宿主能力策略](capability-policy.md)：模块、操作授权、quota 和审计
-- [JavaScript 模块与权限参考](module-permissions.md)：`tjs:*` 门禁、
-  `capsid:*` 公共模块和 API 到权限的完整映射
-- [逃逸级能力门禁](escape-capabilities.md)：FFI/raw socket 不提供结论
-- [Linux 严格沙箱](linux-sandbox.md)：seccomp、Landlock、namespace 与 cgroup
-- [性能结论](performance-benchmarks.md)：当前权威结果和适用边界
-- [基准复现](../bench/README.md)：构建、运行、内容校验和结果保存
+- [性能证据规则](performance-benchmarks.md)：profile、A/B、原始数据和结论边界
+
+txiki.js 升级报告由 CI 生成并作为 workflow artifact 保存；仓库只保留构建身份所需的
+[`txiki-upgrade-baseline.json`](txiki-upgrade-baseline.json)，不提交会过期的报告副本。

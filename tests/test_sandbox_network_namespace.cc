@@ -122,6 +122,22 @@ uint32_t wait_ready(capsid_worker *worker) {
 }
 
 int run(const char *worker_path, const char *fixture_path) {
+    // Regression: pin a descriptor at fd 4 before any other descriptor is
+    // allocated, so the parent-side fd layout (pin=4, target namespace=5,
+    // IPC socketpair=6/7) pushes the spawn's namespace-fd copy onto the
+    // child IPC fd target (8). A spawn that copies the namespace fd into
+    // the F_DUPFD range instead of strictly above every child fd clobbers
+    // the IPC socket during the pre-exec file actions and the worker dies
+    // on its first IPC read.
+    const int layout_pin = open("/dev/null", O_RDWR);
+    if (layout_pin < 0) {
+        fail("layout pin open failed");
+    }
+    if (dup2(layout_pin, 4) < 0) {
+        fail("layout pin dup2 failed");
+    }
+    close(layout_pin);
+
     int control[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, control) != 0) {
         fail("control socketpair failed");

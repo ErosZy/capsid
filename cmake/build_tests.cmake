@@ -1,4 +1,289 @@
 if(BUILD_TESTING)
+    if(CAPSID_BUILD_HOST)
+        find_package(OpenSSL 3.5 REQUIRED COMPONENTS Crypto)
+
+        add_executable(test-host-config tests/test_host_config.cc)
+        target_include_directories(test-host-config PRIVATE src)
+        target_link_libraries(test-host-config PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-config PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-host-config PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-host-config PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME host_config COMMAND test-host-config)
+
+        add_executable(
+            test-host-bytecode-attestation
+            tests/test_host_bytecode_attestation.cc)
+        target_include_directories(
+            test-host-bytecode-attestation PRIVATE src)
+        target_link_libraries(test-host-bytecode-attestation PRIVATE
+            capsid_host_core
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-bytecode-attestation PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-bytecode-attestation PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-bytecode-attestation PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME host_bytecode_attestation
+            COMMAND test-host-bytecode-attestation)
+
+        add_executable(
+            test-host-secret-snapshot
+            tests/test_host_secret_snapshot.cc)
+        target_include_directories(
+            test-host-secret-snapshot PRIVATE include src)
+        target_link_libraries(test-host-secret-snapshot PRIVATE
+            capsid_host_core
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-secret-snapshot PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-secret-snapshot PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-secret-snapshot PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME host_secret_snapshot
+            COMMAND test-host-secret-snapshot)
+
+        add_executable(
+            test-host-active-state
+            tests/test_host_active_state.cc)
+        target_include_directories(
+            test-host-active-state PRIVATE src)
+        target_link_libraries(test-host-active-state PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-active-state PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-active-state PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-active-state PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME host_active_state
+            COMMAND test-host-active-state)
+
+        add_executable(
+            test-host-request-normalization
+            tests/test_host_request_normalization.cc)
+        target_include_directories(
+            test-host-request-normalization PRIVATE src)
+        target_link_libraries(test-host-request-normalization PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-request-normalization PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-request-normalization PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-request-normalization PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME host_request_normalization
+            COMMAND test-host-request-normalization)
+
+        add_executable(
+            test-host-service-lifecycle
+            tests/test_host_service_lifecycle.cc)
+        target_include_directories(
+            test-host-service-lifecycle PRIVATE src)
+        target_link_libraries(test-host-service-lifecycle PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-service-lifecycle PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-service-lifecycle PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-service-lifecycle PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME host_service_lifecycle
+            COMMAND test-host-service-lifecycle)
+
+        add_executable(
+            test-host-worker-recovery
+            tests/test_host_worker_recovery.cc)
+        target_include_directories(
+            test-host-worker-recovery PRIVATE src)
+        target_link_libraries(test-host-worker-recovery PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-worker-recovery PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-worker-recovery PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-worker-recovery PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME host_worker_recovery
+            COMMAND test-host-worker-recovery)
+
+        if(CAPSID_BUILD_WORKER)
+            find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
+            add_test(
+                NAME host_single_worker_integration
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_single_worker.mjs"
+                    --host "$<TARGET_FILE:capsid-host>"
+                    --worker "$<TARGET_FILE:capsid-worker>"
+                    --bundle
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/host-single-worker.js")
+            set_tests_properties(
+                host_single_worker_integration
+                PROPERTIES
+                    LABELS "host;integration;m1"
+                    TIMEOUT 30)
+
+            # M1B: the A/B benchmark runner is validated against fake
+            # components before any real process is attached (design review
+            # §15.7 M1-perf). Skipped (77) where perf is not usable.
+            add_test(
+                NAME host_single_worker_ab_emits_complete_evidence
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_single_worker_ab_evidence.mjs"
+                    --runner "${CMAKE_CURRENT_SOURCE_DIR}/bench/run-ab.sh"
+                    --fake-dir "${CMAKE_CURRENT_SOURCE_DIR}/bench/fake"
+                    --bundle
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/host-single-worker.js"
+                    --build-dir "${CMAKE_BINARY_DIR}")
+            set_tests_properties(
+                host_single_worker_ab_emits_complete_evidence
+                PROPERTIES
+                    LABELS "host;benchmark;m1"
+                    TIMEOUT 600
+                    SKIP_RETURN_CODE 77)
+        endif()
+
+        add_executable(test-build-identity tests/test_build_identity.cc)
+        file(READ
+            "${CMAKE_CURRENT_SOURCE_DIR}/docs/txiki-upgrade-baseline.json"
+            CAPSID_TEST_BUILD_IDENTITY_JSON)
+        string(JSON CAPSID_TEST_EXPECTED_QUICKJS_COMMIT
+            ERROR_VARIABLE CAPSID_TEST_BUILD_IDENTITY_JSON_ERROR
+            GET "${CAPSID_TEST_BUILD_IDENTITY_JSON}" quickjs commit)
+        if(NOT CAPSID_TEST_BUILD_IDENTITY_JSON_ERROR STREQUAL "NOTFOUND" OR
+           NOT CAPSID_TEST_EXPECTED_QUICKJS_COMMIT MATCHES "^[0-9a-f]+$")
+            message(FATAL_ERROR
+                "test build-identity manifest has no valid quickjs.commit")
+        endif()
+        string(LENGTH "${CAPSID_TEST_EXPECTED_QUICKJS_COMMIT}"
+            CAPSID_TEST_EXPECTED_QUICKJS_COMMIT_LENGTH)
+        if(NOT CAPSID_TEST_EXPECTED_QUICKJS_COMMIT_LENGTH EQUAL 40)
+            message(FATAL_ERROR
+                "test build-identity quickjs.commit must be 40 lowercase hex")
+        endif()
+        target_compile_definitions(test-build-identity PRIVATE
+            "CAPSID_TEST_EXPECTED_QUICKJS_COMMIT=\"${CAPSID_TEST_EXPECTED_QUICKJS_COMMIT}\"")
+        target_link_libraries(test-build-identity PRIVATE
+            capsid_runtime
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-build-identity PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-build-identity PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-build-identity PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME runtime_build_identity
+            COMMAND test-build-identity)
+
+        if(CAPSID_BUILD_WORKER)
+            if(NOT TARGET capsid-bytecode-compile)
+                message(FATAL_ERROR
+                    "M0.2 requires the first-party capsid-bytecode-compile "
+                    "target when CAPSID_BUILD_WORKER=ON")
+            endif()
+            add_test(
+                NAME runtime_worker_compiler_identity_matches
+                COMMAND test-build-identity
+                    "$<TARGET_FILE:capsid-worker>"
+                    "$<TARGET_FILE:capsid-bytecode-compile>")
+        endif()
+
+        if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN)
+            add_test(
+                NAME host_sanitizer_instrumentation
+                COMMAND "${CMAKE_COMMAND}"
+                    "-DCAPSID_COMPILE_COMMANDS=${CMAKE_BINARY_DIR}/compile_commands.json"
+                    "-DCAPSID_EXPECT_ASAN=${CAPSID_ENABLE_ASAN}"
+                    "-DCAPSID_EXPECT_UBSAN=${CAPSID_ENABLE_UBSAN}"
+                    -P
+                    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestHostSanitizerInstrumentation.cmake"
+            )
+            set_tests_properties(
+                host_sanitizer_instrumentation
+                PROPERTIES LABELS "host;security;sanitizer")
+        endif()
+    endif()
+
     add_executable(test-protocol tests/test_protocol.cc src/protocol.cc)
     target_include_directories(test-protocol PRIVATE src)
     target_link_libraries(test-protocol PRIVATE capsid_sanitizers)
@@ -1269,6 +1554,21 @@ if(BUILD_TESTING)
                 "${CAPSID_GLOBAL_SURFACE_FIXTURE}"
         )
         set_tests_properties(worker_global_surface PROPERTIES TIMEOUT 20)
+        add_executable(
+            test-worker-end-after-response
+            tests/test_worker_end_after_response.cc)
+        target_include_directories(test-worker-end-after-response PRIVATE tests)
+        target_link_libraries(
+            test-worker-end-after-response
+            PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_end_after_response
+            COMMAND test-worker-end-after-response
+                $<TARGET_FILE:capsid-worker>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
+        )
+        set_tests_properties(worker_end_after_response PROPERTIES TIMEOUT 20)
         add_test(
             NAME worker_wasm_minimal
             COMMAND test-worker-integration

@@ -1,6 +1,9 @@
 #include "worker_runtime.h"
 
+#include "build_identity.h"
 #include "capability_policy.h"
+#include <cstdint>
+
 #include "egress_policy.h"
 #include "ipc_validation.h"
 #include "protocol.h"
@@ -58,6 +61,13 @@ extern const uint32_t capsid__bootstrap_size;
 }
 
 namespace {
+
+// Requests whose response has ended keep at most this many terminal
+// tombstones (see remember_terminal). The Host tracks at most
+// config_.max_inflight requests at once and never reuses an id, so the
+// oldest tombstone is always for a request whose late frames have long
+// since drained.
+static const size_t kMaxTerminalTombstones = 2048;
 
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
 #ifdef MSG_NOSIGNAL
@@ -317,7 +327,16 @@ public:
         }
         deadline_timer_started_ = true;
         update_poll();
-        send_simple(capsid::protocol::kReady, 0, sandbox_features);
+        // The READY payload is the 71-byte compatibility ID from the single
+        // generated identity source, so a host can compare the running
+        // worker against the linked library and the bytecode compiler
+        // without trusting either side. sandbox features stay in flags.
+        static_assert(sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1 == 71,
+                      "compatibility ID must be sha256: plus 64 hex digits");
+        send_payload(capsid::protocol::kReady, 0, sandbox_features,
+                     reinterpret_cast<const std::uint8_t *>(
+                         CAPSID_BUILD_COMPATIBILITY_ID),
+                     sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1);
         flush_output();
 
         return TJS_Run(runtime_);
@@ -820,6 +839,7 @@ private:
                 ctx, "response output queue is full");
         }
         g_worker->responses_.erase(state);
+        g_worker->remember_terminal(id);
         return JS_UNDEFINED;
     }
 
@@ -851,6 +871,7 @@ private:
             state->second,
             timed_out ? "request timed out" : "response failed");
         g_worker->responses_.erase(state);
+        g_worker->remember_terminal(id);
         if (timed_out) {
             g_worker->interrupted_request_id_ = 0;
         }
@@ -2955,7 +2976,12 @@ private:
 
         ResponseState response;
         response.credit = config_.initial_window;
-        response.request_credit = config_.initial_window;
+        // Bodyless requests (kFlagRequestEnd): no request-direction credit
+        // and the request direction ends immediately, exactly as if the
+        // request-end frame had been processed.
+        response.request_credit =
+            decoded.bodyless ? 0 : config_.initial_window;
+        response.request_ended = decoded.bodyless;
         const uint64_t timeout_ns =
             config_.timeout_ms >
                     std::numeric_limits<uint64_t>::max() / 1000000u
@@ -2981,17 +3007,31 @@ private:
         for (size_t i = 0; i < 6; ++i) {
             JS_FreeValue(ctx_, arguments[i]);
         }
-        if (called) {
+        if (called && !decoded.bodyless) {
+            // Bodyless requests get no request-direction window update.
             send_window_update(frame.request_id, config_.initial_window);
+        }
+        if (called && decoded.bodyless) {
+            // Notify the JS side that the request direction ended
+            // immediately, matching the request-end frame semantics.
+            call_id_bridge(request_end_, frame.request_id);
         }
         return called;
     }
 
     bool request_body(const capsid::protocol::Frame &frame) {
+        if (frame.request_id == 0) {
+            return false;
+        }
         std::map<uint64_t, ResponseState>::iterator state =
             responses_.find(frame.request_id);
-        if (frame.request_id == 0 || state == responses_.end() ||
-            state->second.request_ended ||
+        if (state == responses_.end()) {
+            // A late request-body frame for a request whose response already
+            // ended is an idempotent no-op (see remember_terminal); ids that
+            // never existed still fail closed.
+            return is_terminal(frame.request_id);
+        }
+        if (state->second.request_ended ||
             frame.payload.size() > state->second.request_credit) {
             return false;
         }
@@ -3009,14 +3049,39 @@ private:
     }
 
     bool end_request(uint64_t id) {
+        if (id == 0) {
+            return false;
+        }
         std::map<uint64_t, ResponseState>::iterator state =
             responses_.find(id);
-        if (id == 0 || state == responses_.end() ||
-            state->second.request_ended) {
+        if (state == responses_.end()) {
+            // A late request-end for a request whose response already ended
+            // is an idempotent no-op (see remember_terminal); ids that never
+            // existed still fail closed.
+            return is_terminal(id);
+        }
+        if (state->second.request_ended) {
             return false;
         }
         state->second.request_ended = true;
         return call_id_bridge(request_end_, id);
+    }
+
+    // A request whose response has ended keeps a bounded terminal tombstone:
+    // the Host may still deliver request-direction frames (body, end) that
+    // were queued before RESPONSE_END was processed — the IPC is a
+    // SOCK_STREAM, so no ordering is guaranteed between the Host's writes
+    // and the Runtime's reads. Frames for a tombstoned id are idempotent
+    // no-ops; frames for an id that never existed still fail closed.
+    void remember_terminal(uint64_t id) {
+        terminal_requests_.insert(id);
+        if (terminal_requests_.size() > kMaxTerminalTombstones) {
+            terminal_requests_.erase(terminal_requests_.begin());
+        }
+    }
+
+    bool is_terminal(uint64_t id) const {
+        return terminal_requests_.count(id) != 0;
     }
 
     bool cancel_request(uint64_t id) {
@@ -3032,6 +3097,7 @@ private:
         discard_coalesced_response(id);
         const bool called = call_id_bridge(cancel_request_, id);
         responses_.erase(state);
+        remember_terminal(id);
         if (interrupted_request_id_ == id) {
             interrupted_request_id_ = 0;
         }
@@ -3122,6 +3188,7 @@ private:
                 "request deadline exceeded",
                 capsid::protocol::kErrorFlagTimeout);
             responses_.erase(state);
+            remember_terminal(id);
             interrupted_request_id_ = 0;
             /*
              * The deadline timer is a native embedder handle. Drain the jobs
@@ -3244,6 +3311,19 @@ private:
         frame.type = type;
         frame.flags = flags;
         frame.request_id = id;
+        queue_output(frame);
+    }
+
+    void send_payload(uint16_t type,
+                      uint64_t id,
+                      uint32_t flags,
+                      const std::uint8_t *payload,
+                      std::size_t payload_size) {
+        capsid::protocol::Frame frame;
+        frame.type = type;
+        frame.flags = flags;
+        frame.request_id = id;
+        frame.payload.assign(payload, payload + payload_size);
         queue_output(frame);
     }
 
@@ -3583,6 +3663,9 @@ private:
     bool bundle_is_trusted_bytecode_;
     std::string bundle_name_;
     std::map<uint64_t, ResponseState> responses_;
+    // Bounded tombstone of ids whose response has ended (see
+    // remember_terminal).
+    std::set<uint64_t> terminal_requests_;
     std::map<std::string, StorageNamespace> storage_;
     std::set<std::string> storage_allow_audited_;
     std::set<std::string> stdio_allow_audited_;

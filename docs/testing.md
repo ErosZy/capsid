@@ -7,9 +7,10 @@
 
 1. C/C++ 单元测试：协议、header、策略、拓扑、审计与结构化解析；
 2. 真实 worker contract：bundle、IPC、流控、取消、超时、sandbox 和 fetch；
-3. 固定 WPT：84 个上游文件，每个在独立 worker realm 中执行；
+3. 固定 WPT：manifest 选择的每个上游文件都在独立 worker realm 中执行；
 4. 框架差分：Node reference 与真实 worker 逐向量比较，并保留独立绝对断言；
-5. sanitizer/fuzz：项目 target 的 ASan、UBSan 和四个 libFuzzer harness；
+5. sanitizer/fuzz：项目 target 的 ASan、UBSan、计划中的 Host TSan 和四个
+   libFuzzer harness；
 6. benchmark contract：先验证内容、版本和环境，再允许记录性能样本。
 
 标准来源、WPT 选择和偏差分别见
@@ -34,8 +35,8 @@
 - 三个框架的差分向量必须有独立绝对断言，anchor 数不能为零；
 - 负控必须证明门禁能捕获错误输入，不能只有“正确实现会绿”的正向测试。
 
-测试有效性专项审计已在 2026-07-29 闭环，并由上述自动化门禁取代。持续保留
-一次性审计报告会与当前代码漂移，因此不再将其作为产品状态文档。
+测试有效性由上述自动化门禁持续证明；一次性审计报告会与当前代码漂移，因此不作为
+产品状态文档保留。
 
 ## 常用命令
 
@@ -76,6 +77,51 @@ ctest --test-dir build-asan --output-on-failure \
 UBSan 将开关替换为 `CAPSID_ENABLE_UBSAN=ON`。fuzz 构建使用 Clang、
 `CAPSID_BUILD_WORKER=OFF` 和 `CAPSID_BUILD_FUZZERS=ON`。
 
+### TSan（M1C 门）
+
+`CAPSID_ENABLE_TSAN` 已配置：独立 Linux/Clang Debug 构建，不与
+ASan/UBSan 共用（CMake 配置期拒绝组合）。M1C 验收前必须通过；M2 多 worker
+开始前是强制门。
+
+TSan 使用独立 Linux/Clang Debug 构建，不与 ASan、UBSan、LTO、fuzz 或 benchmark
+混跑。第一批至少覆盖 HTTP 事件循环与 worker 线程之间的 command/event handoff、并发
+keep-alive、disconnect/cancel、timeout 和 shutdown/reap。任何第一方代码报告均失败；
+第三方 suppression 必须限定到具体外部符号、写明原因，不能用宽泛规则隐藏 Host、Runtime
+或 IPC 代码。TSan 结果只证明竞态检测，不作为 QPS、延迟或 CPU 结论。
+
+TSan 运行环境有硬性要求：Clang TSan 初始化必须调用
+`personality(ADDR_NO_RANDOMIZE)` 关闭 ASLR，因此默认 Docker/containerd
+seccomp profile 的容器（包括本地 bench/build 容器）会在
+`tsan_platform_linux.cpp:282` 直接 CHECK 失败——这不是代码缺陷，是环境不满足
+前置条件。TSan 门必须在真实 VM（GitHub hosted runner）或
+`--security-opt seccomp=unconfined` 的容器中运行。另外 TSan worker 的 shadow
+内存映射要求保留大段虚拟地址空间，sanitizer 构建（`CAPSID_ASAN_BUILD` /
+`CAPSID_TSAN_BUILD`）会关闭生产 RLIMIT_AS，仍保留 QuickJS heap 上限。
+
+CI 的 `sanitizers` matrix 新增独立 `tsan` entry：Clang 编译、`CAPSID_BUILD_HOST=ON`，
+并在 job 内从 pinned 源码（SHA-256 校验）构建 OpenSSL 3.5 到 `/opt/openssl35`
+（ubuntu-24.04 自带 3.0，不满足 Host 的 3.5 契约）。asan/ubsan entry 维持原配置。
+
+## 平台契约门
+
+平台门分别证明“原生开发”和“生产隔离”，不能互相代替：
+
+- Linux Release 是 v1 生产门，必须在 delegated 环境验证 strict sandbox、
+  cgroup 和 required READY feature bits；
+- macOS native-dev 运行平台中立 Host 单元测试和真实 single-worker loopback
+  集成；strict sandbox 请求必须负控失败；
+- Windows native-dev 轨道不在 M1 门内；获得真实 Windows 机器或 hosted runner 后，
+  才新增 Windows x64/MSVC job，并在 Windows 宿主真实启动 Host 与 worker，覆盖
+  source/trusted-bytecode identity、`capsid:env`、request、streaming、cancel、timeout、
+  crash/reap 和 loopback-only 负控；
+- Windows 交叉编译、Wine、WSL2 或 Linux 容器不能替代 hosted Windows 原生运行证据；
+- Windows/macOS native-dev 通过不得写成生产 sandbox 通过；反之，Linux
+  生产门也不能替代 Windows 开发可用性。
+
+Windows 轨道启动时的第一个门必须先保存 RED 证据：当前 POSIX-only Runtime 在 MSVC
+构建或 native single-worker 集成处失败；实现不得通过跳过 worker 测试、禁用
+trusted bytecode 或把 listener 替换成非原生 Linux VM 来转绿。
+
 ## 环境型 sandbox 证据
 
 普通宿主缺少 cgroup delegation 或 namespace 权限时，相应测试返回 CTest
@@ -85,31 +131,38 @@ skip code 77。这只表示环境不具备前置条件，不能写成通过。
 
 - Ubuntu Release/LTO、固定 WPT、benchmark smoke 和 privileged delegated
   sandbox，并生成 txiki.js 升级报告；
-- Ubuntu ASan 与 UBSan 普通矩阵；ASan 仅排除两个已由 Release 严格门禁和
+- Ubuntu ASan、UBSan 与 TSan 普通矩阵；TSan entry 使用 Clang 并构建
+  Host（含本地源码构建的 OpenSSL 3.5）；ASan 仅排除两个已由 Release 严格门禁和
   ASan 非严格同功能门禁重复覆盖的 strict-sandbox 网络/TLS 退出项，因为
   seccomp 会在 instrumented runtime teardown 阶段终止进程；
 - Clang/libFuzzer 的四个 bounded corpus gate；
 - macOS 14 的 POSIX host-library 与非 worker 单元矩阵。
 
-JUnit、build metadata 和升级报告作为 workflow artifact 保存。最终
+上述是当前 workflow 事实；它尚未包含 Windows job，因此当前 commit 不声称
+Windows 原生开发已交付。这不阻塞 M1，但未来的 Windows native-dev 里程碑在
+加入上述 hosted Windows 门之前不得标记完成。
+
+JUnit、build metadata 和升级报告作为 workflow artifact 保存，不在仓库提交生成报告的
+副本。最终
 `hosted-evidence-index` job 下载各 job 证据，写入 run URL、commit SHA、
 各证据文件 SHA-256 和证据树摘要，并要求所有依赖 job 成功。delegated sandbox
-脚本把 77 视为 CI failure；普通 runner 的环境型 skip 不能替代它。首次
-hosted 全绿索引只能在本次变更 commit/push 后取得，由 `TODO-P2-04` 保留这一项
-外部证据。
+脚本把 77 视为 CI failure；普通 runner 的环境型 skip 不能替代它。
 
 所有第三方 action 都固定到审查过的 40 位 commit SHA。仓库内的
 `testing_validity_workflow_audit` 同时锁定 action 清单、四类 job、安全门和
 CTest JUnit 相对路径；`--test-dir` 已经确定输出根目录，禁止再次把 build
 目录写进 `--output-junit`，以免报告与 artifact 读取到不存在的双层路径。
 
-## 当前已知基线
+## 当前证据如何取得
 
-2026-07-30 的 Release/LTO + 固定 WPT + benchmark 构建注册 201 项：
-普通宿主实测 199 通过、2 个环境型 skip、0 失败。84 个固定 WPT 文件均执行；
-两项 delegated sandbox 正向测试必须在具备权限的独立环境中通过，不能用普通
-宿主的 skip 代替。
+测试数量和结果以当前 build tree 为准：
 
-本轮完整证据汇总见
-[`txiki-upgrade-report.md`](txiki-upgrade-report.md)。数字只描述该固定版本和
-manifest；新增或删除测试后应更新报告，不能把旧计数当成永久承诺。
+```sh
+ctest --test-dir build --show-only=json-v1
+ctest --test-dir build --output-on-failure
+```
+
+固定 WPT 文件集合由 `tests/wpt/manifest.json` 决定；delegated sandbox 正向测试必须在
+具备权限的独立环境中通过，不能用普通宿主的 skip 代替。CI 会为每个 commit 生成
+txiki.js 升级报告和 hosted evidence index；这些带 commit 与摘要的 artifact 才是该次
+运行的证据，文档不复制某一天的计数。

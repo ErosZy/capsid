@@ -25,8 +25,9 @@ export default { fetch(request) { /* ... */ } }
 export function fetch(request) { /* ... */ }
 ```
 
-运行时不提供 HTTP server、TLS 终止、路由、worker 池或租户调度。这些由
-Rust/C++ 等宿主负责。
+Runtime library 不提供 HTTP server、TLS 终止、路由、worker 池或租户调度。这些由
+embedding host 负责；仓库内正在开发的第一方 C++ Host 也是该边界上的独立宿主，
+不会把这些职责塞回 Runtime ABI。
 
 它也不是通用 POSIX 应用容器：terminal readline、任意 TCP、长期 fswatch 和
 WebSocket server 不属于 request-worker 产品面。需要持续连接或后台 watcher
@@ -37,7 +38,7 @@ WebSocket server 不属于 request-worker 产品面。需要持续连接或后�
 ```text
 宿主 HTTP/TLS、路由、worker 池、审计
                   │
-                  │ FetchRPC v1 / Unix socketpair
+                  │ FetchRPC v1 / platform worker transport
                   ▼
 capsid-worker
   QuickJS-ng + libuv
@@ -52,6 +53,35 @@ capsid-worker
 入站请求和应用响应经过带长度前缀的 FetchRPC。应用调用的出站 `fetch()` 直接
 使用 worker 内部的 txiki.js HttpClient/libwebsockets，不经过宿主 HTTP
 代理或 FetchRPC broker。
+
+## 平台契约
+
+平台支持分为“原生开发”和“生产隔离”两个独立承诺：
+
+| 平台 | 原生开发目标 | 生产契约 |
+| --- | --- | --- |
+| Linux x86-64/AArch64 | 支持 | strict sandbox，为 v1 生产发布目标 |
+| macOS | 支持 | v1 不声称等价 Linux 隔离；生产一致性使用 Linux 容器或 VM |
+| Windows | 获得 hosted Windows 环境后建立原生开发链路 | v1 使用 Linux 容器/WSL2；原生生产隔离单独验证 |
+
+“原生开发”至少要求 Host 与 worker 能在目标系统构建和启动，完成
+源码/可信字节码加载、`capsid:env`、HTTP 请求、streaming、cancel、worker
+替换和集成测试。未具备生产级隔离的原生开发模式必须显式开启，只能
+绑定 loopback，不得被文档、日志或 READY 状态表述为生产隔离。
+
+平台边界保持单一责任：Host 决定所需能力并在 READY 时验证实际 feature
+bits；Runtime 实现进程创建、IPC、终止/回收和 OS sandbox。Linux 使用
+seccomp、Landlock、namespace 和 cgroup；未来的 Windows 后端使用 Windows
+原生进程与安全机制，不得把 Job Object、Restricted Token 或 AppContainer
+伪报为 Linux feature bit。部署环境仍负责额外网络边界，Host 不创建
+privileged network supervisor。
+
+当前 ABI v7 的 worker event source 仍是 Unix fd，Runtime 的 spawn/reap 也仍是
+POSIX 实现，因此 Windows 原生开发目标尚未交付，也不在没有真实
+Windows 机器/hosted runner 时开始实现。第一方 Host 不得把这个
+当前事实泄漏到 pool、routing 或 lifecycle；仅平台 worker-event adapter 可以
+直接访问 fd/HANDLE。可信字节码继续受 compatibility identity 约束，Windows
+本地构建的字节码不得绕过 identity 校验部署到不兼容的 Linux worker。
 
 ## JavaScript 表面
 

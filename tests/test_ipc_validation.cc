@@ -3,6 +3,7 @@
 #include "response_headers.h"
 #include "capsid/runtime.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -435,6 +436,21 @@ void test_request_head_decoder() {
         !capsid::decode_worker_request_head(
             frame, 4096, &decoded, &error),
         "zero request id was accepted");
+
+    // Bodyless (kFlagRequestEnd) head: decoded with bodyless=true.
+    frame.request_id = 42;
+    frame.flags = capsid::protocol::kFlagRequestEnd;
+    require(
+        capsid::decode_worker_request_head(
+            frame, 4096, &decoded, &error) &&
+            decoded.bodyless,
+        "bodyless flag was not exposed by the decoder");
+    // Unknown flags are rejected.
+    frame.flags = capsid::protocol::kFlagRequestEnd | 0x20u;
+    require(
+        !capsid::decode_worker_request_head(
+            frame, 4096, &decoded, &error),
+        "unknown request head flags were accepted");
 }
 
 void test_response_header_decoder() {
@@ -482,9 +498,29 @@ void test_response_header_decoder() {
 
 }  // namespace
 
+// A v2 frame (kVersion=2 in the header) must be rejected by the v3 parser.
+void test_protocol_version_rejection() {
+    std::vector<uint8_t> wire;
+    capsid::protocol::append_u32(&wire, capsid::protocol::kMagic);
+    capsid::protocol::append_u16(&wire, 2);  // stale v2 version
+    capsid::protocol::append_u16(&wire, capsid::protocol::kHello);
+    capsid::protocol::append_u32(&wire, 0);  // flags
+    capsid::protocol::append_u64(&wire, 0);  // request_id
+    capsid::protocol::append_u32(&wire, 0);  // payload size
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    std::vector<uint8_t> payload;
+    require(parser.append(wire.data(), wire.size()), "append failed");
+    require(
+        parser.next(&frame, &payload) == capsid::protocol::kParseError,
+        "stale v2 frame was accepted by the v3 parser");
+}
+
 int main() {
     test_hello_and_bundle_state_machine();
     test_request_head_decoder();
     test_response_header_decoder();
+    test_protocol_version_rejection();
     return 0;
 }

@@ -26,8 +26,13 @@
 *.rej
 *~
 
+# Crash dumps (sanitizer builds write core files).
+/core
+/core.*
+
 # Benchmark runs are local by default. Keep only reviewed authoritative and
 # decision-supporting revisions.
+/bench/bin/
 /bench/results/*
 !/bench/results/README.md
 !/bench/results/external-compare-modern-r39-20260730/
@@ -48,3 +53,6 @@
 !/bench/results/linux-artifact-resource-r42-20260730/**
 !/bench/results/vue-ssr-sweep-r3-20260731/
 !/bench/results/vue-ssr-sweep-r3-20260731/**
+!/bench/results/bodyless-ab*/
+!/bench/results/bodyless-ab*/**
+/0

@@ -11,7 +11,7 @@ namespace capsid {
 namespace protocol {
 
 static const uint32_t kMagic = 0x43545257u;
-static const uint16_t kVersion = 2;
+static const uint16_t kVersion = 3;
 static const size_t kHeaderSize = 24;
 static const size_t kHelloLegacyFixedPayloadSize = 106;
 static const size_t kHelloFixedPayloadSize = 108;
@@ -21,6 +21,10 @@ static const uint32_t kFlagStart = 1u;
 static const uint32_t kFlagEnd = 2u;
 static const uint32_t kFlagBundleName = 4u;
 static const uint32_t kFlagTrustedBytecode = 8u;
+// RequestHead flag: request has no body (GET/HEAD). The worker skips the
+// initial request-direction credit and marks request_ended immediately,
+// saving one frame per bodyless request.
+static const uint32_t kFlagRequestEnd = 16u;
 static const uint32_t kErrorFlagTimeout = 1u;
 static const uint32_t kReadySandboxFeatureMask = (1u << 10) - 1u;
 

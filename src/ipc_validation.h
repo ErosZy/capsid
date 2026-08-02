@@ -71,6 +71,10 @@ struct WorkerRequestHead {
     std::string method;
     std::string url;
     std::vector<WorkerRequestHeader> headers;
+    // True when the RequestHead carried kFlagRequestEnd: the request has no
+    // body, so no request-direction credit is granted and the request
+    // direction ends immediately.
+    bool bodyless = false;
 };
 
 bool decode_worker_request_head(const protocol::Frame &frame,

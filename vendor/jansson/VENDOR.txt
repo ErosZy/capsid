@@ -1,0 +1,72 @@
+Vendored Jansson 2.15.1
+=======================
+
+Locked dependency for the Capsid Host configuration validator. This tree is
+the authoritative source; the build never downloads or fetches Jansson at
+configure time.
+
+Provenance
+----------
+
+- Upstream:   https://github.com/akheron/jansson
+- Locked tag: v2.15.1
+- Archive:    https://github.com/akheron/jansson/archive/refs/tags/v2.15.1.tar.gz
+- SHA-256:    dbf95cb0af903f4fb8b61507d96b45b67db7d1479688ede352e1d571394d06f7
+
+Copied verbatim from the archive, unmodified:
+
+- LICENSE
+- src/*.c, src/*.h, src/jansson.def
+- cmake/jansson_private_config.h.cmake (upstream CMake config template)
+- cmake/jansson_config.h.cmake, EXCEPT the documented security deviation
+  below (JSON_PARSER_MAX_DEPTH 2048 -> 64)
+
+Verification: extract the archive above and diff vendor/jansson/src against
+jansson-2.15.1/src; they must be identical. For the CMake config templates,
+only the JSON_PARSER_MAX_DEPTH value in cmake/jansson_config.h.cmake may
+differ from upstream.
+
+Deliberate deviations from the upstream build
+---------------------------------------------
+
+- JANSSON_VERSION is defined as "2.15.1". Upstream CMakeLists.txt line 42
+  sets "4.15.1" (a packaging bug; configure.ac declares 2.15.1), which would
+  make jansson_version_str() report the wrong version.
+- JSON_PARSER_MAX_DEPTH in cmake/jansson_config.h.cmake is tightened from
+  the upstream 2048 to 64, matching capsid::host::kMaxConfigNesting
+  (src/host/config.h). This bounds parser recursion on the Host
+  configuration front end; exceeding the depth fails parsing with
+  json_error_stack_overflow, which the Host maps to kResourceLimit. The
+  generated jansson_config.h is produced from this modified template at
+  configure time, so the change is only effective after reconfiguring.
+- USE_DTOA is off (the upstream default); dtoa.c is vendored but not built.
+- Only the static library target `capsid_jansson` is created; no install, no
+  docs, no examples, no tests.
+- The generated configuration headers are produced from the vendored CMake
+  templates with the values the upstream CMake build would detect on the
+  supported platforms (Linux/macOS, Clang/GCC):
+  JSON_INT_T "long long", json_strtoint strtoll, JSON_INTEGER_FORMAT "lld",
+  JSON_INLINE inline, JSON_HAVE_ATOMIC_BUILTINS 1,
+  JSON_HAVE_SYNC_BUILTINS 1, HAVE_* header/function macros 1,
+  WORDS_BIGENDIAN undef, USE_URANDOM 1, JANSSON_INITIAL_HASHTABLE_ORDER 3.
+  JSON_PARSER_MAX_DEPTH is 64 (Capsid security deviation; upstream value is
+  2048), bounding parse recursion.
+
+Build contract
+--------------
+
+- Include only from cmake/build_host.cmake, i.e. only when
+  CAPSID_BUILD_HOST=ON.
+- The vendored C sources are compiled with the project's C11 baseline and
+  are intentionally NOT built with -Werror: vendor sources must not block
+  the Host on upstream compiler warnings.
+- capsid_host_core links capsid_jansson PRIVATE; jansson symbols never
+  become part of the public ABI.
+
+Upgrade checklist
+-----------------
+
+1. Replace vendor/jansson/src and cmake templates from the new archive.
+2. Update this file (tag, SHA-256) before committing.
+3. Re-run the host config contract tests and the Host sanitizer jobs.
+4. Verify jansson_version_str() reports the locked version.

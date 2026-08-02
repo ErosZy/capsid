@@ -6,17 +6,16 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(CAPSID_BUILD_WORKER "Build the txiki.js worker process" ON)
+option(CAPSID_BUILD_HOST "Build the first-party Capsid Host" OFF)
 option(CAPSID_STRICT_WARNINGS "Treat Capsid Runtime warnings as errors" ON)
 option(CAPSID_USE_MIMALLOC "Use mimalloc for the txiki.js worker" OFF)
 option(CAPSID_ENABLE_LTO "Enable interprocedural optimization for production targets" ON)
 option(CAPSID_ENABLE_ASAN "Build all runtime targets with AddressSanitizer" OFF)
 option(CAPSID_ENABLE_UBSAN "Build all runtime targets with UndefinedBehaviorSanitizer" OFF)
+option(CAPSID_ENABLE_TSAN "Build all runtime targets with ThreadSanitizer" OFF)
 option(CAPSID_BUILD_FUZZERS "Build the libFuzzer protocol boundary targets" OFF)
-option(CAPSID_BUILD_BENCHMARKS "Build the Capsid Runtime benchmark suite" OFF)
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
-option(CAPSID_BUILD_SQLITE_BENCHMARK
-    "Build the benchmark-only read-only SQLite worker variant" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY
     "Enable the process-escape FFI capability (not implemented)" OFF)
 option(CAPSID_ENABLE_RAW_SOCKET_CAPABILITY
@@ -38,7 +37,8 @@ set(CAPSID_WORKER_LINK_MAP
     "${CMAKE_CURRENT_BINARY_DIR}/capsid-worker.map" CACHE FILEPATH
     "capsid-worker linker map path when CAPSID_GENERATE_LINK_MAP is enabled")
 
-if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_BUILD_FUZZERS)
+if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN OR
+   CAPSID_BUILD_FUZZERS)
     if(CAPSID_USE_MIMALLOC)
         message(FATAL_ERROR
             "Sanitizer and fuzz builds require the system allocator; "
@@ -50,6 +50,10 @@ if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_BUILD_FUZZERS)
             "Enable interprocedural optimization for production targets" FORCE)
     endif()
 endif()
+if(CAPSID_ENABLE_TSAN AND (CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN))
+    message(FATAL_ERROR
+        "TSan cannot be combined with ASan or UBSan; use a dedicated build")
+endif()
 if(MSVC AND (CAPSID_ENABLE_UBSAN OR CAPSID_BUILD_FUZZERS))
     message(FATAL_ERROR "UBSan and libFuzzer builds are not supported with MSVC")
 endif()
@@ -59,10 +63,6 @@ endif()
 if(CAPSID_BUILD_FUZZERS AND
    NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     message(FATAL_ERROR "CAPSID_BUILD_FUZZERS requires Clang or AppleClang")
-endif()
-if(CAPSID_BUILD_SQLITE_BENCHMARK AND NOT CAPSID_BUILD_BENCHMARKS)
-    message(FATAL_ERROR
-        "CAPSID_BUILD_SQLITE_BENCHMARK requires CAPSID_BUILD_BENCHMARKS=ON")
 endif()
 
 set(CMAKE_C_STANDARD 11)
@@ -111,9 +111,21 @@ if(CAPSID_ENABLE_UBSAN)
     )
     target_link_options(capsid_sanitizers INTERFACE -fsanitize=undefined)
 endif()
+if(CAPSID_ENABLE_TSAN)
+    if(MSVC)
+        message(FATAL_ERROR "TSan requires Clang or GCC on Linux")
+    endif()
+    target_compile_options(capsid_sanitizers INTERFACE
+        -fsanitize=thread
+        -fno-omit-frame-pointer
+        -fno-sanitize-recover=all
+    )
+    target_link_options(capsid_sanitizers INTERFACE -fsanitize=thread)
+endif()
 
 add_library(capsid_runtime STATIC
     src/audit.cc
+    src/build_info.cc
     src/capability_policy.cc
     src/client.cc
     src/cpu_topology.cc
@@ -150,6 +162,11 @@ if(CAPSID_ENABLE_ASAN)
     # sanitizer builds retain the QuickJS heap limit but leave RLIMIT_AS off.
     target_compile_definitions(capsid_runtime PRIVATE CAPSID_ASAN_BUILD=1)
 endif()
+if(CAPSID_ENABLE_TSAN)
+    # TSan reserves shadow memory across a large virtual range as well; the
+    # same RLIMIT_AS carve-out applies (see CAPSID_ASAN_BUILD).
+    target_compile_definitions(capsid_runtime PRIVATE CAPSID_TSAN_BUILD=1)
+endif()
 
 if(CAPSID_STRICT_WARNINGS)
     if(MSVC)
@@ -162,5 +179,44 @@ endif()
 
 # --- Sub-sections ---
 include(cmake/build_worker.cmake)
+include(cmake/build_host.cmake)
 include(cmake/build_tests.cmake)
-include(cmake/build_benchmarks.cmake)
+
+# --- Single generated build-identity source ---
+# One canonical record shared by capsid_runtime, capsid-worker and
+# capsid-bytecode-compile. Locked inputs come from
+# docs/txiki-upgrade-baseline.json; with CAPSID_BUILD_WORKER=ON the locked
+# values are validated against the prepared overlay and any mismatch fails
+# the configure step.
+include(cmake/ComputeBuildIdentity.cmake)
+include(TestBigEndian)
+test_big_endian(CAPSID_WORDS_BIG_ENDIAN)
+if(CAPSID_WORDS_BIG_ENDIAN)
+    set(CAPSID_BUILD_ENDIANNESS "big")
+else()
+    set(CAPSID_BUILD_ENDIANNESS "little")
+endif()
+# Compile flags that affect QuickJS bytecode compatibility. Kept canonical
+# and stable for a given configuration; bytecode never crosses builds that
+# differ here (see the Host design review §13.1).
+set(CAPSID_BUILD_COMPILE_FLAGS
+    "build_type=${CMAKE_BUILD_TYPE} lto=${CAPSID_ENABLE_LTO} "
+    "asan=${CAPSID_ENABLE_ASAN} ubsan=${CAPSID_ENABLE_UBSAN} "
+    "mimalloc=${CAPSID_USE_MIMALLOC}")
+math(EXPR CAPSID_POINTER_WIDTH_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
+# ABI version 7 matches CAPSID_ABI_VERSION in include/capsid/runtime.h;
+# FetchRPC version 3 matches capsid::protocol::kVersion in src/protocol.h.
+# v3 adds kFlagRequestEnd on RequestHead (bodyless requests).
+capsid_generate_build_identity(
+    OUT_HEADER "${CAPSID_GENERATED_DIR}/build_identity.h"
+    LOCKED_MANIFEST
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/txiki-upgrade-baseline.json"
+    RUNTIME_VERSION "${PROJECT_VERSION}"
+    ABI_VERSION "7"
+    FETCHRPC_VERSION "3"
+    COMPILE_FLAGS "${CAPSID_BUILD_COMPILE_FLAGS}"
+    ARCHITECTURE "${CMAKE_SYSTEM_PROCESSOR}"
+    ENDIANNESS "${CAPSID_BUILD_ENDIANNESS}"
+    POINTER_WIDTH_BITS "${CAPSID_POINTER_WIDTH_BITS}"
+    BYTECODE_FORMAT "quickjs-ng-bytecode-v1"
+    CAPABILITY_MANIFEST_SHA256 "${CAPSID_CAPABILITY_MANIFEST_SHA256}")

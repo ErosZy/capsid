@@ -115,8 +115,7 @@ if(CAPSID_BUILD_WORKER)
     )
 
     set(BUILD_WITH_FFI OFF CACHE BOOL "" FORCE)
-    set(BUILD_WITH_SQLITE
-        ${CAPSID_BUILD_SQLITE_BENCHMARK} CACHE BOOL "" FORCE)
+    set(BUILD_WITH_SQLITE OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_MIMALLOC ${CAPSID_USE_MIMALLOC} CACHE BOOL "" FORCE)
     set(BUILD_WITH_ASAN OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_UBSAN OFF CACHE BOOL "" FORCE)
@@ -126,14 +125,20 @@ if(CAPSID_BUILD_WORKER)
     set(BUILD_TJS_CLI OFF CACHE BOOL "" FORCE)
     set(BUILD_TJS_TEST_LIBS OFF CACHE BOOL "" FORCE)
     set(BUILD_TJS_RESTRICTED_CORE ON CACHE BOOL "" FORCE)
-    set(BUILD_TJS_BENCHMARK_SQLITE
-        ${CAPSID_BUILD_SQLITE_BENCHMARK} CACHE BOOL "" FORCE)
+    set(BUILD_TJS_BENCHMARK_SQLITE OFF CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     find_package(Iconv REQUIRED)
     target_sources(tjs PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/txiki_restricted_core.c"
     )
     target_link_libraries(tjs PUBLIC Iconv::Iconv)
+    # The vendored txiki build compiles with its own -Werror. glibc marks
+    # write() as warn_unused_result, and the vendor's fatal-path writes are
+    # intentionally fire-and-forget (abort() follows immediately). Suppress
+    # only this warning class for the vendored library; project code keeps
+    # strict warnings. Vendor fixes should still go through patches/txiki
+    # when the code itself is wrong.
+    target_compile_options(tjs PRIVATE -Wno-unused-result)
 
     if(CAPSID_ESBUILD_EXECUTABLE)
         set(CAPSID_ESBUILD "${CAPSID_ESBUILD_EXECUTABLE}")
@@ -218,10 +223,6 @@ if(CAPSID_BUILD_WORKER)
                 "CAPSID_GENERATE_LINK_MAP currently supports GNU/Clang on Linux")
         endif()
     endif()
-    if(CAPSID_BUILD_SQLITE_BENCHMARK)
-        target_compile_definitions(
-            capsid-worker PRIVATE CAPSID_BENCHMARK_SQLITE_ONLY)
-    endif()
     set_target_properties(capsid-worker PROPERTIES
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED ON
@@ -233,5 +234,26 @@ if(CAPSID_BUILD_WORKER)
             "$<$<COMPILE_LANGUAGE:CXX>:-Wno-c99-extensions>"
         )
     endif()
+    # First-party bytecode compiler. M0.2 exposes the identity surface only
+    # (--print-compatibility-id); the QuickJS compile round-trip lands in M1
+    # and links the overlay's tjs/qjs at that point.
+    add_executable(capsid-bytecode-compile
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/capsid-bytecode-compile.cc")
+    target_include_directories(capsid-bytecode-compile PRIVATE
+        "${CAPSID_GENERATED_DIR}")
+    target_link_libraries(capsid-bytecode-compile PRIVATE capsid_sanitizers)
+    set_target_properties(capsid-bytecode-compile PROPERTIES
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF)
+    if(CAPSID_STRICT_WARNINGS)
+        if(MSVC)
+            target_compile_options(capsid-bytecode-compile PRIVATE /W4 /WX)
+        else()
+            target_compile_options(capsid-bytecode-compile PRIVATE
+                -Wall -Wextra -Wpedantic -Werror)
+        endif()
+    endif()
+
     add_dependencies(capsid_runtime capsid-worker)
 endif()

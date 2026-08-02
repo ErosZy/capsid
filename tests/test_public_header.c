@@ -1,6 +1,14 @@
 #include "capsid/runtime.h"
 
 int main(void) {
+    capsid_build_info build_info;
+    capsid_build_info_init(&build_info);
+    if (build_info.struct_size != sizeof(build_info) ||
+        build_info.version != CAPSID_BUILD_INFO_VERSION ||
+        capsid_runtime_build_info(NULL) != CAPSID_INVALID_ARGUMENT) {
+        return 16;
+    }
+
     if (sizeof(capsid_egress_action) != sizeof(uint32_t) ||
         sizeof(capsid_permission_action) != sizeof(uint32_t) ||
         sizeof(capsid_permission_name) != sizeof(uint32_t) ||

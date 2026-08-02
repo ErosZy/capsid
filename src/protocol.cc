@@ -43,6 +43,10 @@ bool valid_flags(uint16_t type, uint32_t flags) {
                ((flags & kFlagTrustedBytecode) == 0 ||
                 (flags & kFlagStart) != 0);
     }
+    if (type == kRequestHead) {
+        // kFlagRequestEnd: request has no body.
+        return (flags & ~kFlagRequestEnd) == 0;
+    }
     if (type == kError) {
         return (flags & ~kErrorFlagTimeout) == 0;
     }

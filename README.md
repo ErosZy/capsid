@@ -5,8 +5,9 @@ Capsid 是给 HTTP 网关、应用服务器和 worker pool 嵌入的进程隔离
 `libcapsid_runtime`，把 HTTP 请求转换成 Fetch 请求，并以流式事件接收响应。
 
 Capsid **不是** Node/Deno 替代品，也不是一个直接运行 `.js` 文件的命令行
-服务器。它不监听端口、不终止 TLS、不负责路由和负载均衡。部署方需要提供宿主
-进程，并决定 worker 数量、请求调度、权限、安全边界和故障替换策略。
+服务器。`libcapsid_runtime` 不监听端口、不终止 TLS，也不管理路由或 worker pool；
+部署方可以自行嵌入它。仓库中的第一方 C++ Host 正在实现这些宿主职责，但目前只有
+M0 核心契约与测试，尚没有可运行的 `capsid-host` 服务。
 
 ```text
 客户端
@@ -161,6 +162,13 @@ result = capsid_worker_load_bundle_named(
 `capsid_worker_fd()` 返回非阻塞 Unix socket，可接入 epoll、kqueue 或宿主自己的
 reactor。`CAPSID_WOULD_BLOCK` 是正常背压信号，不是 worker 故障。一个 worker
 handle 同一时刻应只由一个宿主线程驱动。
+
+这是当前 ABI v7 的 POSIX 集成面，不是永久的跨平台限制。项目的平台
+契约是 Linux 作为 v1 生产 strict-sandbox 目标，macOS 和 Windows 提供
+原生开发路径；Windows process/transport/event-source 将在具备真实 Windows
+机器或 hosted runner 后实现，当前尚未交付。未隔离的 native-dev mode 只允许
+loopback，不得用于不可信代码
+的生产执行。详见[平台契约](docs/architecture.md#平台契约)。
 
 请求和响应的关键顺序：
 
@@ -435,7 +443,8 @@ ctest --test-dir build-release --output-on-failure \
 ```
 
 未配置固定 WPT checkout 时，CTest 会登记失败哨兵，防止合规测试静默空跑。
-完整测试说明和当前计数见[测试与持续门禁](docs/testing.md)。
+完整测试说明见[测试与持续门禁](docs/testing.md)。测试数量由当前构建生成，不在说明
+文档中维护易过期的固定计数。
 
 ## 继续阅读
 
@@ -443,12 +452,9 @@ ctest --test-dir build-release --output-on-failure \
 - [架构与产品边界](docs/architecture.md)
 - [宿主嵌入接口](docs/embedding-api.md)
 - [第三方宿主集成规范](docs/host-integration.md)
-- [Capsid Host 架构规划](docs/host-architecture-plan.md)
-- [Capsid Host 技术评审与 v1 详细方案](docs/host-technical-design-review.md)
+- [第一方 Host v1 详细设计](docs/host-technical-design-review.md)
 - [能力与安全策略](docs/capability-policy.md)
 - [JavaScript 模块与权限参考](docs/module-permissions.md)
 - [Linux 严格沙箱](docs/linux-sandbox.md)
 - [标准与偏差](docs/standards-matrix.md)
-- [性能结论](docs/performance-benchmarks.md)
-- [基准复现](bench/README.md)
-- [当前状态与发布门](docs/project-status.md)
+- [性能证据规则](docs/performance-benchmarks.md)

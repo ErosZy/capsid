@@ -579,7 +579,8 @@ bool decode_worker_request_head(const protocol::Frame &frame,
         error->clear();
     }
     if (!output || frame.type != protocol::kRequestHead ||
-        frame.flags != 0 || frame.request_id == 0 ||
+        (frame.flags & ~protocol::kFlagRequestEnd) != 0 ||
+        frame.request_id == 0 ||
         frame.payload.size() < 8 ||
         frame.payload.size() > max_header_bytes ||
         frame.payload.size() > protocol::kMaxPayloadSize) {
@@ -588,6 +589,8 @@ bool decode_worker_request_head(const protocol::Frame &frame,
     const uint8_t *cursor = &frame.payload[0];
     const uint8_t *end = cursor + frame.payload.size();
     WorkerRequestHead decoded;
+    decoded.bodyless =
+        (frame.flags & capsid::protocol::kFlagRequestEnd) != 0;
     uint16_t count = 0;
     if (!read_string16(&cursor, end, &decoded.method) ||
         !read_string32(&cursor, end, &decoded.url) ||

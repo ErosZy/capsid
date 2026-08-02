@@ -12,6 +12,7 @@ extern "C" {
 #define CAPSID_CAPABILITY_POLICY_VERSION_1 1u
 #define CAPSID_CAPABILITY_POLICY_VERSION 2u
 #define CAPSID_MEMORY_METRICS_VERSION 1u
+#define CAPSID_BUILD_INFO_VERSION 1u
 
 #define CAPSID_RESOURCE_UNLIMITED UINT64_MAX
 #define CAPSID_RESOURCE_PIDS_UNLIMITED UINT32_MAX
@@ -58,6 +59,33 @@ typedef enum capsid_result {
     CAPSID_SYSTEM_ERROR = 5,
     CAPSID_CHILD_ERROR = 6
 } capsid_result;
+
+/*
+ * Immutable identity of the Runtime/QuickJS bytecode toolchain. String
+ * pointers returned by capsid_runtime_build_info() have process lifetime and
+ * must not be freed. compatibility_id is "sha256:" followed by 64 lowercase
+ * hexadecimal digits and covers every field below in the documented order.
+ *
+ * This structure is additive to ABI v7. Future versions may append fields;
+ * callers must initialize it and preserve struct_size for size negotiation.
+ */
+typedef struct capsid_build_info {
+    uint32_t struct_size;
+    uint32_t version;
+    const char *runtime_version;
+    uint32_t abi_version;
+    uint32_t fetchrpc_version;
+    const char *quickjs_commit;
+    const char *txiki_overlay_key;
+    const char *txiki_overlay_manifest;
+    const char *bytecode_compile_flags;
+    const char *target_architecture;
+    const char *endianness;
+    uint32_t pointer_width_bits;
+    const char *bytecode_format_identity;
+    const char *capability_manifest_sha256;
+    const char *compatibility_id;
+} capsid_build_info;
 
 /*
  * Host-only resource controls. enabled_fields distinguishes an omitted value
@@ -375,7 +403,10 @@ typedef struct capsid_event {
     uint32_t struct_size;
     capsid_event_type type;
     uint64_t request_id;
-    /* CAPSID_EVENT_READY uses capsid_sandbox_feature bits. */
+    /*
+     * CAPSID_EVENT_READY uses capsid_sandbox_feature bits and carries the
+     * worker compatibility ID as non-NUL-terminated ASCII in payload.
+     */
     uint32_t flags;
     uint32_t status;
     uint32_t credit;
@@ -390,8 +421,33 @@ void capsid_env_entry_init(capsid_env_entry *entry);
 void capsid_capability_policy_init(capsid_capability_policy *policy);
 void capsid_audit_record_init(capsid_audit_record *record);
 void capsid_memory_metrics_init(capsid_memory_metrics *metrics);
+void capsid_build_info_init(capsid_build_info *info);
 void capsid_worker_config_init(capsid_worker_config *config);
 const char *capsid_result_string(capsid_result result);
+
+/*
+ * Returns the library-side build identity. The compatibility ID is computed
+ * from this exact canonical UTF-8 record, including the final newline:
+ *
+ * schema=capsid-bytecode-compatibility-v1
+ * runtimeVersion=<runtime_version>
+ * abiVersion=<abi_version decimal>
+ * fetchRpcVersion=<fetchrpc_version decimal>
+ * quickjsCommit=<quickjs_commit>
+ * txikiOverlayKey=<txiki_overlay_key>
+ * txikiOverlayManifest=<txiki_overlay_manifest>
+ * bytecodeCompileFlags=<bytecode_compile_flags>
+ * targetArchitecture=<target_architecture>
+ * endianness=<endianness>
+ * pointerWidthBits=<pointer_width_bits decimal>
+ * bytecodeFormatIdentity=<bytecode_format_identity>
+ * capabilityManifestSha256=<capability_manifest_sha256>
+ *
+ * Hash the record with SHA-256 and prefix its lowercase hexadecimal digest
+ * with "sha256:". No locale-dependent formatting or JSON canonicalization is
+ * involved.
+ */
+capsid_result capsid_runtime_build_info(capsid_build_info *out_info);
 
 capsid_result capsid_worker_spawn(const capsid_worker_config *config, capsid_worker **out_worker);
 void capsid_worker_destroy(capsid_worker *worker);
@@ -428,6 +484,15 @@ capsid_result capsid_worker_load_trusted_bytecode_named(
     size_t bytecode_size,
     const char *source_name);
 capsid_result capsid_worker_begin_request(capsid_worker *worker,
+                                      uint64_t request_id,
+                                      const char *method,
+                                      const char *url,
+                                      const capsid_header *headers,
+                                      size_t header_count);
+// Optimized begin for GET/HEAD requests: sets the END_REQUEST flag on the
+// RequestHead frame so the worker skips the initial request-direction credit
+// and marks request_ended immediately. Saves one frame per bodyless request.
+capsid_result capsid_worker_begin_bodyless_request(capsid_worker *worker,
                                       uint64_t request_id,
                                       const char *method,
                                       const char *url,

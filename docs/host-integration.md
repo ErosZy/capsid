@@ -10,7 +10,7 @@ embedder。Capsid Runtime 只提供隔离 worker 与 C ABI，不替宿主实现 
 取消和销毁都必须串行；若网关有多个 I/O 线程，应把每个 worker 固定到一个
 owner loop，通过线程安全队列把命令投递给 owner。
 
-`capsid_worker_fd()` 返回非阻塞 Unix socket。宿主应：
+当前 POSIX ABI 上，`capsid_worker_fd()` 返回非阻塞 Unix socket。宿主应：
 
 1. 有待发送数据时监听 writable，任何时候监听 readable；
 2. writable 时反复调用 `capsid_worker_flush()`，直到 `CAPSID_OK` 或
@@ -22,6 +22,12 @@ owner loop，通过线程安全队列把命令投递给 owner。
 
 不要在共享 reactor 上阻塞等待单个 worker。启动、请求和 shutdown 都应有宿主
 deadline；worker 内置 deadline 是第二道边界，不替代网关 deadline。
+
+跨平台宿主应使用自己的 worker-event-source adapter，不要让业务层依赖
+Unix fd。Capsid 将保留 ABI v7 的 fd 路径，并以加法接口建立 Windows
+原生 event source；在该接口与 Windows 构建测试交付前，不得声称 Runtime
+已提供 Windows 嵌入支持。平台支持层级见
+[架构与产品边界](architecture.md#平台契约)。
 
 ## worker 与应用生命周期
 

@@ -899,10 +899,12 @@ void capsid_worker_config_init(capsid_worker_config *config) {
     config->struct_size = sizeof(*config);
     config->abi_version = CAPSID_ABI_VERSION;
     config->js_heap_limit = 64u * 1024u * 1024u;
-#if defined(__APPLE__) || defined(CAPSID_ASAN_BUILD)
-    // macOS does not support the Linux address-space gate. ASan also reserves
-    // a large shadow range that is incompatible with the production default;
-    // its instrumented builds still enforce js_heap_limit inside QuickJS.
+#if defined(__APPLE__) || defined(CAPSID_ASAN_BUILD) || \
+    defined(CAPSID_TSAN_BUILD)
+    // macOS does not support the Linux address-space gate. ASan/TSan also
+    // reserve large shadow ranges that are incompatible with the production
+    // default; their instrumented builds still enforce js_heap_limit inside
+    // QuickJS.
     config->process_memory_limit = 0;
 #else
     config->process_memory_limit = 256u * 1024u * 1024u;
@@ -1185,10 +1187,18 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     const int child_network_namespace_fd = 4;
     int network_namespace_source_fd = -1;
     if (config.sandbox_network_namespace_fd >= 0) {
+        // Reserve the namespace-fd copy strictly above every descriptor the
+        // child will receive (8 = IPC, 4 = namespace): the parent's fd table
+        // is not under our control, and a runner like ctest leaves extra
+        // descriptors open, which can push the F_DUPFD result onto the IPC
+        // dup2 target and clobber the IPC socket during the pre-exec file
+        // actions (observed as an immediate worker exit on read(8)).
+        const int fd_floor =
+            std::max(child_fd, child_network_namespace_fd) + 1;
         network_namespace_source_fd = fcntl(
             config.sandbox_network_namespace_fd,
             F_DUPFD_CLOEXEC,
-            child_network_namespace_fd + 1);
+            fd_floor);
         if (network_namespace_source_fd < 0) {
             posix_spawn_file_actions_destroy(&actions);
             close(sockets[0]);
@@ -1490,12 +1500,13 @@ capsid_result capsid_worker_load_trusted_bytecode_named(
             capsid::protocol::kFlagTrustedBytecode);
 }
 
-capsid_result capsid_worker_begin_request(capsid_worker *worker,
+static capsid_result begin_request_impl(capsid_worker *worker,
                                       uint64_t request_id,
                                       const char *method,
                                       const char *url,
                                       const capsid_header *headers,
-                                      size_t header_count) {
+                                      size_t header_count,
+                                      uint32_t flags) {
     if (!worker || request_id == 0 || !method || !url ||
         (header_count && !headers) || header_count > std::numeric_limits<uint16_t>::max()) {
         return CAPSID_INVALID_ARGUMENT;
@@ -1538,7 +1549,7 @@ capsid_result capsid_worker_begin_request(capsid_worker *worker,
 
     capsid::protocol::Frame frame;
     frame.type = capsid::protocol::kRequestHead;
-    frame.flags = 0;
+    frame.flags = flags;
     frame.request_id = request_id;
     append_string16(&frame.payload, reinterpret_cast<const uint8_t *>(method), method_size);
     append_string32(&frame.payload, reinterpret_cast<const uint8_t *>(url), url_size);
@@ -1557,21 +1568,44 @@ capsid_result capsid_worker_begin_request(capsid_worker *worker,
     if (result == CAPSID_OK) {
         forget_canceled_request(worker, request_id);
         capsid_worker::RequestState state;
+        state.ended = (flags & capsid::protocol::kFlagRequestEnd) != 0;
         const uint64_t hard_timeout_ms =
             worker->request_timeout_ms >
                     std::numeric_limits<uint64_t>::max() -
                         kWorkerTimeoutGraceMs
                 ? std::numeric_limits<uint64_t>::max()
                 : worker->request_timeout_ms + kWorkerTimeoutGraceMs;
-        // The worker reports a recoverable soft timeout at request_timeout_ms.
-        // This later host deadline is the hard process boundary if the worker
-        // cannot service its timer or interrupt handler.
         state.deadline =
             std::chrono::steady_clock::now() +
             std::chrono::milliseconds(hard_timeout_ms);
         worker->requests[request_id] = state;
     }
     return result;
+}
+
+// begin_request with kFlagRequestEnd: worker marks request_ended
+// immediately and skips initial request-direction credit.
+capsid_result capsid_worker_begin_bodyless_request(capsid_worker *worker,
+                                      uint64_t request_id,
+                                      const char *method,
+                                      const char *url,
+                                      const capsid_header *headers,
+                                      size_t header_count) {
+    // Reuse the validation and frame assembly of begin_request by setting
+    // the flag; the shared impl below handles it.
+    return begin_request_impl(worker, request_id, method, url,
+                              headers, header_count,
+                              capsid::protocol::kFlagRequestEnd);
+}
+
+capsid_result capsid_worker_begin_request(capsid_worker *worker,
+                                      uint64_t request_id,
+                                      const char *method,
+                                      const char *url,
+                                      const capsid_header *headers,
+                                      size_t header_count) {
+    return begin_request_impl(worker, request_id, method, url,
+                              headers, header_count, 0);
 }
 
 capsid_result capsid_worker_write_request(capsid_worker *worker,
