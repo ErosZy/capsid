@@ -554,10 +554,14 @@ if [ "$NO_PROFILE" != "1" ]; then
             fi
             # A profile with zero resolved user-space symbols is not usable
             # evidence — every symbol column would be a kernel address.
+            # With --sort symbol the symbol column always begins with a
+            # bracket ([.] user, [k] kernel, [unknown]), so "resolved"
+            # means a [.] line whose symbol is not a raw hex address
+            # (unresolved user samples render as "[.] 0x...").
             # Test-mode runs (fake components) are exempt.
             if [ "$TEST_MODE" != "1" ] && \
                 ! perf report --stdio --no-children -i "$OUT/$file" \
-                --sort symbol 2>/dev/null | grep -qE '^\s+[\d.]+\s+[\d.]+%\s+[^\s[]'; then
+                --sort symbol 2>/dev/null | grep -qE '%\s+\[\.\]\s+[^0\[]'; then
                 fail_evidence "zero user-space symbols in $file"
             fi
         fi
