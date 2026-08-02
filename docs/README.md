@@ -40,6 +40,8 @@
 ## 性能
 
 - [性能证据规则](performance-benchmarks.md)：profile、A/B、原始数据和结论边界
+- [Bodyless 性能验收 waiver](bodyless-performance-waiver.md)：机制验收通过、
+  性能门未达成的产品决策记录（waiver 不是自动通过）
 
 txiki.js 升级报告由 CI 生成并作为 workflow artifact 保存；仓库只保留构建身份所需的
 [`txiki-upgrade-baseline.json`](txiki-upgrade-baseline.json)，不提交会过期的报告副本。
