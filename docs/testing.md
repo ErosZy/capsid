@@ -102,6 +102,13 @@ CI 的 `sanitizers` matrix 新增独立 `tsan` entry：Clang 编译、`CAPSID_BU
 并在 job 内从 pinned 源码（SHA-256 校验）构建 OpenSSL 3.5 到 `/opt/openssl35`
 （ubuntu-24.04 自带 3.0，不满足 Host 的 3.5 契约）。asan/ubsan entry 维持原配置。
 
+**指标开启路径是 TSan 门的另一半**：M1C 验收 A/B 证据在
+`CAPSID_HOST_IPC_METRICS=1` 下生成，而 metrics 由 worker 线程写、IO 线程读并
+整体清零（`write_metrics_line` 的 `metrics_ = Metrics{}`），无锁跨线程访问是
+真实竞态（冻结 RED：`host_single_worker_integration_metrics`）。TSan 只有
+metrics-off 通过不够——证据路径同样必须无竞态。`host_single_worker_integration_metrics`
+（ctest entry，`CAPSID_HOST_IPC_METRICS=1` 环境）与普通集成测试并列为 M1C 门。
+
 ## 平台契约门
 
 平台门分别证明“原生开发”和“生产隔离”，不能互相代替：

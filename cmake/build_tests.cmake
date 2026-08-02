@@ -195,6 +195,28 @@ if(BUILD_TESTING)
                     LABELS "host;integration;m1"
                     TIMEOUT 30)
 
+            # Metrics-on variant: the same integration run with
+            # CAPSID_HOST_IPC_METRICS=1, which arms the per-pump metrics
+            # emission path. The acceptance A/B evidence is generated with
+            # metrics armed, so the TSan gate must cover this path too — a
+            # metrics-off-only TSan pass does not prove the evidence path
+            # race-free (worker thread increments metrics_, the io thread
+            # reads and resets them; see the frozen RED audit).
+            add_test(
+                NAME host_single_worker_integration_metrics
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_single_worker.mjs"
+                    --host "$<TARGET_FILE:capsid-host>"
+                    --worker "$<TARGET_FILE:capsid-worker>"
+                    --bundle
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/host-single-worker.js")
+            set_tests_properties(
+                host_single_worker_integration_metrics
+                PROPERTIES
+                    LABELS "host;integration;m1"
+                    TIMEOUT 30
+                    ENVIRONMENT "CAPSID_HOST_IPC_METRICS=1")
+
             # M1B: the A/B benchmark runner is validated against fake
             # components before any real process is attached (design review
             # §15.7 M1-perf). Skipped (77) where perf is not usable.

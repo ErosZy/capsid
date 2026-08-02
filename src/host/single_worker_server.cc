@@ -26,6 +26,7 @@
 #include <boost/beast/http.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
@@ -356,24 +357,24 @@ private:
     // can sample per-profile-run deltas.
     struct Metrics {
         // Command direction (io → worker).
-        uint64_t commands_submitted = 0;
-        uint64_t command_batches = 0;      // wake-pipe writes
-        uint64_t commands_executed = 0;
-        uint64_t flush_calls = 0;
-        uint64_t flush_eagain = 0;
+        std::atomic<uint64_t> commands_submitted = 0;
+        std::atomic<uint64_t> command_batches = 0;   // wake-pipe writes
+        std::atomic<uint64_t> commands_executed = 0;
+        std::atomic<uint64_t> flush_calls = 0;
+        std::atomic<uint64_t> flush_eagain = 0;
         // Event direction (worker → io).
-        uint64_t events_queued = 0;
-        uint64_t asio_posts = 0;           // actual io_context::post calls
-        uint64_t response_heads = 0;
-        uint64_t response_body_frames = 0;
-        uint64_t response_ends = 0;
+        std::atomic<uint64_t> events_queued = 0;
+        std::atomic<uint64_t> asio_posts = 0;        // io_context::post calls
+        std::atomic<uint64_t> response_heads = 0;
+        std::atomic<uint64_t> response_body_frames = 0;
+        std::atomic<uint64_t> response_ends = 0;
         // Credit.
-        uint64_t grant_commands = 0;
-        uint64_t credit_bytes_granted = 0;
-        uint64_t credit_stall_count = 0;   // write_body_block with no credit
+        std::atomic<uint64_t> grant_commands = 0;
+        std::atomic<uint64_t> credit_bytes_granted = 0;
+        std::atomic<uint64_t> credit_stall_count = 0;
         // Worker-thread queue depths.
-        size_t command_queue_high_water = 0;
-        size_t event_queue_high_water = 0;
+        std::atomic<size_t> command_queue_high_water = 0;
+        std::atomic<size_t> event_queue_high_water = 0;
     };
     Metrics metrics_;
     bool metrics_enabled_ = false;
@@ -796,7 +797,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
     }
     case WorkerEvent::Type::kResponseHead: {
         if (metrics_enabled_) {
-            ++metrics_.response_heads;
+            metrics_.response_heads.fetch_add(1, std::memory_order_relaxed);
         }
         auto it = requests_.find(event.request_id);
         if (it == requests_.end()) {
@@ -898,7 +899,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
     }
     case WorkerEvent::Type::kResponseBody: {
         if (metrics_enabled_) {
-            ++metrics_.response_body_frames;
+            metrics_.response_body_frames.fetch_add(1, std::memory_order_relaxed);
         }
         auto it = requests_.find(event.request_id);
         if (it == requests_.end()) {
@@ -922,7 +923,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
     }
     case WorkerEvent::Type::kResponseEnd: {
         if (metrics_enabled_) {
-            ++metrics_.response_ends;
+            metrics_.response_ends.fetch_add(1, std::memory_order_relaxed);
         }
         auto it = requests_.find(event.request_id);
         if (it == requests_.end()) {
@@ -1330,14 +1331,14 @@ void Impl::drop_session(const std::shared_ptr<Session>& session) {
 
 void Impl::submit_command(Command command) {
     if (metrics_enabled_) {
-        ++metrics_.commands_submitted;
+        metrics_.commands_submitted.fetch_add(1, std::memory_order_relaxed);
     }
     std::unique_lock<std::mutex> lock(mutex_);
     const bool was_empty = commands_.empty();
     commands_.push_back(std::move(command));
     if (was_empty) {
         if (metrics_enabled_) {
-            ++metrics_.command_batches;
+            metrics_.command_batches.fetch_add(1, std::memory_order_relaxed);
         }
         // Wake the worker thread out of its blocking wait. The byte is
         // written on the empty→non-empty transition only: a push into a
@@ -1346,15 +1347,22 @@ void Impl::submit_command(Command command) {
         source_.wake();
     }
     if (metrics_enabled_) {
-        metrics_.command_queue_high_water = std::max(
-            metrics_.command_queue_high_water, commands_.size());
+        {
+            const size_t size = commands_.size();
+            size_t hw = metrics_.command_queue_high_water.load(
+                std::memory_order_relaxed);
+            while (hw < size &&
+                   !metrics_.command_queue_high_water.compare_exchange_weak(
+                       hw, size, std::memory_order_relaxed)) {
+            }
+        }
     }
     cv_.notify_one();
 }
 
 void Impl::io_post(std::function<void()> function) {
     if (metrics_enabled_) {
-        ++metrics_.asio_posts;
+        metrics_.asio_posts.fetch_add(1, std::memory_order_relaxed);
     }
     asio::post(ioc_, std::move(function));
 }
@@ -1552,7 +1560,7 @@ bool Impl::report_runtime_failure(std::uint64_t request_id,
 
 bool Impl::execute_command(Command command) {
     if (metrics_enabled_) {
-        ++metrics_.commands_executed;
+        metrics_.commands_executed.fetch_add(1, std::memory_order_relaxed);
     }
     // Commands for a cancelled request are dropped before execution: the
     // worker may have already expired the request (and erased its state), so
@@ -1655,8 +1663,9 @@ bool Impl::execute_command(Command command) {
     }
     case CommandType::kGrantResponseCredit: {
         if (metrics_enabled_) {
-            ++metrics_.grant_commands;
-            metrics_.credit_bytes_granted += command.credit;
+            metrics_.grant_commands.fetch_add(1, std::memory_order_relaxed);
+            metrics_.credit_bytes_granted.fetch_add(
+                command.credit, std::memory_order_relaxed);
         }
         const capsid_result result = capsid_worker_grant_response_credit(
             worker_, command.request_id, command.credit);
@@ -1830,12 +1839,22 @@ bool Impl::handle_worker_protocol_event(const capsid_event& event) {
 void Impl::queue_worker_event(WorkerEvent event) {
     bool need_post = false;
     {
-        if (metrics_enabled_) {
-            ++metrics_.events_queued;
-            metrics_.event_queue_high_water = std::max(
-                metrics_.event_queue_high_water, events_.size() + 1);
-        }
+        // The event-queue size must be read under the mutex: this function
+        // runs on both the io thread and the worker thread, and the other
+        // side may be mutating events_ concurrently.
         std::unique_lock<std::mutex> lock(mutex_);
+        if (metrics_enabled_) {
+            metrics_.events_queued.fetch_add(1, std::memory_order_relaxed);
+            {
+                const size_t size = events_.size() + 1;
+                size_t hw = metrics_.event_queue_high_water.load(
+                    std::memory_order_relaxed);
+                while (hw < size &&
+                       !metrics_.event_queue_high_water.compare_exchange_weak(
+                           hw, size, std::memory_order_relaxed)) {
+                }
+            }
+        }
         need_post = events_.empty();
         events_.push_back(std::move(event));
     }
@@ -1991,7 +2010,30 @@ void Impl::write_metrics_line() {
     if (!metrics_enabled_) {
         return;
     }
-    // Also snapshot the client-side metrics.
+    // Delta snapshot: exchange() reads and zeroes each host counter in one
+    // atomic step, so a line is the delta since the previous line and a
+    // concurrent increment (worker thread) is never torn or lost. The
+    // client-side snapshot is a delta for the same reason.
+#define CAPSID_METRIC_EXCHANGE(field) \
+    const auto field = \
+        metrics_.field.exchange(0, std::memory_order_relaxed)
+    CAPSID_METRIC_EXCHANGE(commands_submitted);
+    CAPSID_METRIC_EXCHANGE(command_batches);
+    CAPSID_METRIC_EXCHANGE(commands_executed);
+    CAPSID_METRIC_EXCHANGE(flush_calls);
+    CAPSID_METRIC_EXCHANGE(flush_eagain);
+    CAPSID_METRIC_EXCHANGE(events_queued);
+    CAPSID_METRIC_EXCHANGE(asio_posts);
+    CAPSID_METRIC_EXCHANGE(response_heads);
+    CAPSID_METRIC_EXCHANGE(response_body_frames);
+    CAPSID_METRIC_EXCHANGE(response_ends);
+    CAPSID_METRIC_EXCHANGE(grant_commands);
+    CAPSID_METRIC_EXCHANGE(credit_bytes_granted);
+    CAPSID_METRIC_EXCHANGE(credit_stall_count);
+    CAPSID_METRIC_EXCHANGE(command_queue_high_water);
+    CAPSID_METRIC_EXCHANGE(event_queue_high_water);
+#undef CAPSID_METRIC_EXCHANGE
+
     capsid::ClientIpcMetrics client_metrics;
     client_ipc_metrics_snapshot(worker_, &client_metrics);
     // Write one compact JSON line to stderr; the runner captures it.
@@ -2014,21 +2056,21 @@ void Impl::write_metrics_line() {
         "\"socket_read_eagain\":%lu,\"queued_bytes_hw\":%zu"
         "}}\n",
         // host
-        metrics_.commands_submitted,
-        metrics_.command_batches,
-        metrics_.commands_executed,
-        metrics_.flush_calls,
-        metrics_.flush_eagain,
-        metrics_.events_queued,
-        metrics_.asio_posts,
-        metrics_.response_heads,
-        metrics_.response_body_frames,
-        metrics_.response_ends,
-        metrics_.grant_commands,
-        metrics_.credit_bytes_granted,
-        metrics_.credit_stall_count,
-        metrics_.command_queue_high_water,
-        metrics_.event_queue_high_water,
+        (unsigned long)commands_submitted,
+        (unsigned long)command_batches,
+        (unsigned long)commands_executed,
+        (unsigned long)flush_calls,
+        (unsigned long)flush_eagain,
+        (unsigned long)events_queued,
+        (unsigned long)asio_posts,
+        (unsigned long)response_heads,
+        (unsigned long)response_body_frames,
+        (unsigned long)response_ends,
+        (unsigned long)grant_commands,
+        (unsigned long)credit_bytes_granted,
+        (unsigned long)credit_stall_count,
+        command_queue_high_water,
+        event_queue_high_water,
         // client
         (unsigned long)client_metrics.queued_frames,
         (unsigned long)client_metrics.queued_wire_bytes,
@@ -2044,7 +2086,6 @@ void Impl::write_metrics_line() {
         (unsigned long)client_metrics.socket_read_bytes,
         (unsigned long)client_metrics.socket_read_eagain,
         (unsigned long)client_metrics.queued_bytes_high_water);
-    metrics_ = Metrics{};
 }
 
 SingleWorkerServer::SingleWorkerServer(SingleWorkerServerOptions options)

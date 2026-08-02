@@ -155,7 +155,8 @@ capsid_result queue_wire(capsid_worker *worker, const std::vector<uint8_t> &wire
     if (wire.size() > worker->max_queued_bytes ||
         queued > worker->max_queued_bytes - wire.size()) {
         if (worker->ipc_metrics_enabled) {
-            ++worker->ipc_metrics.queue_would_block;
+            worker->ipc_metrics.queue_would_block.fetch_add(
+                1, std::memory_order_relaxed);
         }
         return CAPSID_WOULD_BLOCK;
     }
@@ -165,13 +166,17 @@ capsid_result queue_wire(capsid_worker *worker, const std::vector<uint8_t> &wire
     }
     worker->write_buffer.insert(worker->write_buffer.end(), wire.begin(), wire.end());
     if (worker->ipc_metrics_enabled) {
-        worker->ipc_metrics.queued_wire_bytes += wire.size();
+        worker->ipc_metrics.queued_wire_bytes.fetch_add(
+            wire.size(), std::memory_order_relaxed);
         const size_t outstanding =
             worker->write_buffer.size() - worker->write_offset;
-        worker->ipc_metrics.queued_bytes_high_water =
-            std::max(
-                worker->ipc_metrics.queued_bytes_high_water,
-                outstanding);
+        // Atomic high-water mark (relaxed CAS update).
+        size_t hw = worker->ipc_metrics.queued_bytes_high_water.load(
+            std::memory_order_relaxed);
+        while (hw < outstanding &&
+               !worker->ipc_metrics.queued_bytes_high_water.compare_exchange_weak(
+                   hw, outstanding, std::memory_order_relaxed)) {
+        }
     }
     return CAPSID_OK;
 }
@@ -183,7 +188,8 @@ capsid_result queue_frame(capsid_worker *worker, const capsid::protocol::Frame &
     }
     const capsid_result result = queue_wire(worker, wire);
     if (result == CAPSID_OK && worker->ipc_metrics_enabled) {
-        ++worker->ipc_metrics.queued_frames;
+        worker->ipc_metrics.queued_frames.fetch_add(
+            1, std::memory_order_relaxed);
     }
     return result;
 }
@@ -219,7 +225,8 @@ capsid_result queue_chunked(capsid_worker *worker,
     if (wire_size > worker->max_queued_bytes ||
         queued > worker->max_queued_bytes - wire_size) {
         if (worker->ipc_metrics_enabled) {
-            ++worker->ipc_metrics.queue_would_block;
+            worker->ipc_metrics.queue_would_block.fetch_add(
+                1, std::memory_order_relaxed);
         }
         return CAPSID_WOULD_BLOCK;
     }
@@ -254,7 +261,8 @@ capsid_result queue_chunked(capsid_worker *worker,
     } while (offset < size || first);
     const capsid_result result = queue_wire(worker, batch);
     if (result == CAPSID_OK && worker->ipc_metrics_enabled) {
-        worker->ipc_metrics.queued_frames += frame_count;
+        worker->ipc_metrics.queued_frames.fetch_add(
+            frame_count, std::memory_order_relaxed);
     }
     return result;
 }
@@ -839,43 +847,66 @@ bool decode_header_at(const capsid_event *event,
 
 namespace capsid {
 
-ClientIpcMetrics::ClientIpcMetrics()
-    : queued_frames(0),
-      queued_wire_bytes(0),
-      queue_would_block(0),
-      flush_calls(0),
-      socket_write_calls(0),
-      socket_write_bytes(0),
-      socket_write_eagain(0),
-      next_event_calls(0),
-      parsed_frames(0),
-      parser_payload_copied_bytes(0),
-      socket_read_calls(0),
-      socket_read_bytes(0),
-      socket_read_eagain(0),
-      queued_bytes_high_water(0) {}
+ClientIpcMetrics::ClientIpcMetrics() {}
 
 void client_ipc_metrics_enable(capsid_worker *worker, bool enabled) {
     if (!worker) {
         return;
     }
     worker->ipc_metrics_enabled = enabled;
-    worker->ipc_metrics = ClientIpcMetrics();
+    client_ipc_metrics_reset(worker);
 }
 
 void client_ipc_metrics_reset(capsid_worker *worker) {
     if (!worker) {
         return;
     }
-    worker->ipc_metrics = ClientIpcMetrics();
+#define CAPSID_METRIC_STORE(field) \
+    worker->ipc_metrics.field.store(0, std::memory_order_relaxed)
+    CAPSID_METRIC_STORE(queued_frames);
+    CAPSID_METRIC_STORE(queued_wire_bytes);
+    CAPSID_METRIC_STORE(queue_would_block);
+    CAPSID_METRIC_STORE(flush_calls);
+    CAPSID_METRIC_STORE(socket_write_calls);
+    CAPSID_METRIC_STORE(socket_write_bytes);
+    CAPSID_METRIC_STORE(socket_write_eagain);
+    CAPSID_METRIC_STORE(next_event_calls);
+    CAPSID_METRIC_STORE(parsed_frames);
+    CAPSID_METRIC_STORE(parser_payload_copied_bytes);
+    CAPSID_METRIC_STORE(socket_read_calls);
+    CAPSID_METRIC_STORE(socket_read_bytes);
+    CAPSID_METRIC_STORE(socket_read_eagain);
+    CAPSID_METRIC_STORE(queued_bytes_high_water);
+#undef CAPSID_METRIC_STORE
 }
 
-bool client_ipc_metrics_snapshot(const capsid_worker *worker,
+bool client_ipc_metrics_snapshot(capsid_worker *worker,
                                  ClientIpcMetrics *metrics) {
     if (!worker || !metrics || !worker->ipc_metrics_enabled) {
         return false;
     }
-    *metrics = worker->ipc_metrics;
+    // Delta snapshot: exchange() reads and zeroes each counter in one
+    // atomic step, so the snapshot is the delta accumulated since the
+    // previous snapshot (same per-line semantics as the host metrics) and a
+    // concurrent increment is never torn or lost.
+#define CAPSID_METRIC_EXCHANGE(field) \
+    metrics->field = \
+        worker->ipc_metrics.field.exchange(0, std::memory_order_relaxed)
+    CAPSID_METRIC_EXCHANGE(queued_frames);
+    CAPSID_METRIC_EXCHANGE(queued_wire_bytes);
+    CAPSID_METRIC_EXCHANGE(queue_would_block);
+    CAPSID_METRIC_EXCHANGE(flush_calls);
+    CAPSID_METRIC_EXCHANGE(socket_write_calls);
+    CAPSID_METRIC_EXCHANGE(socket_write_bytes);
+    CAPSID_METRIC_EXCHANGE(socket_write_eagain);
+    CAPSID_METRIC_EXCHANGE(next_event_calls);
+    CAPSID_METRIC_EXCHANGE(parsed_frames);
+    CAPSID_METRIC_EXCHANGE(parser_payload_copied_bytes);
+    CAPSID_METRIC_EXCHANGE(socket_read_calls);
+    CAPSID_METRIC_EXCHANGE(socket_read_bytes);
+    CAPSID_METRIC_EXCHANGE(socket_read_eagain);
+    CAPSID_METRIC_EXCHANGE(queued_bytes_high_water);
+#undef CAPSID_METRIC_EXCHANGE
     return true;
 }
 
@@ -1711,19 +1742,21 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
         return CAPSID_CLOSED;
     }
     if (worker->ipc_metrics_enabled) {
-        ++worker->ipc_metrics.flush_calls;
+        worker->ipc_metrics.flush_calls.fetch_add(
+                    1, std::memory_order_relaxed);
     }
     while (worker->write_offset < worker->write_buffer.size()) {
         const uint8_t *data = &worker->write_buffer[worker->write_offset];
         const size_t size = worker->write_buffer.size() - worker->write_offset;
         if (worker->ipc_metrics_enabled) {
-            ++worker->ipc_metrics.socket_write_calls;
+            worker->ipc_metrics.socket_write_calls.fetch_add(
+                    1, std::memory_order_relaxed);
         }
         const ssize_t written = write_socket(worker->fd, data, size);
         if (written > 0) {
             if (worker->ipc_metrics_enabled) {
-                worker->ipc_metrics.socket_write_bytes +=
-                    static_cast<uint64_t>(written);
+                worker->ipc_metrics.socket_write_bytes.fetch_add(
+                    static_cast<uint64_t>(written), std::memory_order_relaxed);
             }
             worker->write_offset += static_cast<size_t>(written);
             continue;
@@ -1733,7 +1766,8 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
         }
         if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             if (worker->ipc_metrics_enabled) {
-                ++worker->ipc_metrics.socket_write_eagain;
+                worker->ipc_metrics.socket_write_eagain.fetch_add(
+                    1, std::memory_order_relaxed);
             }
             return CAPSID_WOULD_BLOCK;
         }
@@ -1755,7 +1789,8 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
         return CAPSID_INVALID_ARGUMENT;
     }
     if (worker->ipc_metrics_enabled) {
-        ++worker->ipc_metrics.next_event_calls;
+        worker->ipc_metrics.next_event_calls.fetch_add(
+                    1, std::memory_order_relaxed);
     }
     for (;;) {
         capsid::protocol::Frame frame;
@@ -1768,14 +1803,15 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
             uint8_t buffer[64 * 1024];
             for (;;) {
                 if (worker->ipc_metrics_enabled) {
-                    ++worker->ipc_metrics.socket_read_calls;
+                    worker->ipc_metrics.socket_read_calls.fetch_add(
+                    1, std::memory_order_relaxed);
                 }
                 const ssize_t read_size =
                     read(worker->fd, buffer, sizeof(buffer));
                 if (read_size > 0) {
                     if (worker->ipc_metrics_enabled) {
-                        worker->ipc_metrics.socket_read_bytes +=
-                            static_cast<uint64_t>(read_size);
+                        worker->ipc_metrics.socket_read_bytes.fetch_add(
+                            static_cast<uint64_t>(read_size), std::memory_order_relaxed);
                     }
                     if (!worker->parser.append(
                             buffer,
@@ -1802,7 +1838,8 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                 }
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     if (worker->ipc_metrics_enabled) {
-                        ++worker->ipc_metrics.socket_read_eagain;
+                        worker->ipc_metrics.socket_read_eagain.fetch_add(
+                    1, std::memory_order_relaxed);
                     }
                     const std::chrono::steady_clock::time_point now =
                         std::chrono::steady_clock::now();
@@ -1850,9 +1887,10 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
             return CAPSID_PROTOCOL_ERROR;
         }
         if (worker->ipc_metrics_enabled) {
-            ++worker->ipc_metrics.parsed_frames;
-            worker->ipc_metrics.parser_payload_copied_bytes +=
-                worker->event_payload.size();
+            worker->ipc_metrics.parsed_frames.fetch_add(
+                    1, std::memory_order_relaxed);
+            worker->ipc_metrics.parser_payload_copied_bytes.fetch_add(
+                worker->event_payload.size(), std::memory_order_relaxed);
         }
         std::set<uint64_t>::iterator canceled =
             worker->canceled_requests.find(frame.request_id);
