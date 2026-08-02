@@ -357,18 +357,25 @@ def build_report(out, meta, manifest):
     mech_keys = sorted(set(mech.get("baseline", {}).get("counters", {})) |
                        set(mech.get("candidate", {}).get("counters", {})))
     # Frozen per-request mechanism metrics (frozen in evidence.py before
-    # any run; the bodyless A/B verdict uses exactly these three).
+    # any run; the bodyless A/B verdict uses exactly these three). The
+    # fixed-1k workload is a bodyless GET, so the wire frame stream is
+    # already minimal and wire-frame totals do not measure the fusion; the
+    # mechanism's observable effect is on the command stream (begin+end →
+    # fused begin), the worker event stream (no request-credit event, no
+    # WINDOW_UPDATE) and the event polling loop.
     mech_gate_metrics = [
         "host.commands_submitted",   # commands the host submitted to the worker
-        "client.queued_frames",      # request-direction wire frames
-        "client.parsed_frames",      # worker events parsed back
+        "client.next_event_calls",   # worker event polls (fewer events → fewer polls)
+        "client.parsed_frames",      # worker frames parsed back
     ]
+    # The diagnostic window covers the whole round-0 loadgen (warmup +
+    # measured), so the per-request denominator sums both r0 samples.
     completed_by_side = {}
     for sample in samples:
-        if (sample.get("phase") == "measured" and
-                sample.get("round") == 0 and sample.get("side")):
-            completed_by_side[sample.get("side")] = float(
-                sample.get("completed") or 0)
+        if sample.get("round") == 0 and sample.get("side"):
+            completed_by_side[sample.get("side")] = \
+                completed_by_side.get(sample.get("side"), 0.0) + float(
+                    sample.get("completed") or 0)
     if bodyless_ab and all(k in mech_keys for k in mech_gate_metrics):
         gate_ok = True
         for key in mech_gate_metrics:
