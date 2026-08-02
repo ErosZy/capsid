@@ -1,0 +1,242 @@
+{
+  "schema": "capsid-bench-manifest-v1",
+  "run_id": "bodyless-ab2-20260802T164047",
+  "generated_at": "2026-08-02T16:40:47Z",
+  "commit": "4d8a7831dd9df10c6de7a7f4ee872dd8ec98bdf2",
+  "build_args": "\"CAPSID_ENABLE_ASAN:BOOL=OFF;CAPSID_ENABLE_LTO:BOOL=ON;CAPSID_ENABLE_TSAN:BOOL=OFF;CAPSID_ENABLE_UBSAN:BOOL=OFF;CMAKE_BUILD_TYPE:STRING=Release;\"",
+  "components": {
+    "baseline": {
+      "cmd": "bench/wrappers/run-host.sh",
+      "sha256": "f5a5e770f027d29c7ae9f90aedb201383f4a4780f782b2a8133f2fd16eda38ea"
+    },
+    "candidate": {
+      "cmd": "bench/wrappers/run-host.sh",
+      "sha256": "f5a5e770f027d29c7ae9f90aedb201383f4a4780f782b2a8133f2fd16eda38ea"
+    },
+    "worker": {
+      "cmd": "/capsid/build-release/capsid-worker",
+      "sha256": "840509b9d8299a15def18bb843344a30b9cf808cb4286fafd9511ceaf76b6b39"
+    },
+    "bundle": {
+      "cmd": "/capsid/tests/fixtures/host-single-worker.js",
+      "sha256": "cb3ce0f9144d62c09320aafc16760c68ff22687cc0580e086828eb6f62aeefc4"
+    },
+    "loadgen": {
+      "cmd": "/capsid/bench/bin/loadgen",
+      "sha256": "2d1a64fc259cc9c77d06dde40667db3d09f3007211fc7f42a113857f066138db"
+    },
+    "host_bin": {
+      "cmd": "/capsid/build-release/capsid-host",
+      "sha256": "4408a7f3833cdf98360f417985a28af6723ce0442b0d4d99037919d6634a500a"
+    }
+  },
+  "params": {
+    "workload": "fixed-1k",
+    "rounds": 3,
+    "warmup_s": 5,
+    "duration_s": 10,
+    "connections": 64,
+    "inflight": 64,
+    "cpuset": "none",
+    "application": "orders",
+    "public_authority": "public.example",
+    "request_timeout_ms": 10000,
+    "initial_stream_window": 16384,
+    "tcp_nodelay": "on",
+    "statistic": "mean",
+    "baseline_env": "CAPSID_BODYLESS=0",
+    "candidate_env": "CAPSID_BODYLESS=1",
+    "require_ipc_counters": true,
+    "baseline_host_profile": true,
+    "profile_runs": true
+  },
+  "environment": {
+    "uname": "Linux 6.8.0-117-generic x86_64",
+    "nproc": 4,
+    "cgroup_cpu_max": "max 100000",
+    "perf_event_paranoid": "4"
+  },
+  "resource": {
+    "baseline_gateway": {
+      "rss_delta_kb": 872,
+      "pss_delta_kb": 764,
+      "read_syscalls": 15793,
+      "write_syscalls": 8253,
+      "read_bytes": 25055117,
+      "write_bytes": 407170
+    },
+    "baseline_worker": {
+      "rss_delta_kb": 2592,
+      "pss_delta_kb": 2491,
+      "read_syscalls": 995,
+      "write_syscalls": 0,
+      "read_bytes": 4634520,
+      "write_bytes": 0
+    },
+    "candidate_gateway": {
+      "rss_delta_kb": 868,
+      "pss_delta_kb": 773,
+      "read_syscalls": 15828,
+      "write_syscalls": 8011,
+      "read_bytes": 24951986,
+      "write_bytes": 377510
+    },
+    "candidate_worker": {
+      "rss_delta_kb": 2520,
+      "pss_delta_kb": 2401,
+      "read_syscalls": 1044,
+      "write_syscalls": 0,
+      "read_bytes": 4710312,
+      "write_bytes": 0
+    }
+  },
+  "ipc_mechanism": {
+    "baseline": {
+      "window_lines": 618,
+      "counters": {
+        "host.commands_submitted": 64122,
+        "host.command_batches": 4789,
+        "host.commands_executed": 64121,
+        "host.flush_calls": 0,
+        "host.flush_eagain": 0,
+        "host.events_queued": 85496,
+        "host.asio_posts": 618,
+        "host.response_heads": 21374,
+        "host.response_body_frames": 21374,
+        "host.response_ends": 21374,
+        "host.grant_commands": 0,
+        "host.credit_bytes_granted": 0,
+        "host.credit_stall_count": 0,
+        "host.command_queue_hw": 34497,
+        "host.event_queue_hw": 68426,
+        "client.queued_frames": 22113,
+        "client.queued_wire_bytes": 4634520,
+        "client.queue_would_block": 0,
+        "client.flush_calls": 5153,
+        "client.socket_write_calls": 3864,
+        "client.socket_write_bytes": 4634520,
+        "client.socket_write_eagain": 0,
+        "client.next_event_calls": 90650,
+        "client.parsed_frames": 85497,
+        "client.parser_payload_copied_bytes": 22998495,
+        "client.socket_read_calls": 5854,
+        "client.socket_read_bytes": 25050423,
+        "client.socket_read_eagain": 5152,
+        "client.queued_bytes_hw": 2620656
+      }
+    },
+    "candidate": {
+      "window_lines": 571,
+      "counters": {
+        "host.commands_submitted": 43614,
+        "host.command_batches": 4778,
+        "host.commands_executed": 43613,
+        "host.flush_calls": 0,
+        "host.flush_eagain": 0,
+        "host.events_queued": 65421,
+        "host.asio_posts": 571,
+        "host.response_heads": 21807,
+        "host.response_body_frames": 21807,
+        "host.response_ends": 21807,
+        "host.grant_commands": 0,
+        "host.credit_bytes_granted": 0,
+        "host.credit_stall_count": 0,
+        "host.command_queue_hw": 27412,
+        "host.event_queue_hw": 54168,
+        "client.queued_frames": 21807,
+        "client.queued_wire_bytes": 4710312,
+        "client.queue_would_block": 0,
+        "client.flush_calls": 5162,
+        "client.socket_write_calls": 4295,
+        "client.socket_write_bytes": 4710312,
+        "client.socket_write_eagain": 0,
+        "client.next_event_calls": 70584,
+        "client.parsed_frames": 65422,
+        "client.parser_payload_copied_bytes": 23377175,
+        "client.socket_read_calls": 5891,
+        "client.socket_read_bytes": 24947303,
+        "client.socket_read_eagain": 5162,
+        "client.queued_bytes_hw": 2604312
+      }
+    }
+  },
+  "unsupported_counters": "",
+  "test_mode": false,
+  "command": [
+    "--run-id",
+    "bodyless-ab2-20260802T164047",
+    "--out",
+    "bench/results/bodyless-ab2-20260802T164047",
+    "--baseline",
+    "bench/wrappers/run-host.sh",
+    "--candidate",
+    "bench/wrappers/run-host.sh",
+    "--host-bin",
+    "/capsid/build-release/capsid-host",
+    "--worker",
+    "/capsid/build-release/capsid-worker",
+    "--worker-name",
+    "capsid-worker",
+    "--loadgen",
+    "/capsid/bench/bin/loadgen",
+    "--bundle",
+    "/capsid/tests/fixtures/host-single-worker.js",
+    "--build-dir",
+    "/capsid/build-release",
+    "--application",
+    "orders",
+    "--workload",
+    "fixed-1k",
+    "--rounds",
+    "3",
+    "--warmup",
+    "5",
+    "--duration",
+    "10",
+    "--connections",
+    "64",
+    "--inflight",
+    "64",
+    "--window",
+    "16384",
+    "--baseline-env",
+    "CAPSID_BODYLESS=0",
+    "--candidate-env",
+    "CAPSID_BODYLESS=1",
+    "--statistic",
+    "mean",
+    "--require-ipc-counters",
+    "--baseline-host-profile"
+  ],
+  "evidence_status": "complete",
+  "incomplete_reasons": "",
+  "files": {
+    "samples.jsonl": "1c7585db6904205eddb15c0acb3097e30fb67516c831bf8e59a241d23d328d8e",
+    "correctness.json": "74d2204a2698e531d6a62c12983b886708cdb3d2f5583eb44818f2f1f57edd12",
+    "baseline-worker.perf.data": "01ddce53d1a598028fb4b2f6dc099046dae7b5158c1d8244120883049c681d3d",
+    "candidate-host.perf.data": "3bda824522546072eb249e90828ab3559c30152245b888ffb0c3d4d54cc9bc1f",
+    "candidate-worker.perf.data": "c8a3d162135369c2265994408e02e3ae42f143beb7b0f0fc14b78b809b58a8a0",
+    "baseline-gateway.perf.data": "872dd4316f324912be2e04d4e424abfb6c70c86879640b7fe0d3aaef7b71d89b",
+    "perf-stat": {
+      "baseline-gateway.record.log": "6b14afc31c4ae070c2ad28dfe801d45b241686245b9904e073c11e6b438d5fd1",
+      "baseline-gateway.stat": "006ed224ac1a2b6faadadaddd8710858d8f4510714f077d19a2bb6c395349122",
+      "baseline-worker.record.log": "f7e55fbac7ddb68a299f55c11af8aca3514053da5503ebc68fe0927e37c44126",
+      "baseline-worker.stat": "8dd31ae4a6e53c199c02abc8094562bf9c547a91c3956fcc59ebdf031f339459",
+      "candidate-gateway.stat": "99f90c23fdd150fbe927fda91eaae826f52686818d9ac230bccf6445652872c4",
+      "candidate-host.record.log": "3b8e69792fb2f707169344d3d4ea6b195d1cf5f209840bd9780711e490d41125",
+      "candidate-worker.record.log": "addea55addfe47ded885f08034a35c23dfee615d091c2b68eb1d1c46ea6203a9",
+      "candidate-worker.stat": "70c4067499aecb8fb816102a4faed52a2cbd3e7106723d9672d8f4ee84846401"
+    },
+    "ready-records.json": "4f59a50577cc698f5a5b6152f16a2062d454acb0f2a3537e6e643e26ec4d2dd1",
+    "component_logs": {
+      "baseline.round0.bodyless-ab2-20260802T164047.log": "e1d7c732240645c426ae70ad43fee8755699c0512242298aba58d0e7773d6f0c",
+      "baseline.round1.bodyless-ab2-20260802T164047.log": "7fa728fe0003caf24f69ce9c564bebce0e8bd0e807a267e4b62b93743251252b",
+      "baseline.round2.bodyless-ab2-20260802T164047.log": "7fa728fe0003caf24f69ce9c564bebce0e8bd0e807a267e4b62b93743251252b",
+      "baseline.round3.bodyless-ab2-20260802T164047.log": "7fa728fe0003caf24f69ce9c564bebce0e8bd0e807a267e4b62b93743251252b",
+      "candidate.round0.bodyless-ab2-20260802T164047.log": "bcc07b3844fe660c2c42eea8ce1fee4ba02327e176153cf3500adb94c249c47f",
+      "candidate.round1.bodyless-ab2-20260802T164047.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "candidate.round2.bodyless-ab2-20260802T164047.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "candidate.round3.bodyless-ab2-20260802T164047.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}
