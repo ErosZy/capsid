@@ -264,14 +264,21 @@ const requiredFiles = [
     assert.match(result.stderr, /no IPC mechanism counters/);
 }
 
-// ---- RED: dirty working tree (no exemption). The tree is dirty during
-// development, so this always holds; the runner must refuse. ----
+// ---- RED: dirty working tree (no exemption). The test dirties the tree
+// itself (an untracked marker file at the repo root) so it does not depend
+// on the checkout being dirty; the runner must refuse. ----
 {
-    const result = await runnerOutput(args, {
-        env: { CAPSID_BENCH_TEST_MODE: '' },
-    });
-    assert.notEqual(result.code, 0, 'dirty working tree must be rejected');
-    assert.match(result.stderr, /dirty working tree/);
+    const marker = path.join(repoRoot, '.dirty-marker-test');
+    fs.writeFileSync(marker, 'dirty');
+    try {
+        const result = await runnerOutput(args, {
+            env: { CAPSID_BENCH_TEST_MODE: '' },
+        });
+        assert.notEqual(result.code, 0, 'dirty working tree must be rejected');
+        assert.match(result.stderr, /dirty working tree/);
+    } finally {
+        fs.rmSync(marker, { force: true });
+    }
 }
 
 // ---- RED: build arguments not recorded. ----
