@@ -1,0 +1,12 @@
+# started on Sun Aug  2 15:48:26 2026
+
+
+ Performance counter stats for process id '345543':
+
+           7658.11 msec task-clock                       #    0.766 CPUs utilized             
+               752      context-switches                 #   98.197 /sec                      
+               112      cpu-migrations                   #   14.625 /sec                      
+               626      page-faults                      #   81.743 /sec                      
+
+      10.001671826 seconds time elapsed
+

@@ -1,0 +1,242 @@
+{
+  "schema": "capsid-bench-manifest-v1",
+  "run_id": "bodyless-ab3-20260802T154653",
+  "generated_at": "2026-08-02T15:46:53Z",
+  "commit": "530235688357d15818efbef7a83c0bacfe714778",
+  "build_args": "\"CAPSID_ENABLE_ASAN:BOOL=OFF;CAPSID_ENABLE_LTO:BOOL=OFF;CAPSID_ENABLE_TSAN:BOOL=OFF;CAPSID_ENABLE_UBSAN:BOOL=OFF;CMAKE_BUILD_TYPE:STRING=Release;\"",
+  "components": {
+    "baseline": {
+      "cmd": "bench/wrappers/run-host.sh",
+      "sha256": "f5a5e770f027d29c7ae9f90aedb201383f4a4780f782b2a8133f2fd16eda38ea"
+    },
+    "candidate": {
+      "cmd": "bench/wrappers/run-host.sh",
+      "sha256": "f5a5e770f027d29c7ae9f90aedb201383f4a4780f782b2a8133f2fd16eda38ea"
+    },
+    "worker": {
+      "cmd": "/capsid/build-bench/capsid-worker",
+      "sha256": "70118c35d0fc1116d1963f115d95790df089a01462073b26cc6d592361e79f23"
+    },
+    "bundle": {
+      "cmd": "/capsid/tests/fixtures/host-single-worker.js",
+      "sha256": "cb3ce0f9144d62c09320aafc16760c68ff22687cc0580e086828eb6f62aeefc4"
+    },
+    "loadgen": {
+      "cmd": "/capsid/bench/bin/loadgen",
+      "sha256": "a12c6e57db3eb4a7f8df97536f4b95f7d9fad4f241f32767c9cb134a49eaa328"
+    },
+    "host_bin": {
+      "cmd": "/capsid/build-bench/capsid-host",
+      "sha256": "c658ea068a172c71bb1c85d216a4ad4acdb481cad1294f743286f08570b5c169"
+    }
+  },
+  "params": {
+    "workload": "fixed-1k",
+    "rounds": 3,
+    "warmup_s": 5,
+    "duration_s": 10,
+    "connections": 64,
+    "inflight": 64,
+    "cpuset": "none",
+    "application": "orders",
+    "public_authority": "public.example",
+    "request_timeout_ms": 10000,
+    "initial_stream_window": 16384,
+    "tcp_nodelay": "on",
+    "statistic": "mean",
+    "baseline_env": "CAPSID_BODYLESS=0",
+    "candidate_env": "CAPSID_BODYLESS=1",
+    "require_ipc_counters": true,
+    "baseline_host_profile": true,
+    "profile_runs": true
+  },
+  "environment": {
+    "uname": "Linux 6.8.0-117-generic x86_64",
+    "nproc": 4,
+    "cgroup_cpu_max": "max 100000",
+    "perf_event_paranoid": "4"
+  },
+  "resource": {
+    "baseline_gateway": {
+      "rss_delta_kb": 872,
+      "pss_delta_kb": 772,
+      "read_syscalls": 15611,
+      "write_syscalls": 8269,
+      "read_bytes": 26385259,
+      "write_bytes": 412327
+    },
+    "baseline_worker": {
+      "rss_delta_kb": 2664,
+      "pss_delta_kb": 2567,
+      "read_syscalls": 1035,
+      "write_syscalls": 0,
+      "read_bytes": 4876944,
+      "write_bytes": 0
+    },
+    "candidate_gateway": {
+      "rss_delta_kb": 836,
+      "pss_delta_kb": 750,
+      "read_syscalls": 13686,
+      "write_syscalls": 7417,
+      "read_bytes": 26246279,
+      "write_bytes": 388016
+    },
+    "candidate_worker": {
+      "rss_delta_kb": 2624,
+      "pss_delta_kb": 2542,
+      "read_syscalls": 1015,
+      "write_syscalls": 0,
+      "read_bytes": 4954824,
+      "write_bytes": 0
+    }
+  },
+  "ipc_mechanism": {
+    "baseline": {
+      "window_lines": 2023,
+      "counters": {
+        "host.commands_submitted": 209586,
+        "host.command_batches": 14687,
+        "host.commands_executed": 139694,
+        "host.flush_calls": 0,
+        "host.flush_eagain": 0,
+        "host.events_queued": 272530,
+        "host.asio_posts": 2016,
+        "host.response_heads": 69862,
+        "host.response_body_frames": 69862,
+        "host.response_ends": 69862,
+        "host.grant_commands": 0,
+        "host.credit_bytes_granted": 0,
+        "host.credit_stall_count": 0,
+        "host.command_queue_hw": 112520,
+        "host.event_queue_hw": 36893636310513505314,
+        "client.queued_frames": 24028979,
+        "client.queued_wire_bytes": 5103782088,
+        "client.queue_would_block": 0,
+        "client.flush_calls": 5370848,
+        "client.socket_write_calls": 4071986,
+        "client.socket_write_bytes": 5103780144,
+        "client.socket_write_eagain": 0,
+        "client.next_event_calls": 99674562,
+        "client.parsed_frames": 94303749,
+        "client.parser_payload_copied_bytes": 25366596837,
+        "client.socket_read_calls": 6129397,
+        "client.socket_read_bytes": 27631876569,
+        "client.socket_read_eagain": 5370811,
+        "client.queued_bytes_hw": 27896400
+      }
+    },
+    "candidate": {
+      "window_lines": 1775,
+      "counters": {
+        "host.commands_submitted": 143366,
+        "host.command_batches": 13884,
+        "host.commands_executed": 74152,
+        "host.flush_calls": 0,
+        "host.flush_eagain": 0,
+        "host.events_queued": 214706,
+        "host.asio_posts": 1771,
+        "host.response_heads": 71683,
+        "host.response_body_frames": 71683,
+        "host.response_ends": 71683,
+        "host.grant_commands": 0,
+        "host.credit_bytes_granted": 0,
+        "host.credit_stall_count": 0,
+        "host.command_queue_hw": 91862,
+        "host.event_queue_hw": 92233759748197182826,
+        "client.queued_frames": 21314127,
+        "client.queued_wire_bytes": 4603851432,
+        "client.queue_would_block": 0,
+        "client.flush_calls": 4549793,
+        "client.socket_write_calls": 3767245,
+        "client.socket_write_bytes": 4603843872,
+        "client.socket_write_eagain": 0,
+        "client.next_event_calls": 68485634,
+        "client.parsed_frames": 63935843,
+        "client.parser_payload_copied_bytes": 22845939609,
+        "client.socket_read_calls": 5242744,
+        "client.socket_read_bytes": 24380401401,
+        "client.socket_read_eagain": 4549786,
+        "client.queued_bytes_hw": 24419016
+      }
+    }
+  },
+  "unsupported_counters": "",
+  "test_mode": false,
+  "command": [
+    "--run-id",
+    "bodyless-ab3-20260802T154653",
+    "--out",
+    "bench/results/bodyless-ab3-20260802T154653",
+    "--baseline",
+    "bench/wrappers/run-host.sh",
+    "--candidate",
+    "bench/wrappers/run-host.sh",
+    "--host-bin",
+    "/capsid/build-bench/capsid-host",
+    "--worker",
+    "/capsid/build-bench/capsid-worker",
+    "--worker-name",
+    "capsid-worker",
+    "--loadgen",
+    "/capsid/bench/bin/loadgen",
+    "--bundle",
+    "/capsid/tests/fixtures/host-single-worker.js",
+    "--build-dir",
+    "/capsid/build-bench",
+    "--application",
+    "orders",
+    "--workload",
+    "fixed-1k",
+    "--rounds",
+    "3",
+    "--warmup",
+    "5",
+    "--duration",
+    "10",
+    "--connections",
+    "64",
+    "--inflight",
+    "64",
+    "--window",
+    "16384",
+    "--baseline-env",
+    "CAPSID_BODYLESS=0",
+    "--candidate-env",
+    "CAPSID_BODYLESS=1",
+    "--statistic",
+    "mean",
+    "--require-ipc-counters",
+    "--baseline-host-profile"
+  ],
+  "evidence_status": "complete",
+  "incomplete_reasons": "",
+  "files": {
+    "samples.jsonl": "5ec0dcb5b33579bfce7a6618682bcd5e3a7d203d65a941bccc64c6be3e0947e1",
+    "correctness.json": "609e0d588825ae0452118225614f7427c67ee6ac73968484af263adf19ce6524",
+    "baseline-worker.perf.data": "fe168c9463563c6e9551b154a85aa312e8bcf71c5316cd66ca42e83d0b1527ca",
+    "candidate-host.perf.data": "964fa1a420fa49bb501e62421dbbda7108d0ac9f6cdcab91af84205a187d72d9",
+    "candidate-worker.perf.data": "e3a86096f82655e3f131fefa429375da4ea42b2d050751da033fc82d2aec7be3",
+    "baseline-gateway.perf.data": "a904f4d5fcb70b75e286dce56398cb5b8ac89be2d5cdea6371c41023325dc285",
+    "perf-stat": {
+      "baseline-gateway.record.log": "f51d61b10417ef50bb5e648740ac129c84b2867c9f2f06d4ab85e2e77d233081",
+      "baseline-gateway.stat": "435b2dd142c09ce68fbf68e99b2c6ad96a9f5faf5495cbf44755b25c803d97ab",
+      "baseline-worker.record.log": "88199a05495e9fa82e04ba9335e2e3dc752438f70aa41e6ad4b1266bdb2b6f15",
+      "baseline-worker.stat": "bfbbbb1da2b055159451a7b3eb8dc4763b96eac95a7f020be1df02173054b0ec",
+      "candidate-gateway.stat": "11a7257807cfb7e916339e47a1cb2a58ff4d35b7fd41d59551bdac35d5d6717a",
+      "candidate-host.record.log": "694d1959f1014cf65a80a4ab8088b1ba66abb74cfb1ec36a5d2802e9b552d9ed",
+      "candidate-worker.record.log": "b66567d90e263692d0c45cebff9e2dc343d4b51f8c4d0e4655a3983e629059a8",
+      "candidate-worker.stat": "c135d3455212d51a49ecd270adf68a4be8db2b7027a079dd101ac8db965d5a1f"
+    },
+    "ready-records.json": "24c09a045210e82949197f8c1ba802b5b04007b9b058a143e0a8bc44369cc206",
+    "component_logs": {
+      "baseline.round0.bodyless-ab3-20260802T154653.log": "a771b068d2f49897d18410874e4826b742ac3ed34356c020f660607f54d7c101",
+      "baseline.round1.bodyless-ab3-20260802T154653.log": "53924a05d29790334f3880856b796468efbc40cb6cfeead08770b41378da432b",
+      "baseline.round2.bodyless-ab3-20260802T154653.log": "f3b772eb0ae82ff53fd087f0c840c43503ab53fc844b34bb911edb972983e4a8",
+      "baseline.round3.bodyless-ab3-20260802T154653.log": "e13fbc7033145f047cc9e2385b8ede4ad1e2926ef54113fa381c923f5ce88fb9",
+      "candidate.round0.bodyless-ab3-20260802T154653.log": "fa65b236a0f560a729b102a295bdaebefd1d025967475120168c13672f5e6c77",
+      "candidate.round1.bodyless-ab3-20260802T154653.log": "44f287ec6359a72695ac14374b653df3571bb7300cdbaa3c9e77115c6f3ea65a",
+      "candidate.round2.bodyless-ab3-20260802T154653.log": "3dbd73e1c933986cd11e38410bed05a5d091fa64699e7152b5751495485244e6",
+      "candidate.round3.bodyless-ab3-20260802T154653.log": "be6eeee7da37344a03d8f57e8992804d6167e394aaf71ed6eab979a1337a19c2"
+    }
+  }
+}
