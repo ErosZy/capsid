@@ -56,6 +56,8 @@
 !/bench/results/vue-ssr-sweep-r3-20260731/**
 !/bench/results/bodyless-ab*/
 !/bench/results/bodyless-ab*/**
+!/bench/results/bodyless-11-*/
+!/bench/results/bodyless-11-*/**
 !/bench/results/go-vs-cpp*/
 !/bench/results/go-vs-cpp*/**
 /0
