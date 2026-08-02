@@ -11,6 +11,7 @@
 /build/
 /build-*/
 /Testing/
+**/Testing/
 /compile_commands.json
 
 # Reinstallable language dependencies and caches.
