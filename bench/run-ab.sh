@@ -523,12 +523,16 @@ fail_evidence() {
 }
 
 # The working tree must be clean: a benchmark bound to a dirty tree cannot
-# be replayed from its manifest commit. CAPSID_BENCH_TEST_MODE is for the
-# fake-component RED test only; production runs must never set it, and a
-# test-mode run is recorded as such in the manifest.
+# be replayed from its manifest commit. The runner's own evidence output
+# (bench/results/, gitignored by default and untracked until reviewed) is
+# excluded — evidence dirs are legitimate untracked state, not source dirt.
+# CAPSID_BENCH_TEST_MODE is for the fake-component RED test only; production
+# runs must never set it, and a test-mode run is recorded as such in the
+# manifest.
 TEST_MODE="${CAPSID_BENCH_TEST_MODE:-0}"
 if [ "$TEST_MODE" != "1" ] && \
-    [ -n "$(git -C "$SCRIPT_DIR/.." status --porcelain 2>/dev/null)" ]; then
+    [ -n "$(git -C "$SCRIPT_DIR/.." status --porcelain -- . \
+        ':(exclude)bench/results/' 2>/dev/null)" ]; then
     fail_evidence "dirty working tree"
 fi
 
