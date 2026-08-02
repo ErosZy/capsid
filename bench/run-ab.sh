@@ -365,16 +365,18 @@ for ((round = 1; round <= ROUNDS; round++)); do
         cmd="$BASELINE"
         [ "$side" = "candidate" ] && cmd="$CANDIDATE"
         start_component "$side" "$cmd" "$round"
-        run_loadgen "$side" "$round"
-        stop_component "$side"
 
-        # Measured-window IPC mechanism counters: sum the per-pump delta
-        # metrics lines produced during this round's loadgen window (the
-        # lines emitted before the loadgen starts are startup noise and are
-        # skipped). The per-round sums are merged across rounds below.
+        # Measured-window IPC mechanism counters: count the per-pump delta
+        # metrics lines already emitted (startup noise) BEFORE the loadgen
+        # starts, then sum the lines the loadgen window appends. The
+        # per-round sums are merged across rounds below.
         ipc_log="$OUT/.tmp/$side.round$round.$RUN_ID.log"
         pre_metric_lines="$(grep -c '^{"host":' "$ipc_log" 2>/dev/null || true)"
         [ -n "$pre_metric_lines" ] || pre_metric_lines=0
+
+        run_loadgen "$side" "$round"
+        stop_component "$side"
+
         python3 - "$ipc_log" "$pre_metric_lines" \
             "$OUT/.tmp/ipc_window.$side.$round.$$.json" <<'PY'
 import json, sys
