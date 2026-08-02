@@ -50,7 +50,6 @@ jobs:
             examples/hono-reference \
             examples/itty-router-reference \
             examples/h3-v2-reference \
-            bench/apps
           do
             npm ci --ignore-scripts --prefix "${directory}"
           done
@@ -173,7 +172,6 @@ jobs:
             examples/hono-reference \
             examples/itty-router-reference \
             examples/h3-v2-reference \
-            bench/apps
           do
             npm ci --ignore-scripts --prefix "${directory}"
           done
