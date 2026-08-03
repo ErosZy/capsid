@@ -27,6 +27,7 @@ if(CAPSID_BUILD_HOST)
 
     add_library(capsid_host_core STATIC
         src/host/active_state.cc
+        src/host/artifact_safe_read.cc
         src/host/bytecode_attestation.cc
         src/host/config.cc
         src/host/generation_identity.cc
