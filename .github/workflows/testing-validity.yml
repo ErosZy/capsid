@@ -49,7 +49,7 @@ jobs:
             vendor/txiki.js \
             examples/hono-reference \
             examples/itty-router-reference \
-            examples/h3-v2-reference \
+            examples/h3-v2-reference
           do
             npm ci --ignore-scripts --prefix "${directory}"
           done
@@ -171,7 +171,7 @@ jobs:
             vendor/txiki.js \
             examples/hono-reference \
             examples/itty-router-reference \
-            examples/h3-v2-reference \
+            examples/h3-v2-reference
           do
             npm ci --ignore-scripts --prefix "${directory}"
           done
