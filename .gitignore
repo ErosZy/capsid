@@ -64,4 +64,6 @@
 !/bench/results/hono-vs-slim-*/**
 !/bench/results/hono-php-py-*/
 !/bench/results/hono-php-py-*/**
+!/bench/results/hono-php-py-16k-*/
+!/bench/results/hono-php-py-16k-*/**
 /0

@@ -18,6 +18,9 @@
 //   json          GET /@capsid/orders/bench/json  -> JSON document
 //   bytes         GET /@capsid/orders/bench/bytes -> 1024 bytes
 //   stream        GET /@capsid/orders/bench/stream -> 1024 streamed bytes
+//   json16k       GET /@capsid/orders/bench/json16k -> ~16 KiB JSON
+//   bytes16k      GET /@capsid/orders/bench/bytes16k -> 16384 bytes
+//   stream16k     GET /@capsid/orders/bench/stream16k -> 16384 streamed bytes
 package main
 
 import (
@@ -112,6 +115,17 @@ func main() {
 		path = "/@capsid/orders/bench/stream"
 		expectedLen = 1024
 		expectedByte = byte(0x62)
+	case "json16k":
+		path = "/@capsid/orders/bench/json16k"
+		expectedLen = -1
+	case "bytes16k":
+		path = "/@capsid/orders/bench/bytes16k"
+		expectedLen = 16384
+		expectedByte = byte(0x61)
+	case "stream16k":
+		path = "/@capsid/orders/bench/stream16k"
+		expectedLen = 16384
+		expectedByte = byte(0x62)
 	case "fixed-1k":
 		// default above
 	default:
@@ -159,6 +173,14 @@ func main() {
 			// 1024 streamed bytes: b*341 c*341 d*342.
 			return len(body) == 1024 && body[0] == 0x62 &&
 				body[341] == 0x63 && body[1023] == 0x64
+		case "json16k":
+			// ~16 KiB JSON document with the status marker.
+			return len(body) > 16000 && body[0] == '{' &&
+				bytes.Contains(body, []byte(`"status":"ok"`))
+		case "stream16k":
+			// 16384 streamed bytes: b*5462 c*5461 d*5461.
+			return len(body) == 16384 && body[0] == 0x62 &&
+				body[5462] == 0x63 && body[16383] == 0x64
 		case "cpu-template":
 			return len(body) > 0 && contains(body, "</ul>")
 		default:

@@ -85,6 +85,30 @@ app.get('/bench/stream', context => new Response(
     { headers: { 'content-type': 'application/octet-stream' } },
 ));
 
+// 16 KiB payloads: json16k (pad field), bytes16k, stream16k.
+const pad16k = 'x'.repeat(16384);
+app.get('/bench/json16k', context => context.json({
+    status: 'ok',
+    app: 'hono',
+    pad: pad16k,
+}));
+app.get('/bench/bytes16k', context => new Response(
+    new Uint8Array(16384).fill(0x61),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+app.get('/bench/stream16k', context => new Response(
+    new ReadableStream({
+        type: 'bytes',
+        pull(controller) {
+            controller.enqueue(new Uint8Array(5462).fill(0x62));
+            controller.enqueue(new Uint8Array(5461).fill(0x63));
+            controller.enqueue(new Uint8Array(5461).fill(0x64));
+            controller.close();
+        },
+    }),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+
 const based = new Hono().basePath('/routing/base');
 based.get('/item/:id', context => context.text(
     `base:${context.req.param('id')}`,
