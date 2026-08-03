@@ -234,14 +234,26 @@ if(CAPSID_BUILD_WORKER)
             "$<$<COMPILE_LANGUAGE:CXX>:-Wno-c99-extensions>"
         )
     endif()
-    # First-party bytecode compiler. M0.2 exposes the identity surface only
-    # (--print-compatibility-id); the QuickJS compile round-trip lands in M1
-    # and links the overlay's tjs/qjs at that point.
+    # First-party bytecode compiler (M1D-1): compiles module bytecode with
+    # the same QuickJS the worker links (the txiki overlay's tjs), emits the
+    # canonical attestation and the frozen binary signing message. It never
+    # sees a private key; signing is the offline pipeline's job.
+    find_package(OpenSSL 3.5 REQUIRED COMPONENTS Crypto)
+    if(NOT TARGET capsid_jansson)
+        add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/jansson")
+    endif()
     add_executable(capsid-bytecode-compile
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/capsid-bytecode-compile.cc")
     target_include_directories(capsid-bytecode-compile PRIVATE
-        "${CAPSID_GENERATED_DIR}")
-    target_link_libraries(capsid-bytecode-compile PRIVATE capsid_sanitizers)
+        "${CAPSID_GENERATED_DIR}"
+        "${CAPSID_TXIKI_OVERLAY}/deps/quickjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/jansson/src")
+    target_link_libraries(capsid-bytecode-compile PRIVATE
+        tjs
+        Iconv::Iconv
+        capsid_jansson
+        OpenSSL::Crypto
+        capsid_sanitizers)
     set_target_properties(capsid-bytecode-compile PROPERTIES
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED ON

@@ -21,7 +21,9 @@ if(CAPSID_BUILD_HOST)
     endif()
     find_package(OpenSSL 3.5 REQUIRED COMPONENTS Crypto)
 
-    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/jansson")
+    if(NOT TARGET capsid_jansson)
+        add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/jansson")
+    endif()
 
     add_library(capsid_host_core STATIC
         src/host/active_state.cc
