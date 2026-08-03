@@ -150,6 +150,55 @@ if(BUILD_TESTING)
             NAME host_secret_file_provider
             COMMAND test-host-secret-file-provider)
 
+        if(CAPSID_BUILD_WORKER)
+            # M1D managed host frozen suite: one binary, one mode per test.
+            add_executable(
+                test-host-managed
+                tests/test_host_managed.cc)
+            target_include_directories(
+                test-host-managed PRIVATE include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(test-host-managed PRIVATE
+                capsid_runtime
+                capsid_host_core
+                capsid_jansson
+                OpenSSL::Crypto
+                capsid_sanitizers)
+            set_target_properties(test-host-managed PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-managed PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-managed PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_dependencies(test-host-managed
+                capsid-bytecode-compile
+                capsid-worker)
+            foreach(CAPSID_MANAGED_TEST_ID
+                    host_managed_deploy_integration
+                    host_managed_trusted_bytecode
+                    host_managed_compatibility_fallback
+                    host_managed_secret_snapshot
+                    host_managed_deploy_fail_closed
+                    host_managed_retire_and_recovery)
+                add_test(
+                    NAME "${CAPSID_MANAGED_TEST_ID}"
+                    COMMAND test-host-managed
+                        "${CAPSID_MANAGED_TEST_ID}"
+                        $<TARGET_FILE:capsid-worker>
+                        $<TARGET_FILE:capsid-bytecode-compile>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js")
+                set_tests_properties(
+                    "${CAPSID_MANAGED_TEST_ID}" PROPERTIES TIMEOUT 120)
+            endforeach()
+        endif()
+
         add_executable(
             test-host-policy-compiler
             tests/test_host_policy_compiler.cc)

@@ -1,6 +1,9 @@
 #ifndef CAPSID_HOST_MANAGED_HOST_H
 #define CAPSID_HOST_MANAGED_HOST_H
 
+struct capsid_worker;
+
+#include "host/bytecode_attestation.h"
 #include "host/policy_compiler.h"
 
 #include <cstdint>
@@ -21,11 +24,17 @@ namespace capsid::host {
 struct ManagedHostOptions {
     // Pre-opened directory descriptors (safe-read boundary).
     int applications_root_fd = -1;
-    int secret_root_template_fd = -1;  // dirfd of the secret root
-    std::string state_root;            // absolute path, created by the Host
-    std::string application;           // the single active App
+    // Pre-opened secret root dirfd; the App subdirectory is opened and
+    // owner/mode verified by the coordinator before any secret read.
+    int secret_root_template_fd = -1;
+    std::string state_root;  // absolute path, created by the Host
+    std::string application; // the single active App
+    std::string worker_path; // absolute capsid-worker path
     HostPolicy host_policy;
-    std::vector<std::string> trusted_key_ids;  // allowed signing key ids
+    // Trusted Ed25519 keys for bytecode attestation verification.
+    std::vector<capsid::host::TrustedBytecodeKey> trusted_keys;
+    // The runtime compatibility ID the worker must report at READY.
+    std::string runtime_compatibility_id;
 };
 
 enum class OperationState {
@@ -48,6 +57,10 @@ struct DeployOutcome {
     bool ok = false;
     std::string operation_id;
     std::string error;  // static text
+    // The warmed worker (READY + compatibility verified), owned by the
+    // caller after a successful deploy; the caller wires the data plane
+    // and drains the previous worker. Null on failure.
+    capsid_worker* worker = nullptr;
 };
 
 enum class DeployErrorCode {

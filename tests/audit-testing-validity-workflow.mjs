@@ -14,8 +14,10 @@ const expectedActions = new Map([
   ["actions/setup-node", "49933ea5288caeca8642d1e84afbd3f7d6820020"],
   ["actions/setup-go", "40f1582b2485089dde7abd97c1529aa768e1baff"],
   ["denoland/setup-deno", "22d081ff2d3a40755e97629de92e3bcbfa7cf2ed"],
-  ["actions/upload-artifact", "ea165f8d65b6e75b540449e92b4886f43607fa02"],
-  ["actions/download-artifact", "d3f86a106a0bac45b974a628896c90dbdf5c8093"],
+  // v6.0.0 (node24 runtime): the reviewed revision after the Node 20
+  // deprecation migration (upload b7c566a, download 018cc2c).
+  ["actions/upload-artifact", "b7c566a772e6b6bfb58ed0dc250532a479d7789f"],
+  ["actions/download-artifact", "018cc2cf5baa6db3ef3c5f8a56943fffe632ef53"],
 ]);
 
 const uses = [

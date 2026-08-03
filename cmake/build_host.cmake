@@ -37,6 +37,7 @@ if(CAPSID_BUILD_HOST)
         src/host/secret_file_provider.cc
         src/host/secret_snapshot.cc
         src/host/service_lifecycle.cc
+        src/host/worker_event_source.cc
         src/host/worker_recovery.cc
     )
     set_target_properties(capsid_host_core PROPERTIES
@@ -91,8 +92,7 @@ if(CAPSID_BUILD_HOST)
 
         add_executable(capsid-host
             src/host/main.cc
-            src/host/single_worker_server.cc
-            src/host/worker_event_source.cc)
+            src/host/single_worker_server.cc)
         target_include_directories(capsid-host PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/src"
             "${CMAKE_CURRENT_SOURCE_DIR}/include")

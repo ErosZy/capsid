@@ -1772,7 +1772,12 @@ POSIX：
    sourceName/compatibility 选择、secret symlink/FIFO/NUL/越权负控、Policy Compiler、
    `capsid_env_entry[]` 快照和 Unix admin deploy；覆盖源码、可信字节码、兼容失配回退
    源码、secret 进入 worker 四条路径，并移除任何把 single-worker fixture mode 当作部署
-   接口的依赖。
+   接口的依赖。验收顺序固定为：基础 compiler/read/provider/policy 契约 → managed 真实
+   worker deploy/retire/recover → Unix Admin API → 跨平台与 sanitizer 门 → 零探针性能回归。
+   Admin API 不得先于 coordinator 的真实 worker 闭环冻结，因为它不负责补全或重新解释
+   部署状态机。任何 deploy 路径只有在可信输入已验证、generation durable commit、真实
+   worker READY 且 canonical `active.json` 成功发布后才能返回 Active；此前失败必须保留旧
+   active generation。
 
 M1A 冻结的 executable 测试入口为：
 
