@@ -58,6 +58,33 @@ app.get('/routing/assets/*', context => context.text(
 ));
 app.all('/routing/all', context => context.text(`all:${context.req.method}`));
 
+// Single-process benchmark routes (hono vs slim comparison):
+// /bench/json  -> a fixed JSON document
+// /bench/bytes -> 1024 bytes of binary payload
+// /bench/stream -> a streamed response (3 chunks)
+app.get('/bench/json', context => context.json({
+    status: 'ok',
+    app: 'hono',
+    item: 'benchmark',
+    value: 42,
+}));
+app.get('/bench/bytes', context => new Response(
+    new Uint8Array(1024).fill(0x61),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+app.get('/bench/stream', context => new Response(
+    new ReadableStream({
+        type: 'bytes',
+        pull(controller) {
+            controller.enqueue(new Uint8Array(341).fill(0x62));
+            controller.enqueue(new Uint8Array(341).fill(0x63));
+            controller.enqueue(new Uint8Array(342).fill(0x64));
+            controller.close();
+        },
+    }),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+
 const based = new Hono().basePath('/routing/base');
 based.get('/item/:id', context => context.text(
     `base:${context.req.param('id')}`,
