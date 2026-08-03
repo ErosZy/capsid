@@ -259,6 +259,70 @@ int main() {
         close(fixture.root_fd);
     }
 
+    // 9b. Partial bytecode sets: any one or two files reject all-or-none.
+    {
+        struct PartialCase {
+            bool qjsb;
+            bool json;
+            bool sig;
+        };
+        const PartialCase cases[] = {
+            { true, false, false }, { false, true, false },
+            { false, false, true }, { true, true, false },
+            { true, false, true },  { false, true, true },
+        };
+        int index = 0;
+        for (const PartialCase& partial : cases) {
+            Fixture fixture = make_fixture("orders",
+                                           ("v9p" + std::to_string(index)).c_str());
+            const std::string vdir =
+                std::string("orders/v9p") + std::to_string(index);
+            write_file_at(fixture.root_fd, (vdir + "/capsid.json").c_str(), "{}");
+            write_file_at(fixture.root_fd, (vdir + "/bundle.mjs").c_str(), "x");
+            if (partial.qjsb) {
+                write_file_at(fixture.root_fd, (vdir + "/bundle.qjsb").c_str(), "bc");
+            }
+            if (partial.json) {
+                write_file_at(fixture.root_fd, (vdir + "/bytecode.json").c_str(), "{}");
+            }
+            if (partial.sig) {
+                write_file_at(fixture.root_fd, (vdir + "/bytecode.sig").c_str(), "sig");
+            }
+            const capsid::host::SafeReadResult result =
+                safe_read_version_artifacts(fixture.root_fd, "orders",
+                                            ("v9p" + std::to_string(index)).c_str(),
+                                            capsid::host::kMaxVersionArtifactTotalBytes);
+            require_error_code(result.code, SafeReadErrorCode::kMissingFile,
+                              "partial bytecode set");
+            close(fixture.root_fd);
+            index += 1;
+        }
+    }
+
+    // 9c. Formal App/Version ID grammar: separators and traversal never
+    // become nested paths.
+    {
+        Fixture fixture = make_fixture("orders", "v9g");
+        const std::string vdir = "orders/v9g";
+        write_file_at(fixture.root_fd, (vdir + "/capsid.json").c_str(), "{}");
+        write_file_at(fixture.root_fd, (vdir + "/bundle.mjs").c_str(), "x");
+        for (const char* bad_app : { "foo/bar", "../orders", "", "a..b", ".hidden" }) {
+            const capsid::host::SafeReadResult result =
+                safe_read_version_artifacts(fixture.root_fd, bad_app, "v9g",
+                                            capsid::host::kMaxVersionArtifactTotalBytes);
+            require_error_code(result.code, SafeReadErrorCode::kInvalidPath,
+                              "invalid app id");
+        }
+        for (const char* bad_version : { "v/1", "..", "", "v..1" }) {
+            const capsid::host::SafeReadResult result =
+                safe_read_version_artifacts(fixture.root_fd, "orders", bad_version,
+                                            capsid::host::kMaxVersionArtifactTotalBytes);
+            require_error_code(result.code, SafeReadErrorCode::kInvalidPath,
+                              "invalid version id");
+        }
+        close(fixture.root_fd);
+    }
+
     // 10. In-place replacement / mid-read truncation: a large file
     // truncated by a concurrent thread while the reader is reading must
     // fail as an identity change.

@@ -201,6 +201,33 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
 
 }  // namespace
 
+bool valid_app_version_id(std::string_view value,
+                          std::size_t max_length) {
+    if (value.empty() || value.size() > max_length) {
+        return false;
+    }
+    for (std::size_t index = 0; index < value.size(); ++index) {
+        const char c = value[index];
+        const bool alnum =
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9');
+        const bool extra = c == '.' || c == '_' || c == '-';
+        if (!alnum && !extra) {
+            return false;
+        }
+        // No empty or ".." component: the first char cannot be a
+        // separator, and a '.' must not be followed by '.'.
+        if (index == 0 && (c == '.' || c == '_' || c == '-')) {
+            return false;
+        }
+        if (c == '.' && index + 1 < value.size() &&
+            value[index + 1] == '.') {
+            return false;
+        }
+    }
+    return true;
+}
+
 SafeReadResult safe_read_regular_file(int root_fd,
                                       std::string_view relative_path,
                                       std::size_t max_bytes) {
@@ -240,12 +267,12 @@ SafeReadResult safe_read_version_artifacts(int root_fd,
                                            std::string_view app,
                                            std::string_view version,
                                            std::size_t max_total_bytes) {
-    const std::string prefix = std::string(app) + "/" + std::string(version) + "/";
-    if (app.empty() || version.empty() ||
-        !valid_relative_path(prefix.substr(0, prefix.size() - 1))) {
+    if (!valid_app_version_id(app, 64) ||
+        !valid_app_version_id(version, 128)) {
         return fail_result(SafeReadErrorCode::kInvalidPath,
                            "invalid app or version identifier");
     }
+    const std::string prefix = std::string(app) + "/" + std::string(version) + "/";
 
     SafeReadResult result;
     std::size_t total = 0;
@@ -254,10 +281,10 @@ SafeReadResult safe_read_version_artifacts(int root_fd,
     SafeFile bytecode;
     SafeFile attestation;
     SafeFile signature;
-    const auto collect = [&](const char* name, SafeFile* target) -> bool {
+    const auto collect = [&](const char* name, SafeFile* target,
+                             std::size_t limit) -> bool {
         SafeReadResult one =
-            safe_read_regular_file(root_fd, prefix + name,
-                                   kMaxArtifactFileBytes);
+            safe_read_regular_file(root_fd, prefix + name, limit);
         if (one.code != SafeReadErrorCode::kNone) {
             result = std::move(one);
             return false;
@@ -272,33 +299,52 @@ SafeReadResult safe_read_version_artifacts(int root_fd,
         return true;
     };
 
-    // Required files.
-    if (!collect("capsid.json", &capsid_json) ||
-        !collect("bundle.mjs", &bundle)) {
+    // Required files with per-file limits.
+    if (!collect("capsid.json", &capsid_json, kMaxConfigFileBytes) ||
+        !collect("bundle.mjs", &bundle, kMaxBundleFileBytes)) {
         return result;
     }
 
-    // Bytecode triple: all or none. A present bundle.qjsb with a missing
-    // bytecode.json or bytecode.sig is an all-or-none violation, not a
-    // source-only version.
-    const SafeReadResult probe =
-        safe_read_regular_file(root_fd, prefix + "bundle.qjsb",
-                               kMaxArtifactFileBytes);
-    const bool bytecode_present =
-        probe.code != SafeReadErrorCode::kMissingFile;
-    if (bytecode_present && probe.code != SafeReadErrorCode::kNone) {
-        return probe;
+    // Bytecode triple: strictly 0 or 3. Each of the three files is probed
+    // independently; a partial set (any one or two present) is an
+    // all-or-none violation, not a source-only version.
+    const char* const bytecode_names[] = {
+        "bundle.qjsb", "bytecode.json", "bytecode.sig",
+    };
+    const std::size_t bytecode_limits[] = {
+        kMaxBundleFileBytes, kMaxAttestationFileBytes,
+        kBytecodeSignatureBytes,
+    };
+    SafeReadResult probes[3];
+    bool present[3] = {};
+    for (std::size_t index = 0; index < 3; ++index) {
+        probes[index] =
+            safe_read_regular_file(root_fd, prefix + bytecode_names[index],
+                                   bytecode_limits[index]);
+        present[index] =
+            probes[index].code != SafeReadErrorCode::kMissingFile;
+        if (present[index] && probes[index].code != SafeReadErrorCode::kNone) {
+            return probes[index];
+        }
     }
+    const int present_count =
+        (present[0] ? 1 : 0) + (present[1] ? 1 : 0) + (present[2] ? 1 : 0);
+    if (present_count != 0 && present_count != 3) {
+        // Partial set: any one or two of the three files is an
+        // all-or-none violation, not a source-only version.
+        return fail_result(SafeReadErrorCode::kMissingFile,
+                           "bytecode artifacts must be all-or-none");
+    }
+    const bool bytecode_present = present_count == 3;
     if (bytecode_present) {
-        total += probe.file.bytes.size();
+        bytecode = std::move(probes[0].file);
+        attestation = std::move(probes[1].file);
+        signature = std::move(probes[2].file);
+        total += bytecode.bytes.size() + attestation.bytes.size() +
+                 signature.bytes.size();
         if (total > max_total_bytes) {
             return fail_result(SafeReadErrorCode::kOverLimit,
                                "version artifacts exceed the total limit");
-        }
-        bytecode = std::move(probe.file);
-        if (!collect("bytecode.json", &attestation) ||
-            !collect("bytecode.sig", &signature)) {
-            return result;
         }
     }
 

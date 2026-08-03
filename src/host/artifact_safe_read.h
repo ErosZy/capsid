@@ -24,7 +24,14 @@ namespace capsid::host {
 // change fails the read. Failures return an empty snapshot and error
 // messages that never contain file content.
 
-inline constexpr std::size_t kMaxArtifactFileBytes = 16U * 1024U * 1024U;
+// Per-file hard limits (M1D audit): capsid.json 1 MiB, the attestation
+// 64 KiB, the signature exactly 64 bytes (Ed25519), and the bundle/source
+// bound matches the Runtime IPC load limit (one authoritative constant).
+inline constexpr std::size_t kMaxConfigFileBytes = 1024U * 1024U;
+inline constexpr std::size_t kMaxAttestationFileBytes = 64U * 1024U;
+inline constexpr std::size_t kBytecodeSignatureBytes = 64U;
+inline constexpr std::size_t kMaxBundleFileBytes = 16U * 1024U * 1024U;
+inline constexpr std::size_t kMaxArtifactFileBytes = kMaxBundleFileBytes;
 inline constexpr std::size_t kMaxVersionArtifactTotalBytes =
     64U * 1024U * 1024U;
 
@@ -91,6 +98,12 @@ struct SafeReadResult {
 SafeReadResult safe_read_regular_file(int root_fd,
                                       std::string_view relative_path,
                                       std::size_t max_bytes);
+
+// Formal identifier grammar (M1D audit): App and Version are single
+// identifiers of [A-Za-z0-9][A-Za-z0-9._-]* with no empty or ".."
+// components — a value like "foo/bar" must never become a nested path.
+bool valid_app_version_id(std::string_view value,
+                          std::size_t max_length);
 
 // The frozen version layout (M1D):
 //
