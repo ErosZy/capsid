@@ -7,9 +7,10 @@
 2. 由当前 commit 生成的原始测试或 benchmark artifact；
 3. Markdown 说明。
 
-截至当前工作树，Runtime 与 worker 是可构建产品；第一方 C++ Host 正在按
-[Host v1 详细设计](host-technical-design-review.md)实现 M0 可执行契约，尚没有可运行的
-`capsid-host` 服务。里程碑状态以源码和测试为准，不单独维护易漂移的状态文档。
+截至当前工作树，Runtime、worker 与第一方 `capsid-host`（`--mode single-worker`）
+都是可构建、可测试的产品：Host 已具备单 worker 数据面、FetchRPC 协议与 benchmark
+基线（`bench/`）；多 App/pool、多 worker 等能力继续实现中。里程碑状态以源码和测试
+为准，不单独维护易漂移的状态文档。
 
 ## 入门与架构
 

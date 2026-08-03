@@ -176,13 +176,24 @@ const requiredFiles = [
     assert.match(result.stderr, /errors counted as success/);
 }
 
-// ---- RED: missing profile. ----
+// ---- RED: missing profile. Evidence is incomplete while the measured
+// samples are complete — the acceptance verdict must be n/a in both the
+// manifest and the report, never a pass/fail on partial evidence. ----
 {
     const result = await runnerOutput(args, {
         env: { CAPSID_BENCH_FAKE_NO_PROFILE: '1' },
     });
     assert.notEqual(result.code, 0, 'missing profile must be rejected');
     assert.match(result.stderr, /missing or empty profile/);
+    const manifest = JSON.parse(fs.readFileSync(
+        path.join(result.out, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.evidence_status, 'incomplete',
+        'missing profile must leave evidence incomplete');
+    assert.equal(manifest.acceptance_verdict, 'n/a',
+        'incomplete evidence must not carry a pass/fail verdict');
+    const report = fs.readFileSync(path.join(result.out, 'report.md'), 'utf8');
+    assert.match(report, /verdict: n\/a/i,
+        'report must show n/a for incomplete evidence');
 }
 
 // ---- RED: missing raw samples. ----

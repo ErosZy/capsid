@@ -343,6 +343,10 @@ def build_report(out, meta, manifest):
     delta_p50 = (cand_p50 - base_p50) / base_p50 * 100 \
         if base_p50 and cand_p50 is not None else 0.0
     lines.append(f"- delta QPS: {delta_qps:+.2f}%; delta p50: {delta_p50:+.2f}%")
+    # Incomplete evidence (missing profile/identity/counters, not just
+    # samples) carries no acceptance verdict: acceptance_verdict and the
+    # report line must both be n/a, never pass/fail on partial evidence.
+    evidence_incomplete = manifest["evidence_status"] == "incomplete"
     # Bodyless off/on A/B: both sides are the same capsid-host binary,
     # differing only in CAPSID_BODYLESS. The gate is frozen on three
     # per-request mechanism metrics (each counter divided by the completed
@@ -398,10 +402,12 @@ def build_report(out, meta, manifest):
         lines.append(f"- bodyless A/B (same binary, CAPSID_BODYLESS off→on): "
                      f"frozen per-request mechanism gate — all three metrics "
                      f"above must drop ≥20%, with no QPS regression")
-        verdict = "pass" if gate_ok and delta_qps >= 0.0 else "fail"
+        verdict = ("n/a" if evidence_incomplete else
+                   ("pass" if gate_ok and delta_qps >= 0.0 else "fail"))
         lines.append(f"- verdict: {verdict.upper()}")
     else:
-        verdict = "pass" if delta_qps >= 5.0 or delta_p50 <= -10.0 else "fail"
+        verdict = ("n/a" if evidence_incomplete else
+                   ("pass" if delta_qps >= 5.0 or delta_p50 <= -10.0 else "fail"))
         lines.append(f"- M1B acceptance gate: QPS ≥ +5% or p50 ≤ -10%; "
                      f"verdict: {verdict.upper()}")
     if base_qps is None:

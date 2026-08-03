@@ -3025,10 +3025,13 @@ private:
             // (worker_bodyless_end_failure) injects the failure through the
             // snapshot and asserts the fused begin propagates it.
             std::string injected;
+            // Presence alone must not trigger: only the exact value "1"
+            // arms the injection, so a stray snapshot entry cannot flip
+            // production behavior.
             const bool fail_end =
                 config_.capability_policy.env_value(
                     "CAPSID_TEST_FAIL_REQUEST_END_BRIDGE",
-                    &injected);
+                    &injected) && injected == "1";
             const bool end_ok =
                 fail_end
                     ? false
