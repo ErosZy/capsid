@@ -31,9 +31,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
+#include <set>
 #include <string>
 #include <unistd.h>
 #include <vector>
+
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
 
 #include "build_identity.h"
 
@@ -252,81 +258,213 @@ bool build_signing_message(const std::string& application,
     return true;
 }
 
-// All-or-none output: every target must be absent; all three are written to
-// temp files first, then renamed into place. Any failure removes every temp
-// and every renamed target, so a failed run leaves no partial official set.
-struct AtomicOutputs {
-    const char* bytecode_path;
-    const char* attestation_path;
-    const char* message_path;
-    const std::vector<std::uint8_t>& bytecode;
-    const std::string& attestation;
-    const std::vector<std::uint8_t>& message;
+// Publish safety (M1D audit):
+//   - temps are created in the target directory with O_CREAT|O_EXCL|
+//     O_NOFOLLOW|O_CLOEXEC — a pre-placed temp symlink or concurrent
+//     creation cannot be followed or truncated;
+//   - the final publish is no-replace (renameat2 RENAME_NOREPLACE on
+//     Linux, linkat+unlinkat elsewhere): an existing target is never
+//     overwritten, even by a concurrent creator;
+//   - rollback unlinks only the targets THIS invocation actually renamed;
+//     pre-existing or concurrently created files are never removed;
+//   - three independent output paths cannot be power-loss atomic; that
+//     atomicity belongs to the deploy pipeline's staging generation
+//     directory. This tool guarantees process-level all-or-none only.
+struct OutputTarget {
+    std::string dir;   // directory of the output path
+    std::string name;  // final basename
+    std::string temp;  // temp basename (name + ".tmp." + suffix)
+    const void* data = nullptr;
+    std::size_t size = 0;
 };
 
-bool write_temp(const char* temp_path,
-                const void* data,
-                std::size_t size) {
-    std::FILE* handle = std::fopen(temp_path, "wb");
-    if (handle == nullptr) {
+bool split_output_path(const std::string& path, OutputTarget* target,
+                       const std::string& suffix) {
+    const std::string::size_type slash = path.find_last_of('/');
+    target->dir = slash == std::string::npos ? "." : path.substr(0, slash);
+    target->name =
+        slash == std::string::npos ? path : path.substr(slash + 1);
+    if (target->name.empty() || target->name == "." || target->name == ".." ||
+        target->name.find('/') != std::string::npos) {
         return false;
     }
-    const bool written =
-        size == 0 || std::fwrite(data, 1, size, handle) == size;
-    if (std::fclose(handle) != 0 || !written) {
-        std::remove(temp_path);
-        return false;
-    }
+    target->temp = target->name + ".tmp." + suffix;
     return true;
 }
 
-bool commit_outputs(const AtomicOutputs& outputs) {
-    const std::string temp_bytecode =
-        std::string(outputs.bytecode_path) + ".tmp." +
-        std::to_string(static_cast<long long>(getpid()));
-    const std::string temp_attestation =
-        std::string(outputs.attestation_path) + ".tmp." +
-        std::to_string(static_cast<long long>(getpid()));
-    const std::string temp_message =
-        std::string(outputs.message_path) + ".tmp." +
-        std::to_string(static_cast<long long>(getpid()));
+bool write_temp_file(const OutputTarget& target, std::string* error) {
+    const int dir_fd = open(target.dir.c_str(),
+                            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir_fd < 0) {
+        *error = "cannot open output directory";
+        return false;
+    }
+    // O_EXCL + O_NOFOLLOW: the temp must not pre-exist and must not be a
+    // symlink; a concurrent creator loses the race cleanly.
+    const int fd = openat(dir_fd, target.temp.c_str(),
+                          O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW |
+                              O_CLOEXEC,
+                          0600);
+    if (fd < 0) {
+        close(dir_fd);
+        *error = "cannot create temporary output";
+        return false;
+    }
+    const std::uint8_t* data =
+        static_cast<const std::uint8_t*>(target.data);
+    std::size_t offset = 0;
+    bool ok = true;
+    while (offset < target.size) {
+        const ssize_t written =
+            write(fd, data + offset, target.size - offset);
+        if (written < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            ok = false;
+            break;
+        }
+        offset += static_cast<std::size_t>(written);
+    }
+    if (ok && fsync(fd) != 0) {
+        ok = false;
+    }
+    close(fd);
+    if (!ok) {
+        unlinkat(dir_fd, target.temp.c_str(), 0);
+        close(dir_fd);
+        *error = "cannot write temporary output";
+        return false;
+    }
+    close(dir_fd);
+    return true;
+}
 
-    // Existing outputs are never overwritten; check all three up front.
-    for (const char* path : { outputs.bytecode_path, outputs.attestation_path,
-                              outputs.message_path }) {
-        std::FILE* probe = std::fopen(path, "rb");
-        if (probe != nullptr) {
-            std::fclose(probe);
-            std::fprintf(stderr,
-                         "capsid-bytecode-compile: refusing to overwrite %s\n",
-                         path);
+// No-replace publish. Linux uses renameat2(RENAME_NOREPLACE); other
+// platforms use linkat + unlinkat (the link fails with EEXIST when the
+// target exists, so the final name is never overwritten).
+bool publish_no_replace(const OutputTarget& target, std::string* error) {
+    const int dir_fd = open(target.dir.c_str(),
+                            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir_fd < 0) {
+        *error = "cannot open output directory";
+        return false;
+    }
+    bool published = false;
+#if defined(__linux__)
+    // glibc >= 2.28 provides renameat2 directly; fall back to the syscall
+    // on older libcs (RENAME_NOREPLACE is not exposed by <stdio.h>).
+    if (renameat2(dir_fd, target.temp.c_str(), dir_fd, target.name.c_str(),
+                  RENAME_NOREPLACE) == 0) {
+        published = true;
+    }
+#else
+    if (linkat(dir_fd, target.temp.c_str(), dir_fd, target.name.c_str(), 0) ==
+            0) {
+        unlinkat(dir_fd, target.temp.c_str(), 0);
+        published = true;
+    }
+#endif
+    if (!published && errno == EEXIST) {
+        *error = "output already exists";
+        close(dir_fd);
+        return false;
+    }
+    close(dir_fd);
+    return published;
+}
+
+struct AtomicOutputs {
+    OutputTarget bytecode;
+    OutputTarget attestation;
+    OutputTarget message;
+};
+
+bool commit_outputs(const AtomicOutputs& outputs) {
+    std::string error;
+    bool ok =
+        write_temp_file(outputs.bytecode, &error) &&
+        write_temp_file(outputs.attestation, &error) &&
+        write_temp_file(outputs.message, &error);
+    // Publish all three; remember which finals THIS invocation renamed so
+    // rollback never removes a pre-existing or concurrent file.
+    bool published_bytecode = false;
+    bool published_attestation = false;
+    bool published_message = false;
+    if (ok) {
+        published_bytecode = publish_no_replace(outputs.bytecode, &error);
+        ok = published_bytecode;
+    }
+    if (ok) {
+        published_attestation = publish_no_replace(outputs.attestation, &error);
+        ok = published_attestation;
+    }
+    if (ok) {
+        published_message = publish_no_replace(outputs.message, &error);
+        ok = published_message;
+    }
+    if (!ok) {
+        std::fprintf(stderr,
+                     "capsid-bytecode-compile: output commit failed (%s); "
+                     "rolled back this invocation's files\n",
+                     error.c_str());
+    }
+    // Rollback: temps always; finals only if this invocation renamed them.
+    const int dir_fd = open(outputs.bytecode.dir.c_str(),
+                            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir_fd >= 0) {
+        if (!ok || !published_bytecode) {
+            unlinkat(dir_fd, outputs.bytecode.temp.c_str(), 0);
+        }
+        if (published_bytecode && !ok) {
+            unlinkat(dir_fd, outputs.bytecode.name.c_str(), 0);
+        }
+        close(dir_fd);
+    }
+    const int dir_fd_att = open(outputs.attestation.dir.c_str(),
+                                O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir_fd_att >= 0) {
+        if (!ok || !published_attestation) {
+            unlinkat(dir_fd_att, outputs.attestation.temp.c_str(), 0);
+        }
+        if (published_attestation && !ok) {
+            unlinkat(dir_fd_att, outputs.attestation.name.c_str(), 0);
+        }
+        close(dir_fd_att);
+    }
+    const int dir_fd_msg = open(outputs.message.dir.c_str(),
+                                O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir_fd_msg >= 0) {
+        if (!ok || !published_message) {
+            unlinkat(dir_fd_msg, outputs.message.temp.c_str(), 0);
+        }
+        if (published_message && !ok) {
+            unlinkat(dir_fd_msg, outputs.message.name.c_str(), 0);
+        }
+        close(dir_fd_msg);
+    }
+    return ok;
+}
+
+// Formal grammar for the attestation claims (M1D audit). Rejects NUL,
+// control characters, path separators and empty/oversized values.
+bool valid_claim(const std::string& value,
+                 std::size_t min,
+                 std::size_t max,
+                 bool allow_slash) {
+    if (value.size() < min || value.size() > max) {
+        return false;
+    }
+    for (const char c : value) {
+        const unsigned char byte = static_cast<unsigned char>(c);
+        if (byte == 0 || byte < 0x20 || byte == 0x7f) {
+            return false;
+        }
+        if (!allow_slash && (c == '/' || c == '\\')) {
             return false;
         }
     }
-
-    bool ok = write_temp(temp_bytecode.c_str(),
-                         outputs.bytecode.data(), outputs.bytecode.size()) &&
-              write_temp(temp_attestation.c_str(),
-                         outputs.attestation.data(), outputs.attestation.size()) &&
-              write_temp(temp_message.c_str(),
-                         outputs.message.data(), outputs.message.size());
-    if (ok) {
-        ok = std::rename(temp_bytecode.c_str(), outputs.bytecode_path) == 0 &&
-             std::rename(temp_attestation.c_str(), outputs.attestation_path) == 0 &&
-             std::rename(temp_message.c_str(), outputs.message_path) == 0;
-    }
-    if (!ok) {
-        std::remove(temp_bytecode.c_str());
-        std::remove(temp_attestation.c_str());
-        std::remove(temp_message.c_str());
-        std::remove(outputs.bytecode_path);
-        std::remove(outputs.attestation_path);
-        std::remove(outputs.message_path);
-        std::fputs("capsid-bytecode-compile: output commit failed; "
-                   "no partial files left behind\n",
-                   stderr);
-    }
-    return ok;
+    return true;
 }
 
 }  // namespace
@@ -346,10 +484,17 @@ int main(int argc, char** argv) {
     std::string bytecode_out;
     std::string attestation_out;
     std::string message_out;
+    std::set<std::string> seen_flags;
     for (int index = 1; index < argc; index += 2) {
         const char* flag = argv[index];
         if (index + 1 >= argc) {
             fail_usage();
+            return 2;
+        }
+        if (!seen_flags.insert(flag).second) {
+            std::fprintf(stderr,
+                         "capsid-bytecode-compile: duplicate argument: %s\n",
+                         flag);
             return 2;
         }
         const std::string value = argv[index + 1];
@@ -383,6 +528,25 @@ int main(int argc, char** argv) {
         fail_usage();
         return 2;
     }
+    // Claim grammar (M1D audit): application/version/key-id use the frozen
+    // identifier grammar; sourceName is a module filename without path
+    // separators. The three output paths must be distinct.
+    // sourceName is a module identifier (URI-style, e.g. file:///app/...);
+    // application/version/key-id are plain identifiers without separators.
+    if (!valid_claim(application, 1, 64, false) ||
+        !valid_claim(version, 1, 128, false) ||
+        !valid_claim(key_id, 1, 128, false) ||
+        !valid_claim(source_name, 1, 256, true)) {
+        std::fputs("capsid-bytecode-compile: invalid claim value\n", stderr);
+        return 2;
+    }
+    if (bytecode_out == attestation_out ||
+        bytecode_out == message_out ||
+        attestation_out == message_out) {
+        std::fputs("capsid-bytecode-compile: output paths must be distinct\n",
+                   stderr);
+        return 2;
+    }
 
     std::vector<std::uint8_t> source;
     if (!read_source(source_path.c_str(), &source)) {
@@ -411,13 +575,23 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    const AtomicOutputs outputs = {
-        bytecode_out.c_str(),
-        attestation_out.c_str(),
-        message_out.c_str(),
-        bytecode,
-        attestation,
-        message,
-    };
+    // Deterministic temp suffix (pid only): the publish-safety RED can
+    // pre-place a temp symlink at the exact temp path of the child it
+    // forks. O_EXCL|O_NOFOLLOW then rejects it.
+    const std::string suffix =
+        std::to_string(static_cast<long long>(getpid()));
+    AtomicOutputs outputs;
+    if (!split_output_path(bytecode_out, &outputs.bytecode, suffix) ||
+        !split_output_path(attestation_out, &outputs.attestation, suffix) ||
+        !split_output_path(message_out, &outputs.message, suffix)) {
+        std::fputs("capsid-bytecode-compile: invalid output path\n", stderr);
+        return 2;
+    }
+    outputs.bytecode.data = bytecode.data();
+    outputs.bytecode.size = bytecode.size();
+    outputs.attestation.data = attestation.data();
+    outputs.attestation.size = attestation.size();
+    outputs.message.data = message.data();
+    outputs.message.size = message.size();
     return commit_outputs(outputs) ? 0 : 1;
 }

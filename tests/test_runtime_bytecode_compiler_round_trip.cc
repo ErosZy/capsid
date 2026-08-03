@@ -42,6 +42,12 @@ void fail(const std::string& message) {
     std::exit(1);
 }
 
+void require(bool condition, const std::string& message) {
+    if (!condition) {
+        fail(message);
+    }
+}
+
 void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
@@ -523,6 +529,100 @@ int main(int argc, char** argv) {
             capsid::host::BytecodeAttestationErrorCode::kInvalidSignature) {
             fail("digest tamper path did not fail closed");
         }
+    }
+
+    // 7. Publish safety (M1D audit): duplicate args, aliased outputs,
+    // pre-existing targets and a pre-placed temp symlink all fail without
+    // producing or clobbering files.
+    {
+        // Duplicate argument.
+        int status = 0;
+        const pid_t duplicate = fork();
+        if (duplicate == 0) {
+            execl(compiler_tool, compiler_tool,
+                  "--source", fixture_path,
+                  "--source-name", source_name.c_str(),
+                  "--application", "orders",
+                  "--version", "2026-08-03-001",
+                  "--key-id", "test-key-1",
+                  "--bytecode-out", bytecode_out.c_str(),
+                  "--bytecode-out", bytecode_out.c_str(),
+                  "--attestation-out", attestation_out.c_str(),
+                  "--signing-message-out", message_out.c_str(),
+                  nullptr);
+            _exit(127);
+        }
+        waitpid(duplicate, &status, 0);
+        require(WIFEXITED(status) && WEXITSTATUS(status) == 2,
+                "duplicate argument not rejected");
+
+        // Aliased output paths.
+        const pid_t alias = fork();
+        if (alias == 0) {
+            execl(compiler_tool, compiler_tool,
+                  "--source", fixture_path,
+                  "--source-name", source_name.c_str(),
+                  "--application", "orders",
+                  "--version", "2026-08-03-001",
+                  "--key-id", "test-key-1",
+                  "--bytecode-out", bytecode_out.c_str(),
+                  "--attestation-out", bytecode_out.c_str(),
+                  "--signing-message-out", message_out.c_str(),
+                  nullptr);
+            _exit(127);
+        }
+        waitpid(alias, &status, 0);
+        require(WIFEXITED(status) && WEXITSTATUS(status) == 2,
+                "aliased output paths not rejected");
+
+        // Pre-existing final target: no-replace refuses and the existing
+        // content survives.
+        const std::string kept = read_file(attestation_out.c_str());
+        const pid_t existing = fork();
+        if (existing == 0) {
+            execl(compiler_tool, compiler_tool,
+                  "--source", fixture_path,
+                  "--source-name", source_name.c_str(),
+                  "--application", "orders",
+                  "--version", "2026-08-03-001",
+                  "--key-id", "test-key-1",
+                  "--bytecode-out", bytecode_out.c_str(),
+                  "--attestation-out", attestation_out.c_str(),
+                  "--signing-message-out", message_out.c_str(),
+                  nullptr);
+            _exit(127);
+        }
+        waitpid(existing, &status, 0);
+        require(WIFEXITED(status) && WEXITSTATUS(status) != 0,
+                "pre-existing target was overwritten");
+        require(read_file(attestation_out.c_str()) == kept,
+                "pre-existing target content changed");
+
+        // Pre-placed temp symlink: the child's temp path is
+        // <name>.tmp.<pid>; the fork tells us the pid before exec, so the
+        // symlink is placed exactly where the compiler will open it.
+        const pid_t temp_symlink = fork();
+        if (temp_symlink == 0) {
+            const std::string symlink_path =
+                bytecode_out + ".tmp." +
+                std::to_string(static_cast<long long>(getpid()));
+            require(symlink("target", symlink_path.c_str()) == 0,
+                    "cannot pre-place temp symlink");
+            execl(compiler_tool, compiler_tool,
+                  "--source", fixture_path,
+                  "--source-name", source_name.c_str(),
+                  "--application", "orders",
+                  "--version", "2026-08-03-001",
+                  "--key-id", "test-key-1",
+                  "--bytecode-out", bytecode_out.c_str(),
+                  "--attestation-out", attestation_out.c_str(),
+                  "--signing-message-out", message_out.c_str(),
+                  nullptr);
+            _exit(127);
+        }
+        waitpid(temp_symlink, &status, 0);
+        require(WIFEXITED(status) && WEXITSTATUS(status) != 0,
+                "pre-placed temp symlink was followed");
     }
 
     std::cout << "PASS" << std::endl;
