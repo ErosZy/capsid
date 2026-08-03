@@ -82,23 +82,35 @@ bool path_within(const std::string& path, const std::string& root) {
            path[root.size()] == '/';
 }
 
+// Frozen env-pattern grammar: "*", an exact name, or a single trailing
+// wildcard ("PREFIX*"). A leading wildcard ("*SUFFIX") is not part of the
+// grammar and must be rejected, not interpreted.
 bool env_pattern_matches(const std::string& pattern, const std::string& name) {
     if (pattern == "*") {
         return true;
     }
-    if (pattern.size() >= 2 && pattern.back() == '*' &&
-        pattern.find('*') == pattern.size() - 1) {
+    const std::string::size_type star = pattern.find('*');
+    if (star != std::string::npos) {
+        if (star != pattern.size() - 1 || pattern.find('*', star + 1) !=
+                                              std::string::npos) {
+            return false;  // only a single trailing wildcard is valid
+        }
         return name.compare(0, pattern.size() - 1, pattern, 0,
                             pattern.size() - 1) == 0;
     }
-    if (pattern.size() >= 2 && pattern[0] == '*' &&
-        pattern.find('*') == 0) {
-        const std::string suffix = pattern.substr(1);
-        return name.size() >= suffix.size() &&
-               name.compare(name.size() - suffix.size(), suffix.size(),
-                            suffix) == 0;
-    }
     return name == pattern;
+}
+
+bool valid_env_pattern(const std::string& pattern) {
+    if (pattern == "*") {
+        return true;
+    }
+    const std::string::size_type star = pattern.find('*');
+    if (star == std::string::npos) {
+        return !pattern.empty();
+    }
+    return star == pattern.size() - 1 &&
+           pattern.find('*', star + 1) == std::string::npos;
 }
 
 std::string json_escape(const std::string& value) {
@@ -141,19 +153,61 @@ PolicyCompileResult compile_policy(
     result.effective.min_ready = 1;
     result.effective.strict_sandbox = host.strict_sandbox;
 
-    // Modules: app request must be inside the host allowlist.
+    // Modules: app request must be inside the host allowlist; duplicates
+    // in the request reject.
     {
         std::set<std::string> allowed(host.module_allowlist.begin(),
                                       host.module_allowlist.end());
-        std::set<std::string> chosen;
+        std::set<std::string> requested;
         for (const std::string& module : app.modules) {
+            if (!requested.insert(module).second) {
+                result.error = "duplicate module request";
+                return result;
+            }
             if (allowed.find(module) == allowed.end()) {
                 result.error = "module not allowed by the Host: " + module;
                 return result;
             }
-            chosen.insert(module);
         }
-        result.effective.modules.assign(chosen.begin(), chosen.end());
+        result.effective.modules.assign(requested.begin(), requested.end());
+    }
+
+    // Host env patterns must themselves follow the frozen grammar.
+    for (const std::string& pattern : host.env_patterns) {
+        if (!valid_env_pattern(pattern)) {
+            result.error = "invalid Host env pattern";
+            return result;
+        }
+    }
+
+    std::set<std::string> requested_env_names;
+    for (const AppRequest::EnvRequest& request : app.env) {
+        if (!requested_env_names.insert(request.name).second) {
+            result.error = "duplicate environment request";
+            return result;
+        }
+    }
+    if (app.env.size() != resolved_secrets.size()) {
+        result.error = "resolved secret set does not match the request";
+        return result;
+    }
+    {
+        std::set<std::string> resolved_names;
+        for (const EffectiveEnvEntry& entry : resolved_secrets) {
+            if (!resolved_names.insert(entry.name).second) {
+                result.error = "duplicate resolved secret";
+                return result;
+            }
+            if (requested_env_names.find(entry.name) ==
+                requested_env_names.end()) {
+                result.error = "resolved secret not requested";
+                return result;
+            }
+        }
+        if (resolved_names != requested_env_names) {
+            result.error = "resolved secret set is incomplete";
+            return result;
+        }
     }
 
     // Env: host pattern must cover each request; denials win.
@@ -177,15 +231,30 @@ PolicyCompileResult compile_policy(
         }
     }
 
-    // fs read: normalized app paths must stay within a host root.
+    // fs read: normalized app paths must stay within normalized host
+    // roots.
+    std::vector<std::string> normalized_roots;
+    for (const std::string& root : host.fs_read_roots) {
+        std::string normalized_root;
+        if (!normalize_path(root, &normalized_root)) {
+            result.error = "invalid Host filesystem root";
+            return result;
+        }
+        normalized_roots.push_back(normalized_root);
+    }
+    std::set<std::string> requested_fs;
     for (const std::string& raw : app.fs_read) {
+        if (!requested_fs.insert(raw).second) {
+            result.error = "duplicate filesystem request";
+            return result;
+        }
         std::string normalized;
         if (!normalize_path(raw, &normalized)) {
             result.error = "invalid filesystem read path";
             return result;
         }
         bool within = false;
-        for (const std::string& root : host.fs_read_roots) {
+        for (const std::string& root : normalized_roots) {
             if (path_within(normalized, root)) {
                 within = true;
                 break;
@@ -209,8 +278,9 @@ PolicyCompileResult compile_policy(
                 covered = true;
                 break;
             }
+            // The App's empty port list means ANY port; a Host with a
+            // finite port list cannot cover that.
             if (target.ports.empty()) {
-                covered = true;
                 break;
             }
             bool all_covered = true;
@@ -245,21 +315,40 @@ PolicyCompileResult compile_policy(
     result.effective.storage = app.storage;
     result.effective.stdio = app.stdio;
 
-    // worker/request/resource: app must not exceed host maximums.
-    if (app.requests_per_worker > host.max_requests_per_worker) {
+    // worker/request/resource: app must not exceed host maximums; a Host
+    // maximum of 0 means unlimited.
+    if (host.max_requests_per_worker != 0 &&
+        app.requests_per_worker > host.max_requests_per_worker) {
         result.error = "request rate exceeds the Host maximum";
         return result;
     }
-    if (app.memory_bytes > host.max_worker_memory_bytes) {
+    if (host.max_worker_memory_bytes != 0 &&
+        app.memory_bytes > host.max_worker_memory_bytes) {
         result.error = "worker memory exceeds the Host maximum";
         return result;
     }
     result.effective.requests_per_worker = app.requests_per_worker;
     result.effective.memory_bytes = app.memory_bytes;
+    // Canonical fetch ordering.
+    std::sort(result.effective.fetch.begin(), result.effective.fetch.end(),
+              [](const FetchTarget& a, const FetchTarget& b) {
+                  return a.host < b.host;
+              });
+    // Canonical fs ordering.
+    std::sort(result.effective.fs_read.begin(), result.effective.fs_read.end());
+
+    // Canonical ordering: semantically identical inputs in any order must
+    // produce the same effective config, JSON and digests.
+    std::vector<AppRequest::EnvRequest> ordered_env = app.env;
+    std::sort(ordered_env.begin(), ordered_env.end(),
+              [](const AppRequest::EnvRequest& a,
+                 const AppRequest::EnvRequest& b) {
+                  return a.name < b.name;
+              });
 
     // Env entries with secret resolution: name + source + key id + opaque
     // revision only. The literal/secret values never enter effective.json.
-    for (const AppRequest::EnvRequest& request : app.env) {
+    for (const AppRequest::EnvRequest& request : ordered_env) {
         EffectiveEnvEntry entry;
         entry.name = request.name;
         entry.from_secret = request.from_secret;
@@ -283,17 +372,23 @@ PolicyCompileResult compile_policy(
         result.effective.env.push_back(entry);
     }
 
-    // Rule ids: stable per normalized rule, unique.
+    // Rule ids: stable per normalized rule, unique, for every category.
     std::set<std::uint32_t> seen;
-    for (const std::string& module : result.effective.modules) {
-        const std::uint32_t id = rule_id("module:" + module);
+    const auto add_rule = [&](const std::string& label) -> bool {
+        const std::uint32_t id = rule_id(label);
         if (!seen.insert(id).second) {
             result.error = "rule id collision";
+            return false;
+        }
+        result.effective.rule_ids.push_back({ id, label });
+        return true;
+    };
+    for (const std::string& module : result.effective.modules) {
+        if (!add_rule("module:" + module)) {
             return result;
         }
-        result.effective.rule_ids.push_back({ id, "module:" + module });
     }
-    for (const EffectiveEnvEntry& entry : result.effective.env) {
+    for (EffectiveEnvEntry& entry : result.effective.env) {
         const std::string label =
             std::string("env:") + entry.name + ":" +
             (entry.from_secret ? "secret:" + entry.secret_key_id : "literal");
@@ -302,11 +397,40 @@ PolicyCompileResult compile_policy(
             result.error = "rule id collision";
             return result;
         }
+        entry.rule_id = id;
         result.effective.rule_ids.push_back({ id, label });
-        const_cast<EffectiveEnvEntry&>(entry).rule_id = id;
+    }
+    for (const std::string& path : result.effective.fs_read) {
+        if (!add_rule("fs:" + path)) {
+            return result;
+        }
+    }
+    for (const FetchTarget& target : result.effective.fetch) {
+        if (!add_rule("fetch:" + target.host)) {
+            return result;
+        }
+    }
+    if (result.effective.storage && !add_rule("storage")) {
+        return result;
+    }
+    if (result.effective.stdio && !add_rule("stdio")) {
+        return result;
+    }
+    if (!add_rule("worker")) {
+        return result;
+    }
+    if (!add_rule("isolation")) {
+        return result;
     }
 
-    // Canonical effective.json (no secret values) + digests.
+    // Canonical effective.json (no secret values) + digests. rule_ids are
+    // sorted by id so the reverse lookup is order-independent.
+    std::sort(result.effective.rule_ids.begin(),
+              result.effective.rule_ids.end(),
+              [](const std::pair<std::uint32_t, std::string>& a,
+                 const std::pair<std::uint32_t, std::string>& b) {
+                  return a.first < b.first;
+              });
     std::ostringstream json;
     json << "{\"modules\":[";
     for (std::size_t index = 0; index < result.effective.modules.size(); ++index) {

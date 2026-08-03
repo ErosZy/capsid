@@ -178,6 +178,94 @@ int main() {
         // field by construction.
     }
 
+    // 8b. Any-port App vs finite Host ports rejects; Host maximum = 0
+    // means unlimited; a suffix wildcard pattern rejects.
+    {
+        capsid::host::AppRequest app = legal_app();
+        app.fetch = { { "api.example", {} } };  // any port
+        require(!compile_policy(default_host(), app, {}).ok,
+                "any-port request against finite Host ports accepted");
+
+        capsid::host::HostPolicy unlimited = default_host();
+        unlimited.max_requests_per_worker = 0;
+        unlimited.max_worker_memory_bytes = 0;
+        EffectiveEnvEntry resolved;
+        resolved.name = "APP_TOKEN";
+        resolved.from_secret = true;
+        resolved.secret_key_id = "api-token";
+        resolved.secret_revision = "file-v1:1:2:3:4:5";
+        const PolicyCompileResult unlimited_result =
+            compile_policy(unlimited, legal_app(), { resolved });
+        require(unlimited_result.ok,
+                "finite app values rejected against unlimited Host");
+
+        capsid::host::HostPolicy bad_pattern = default_host();
+        bad_pattern.env_patterns = { "*SUFFIX" };  // not part of the grammar
+        require(!compile_policy(bad_pattern, legal_app(), { resolved }).ok,
+                "suffix wildcard pattern accepted");
+    }
+
+    // 8c. Inexact resolved secret sets reject: missing, duplicate, extra.
+    {
+        EffectiveEnvEntry resolved;
+        resolved.name = "APP_TOKEN";
+        resolved.from_secret = true;
+        resolved.secret_key_id = "api-token";
+        resolved.secret_revision = "file-v1:1:2:3:4:5";
+        // Missing: the request has one env entry, none resolved.
+        require(!compile_policy(default_host(), legal_app(), {}).ok,
+                "missing resolved secret accepted");
+        // Extra: a resolved entry not requested.
+        EffectiveEnvEntry extra;
+        extra.name = "APP_OTHER";
+        extra.from_secret = true;
+        extra.secret_key_id = "other";
+        extra.secret_revision = "file-v1:9:9:9:9:9";
+        require(!compile_policy(default_host(), legal_app(), { resolved, extra }).ok,
+                "extra resolved secret accepted");
+        // Duplicate resolved names.
+        require(!compile_policy(default_host(), legal_app(),
+                                { resolved, resolved }).ok,
+                "duplicate resolved secret accepted");
+    }
+
+    // 8d. Input permutation: the same semantics in a different order
+    // produce the same effective JSON and digests.
+    {
+        EffectiveEnvEntry resolved;
+        resolved.name = "APP_TOKEN";
+        resolved.from_secret = true;
+        resolved.secret_key_id = "api-token";
+        resolved.secret_revision = "file-v1:1:2:3:4:5";
+
+        capsid::host::AppRequest order_a = legal_app();
+        capsid::host::AppRequest order_b = legal_app();
+        // Reorder modules and env requests.
+        order_b.modules = { "capsid:utils", "capsid:env" };
+        capsid::host::AppRequest::EnvRequest second;
+        second.name = "APP_REGION";
+        second.literal = "eu";
+        order_a.env.push_back(second);
+        order_b.env.insert(order_b.env.begin(), second);
+        EffectiveEnvEntry resolved_region;
+        resolved_region.name = "APP_REGION";
+        resolved_region.from_secret = false;
+        resolved_region.literal = "eu";
+        const PolicyCompileResult result_a = compile_policy(
+            default_host(), order_a, { resolved, resolved_region });
+        const PolicyCompileResult result_b = compile_policy(
+            default_host(), order_b, { resolved, resolved_region });
+        require(result_a.ok && result_b.ok, "permutation compile failed");
+        require(result_a.effective.effective_json ==
+                    result_b.effective.effective_json,
+                "permutation changed effective.json");
+        require(result_a.effective.effective_digest ==
+                    result_b.effective.effective_digest,
+                "permutation changed the effective digest");
+        require(result_a.effective.rule_ids == result_b.effective.rule_ids,
+                "permutation changed rule ids");
+    }
+
     // 9. Rule ids stable and unique.
     {
         EffectiveEnvEntry resolved;
