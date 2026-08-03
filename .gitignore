@@ -62,4 +62,6 @@
 !/bench/results/go-vs-cpp*/**
 !/bench/results/hono-vs-slim-*/
 !/bench/results/hono-vs-slim-*/**
+!/bench/results/hono-php-py-*/
+!/bench/results/hono-php-py-*/**
 /0
