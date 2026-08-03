@@ -89,6 +89,13 @@ if(BUILD_TESTING)
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js")
             set_tests_properties(
                 runtime_bytecode_compiler_round_trip PROPERTIES TIMEOUT 60)
+            # Explicit dependencies: a fresh build of this test target alone
+            # must produce the compiler and worker binaries it executes
+            # (never rely on binaries left in the tree by earlier builds).
+            add_dependencies(
+                test-runtime-bytecode-compiler-round-trip
+                capsid-bytecode-compile
+                capsid-worker)
         endif()
 
         add_executable(
