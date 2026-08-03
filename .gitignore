@@ -60,4 +60,6 @@
 !/bench/results/bodyless-11-*/**
 !/bench/results/go-vs-cpp*/
 !/bench/results/go-vs-cpp*/**
+!/bench/results/hono-vs-slim-*/
+!/bench/results/hono-vs-slim-*/**
 /0

@@ -150,7 +150,19 @@ func main() {
 	)
 
 	verify := func(body []byte) bool {
-		if expectedLen >= 0 {
+		switch workload {
+		case "json":
+			// The JSON document starts with '{' and carries the marker.
+			return len(body) > 2 && body[0] == '{' &&
+				bytes.Contains(body, []byte(`"status":"ok"`))
+		case "stream":
+			// 1024 streamed bytes: b*341 c*341 d*342.
+			return len(body) == 1024 && body[0] == 0x62 &&
+				body[341] == 0x63 && body[1023] == 0x64
+		case "cpu-template":
+			return len(body) > 0 && contains(body, "</ul>")
+		default:
+			// fixed-1k, bytes: uniform byte payload.
 			if len(body) != expectedLen {
 				return false
 			}
@@ -161,7 +173,6 @@ func main() {
 			}
 			return true
 		}
-		return len(body) > 0 && contains(body, "</ul>")
 	}
 
 	runPhase := func(phase string, seconds int) {
