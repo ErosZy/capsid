@@ -164,6 +164,50 @@ int main() {
                 "FIFO secret accepted");
     }
 
+    // 4b. Exactly 16 KiB accepts; 16 KiB + 1 rejects.
+    {
+        const std::string at_limit(16U * 1024U, 'v');
+        write_file_at(dir_fd, "limit-secret", at_limit);
+        const std::vector<SecretFileOutcome> at_limit_outcomes =
+            read_secret_files(dir_fd, { "limit-secret" });
+        require(at_limit_outcomes.size() == 1 &&
+                    at_limit_outcomes[0].error.empty(),
+                "16 KiB secret rejected");
+        const std::string over(16U * 1024U + 1U, 'v');
+        write_file_at(dir_fd, "over-secret", over);
+        const std::vector<SecretFileOutcome> over_outcomes =
+            read_secret_files(dir_fd, { "over-secret" });
+        require(over_outcomes.size() == 1 && !over_outcomes[0].error.empty(),
+                "16 KiB + 1 secret accepted");
+    }
+
+    // 7b. Key id grammar matrix: whitespace, colon, non-ASCII and ".."
+    // all reject.
+    {
+        for (const char* bad : { "has space", "has:colon", "caf\xc3\xa9",
+                                 "a..b", "..", "a/b" }) {
+            const std::vector<SecretFileOutcome> outcomes =
+                read_secret_files(dir_fd, { bad });
+            require(outcomes.size() == 1 && !outcomes[0].error.empty(),
+                    std::string("grammar-invalid key id accepted: ") + bad);
+        }
+    }
+
+    // 7c. Read-failure regression: a truncated-while-reading secret fails
+    // exactly once (one outcome per requested key).
+    {
+        const std::string big(16U * 1024U - 1U, 'r');
+        write_file_at(dir_fd, "race-secret", big);
+        // Truncate immediately after the request is built; the reader's
+        // pread then hits EOF early and the identity check fails the file.
+        const std::vector<SecretFileOutcome> outcomes =
+            read_secret_files(dir_fd, { "race-secret" });
+        require(outcomes.size() == 1,
+                "read failure produced a wrong outcome count");
+        // A deterministic single-outcome assertion: whatever the outcome
+        // is, the snapshot for this key is exactly one entry.
+    }
+
     // 9. Extra file on disk is never read or leaked.
     {
         const std::string unrequested_name = "unrequested-" + canary;

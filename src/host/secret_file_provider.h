@@ -25,7 +25,9 @@ namespace capsid::host {
 //   - values enter only the owning snapshot — never error strings, logs or
 //     serialized output.
 
-inline constexpr std::size_t kMaxSecretFileBytes = 16U * 1024U + 1U;
+// Exactly 16 KiB. The reader may observe a 16 KiB + 1 byte file via
+// fstat, but any size above 16 KiB rejects.
+inline constexpr std::size_t kMaxSecretFileBytes = 16U * 1024U;
 inline constexpr std::size_t kMaxSecretKeyIdBytes = 128U;
 inline constexpr std::size_t kMaxSecretsPerSnapshot = 256U;
 

@@ -63,9 +63,13 @@ bool valid_utf8(const std::uint8_t* data, std::size_t size) {
 }
 
 #if defined(__APPLE__)
+#define CAPSID_SECRET_MTIME_SEC(st) ((st).st_mtimespec.tv_sec)
+#define CAPSID_SECRET_MTIME_NSEC(st) ((st).st_mtimespec.tv_nsec)
 #define CAPSID_SECRET_CTIME_SEC(st) ((st).st_ctimespec.tv_sec)
 #define CAPSID_SECRET_CTIME_NSEC(st) ((st).st_ctimespec.tv_nsec)
 #else
+#define CAPSID_SECRET_MTIME_SEC(st) ((st).st_mtim.tv_sec)
+#define CAPSID_SECRET_MTIME_NSEC(st) ((st).st_mtim.tv_nsec)
 #define CAPSID_SECRET_CTIME_SEC(st) ((st).st_ctim.tv_sec)
 #define CAPSID_SECRET_CTIME_NSEC(st) ((st).st_ctim.tv_nsec)
 #endif
@@ -83,11 +87,23 @@ std::string build_revision(const struct stat& st) {
 }  // namespace
 
 bool valid_secret_key_id(const std::string& key_id) {
-    if (key_id.empty() || key_id.size() > kMaxSecretKeyIdBytes ||
-        key_id == "." || key_id == ".." ||
-        key_id.find('/') != std::string::npos ||
-        key_id.find('\0') != std::string::npos) {
+    if (key_id.empty() || key_id.size() > kMaxSecretKeyIdBytes) {
         return false;
+    }
+    // Frozen grammar: [A-Za-z0-9._-], no "..", no separators or non-ASCII
+    // (matches the existing secret snapshot contract).
+    for (std::size_t index = 0; index < key_id.size(); ++index) {
+        const char c = key_id[index];
+        const bool alnum =
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9');
+        if (!alnum && c != '.' && c != '_' && c != '-') {
+            return false;
+        }
+        if (c == '.' && index + 1 < key_id.size() &&
+            key_id[index + 1] == '.') {
+            return false;
+        }
     }
     return true;
 }
@@ -170,9 +186,7 @@ std::vector<SecretFileOutcome> read_secret_files(
                 close(fd);
                 outcome.value.clear();
                 outcome.error = "secret file read failed";
-                outcomes.push_back(std::move(outcome));
-                offset = outcome.value.size() + 1;  // mark invalid
-                break;
+                break;  // single outcome; the offset check below fails it
             }
             if (count == 0) {
                 break;  // truncated; identity check below catches it
@@ -197,11 +211,13 @@ std::vector<SecretFileOutcome> read_secret_files(
         }
         if (before.st_dev != after.st_dev || before.st_ino != after.st_ino ||
             before.st_size != after.st_size ||
+            CAPSID_SECRET_MTIME_SEC(before) !=
+                CAPSID_SECRET_MTIME_SEC(after) ||
+            CAPSID_SECRET_MTIME_NSEC(before) !=
+                CAPSID_SECRET_MTIME_NSEC(after) ||
             CAPSID_SECRET_CTIME_SEC(before) != CAPSID_SECRET_CTIME_SEC(after) ||
             CAPSID_SECRET_CTIME_NSEC(before) !=
-                CAPSID_SECRET_CTIME_NSEC(after) ||
-            CAPSID_SECRET_CTIME_SEC(before) !=
-                CAPSID_SECRET_CTIME_SEC(after)) {
+                CAPSID_SECRET_CTIME_NSEC(after)) {
             close(fd);
             outcome.value.clear();
             outcome.error = "secret file changed while reading";
