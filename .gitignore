@@ -66,4 +66,6 @@
 !/bench/results/hono-php-py-*/**
 !/bench/results/hono-php-py-16k-*/
 !/bench/results/hono-php-py-16k-*/**
+!/bench/results/capsid-64k-*/
+!/bench/results/capsid-64k-*/**
 /0
