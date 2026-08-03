@@ -8,9 +8,10 @@
 3. Markdown 说明。
 
 截至当前工作树，Runtime、worker 与第一方 `capsid-host`（`--mode single-worker`）
-都是可构建、可测试的产品：Host 已具备单 worker 数据面、FetchRPC 协议与 benchmark
-基线（`bench/`）；多 App/pool、多 worker 等能力继续实现中。里程碑状态以源码和测试
-为准，不单独维护易漂移的状态文档。
+均可构建、可测试：Host 已具备单 worker 数据面、FetchRPC 协议与 benchmark 基线
+（`bench/`），属于可运行的 benchmark/integration 模式，**非生产部署接口**；多
+App/pool、多 worker 与安全部署闭环（M1D）继续实现中。里程碑状态以源码和测试为准，
+不单独维护易漂移的状态文档。
 
 ## 入门与架构
 
