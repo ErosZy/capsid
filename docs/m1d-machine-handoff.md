@@ -26,8 +26,9 @@
 
 ```text
 branch: main
-HEAD:   aeaca2c feat(host): M1D managed pipeline — real worker closure, policy/secret wiring, active-state persist
-remote: origin/main = aeaca2c
+managed checkpoint: aeaca2c feat(host): M1D managed pipeline — real worker closure, policy/secret wiring, active-state persist
+CI follow-up:       e48f5b3 ci: install libboost-system-dev — capsid-host needs system Boost on runners
+remote: origin/main 包含上述两个 commit 和本交接文档的最终修订
 tree:   clean
 ```
 
@@ -54,7 +55,7 @@ f388d59 fix(host): secret provider contract — exact 16 KiB, key-id grammar, mt
 git status --short --branch
 git diff --check
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-test "$(git rev-parse HEAD)" = aeaca2c2f05fd0df4efea888c77f9e54156e4f7c
+git merge-base --is-ancestor e48f5b3098272ddf7d5b573377a43b7891e82553 HEAD
 ```
 
 ## 3. 新机器恢复
@@ -71,10 +72,10 @@ git log --oneline -12
 git submodule status --recursive
 ```
 
-恢复后必须看到上述五个基础返修 commit 和 managed checkpoint：
+恢复后必须看到上述五个基础返修 commit、managed checkpoint 和 CI follow-up：
 
 ```sh
-test "$(git rev-parse HEAD)" = aeaca2c2f05fd0df4efea888c77f9e54156e4f7c
+git merge-base --is-ancestor e48f5b3098272ddf7d5b573377a43b7891e82553 HEAD
 git status --short --branch
 ```
 
