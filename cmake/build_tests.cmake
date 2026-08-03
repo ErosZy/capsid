@@ -144,6 +144,32 @@ if(BUILD_TESTING)
             COMMAND test-host-secret-file-provider)
 
         add_executable(
+            test-host-policy-compiler
+            tests/test_host_policy_compiler.cc)
+        target_include_directories(
+            test-host-policy-compiler PRIVATE include src)
+        target_link_libraries(test-host-policy-compiler PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-policy-compiler PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-policy-compiler PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-policy-compiler PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME host_policy_compiler
+            COMMAND test-host-policy-compiler)
+
+        add_executable(
             test-host-secret-snapshot
             tests/test_host_secret_snapshot.cc)
         target_include_directories(
