@@ -188,12 +188,16 @@ bool build_attestation(const std::string& application,
     if (root == nullptr) {
         return false;
     }
+    // Digest claims carry the frozen "sha256:" prefix the verifier's strict
+    // parser requires.
+    const std::string source_digest = "sha256:" + source_sha256;
+    const std::string bytecode_digest = "sha256:" + bytecode_sha256;
     bool ok = json_object_set_new(root, "schema", json_string(kAttestationSchema)) == 0 &&
               json_object_set_new(root, "application", json_string(application.c_str())) == 0 &&
               json_object_set_new(root, "version", json_string(version.c_str())) == 0 &&
               json_object_set_new(root, "sourceName", json_string(source_name.c_str())) == 0 &&
-              json_object_set_new(root, "sourceSha256", json_string(source_sha256.c_str())) == 0 &&
-              json_object_set_new(root, "bytecodeSha256", json_string(bytecode_sha256.c_str())) == 0 &&
+              json_object_set_new(root, "sourceSha256", json_string(source_digest.c_str())) == 0 &&
+              json_object_set_new(root, "bytecodeSha256", json_string(bytecode_digest.c_str())) == 0 &&
               json_object_set_new(root, "compatibilityId",
                                   json_string(CAPSID_BUILD_COMPATIBILITY_ID)) == 0 &&
               json_object_set_new(root, "keyId", json_string(key_id.c_str())) == 0;
@@ -232,8 +236,8 @@ bool build_signing_message(const std::string& application,
         application,
         version,
         source_name,
-        source_sha256,
-        bytecode_sha256,
+        "sha256:" + source_sha256,
+        "sha256:" + bytecode_sha256,
         CAPSID_BUILD_COMPATIBILITY_ID,
         key_id,
     };

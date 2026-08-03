@@ -48,6 +48,49 @@ if(BUILD_TESTING)
             NAME host_bytecode_attestation
             COMMAND test-host-bytecode-attestation)
 
+        if(CAPSID_BUILD_WORKER)
+            # M1D frozen RED: compiler → offline sign (test key) → host
+            # verifier → trusted worker load → identical results to the
+            # source-loaded worker; compatibility IDs and determinism; a
+            # tamper matrix that must fail closed.
+            add_executable(
+                test-runtime-bytecode-compiler-round-trip
+                tests/test_runtime_bytecode_compiler_round_trip.cc)
+            target_include_directories(
+                test-runtime-bytecode-compiler-round-trip PRIVATE
+                src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-runtime-bytecode-compiler-round-trip PRIVATE
+                capsid_runtime
+                capsid_host_core
+                capsid_jansson
+                OpenSSL::Crypto
+                capsid_sanitizers)
+            set_target_properties(
+                test-runtime-bytecode-compiler-round-trip PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-runtime-bytecode-compiler-round-trip PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-runtime-bytecode-compiler-round-trip PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(
+                NAME runtime_bytecode_compiler_round_trip
+                COMMAND test-runtime-bytecode-compiler-round-trip
+                    $<TARGET_FILE:capsid-bytecode-compile>
+                    $<TARGET_FILE:capsid-worker>
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js")
+            set_tests_properties(
+                runtime_bytecode_compiler_round_trip PROPERTIES TIMEOUT 60)
+        endif()
+
         add_executable(
             test-host-secret-snapshot
             tests/test_host_secret_snapshot.cc)
