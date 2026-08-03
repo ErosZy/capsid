@@ -31,6 +31,7 @@ if(CAPSID_BUILD_HOST)
         src/host/bytecode_attestation.cc
         src/host/config.cc
         src/host/generation_identity.cc
+        src/host/managed_host.cc
         src/host/policy_compiler.cc
         src/host/request_normalization.cc
         src/host/secret_file_provider.cc
