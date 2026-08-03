@@ -15,6 +15,9 @@
 // Workloads:
 //   fixed-1k      GET /@capsid/orders/fixed       -> 1024 bytes of 0x78
 //   cpu-template  GET /@capsid/orders/cpu         -> generated HTML template
+//   json          GET /@capsid/orders/bench/json  -> JSON document
+//   bytes         GET /@capsid/orders/bench/bytes -> 1024 bytes
+//   stream        GET /@capsid/orders/bench/stream -> 1024 streamed bytes
 package main
 
 import (
@@ -94,10 +97,24 @@ func main() {
 	path := "/@capsid/orders/fixed"
 	expectedLen := 1024
 	expectedByte := byte(0x78)
-	if workload == "cpu-template" {
+	switch workload {
+	case "cpu-template":
 		path = "/@capsid/orders/cpu"
 		expectedLen = -1
-	} else if workload != "fixed-1k" {
+	case "json":
+		path = "/@capsid/orders/bench/json"
+		expectedLen = -1
+	case "bytes":
+		path = "/@capsid/orders/bench/bytes"
+		expectedLen = 1024
+		expectedByte = byte(0x61)
+	case "stream":
+		path = "/@capsid/orders/bench/stream"
+		expectedLen = 1024
+		expectedByte = byte(0x62)
+	case "fixed-1k":
+		// default above
+	default:
 		fatal("unknown workload: " + workload)
 	}
 
