@@ -32,6 +32,7 @@ if(CAPSID_BUILD_HOST)
         src/host/config.cc
         src/host/generation_identity.cc
         src/host/request_normalization.cc
+        src/host/secret_file_provider.cc
         src/host/secret_snapshot.cc
         src/host/service_lifecycle.cc
         src/host/worker_recovery.cc
