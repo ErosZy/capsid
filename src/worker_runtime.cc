@@ -209,6 +209,10 @@ struct ResponseState {
     TerminalPending terminal;
     bool terminal_pending;
     ResponsePhase phase;
+    // Diagnostic timestamps (performance loop; zero cost when idle).
+    uint64_t t_begin_ns;
+    uint64_t t_head_ns;
+    uint64_t t_write_done_ns;
 
     ResponseState()
         : credit(0),
@@ -217,7 +221,10 @@ struct ResponseState {
           deadline_ns(0),
           request_ended(false),
           terminal_pending(false),
-          phase(ResponsePhase::kOpen) {}
+          phase(ResponsePhase::kOpen),
+          t_begin_ns(0),
+          t_head_ns(0),
+          t_write_done_ns(0) {}
 };
 
 struct StorageNamespace {
@@ -440,6 +447,7 @@ private:
             !self->define_native(core, "capsidResponseWrite", js_response_write, 2) ||
             !self->define_native(core, "capsidResponseEnd", js_response_end, 1) ||
             !self->define_native(core, "capsidResponseError", js_response_error, 2) ||
+            !self->define_native(core, "capsidResponseFinal", js_response_final, 5) ||
             !self->define_native(core, "capsidEnterRequest", js_enter_request, 1) ||
             !self->define_native(core, "capsidLeaveRequest", js_leave_request, 1) ||
             !self->define_native(
@@ -713,32 +721,24 @@ private:
         return JS_UNDEFINED;
     }
 
-    static JSValue js_response_head(JSContext *ctx,
-                                    JSValueConst,
-                                    int argc,
-                                    JSValueConst *argv) {
-        uint64_t id = 0;
-        uint32_t status = 0;
-        if (!g_worker || argc < 4 || JS_ToIndex(ctx, &id, argv[0]) ||
-            JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
-            return JS_EXCEPTION;
-        }
-        if (g_worker->responses_.find(id) ==
-            g_worker->responses_.end()) {
-            return JS_UNDEFINED;
-        }
-
+    // Builds and queues the ResponseHead frame; shared by
+    // js_response_head and js_response_final. Returns true on success.
+    static bool build_response_head(JSContext *ctx,
+                                    uint64_t id,
+                                    uint32_t status,
+                                    JSValueConst status_text_value,
+                                    JSValueConst headers_value) {
         capsid::protocol::Frame frame;
         frame.type = capsid::protocol::kResponseHead;
         frame.flags = 0;
         frame.request_id = id;
-        capsid::protocol::append_u16(&frame.payload, static_cast<uint16_t>(status));
-        const std::string status_text = to_string(ctx, argv[2]);
+        capsid::protocol::append_u16(
+            &frame.payload, static_cast<uint16_t>(status));
+        const std::string status_text = to_string(ctx, status_text_value);
         if (status_text.size() > std::numeric_limits<uint16_t>::max() ||
             status_text.size() + sizeof(uint16_t) >
                 g_worker->config_.max_header_bytes - frame.payload.size()) {
-            return JS_ThrowRangeError(
-                ctx, "response status text exceeds configured header limit");
+            return false;
         }
         append_string16(
             &frame.payload,
@@ -746,18 +746,20 @@ private:
             status_text.size());
 
         uint32_t count = 0;
-        JSValue length_value = JS_GetPropertyStr(ctx, argv[3], "length");
+        JSValue length_value =
+            JS_GetPropertyStr(ctx, headers_value, "length");
         if (JS_ToUint32(ctx, &count, length_value)) {
             JS_FreeValue(ctx, length_value);
-            return JS_EXCEPTION;
+            return false;
         }
         JS_FreeValue(ctx, length_value);
         if (count > std::numeric_limits<uint16_t>::max()) {
-            return JS_ThrowRangeError(ctx, "too many response headers");
+            return false;
         }
-        capsid::protocol::append_u16(&frame.payload, static_cast<uint16_t>(count));
+        capsid::protocol::append_u16(
+            &frame.payload, static_cast<uint16_t>(count));
         for (uint32_t i = 0; i < count; ++i) {
-            JSValue pair = JS_GetPropertyUint32(ctx, argv[3], i);
+            JSValue pair = JS_GetPropertyUint32(ctx, headers_value, i);
             JSValue name_value = JS_GetPropertyUint32(ctx, pair, 0);
             JSValue value_value = JS_GetPropertyUint32(ctx, pair, 1);
             const std::string name = to_string(ctx, name_value);
@@ -767,7 +769,7 @@ private:
             JS_FreeValue(ctx, pair);
             if (name.size() > std::numeric_limits<uint16_t>::max() ||
                 value.size() > std::numeric_limits<uint32_t>::max()) {
-                return JS_ThrowRangeError(ctx, "response header is too large");
+                return false;
             }
             const size_t overhead = sizeof(uint16_t) + sizeof(uint32_t);
             if (name.size() >
@@ -779,22 +781,125 @@ private:
                 value.size() >
                     g_worker->config_.max_header_bytes -
                         frame.payload.size() - name.size() - overhead) {
-                return JS_ThrowRangeError(
-                    ctx, "response headers exceed configured limit");
+                return false;
             }
-            append_string16(&frame.payload,
-                            reinterpret_cast<const uint8_t *>(name.data()),
-                            name.size());
-            append_string32(&frame.payload,
-                            reinterpret_cast<const uint8_t *>(value.data()),
-                            value.size());
+            append_string16(
+                &frame.payload,
+                reinterpret_cast<const uint8_t *>(name.data()),
+                name.size());
+            append_string32(
+                &frame.payload,
+                reinterpret_cast<const uint8_t *>(value.data()),
+                value.size());
         }
         if (frame.payload.size() > g_worker->config_.max_header_bytes) {
-            return JS_ThrowRangeError(ctx, "response headers exceed configured limit");
+            return false;
         }
-        if (!g_worker->queue_output(frame)) {
-            return JS_ThrowInternalError(ctx, "response output queue is full");
+        return g_worker->queue_output(frame);
+    }
+
+    static JSValue js_response_head(JSContext *ctx,
+                                    JSValueConst,
+                                    int argc,
+                                    JSValueConst *argv) {
+        uint64_t id = 0;
+        uint32_t status = 0;
+        if (!g_worker || argc < 4 || JS_ToIndex(ctx, &id, argv[0]) ||
+            JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
+            return JS_EXCEPTION;
         }
+        std::map<uint64_t, ResponseState>::iterator head_state =
+            g_worker->responses_.find(id);
+        if (head_state == g_worker->responses_.end()) {
+            return JS_UNDEFINED;
+        }
+        head_state->second.t_head_ns = uv_hrtime();
+
+        if (!build_response_head(ctx, id, status, argv[2], argv[3])) {
+            return JS_ThrowInternalError(
+                ctx, "response head encoding failed");
+        }
+        return JS_UNDEFINED;
+    }
+
+    // Single-shot response for non-streamed bodies (performance loop):
+    // head frame + body frames + end terminal in ONE native call,
+    // eliminating two JS round-trips per request. The head frame is
+    // queued first, the body goes through the normal credit-driven
+    // fast/pending path, and the end terminal waits for the body to
+    // drain (existing machinery).
+    static JSValue js_response_final(JSContext *ctx,
+                                     JSValueConst,
+                                     int argc,
+                                     JSValueConst *argv) {
+        uint64_t id = 0;
+        uint32_t status = 0;
+        if (!g_worker || argc < 5 || JS_ToIndex(ctx, &id, argv[0]) ||
+            JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
+            return JS_EXCEPTION;
+        }
+        std::map<uint64_t, ResponseState>::iterator state =
+            g_worker->responses_.find(id);
+        if (state == g_worker->responses_.end()) {
+            return JS_UNDEFINED;
+        }
+        state->second.t_head_ns = uv_hrtime();
+        if (!build_response_head(ctx, id, status, argv[2], argv[3])) {
+            return JS_ThrowInternalError(
+                ctx, "response head encoding failed");
+        }
+        // Body: Uint8Array or string; both are encoded/read here, then
+        // pushed through the fast path with the remainder snapshotted
+        // for credit-driven advancement.
+        size_t body_size = 0;
+        const uint8_t *body_bytes = NULL;
+        JSValue body_copy = JS_UNDEFINED;
+        if (!JS_IsNull(argv[4]) && !JS_IsUndefined(argv[4])) {
+            if (JS_IsString(argv[4])) {
+                const char *text = JS_ToCStringLen(ctx, &body_size, argv[4]);
+                if (!text) {
+                    return JS_EXCEPTION;
+                }
+                // Copy so the fast path and snapshot share stable bytes.
+                std::vector<uint8_t> copy(text, text + body_size);
+                JS_FreeCString(ctx, text);
+                body_copy = JS_NewUint8ArrayCopy(
+                    ctx, copy.empty() ? NULL : &copy[0], copy.size());
+                if (JS_IsException(body_copy)) {
+                    return JS_EXCEPTION;
+                }
+                body_bytes = JS_GetUint8Array(ctx, &body_size, body_copy);
+            } else {
+                body_bytes = JS_GetUint8Array(ctx, &body_size, argv[4]);
+            }
+        }
+        if (body_bytes != NULL && body_size > 0) {
+            size_t fast_sent = 0;
+            const EnqueueResult result = g_worker->queue_response_bytes_fast(
+                id, body_bytes, body_size, &state->second, &fast_sent);
+            if (result == EnqueueResult::kFatal) {
+                JS_FreeValue(ctx, body_copy);
+                return JS_ThrowInternalError(ctx, "response output is wedged");
+            }
+            if (result == EnqueueResult::kWouldBlock) {
+                PendingWrite pending;
+                pending.data.assign(body_bytes + fast_sent,
+                                    body_bytes + body_size);
+                pending.offset = 0;
+                pending.size = pending.data.size();
+                pending.resolve = JS_UNDEFINED;
+                pending.reject = JS_UNDEFINED;
+                state->second.pending.push_back(std::move(pending));
+                g_worker->enqueue_pump(id);
+            }
+        }
+        JS_FreeValue(ctx, body_copy);
+        // End terminal: waits for the body to drain, then sends the
+        // ResponseEnd frame (existing machinery).
+        TerminalPending terminal;
+        terminal.kind = TerminalPending::Kind::kResponseEnd;
+        terminal.error_flags = 0;
+        g_worker->queue_terminal_or_defer(id, terminal);
         return JS_UNDEFINED;
     }
 
@@ -3022,6 +3127,7 @@ private:
         }
 
         ResponseState response;
+        response.t_begin_ns = uv_hrtime();
         response.credit = config_.initial_window;
         // Bodyless requests (kFlagRequestEnd): no request-direction credit
         // and the request direction ends immediately, exactly as if the
@@ -3283,6 +3389,7 @@ private:
     // Resolves and frees the front pending write (fully accepted by the
     // wire queue). Single release point for the JS values.
     void resolve_pending(ResponseState &state) {
+        state.t_write_done_ns = uv_hrtime();
         PendingWrite &pending = state.pending.front();
         JSValue result = JS_Call(ctx_, pending.resolve, JS_UNDEFINED, 0, NULL);
         if (JS_IsException(result)) {
@@ -3403,6 +3510,32 @@ private:
         return true;
     }
 
+    // Diagnostic sampling: every 256 completed responses, print the
+    // per-request breakdown (handler / write / tail) to stderr.
+    void diag_sample(uint64_t id, const ResponseState &state) {
+        (void)id;
+        diag_samples_ += 1;
+        if (diag_samples_ % 256 != 0) {
+            return;
+        }
+        const uint64_t now = uv_hrtime();
+        const uint64_t total =
+            state.t_begin_ns != 0 ? now - state.t_begin_ns : 0;
+        const uint64_t handler =
+            state.t_head_ns != 0 ? state.t_head_ns - state.t_begin_ns : 0;
+        const uint64_t write =
+            state.t_write_done_ns != 0
+                ? state.t_write_done_ns - state.t_head_ns
+                : 0;
+        const uint64_t tail = now - state.t_write_done_ns;
+        std::fprintf(stderr,
+                     "DIAG total=%.3fms handler=%.3fms write=%.3fms tail=%.3fms\n",
+                     total / 1000000.0,
+                     handler / 1000000.0,
+                     write / 1000000.0,
+                     tail / 1000000.0);
+    }
+
     // Terminal entry point from JS (responseEnd / responseError). Sends
     // immediately when possible; otherwise the terminal is deferred and
     // the pump completes it (contract #5/#6).
@@ -3415,6 +3548,9 @@ private:
         }
         ResponseState &state = state_it->second;
         if (try_send_terminal(id, state, terminal)) {
+            if (terminal.kind == TerminalPending::Kind::kResponseEnd) {
+                g_worker->diag_sample(id, state);
+            }
             responses_.erase(state_it);
             remember_terminal(id);
         } else {
@@ -3814,6 +3950,7 @@ private:
     int poll_events_;
     capsid::OutboundBuffer outbound_;
     bool pump_in_progress_;
+    uint64_t diag_samples_;
     bool shutting_down_;
     capsid::protocol::Parser parser_;
     capsid::WorkerStartupState startup_state_;

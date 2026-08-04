@@ -186,6 +186,10 @@ app.get('/bench/bytes65537', context => new Response(
     new Uint8Array(65537).fill(0x61),
     { headers: { 'content-type': 'application/octet-stream' } },
 ));
+const bytes65537Pre = new Uint8Array(65537).fill(0x61);
+app.get('/bench/bytes65537-pre', () => new Response(bytes65537Pre, {
+    headers: { 'content-type': 'application/octet-stream' },
+}));
 app.get('/bench/bytes65535', context => new Response(
     new Uint8Array(65535).fill(0x61),
     { headers: { 'content-type': 'application/octet-stream' } },

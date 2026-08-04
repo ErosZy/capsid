@@ -484,6 +484,37 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
             for (const value of response.headers.getSetCookie()) {
                 headers.push([ 'set-cookie', value ]);
             }
+
+            // Fast path: a non-streamed body completes the whole
+            // response (head + body + end) in one native call, avoiding
+            // two JS round-trips per request. Streamed bodies keep the
+            // incremental path below.
+            const body = response.body;
+            if (body && !(body instanceof ReadableStream)) {
+                let bytes = null;
+                if (body instanceof Uint8Array) {
+                    bytes = body;
+                } else if (typeof body === 'string') {
+                    bytes = body;
+                } else if (body instanceof ArrayBuffer) {
+                    bytes = new Uint8Array(body);
+                } else if (body instanceof Blob) {
+                    bytes = new Uint8Array(await body.arrayBuffer());
+                } else {
+                    bytes = null;
+                }
+                if (bytes !== null) {
+                    core.capsidResponseFinal(
+                        id,
+                        response.status,
+                        response.statusText,
+                        headers,
+                        bytes,
+                    );
+                    return;
+                }
+            }
+
             core.capsidResponseHead(
                 id,
                 response.status,

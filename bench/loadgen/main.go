@@ -152,6 +152,19 @@ func main() {
 		path = "/@capsid/orders/bench/bytes65537"
 		expectedLen = 65537
 		expectedByte = byte(0x61)
+	case "bytes65537-pre":
+		path = "/@capsid/orders/bench/bytes65537-pre"
+		expectedLen = 65537
+		expectedByte = byte(0x61)
+	case "entry":
+		path = "/@capsid/orders/entry"
+		expectedLen = 12
+	case "no-content":
+		path = "/@capsid/orders/response/no-content"
+		expectedLen = 0
+	case "bare":
+		path = "/@capsid/orders/x"
+		expectedLen = 1
 	case "bytes64k":
 		path = "/@capsid/orders/bench/bytes64k"
 		expectedLen = 65536
@@ -218,6 +231,12 @@ func main() {
 		case "json64k", "json64k-pre", "json64k-bytes", "json64k-octet":
 			return len(body) > 64000 && body[0] == '{' &&
 				bytes.Contains(body, []byte(`"status":"ok"`))
+		case "bare":
+			return string(body) == "x"
+		case "no-content":
+			return len(body) == 0
+		case "entry":
+			return string(body) == "hono-entry-ok"
 		case "text64k":
 			return len(body) == 65536 && body[0] == 't' &&
 				body[65535] == 't'

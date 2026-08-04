@@ -69,6 +69,11 @@ constexpr std::size_t kMaxRequestBodyBytes = 16u * 1024u * 1024u;
 constexpr auto kReadyTimeout = std::chrono::seconds(10);
 constexpr auto kShutdownGrace = std::chrono::seconds(2);
 
+// Early-credit window (host): frames are reimbursed on receive while
+// the per-request HTTP write queue is below this; beyond it credit
+// falls back to write-completion so slow clients stay bounded.
+static const size_t kEarlyCreditWindow = 64u * 1024u;
+
 void write_stderr(std::string_view message) {
     std::fwrite(message.data(), 1, message.size(), stderr);
     std::fputc('\n', stderr);
@@ -229,6 +234,10 @@ struct PendingRequest {
     std::shared_ptr<http::response_serializer<http::buffer_body>> serializer;
     std::vector<std::uint8_t> outgoing;
     std::deque<std::vector<std::uint8_t>> body_queue;
+    // Total bytes currently queued for the HTTP write, so the early
+    // credit window (performance loop v1) can stay bounded: a slow
+    // client must not make the host buffer unboundedly.
+    size_t body_queue_bytes;
     bool head_sent = false;
     bool head_only = false;
     bool writing = false;
@@ -906,15 +915,24 @@ void Impl::handle_worker_event(WorkerEvent event) {
             return;
         }
         PendingRequest& pending = it->second;
-        if (pending.head_only) {
-            // HEAD consumes the worker body without exposing it; the credit
-            // is returned as if the bytes had been written.
+        // Performance loop v1: return credit as soon as the frame is
+        // received, not after the client write completes, while the
+        // per-request write queue stays shallow. This removes one host
+        // round-trip per frame (write-completion -> credit -> worker
+        // wakeup). Beyond the window the credit falls back to
+        // write-completion, so a slow client cannot make the host
+        // buffer unboundedly.
+        if (pending.body_queue_bytes < kEarlyCreditWindow) {
             pending.pending_response_credit +=
                 static_cast<std::uint32_t>(event.body.size());
             flush_pending_credit(event.request_id, pending, false);
+        }
+        if (pending.head_only) {
+            // HEAD consumes the worker body without exposing it.
             return;
         }
         if (pending.writing) {
+            pending.body_queue_bytes += event.body.size();
             pending.body_queue.push_back(std::move(event.body));
             return;
         }
@@ -1161,6 +1179,7 @@ void Impl::write_body_block(std::uint64_t request_id,
                 std::vector<std::uint8_t> queued =
                     std::move(pending.body_queue.front());
                 pending.body_queue.pop_front();
+                pending.body_queue_bytes -= queued.size();
                 self->write_body_block(request_id, std::move(queued));
             } else if (pending.end_seen) {
                 self->write_end_block(request_id);
