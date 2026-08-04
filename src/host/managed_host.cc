@@ -426,7 +426,7 @@ WarmResult warm_worker(const ManagedHostOptions& options,
     // concurrent request window. memoryMax is the memory permit for Host
     // budget accounting and identity only; it never impersonates a worker
     // field. Sanitizer builds are the one deliberate exception: RLIMIT_AS
-    // is fundamentally incompatible with ASan-instrumented workers (the
+    // is fundamentally incompatible with ASan/TSan-instrumented workers (the
     // shadow-memory reservation exhausts any finite address-space limit
     // before READY), so the sanitizer build skips the forwarding while the
     // Release build always enforces it; the relation the Runtime's HELLO
@@ -438,10 +438,11 @@ WarmResult warm_worker(const ManagedHostOptions& options,
     if (effective.js_heap_bytes > 0) {
         config.js_heap_limit = effective.js_heap_bytes;
     }
-#if defined(__SANITIZE_ADDRESS__)
+#if defined(CAPSID_ASAN_BUILD) || defined(CAPSID_TSAN_BUILD) || \
+    defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
     const bool forward_address_space_limit = false;
 #elif defined(__has_feature)
-#if __has_feature(address_sanitizer)
+#if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
     const bool forward_address_space_limit = false;
 #else
     const bool forward_address_space_limit = true;

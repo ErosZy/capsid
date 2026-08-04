@@ -29,6 +29,23 @@ namespace {
 namespace beast = boost::beast;
 namespace http = beast::http;
 
+// Linux suppresses SIGPIPE per send call. macOS exposes the equivalent as a
+// socket option which must be installed before any response (including the
+// authorization rejection) is written.
+bool prepare_no_sigpipe(int fd) {
+#if defined(MSG_NOSIGNAL)
+    (void) fd;
+    return true;
+#elif defined(SO_NOSIGPIPE)
+    const int enabled = 1;
+    return setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled,
+                      sizeof(enabled)) == 0;
+#else
+    (void) fd;
+    return false;
+#endif
+}
+
 // Fixed-format bounded JSON response. Serialization is a simple, length
 // controlled writer (the HTTP/1 framing authority remains Boost.Beast,
 // which parsed the request); every response carries the exact headers the
@@ -91,8 +108,13 @@ bool write_all_bounded(int fd, const std::string& bytes,
                         std::max<std::int64_t>(1, remaining.count()))) <= 0) {
             return false;
         }
+#if defined(MSG_NOSIGNAL)
+        constexpr int send_flags = MSG_NOSIGNAL;
+#else
+        constexpr int send_flags = 0;
+#endif
         const ssize_t count = send(fd, bytes.data() + offset,
-                                   bytes.size() - offset, MSG_NOSIGNAL);
+                                   bytes.size() - offset, send_flags);
         if (count < 0 && errno == EINTR) {
             continue;
         }
@@ -158,6 +180,12 @@ bool serve_accepted_admin_http_connection(
     std::string* error) {
     // The accepted connection is served; the caller owns its lifecycle
     // around this call.
+    if (!prepare_no_sigpipe(fd)) {
+        if (error != nullptr) {
+            *error = "cannot prepare admin connection";
+        }
+        return false;
+    }
     // Bind the connection to its kernel peer credentials and decide the
     // global authorization BEFORE reading any attacker-controlled HTTP
     // byte.

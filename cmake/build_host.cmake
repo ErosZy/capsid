@@ -62,6 +62,18 @@ if(CAPSID_BUILD_HOST)
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )
+    # managed_host.cc constructs the worker configuration itself, so it must
+    # see the sanitizer identity instead of relying on capsid_runtime's
+    # PRIVATE definitions. Both sanitizers reserve a vast shadow address
+    # range and therefore cannot run a worker under finite RLIMIT_AS.
+    if(CAPSID_ENABLE_ASAN)
+        target_compile_definitions(capsid_host_core PRIVATE
+            CAPSID_ASAN_BUILD=1)
+    endif()
+    if(CAPSID_ENABLE_TSAN)
+        target_compile_definitions(capsid_host_core PRIVATE
+            CAPSID_TSAN_BUILD=1)
+    endif()
     if(CAPSID_STRICT_WARNINGS)
         if(MSVC)
             target_compile_options(capsid_host_core PRIVATE /W4 /WX)

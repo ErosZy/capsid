@@ -19,6 +19,29 @@
 namespace capsid::host {
 namespace {
 
+// Creates an AF_UNIX stream without allowing the descriptor to leak into a
+// spawned worker. Linux can apply CLOEXEC atomically at socket creation;
+// other POSIX platforms (including macOS) require a separate fcntl pass.
+// Every failure path closes the descriptor before returning.
+int create_cloexec_unix_socket() {
+#if defined(__linux__) && defined(SOCK_CLOEXEC)
+    return socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#else
+    const int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+    const int flags = fcntl(fd, F_GETFD, 0);
+    if (flags < 0 || fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0) {
+        const int saved_errno = errno;
+        close(fd);
+        errno = saved_errno;
+        return -1;
+    }
+    return fd;
+#endif
+}
+
 // Static redacted diagnostics only; never a path, errno text or backend
 // material.
 AdminResponse json_response(unsigned status, const std::string& body) {
@@ -354,7 +377,7 @@ bool remove_stale_socket(const std::string& path) {
         before.st_uid != geteuid()) {
         return false;
     }
-    const int probe = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int probe = create_cloexec_unix_socket();
     if (probe < 0) {
         return false;
     }
@@ -409,7 +432,7 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
         final_slash == std::string::npos
             ? options.path
             : options.path.substr(final_slash + 1);
-    const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = create_cloexec_unix_socket();
     if (fd < 0) {
         if (error != nullptr) {
             *error = "cannot create admin listener";
