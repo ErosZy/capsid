@@ -28,6 +28,12 @@ struct HostPolicy {
     std::vector<std::string> fs_read_roots;  // normalized, no trailing '/'
     std::vector<FetchTarget> fetch_targets;
     bool storage_allowed = false;
+    // Exact resource allow sets. Every App-requested namespace/stream must
+    // be contained in the Host set; the bool flags are only the coarse
+    // gate and can never widen a request beyond the sets. A Host that
+    // allows storage with an empty set allows no namespace at all.
+    std::vector<std::string> storage_namespaces;
+    std::vector<std::string> stdio_streams;
     bool stdio_allowed = false;
     std::uint32_t max_workers = 1;
     std::uint32_t min_ready = 1;
@@ -48,9 +54,20 @@ struct AppRequest {
     std::vector<std::string> fs_read;  // requested allow paths
     std::vector<FetchTarget> fetch;
     bool storage = false;
+    // Exact storage namespace allow list (permissions.storage.namespaces).
+    std::vector<std::string> storage_namespaces;
     bool stdio = false;
+    // Exact stdio stream allow list (permissions.stdio); each entry is one
+    // of "stdin"/"stdout"/"stderr".
+    std::vector<std::string> stdio_streams;
     std::uint64_t requests_per_worker = 0;
-    std::uint64_t memory_bytes = 0;
+    // worker.* resource fields. memory_bytes is worker.memoryMax (the
+    // process memory ceiling); the three sub-resources keep their own
+    // slots so none of them impersonates another at the Runtime boundary.
+    std::uint64_t memory_bytes = 0;          // worker.memoryMax
+    std::uint64_t js_heap_bytes = 0;         // worker.jsHeap
+    std::uint64_t process_address_bytes = 0; // worker.processAddressSpace
+    std::uint64_t file_descriptors = 0;      // worker.fileDescriptors, 0 = unset
     std::uint32_t workers = 1;  // M1D: must be 1
     std::uint32_t min_ready = 1;
 };
@@ -68,11 +85,26 @@ struct EffectiveConfig {
     std::vector<std::string> modules;          // sorted intersection
     std::vector<EffectiveEnvEntry> env;        // in app request order
     std::vector<std::string> fs_read;          // normalized allow list
+    // Parallel stable rule ids from the policy compiler. The Runtime
+    // capability policy requires every rule id to be non-zero and unique
+    // within the policy, so these travel with the effective config instead
+    // of being re-derived (or hard-coded) at descriptor build time.
+    std::vector<std::uint32_t> fs_rule_ids;
     std::vector<FetchTarget> fetch;
+    std::vector<std::uint32_t> fetch_rule_ids;
     bool storage = false;
+    std::vector<std::string> storage_namespaces;  // canonical order
+    std::vector<std::uint32_t> storage_rule_ids;  // parallel to namespaces
     bool stdio = false;
+    std::vector<std::string> stdio_streams;  // canonical order
+    std::vector<std::uint32_t> stdio_rule_ids;  // parallel to streams
     std::uint64_t requests_per_worker = 0;
+    // The effective process-memory permit: the largest stated ceiling
+    // (memoryMax, jsHeap, processAddressSpace) for Host-budget accounting.
     std::uint64_t memory_bytes = 0;
+    std::uint64_t js_heap_bytes = 0;          // -> Runtime js_heap_limit
+    std::uint64_t process_address_bytes = 0;  // -> Runtime process_memory_limit
+    std::uint64_t file_descriptors = 0;       // -> Runtime resource_limits
     std::uint32_t workers = 1;
     std::uint32_t min_ready = 1;
     bool strict_sandbox = true;

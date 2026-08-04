@@ -5,6 +5,7 @@
 #include <openssl/evp.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <sstream>
 
@@ -303,7 +304,11 @@ PolicyCompileResult compile_policy(
         result.effective.fetch.push_back(target);
     }
 
-    // storage/stdio: exact subset of the Host allowance.
+    // storage/stdio: exact subset of the Host allowance. The Host's
+    // precise namespace/stream sets are the authoritative intersection:
+    // every App-requested resource must be contained in the Host set, and
+    // the coarse bool flags can never widen a request beyond the sets (a
+    // Host with storage_allowed but an empty namespace set allows none).
     if (app.storage && !host.storage_allowed) {
         result.error = "storage not allowed by the Host";
         return result;
@@ -314,21 +319,78 @@ PolicyCompileResult compile_policy(
     }
     result.effective.storage = app.storage;
     result.effective.stdio = app.stdio;
+    if (app.storage) {
+        std::set<std::string> requested_namespaces(app.storage_namespaces.begin(),
+                                                   app.storage_namespaces.end());
+        if (requested_namespaces.size() != app.storage_namespaces.size()) {
+            result.error = "duplicate storage namespace";
+            return result;
+        }
+        const std::set<std::string> allowed(host.storage_namespaces.begin(),
+                                            host.storage_namespaces.end());
+        for (const std::string& namespace_name : requested_namespaces) {
+            if (allowed.find(namespace_name) == allowed.end()) {
+                result.error = "storage namespace not allowed by the Host";
+                return result;
+            }
+        }
+        result.effective.storage_namespaces.assign(
+            requested_namespaces.begin(), requested_namespaces.end());
+    }
+    if (app.stdio) {
+        std::set<std::string> requested_streams(app.stdio_streams.begin(),
+                                                app.stdio_streams.end());
+        if (requested_streams.size() != app.stdio_streams.size()) {
+            result.error = "duplicate stdio stream";
+            return result;
+        }
+        const std::set<std::string> allowed(host.stdio_streams.begin(),
+                                            host.stdio_streams.end());
+        for (const std::string& stream : requested_streams) {
+            if (allowed.find(stream) == allowed.end()) {
+                result.error = "stdio stream not allowed by the Host";
+                return result;
+            }
+        }
+        result.effective.stdio_streams.assign(requested_streams.begin(),
+                                              requested_streams.end());
+    }
 
     // worker/request/resource: app must not exceed host maximums; a Host
-    // maximum of 0 means unlimited.
+    // maximum of 0 means unlimited. The memory permit is the largest stated
+    // ceiling, so a sub-resource (jsHeap/processAddressSpace) can never
+    // sneak past the Host per-worker budget while memoryMax stays small.
     if (host.max_requests_per_worker != 0 &&
         app.requests_per_worker > host.max_requests_per_worker) {
         result.error = "request rate exceeds the Host maximum";
         return result;
     }
+    result.effective.requests_per_worker = app.requests_per_worker;
+    result.effective.js_heap_bytes = app.js_heap_bytes;
+    result.effective.process_address_bytes = app.process_address_bytes;
+    result.effective.file_descriptors = app.file_descriptors;
+    result.effective.memory_bytes = std::max(
+        app.memory_bytes,
+        std::max(app.js_heap_bytes, app.process_address_bytes));
     if (host.max_worker_memory_bytes != 0 &&
-        app.memory_bytes > host.max_worker_memory_bytes) {
+        result.effective.memory_bytes > host.max_worker_memory_bytes) {
         result.error = "worker memory exceeds the Host maximum";
         return result;
     }
-    result.effective.requests_per_worker = app.requests_per_worker;
-    result.effective.memory_bytes = app.memory_bytes;
+    // The process-memory ceiling — the most restrictive stated ceiling
+    // among processAddressSpace/memoryMax — must never sit below the JS
+    // heap: the Runtime's HELLO validation rejects
+    // process_memory_limit < js_heap_limit, and the managed boundary
+    // applies the same rule before staging so an invalid worker
+    // configuration can never start.
+    const std::uint64_t process_ceiling =
+        std::min(result.effective.process_address_bytes,
+                 result.effective.memory_bytes);
+    if (result.effective.js_heap_bytes > 0 && process_ceiling > 0 &&
+        process_ceiling < result.effective.js_heap_bytes) {
+        result.error = "process memory ceiling below the JS heap limit";
+        return result;
+    }
     // Canonical fetch ordering.
     std::sort(result.effective.fetch.begin(), result.effective.fetch.end(),
               [](const FetchTarget& a, const FetchTarget& b) {
@@ -404,17 +466,27 @@ PolicyCompileResult compile_policy(
         if (!add_rule("fs:" + path)) {
             return result;
         }
+        result.effective.fs_rule_ids.push_back(rule_id("fs:" + path));
     }
     for (const FetchTarget& target : result.effective.fetch) {
         if (!add_rule("fetch:" + target.host)) {
             return result;
         }
+        result.effective.fetch_rule_ids.push_back(
+            rule_id("fetch:" + target.host));
     }
-    if (result.effective.storage && !add_rule("storage")) {
-        return result;
+    for (const std::string& namespace_name : result.effective.storage_namespaces) {
+        if (!add_rule("storage:" + namespace_name)) {
+            return result;
+        }
+        result.effective.storage_rule_ids.push_back(
+            rule_id("storage:" + namespace_name));
     }
-    if (result.effective.stdio && !add_rule("stdio")) {
-        return result;
+    for (const std::string& stream : result.effective.stdio_streams) {
+        if (!add_rule("stdio:" + stream)) {
+            return result;
+        }
+        result.effective.stdio_rule_ids.push_back(rule_id("stdio:" + stream));
     }
     if (!add_rule("worker")) {
         return result;
@@ -456,19 +528,39 @@ PolicyCompileResult compile_policy(
         }
         json << ",\"ruleId\":" << entry.rule_id << '}';
     }
+    std::map<std::string, std::uint32_t> id_by_label;
+    for (const std::pair<std::uint32_t, std::string>& pair :
+         result.effective.rule_ids) {
+        id_by_label[pair.second] = pair.first;
+    }
     json << "],\"fsRead\":[";
     for (std::size_t index = 0; index < result.effective.fs_read.size(); ++index) {
         if (index > 0) {
             json << ',';
         }
-        json << '"' << json_escape(result.effective.fs_read[index]) << '"';
+        const std::map<std::string, std::uint32_t>::const_iterator id =
+            id_by_label.find("fs:" + result.effective.fs_read[index]);
+        if (id == id_by_label.end()) {
+            result.error = "missing fs rule id";
+            return result;
+        }
+        json << "{\"path\":\""
+             << json_escape(result.effective.fs_read[index])
+             << "\",\"ruleId\":" << id->second << '}';
     }
     json << "],\"fetch\":[";
     for (std::size_t index = 0; index < result.effective.fetch.size(); ++index) {
         if (index > 0) {
             json << ',';
         }
-        json << "{\"host\":\"" << json_escape(result.effective.fetch[index].host)
+        const std::map<std::string, std::uint32_t>::const_iterator id =
+            id_by_label.find("fetch:" + result.effective.fetch[index].host);
+        if (id == id_by_label.end()) {
+            result.error = "missing fetch rule id";
+            return result;
+        }
+        json << "{\"host\":\""
+             << json_escape(result.effective.fetch[index].host)
              << "\",\"ports\":[";
         const std::vector<std::uint16_t>& ports =
             result.effective.fetch[index].ports;
@@ -478,12 +570,33 @@ PolicyCompileResult compile_policy(
             }
             json << ports[port_index];
         }
-        json << "]}";
+        json << "],\"ruleId\":" << id->second << "}";
     }
     json << "],\"storage\":" << (result.effective.storage ? "true" : "false")
-         << ",\"stdio\":" << (result.effective.stdio ? "true" : "false")
-         << ",\"requestsPerWorker\":" << result.effective.requests_per_worker
+         << ",\"storageNamespaces\":[";
+    for (std::size_t index = 0;
+         index < result.effective.storage_namespaces.size(); ++index) {
+        if (index > 0) {
+            json << ',';
+        }
+        json << '"' << json_escape(result.effective.storage_namespaces[index])
+             << '"';
+    }
+    json << "],\"stdio\":" << (result.effective.stdio ? "true" : "false")
+         << ",\"stdioStreams\":[";
+    for (std::size_t index = 0; index < result.effective.stdio_streams.size();
+         ++index) {
+        if (index > 0) {
+            json << ',';
+        }
+        json << '"' << json_escape(result.effective.stdio_streams[index])
+             << '"';
+    }
+    json << "],\"requestsPerWorker\":" << result.effective.requests_per_worker
          << ",\"memoryBytes\":" << result.effective.memory_bytes
+         << ",\"jsHeapBytes\":" << result.effective.js_heap_bytes
+         << ",\"processAddressBytes\":" << result.effective.process_address_bytes
+         << ",\"fileDescriptors\":" << result.effective.file_descriptors
          << ",\"workers\":" << result.effective.workers
          << ",\"minReady\":" << result.effective.min_ready
          << ",\"strictSandbox\":" << (result.effective.strict_sandbox ? "true" : "false")
@@ -511,10 +624,19 @@ PolicyCompileResult compile_policy(
         }
         app_stream << ';';
     }
-    app_stream << "storage:" << (app.storage ? 1 : 0)
-               << ";stdio:" << (app.stdio ? 1 : 0)
-               << ";rps:" << app.requests_per_worker
-               << ";mem:" << app.memory_bytes;
+    app_stream << "storage:" << (app.storage ? 1 : 0) << ':';
+    for (const std::string& namespace_name : app.storage_namespaces) {
+        app_stream << namespace_name << ',';
+    }
+    app_stream << ";stdio:" << (app.stdio ? 1 : 0) << ':';
+    for (const std::string& stream : app.stdio_streams) {
+        app_stream << stream << ',';
+    }
+    app_stream << ";rps:" << app.requests_per_worker
+               << ";mem:" << app.memory_bytes
+               << ";heap:" << app.js_heap_bytes
+               << ";addr:" << app.process_address_bytes
+               << ";fds:" << app.file_descriptors;
     result.effective.app_config_digest = sha256_hex(app_stream.str());
     result.effective.effective_digest =
         sha256_hex(result.effective.effective_json);

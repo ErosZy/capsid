@@ -27,10 +27,12 @@ if(CAPSID_BUILD_HOST)
 
     add_library(capsid_host_core STATIC
         src/host/active_state.cc
+        src/host/admin_api.cc
         src/host/artifact_safe_read.cc
         src/host/bytecode_attestation.cc
         src/host/config.cc
         src/host/generation_identity.cc
+        src/host/managed_admin_backend.cc
         src/host/managed_host.cc
         src/host/policy_compiler.cc
         src/host/request_normalization.cc
@@ -40,6 +42,11 @@ if(CAPSID_BUILD_HOST)
         src/host/worker_event_source.cc
         src/host/worker_recovery.cc
     )
+    # managed_host.cc and the Admin adapters call the worker API; the
+    # dependency is PUBLIC so every consumer of the core links the worker
+    # runtime, including adapters whose own test code never touches
+    # capsid_worker_* directly.
+    target_link_libraries(capsid_host_core PUBLIC capsid_runtime)
     set_target_properties(capsid_host_core PROPERTIES
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED ON
@@ -137,6 +144,11 @@ if(CAPSID_BUILD_HOST)
                     "LINKER:-Map,${CAPSID_GENERATED_DIR}/capsid-host.map")
             endif()
         endif()
+        # The Admin HTTP transport uses Boost.Beast as the HTTP/1 framing
+        # authority; it joins the host core only when Boost is available,
+        # so a Boost-less platform still builds the pure Admin dispatcher.
+        target_sources(capsid_host_core PRIVATE src/host/admin_http.cc)
+        target_link_libraries(capsid_host_core PRIVATE Boost::system)
     else()
         message(STATUS "capsid-host skipped: system Boost not found")
     endif()

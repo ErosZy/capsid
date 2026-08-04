@@ -16,7 +16,15 @@ namespace capsid::host {
 inline constexpr std::size_t kMaxEnvironmentEntries = 256U;
 inline constexpr std::size_t kMaxEnvironmentNameBytes = 256U;
 inline constexpr std::size_t kMaxEnvironmentValueBytes = 16U * 1024U;
+// Budget for the actual env name/value bytes entering the Runtime snapshot.
 inline constexpr std::size_t kMaxEnvironmentSnapshotBytes = 48U * 1024U;
+// Independent budget for the committed metadata document
+// (effective_environment_json: names, source kinds, key IDs and opaque
+// revisions). The metadata carries identifier material that can legitimately
+// exceed the value budget, so it gets its own ceiling; values never enter
+// this document.
+inline constexpr std::size_t kMaxEnvironmentMetadataJsonBytes =
+    256U * 1024U;
 inline constexpr std::size_t kMaxSecretKeyBytes = 128U;
 inline constexpr std::size_t kMaxSecretRevisionBytes = 256U;
 

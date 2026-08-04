@@ -150,7 +150,137 @@ if(BUILD_TESTING)
             NAME host_secret_file_provider
             COMMAND test-host-secret-file-provider)
 
+        if(UNIX)
+            # M1D Unix Admin API frozen RED suite. This is deliberately
+            # independent of the single-worker benchmark fixture: the
+            # managed service will own the listener and coordinator adapter.
+            add_executable(
+                test-host-admin-api
+                tests/test_host_admin_api.cc)
+            target_include_directories(
+                test-host-admin-api PRIVATE include src)
+            target_link_libraries(test-host-admin-api PRIVATE
+                capsid_host_core
+                capsid_sanitizers)
+            set_target_properties(test-host-admin-api PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-admin-api PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-admin-api PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            foreach(CAPSID_ADMIN_API_TEST_ID
+                    host_admin_peer_credentials
+                    host_admin_socket_mode
+                    host_admin_global_authorization
+                    host_admin_four_endpoints
+                    host_admin_request_limits
+                    host_admin_strict_requests_and_redaction
+                    host_admin_identifier_grammar
+                    host_admin_bodyless_routes_and_safe_status
+                    host_admin_backend_exception_redacted
+                    host_admin_backend_output_validation
+                    host_admin_submission_status
+                    host_admin_socket_group
+                    host_admin_stale_socket_recovery
+                    host_admin_socket_path_fail_closed)
+                add_test(
+                    NAME "${CAPSID_ADMIN_API_TEST_ID}"
+                    COMMAND test-host-admin-api
+                        "${CAPSID_ADMIN_API_TEST_ID}")
+                set_tests_properties(
+                    "${CAPSID_ADMIN_API_TEST_ID}" PROPERTIES TIMEOUT 10)
+            endforeach()
+        endif()
+
+        if(UNIX AND Boost_FOUND)
+            # The second Admin batch crosses the real Unix-stream/HTTP
+            # boundary. The production implementation must use the Host's
+            # Boost.Beast HTTP/1 authority; the public header remains free of
+            # Boost types.
+            find_package(Threads REQUIRED)
+            add_executable(
+                test-host-admin-http
+                tests/test_host_admin_http.cc)
+            target_include_directories(
+                test-host-admin-http PRIVATE include src)
+            target_link_libraries(test-host-admin-http PRIVATE
+                capsid_host_core
+                Boost::system
+                Threads::Threads
+                capsid_sanitizers)
+            set_target_properties(test-host-admin-http PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                target_compile_options(
+                    test-host-admin-http PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+            foreach(CAPSID_ADMIN_HTTP_TEST_ID
+                    host_admin_http_authorized_round_trip
+                    host_admin_http_peer_rejected_before_read
+                    host_admin_http_framing_limits
+                    host_admin_http_smuggling_rejected
+                    host_admin_http_slow_header_timeout
+                    host_admin_http_slow_drip_deadlines)
+                add_test(
+                    NAME "${CAPSID_ADMIN_HTTP_TEST_ID}"
+                    COMMAND test-host-admin-http
+                        "${CAPSID_ADMIN_HTTP_TEST_ID}")
+                set_tests_properties(
+                    "${CAPSID_ADMIN_HTTP_TEST_ID}" PROPERTIES TIMEOUT 10)
+            endforeach()
+        endif()
+
         if(CAPSID_BUILD_WORKER)
+            # M1D Admin/coordinator bridge: the real managed adapter and its
+            # bounded asynchronous submission wrapper are separate from the
+            # HTTP transport so operation progress remains independently
+            # testable.
+            find_package(Threads REQUIRED)
+            add_executable(
+                test-host-managed-admin-backend
+                tests/test_host_managed_admin_backend.cc)
+            target_include_directories(
+                test-host-managed-admin-backend PRIVATE include src)
+            target_link_libraries(test-host-managed-admin-backend PRIVATE
+                capsid_runtime
+                capsid_host_core
+                capsid_jansson
+                OpenSSL::Crypto
+                Threads::Threads
+                capsid_sanitizers)
+            set_target_properties(test-host-managed-admin-backend PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                target_compile_options(
+                    test-host-managed-admin-backend PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+            foreach(CAPSID_MANAGED_ADMIN_TEST_ID
+                    host_admin_async_deploy_progress
+                    host_admin_async_failure_and_capacity
+                    host_managed_admin_routes_real_coordinator
+                    host_admin_managed_status_dispatch_round_trip)
+                add_test(
+                    NAME "${CAPSID_MANAGED_ADMIN_TEST_ID}"
+                    COMMAND test-host-managed-admin-backend
+                        "${CAPSID_MANAGED_ADMIN_TEST_ID}")
+                set_tests_properties(
+                    "${CAPSID_MANAGED_ADMIN_TEST_ID}" PROPERTIES TIMEOUT 10)
+            endforeach()
+
             # M1D managed host frozen suite: one binary, one mode per test.
             add_executable(
                 test-host-managed
@@ -182,11 +312,65 @@ if(BUILD_TESTING)
                 capsid-worker)
             foreach(CAPSID_MANAGED_TEST_ID
                     host_managed_deploy_integration
+                    host_managed_admin_worker_lifecycle
                     host_managed_trusted_bytecode
                     host_managed_compatibility_fallback
+                    host_managed_fallback_identity_retains_attestation
                     host_managed_secret_snapshot
+                    host_managed_secret_snapshot_limit_precedes_staging
+                    host_managed_secret_app_symlink_rejected
+                    host_managed_secret_value_not_persisted
+                    host_managed_recovery_accepts_large_valid_env_metadata
                     host_managed_deploy_fail_closed
-                    host_managed_retire_and_recovery)
+                    host_managed_retire_and_recovery
+                    host_managed_retire_is_idempotent
+                    host_managed_recovery_warms_worker
+                    host_managed_version_immutability
+                    host_managed_version_mapping_canonical_path
+                    host_managed_resource_config_affects_identity
+                    host_managed_applies_worker_memory_limit
+                    host_managed_rejects_request_limit_over_host
+                    host_managed_host_policy_affects_identity
+                    host_managed_fetch_policy_warms_worker
+                    host_managed_multiple_rules_stable
+                    host_managed_multiple_env_entries_stable
+                    host_managed_rejects_unknown_config
+                    host_managed_literal_env_without_secret_root
+                    host_managed_runtime_identity_fail_closed
+                    host_managed_state_root_symlink_rejected
+                    host_managed_staging_symlink_rejected
+                    host_managed_generations_symlink_rejected
+                    host_managed_complete_symlink_rejected
+                    host_managed_concurrent_operation_ids
+                    host_managed_recovery_uses_committed_generation
+                    host_managed_recovery_cleans_stale_temp
+                    host_managed_recovery_rejects_generation_tamper
+                    host_managed_recovery_rejects_snapshot_fifo_promptly
+                    host_managed_recovery_rejects_optional_snapshot_fifo
+                    host_managed_recovery_rejects_oversized_snapshot
+                    host_managed_recovery_revalidates_host_policy
+                    host_managed_recovery_never_reuses_stale_secret
+                    host_managed_recovery_rejects_trusted_bundle_swap
+                    host_managed_recovery_rejects_trusted_attestation_drift
+                    host_managed_recovery_rejects_source_name_tamper
+                    host_managed_recovery_rejects_source_name_separator_tamper
+                    host_managed_recovery_rejects_source_name_segment_tamper
+                    host_managed_idempotent_rejects_corrupt_generation
+                    host_managed_shared_generation_cleans_staging
+                    host_managed_shared_generation_redeploys
+                    host_managed_shared_generation_recovers
+                    host_managed_storage_namespace_reaches_worker
+                    host_managed_stdio_stream_reaches_worker
+                    host_managed_rejects_storage_namespace_over_host
+                    host_managed_rejects_stdio_stream_over_host
+                    host_managed_resource_fields_affect_identity
+                    host_managed_resource_limits_reach_worker
+                    host_managed_process_address_space_reaches_release_runtime
+                    host_managed_failed_deploy_cleans_staging
+                    host_managed_staging_mode_rejected
+                    host_managed_generations_mode_rejected
+                    host_managed_rejects_corrupt_version_mapping
+                    host_managed_failed_operation_status)
                 add_test(
                     NAME "${CAPSID_MANAGED_TEST_ID}"
                     COMMAND test-host-managed

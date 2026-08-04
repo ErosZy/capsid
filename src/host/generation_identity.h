@@ -2,7 +2,6 @@
 #define CAPSID_HOST_GENERATION_IDENTITY_H
 
 #include <string>
-#include <string_view>
 
 namespace capsid::host {
 
@@ -11,18 +10,21 @@ enum class SelectedArtifactKind {
     kTrustedBytecode,
 };
 
+// The input owns all of its strings. The Host never passes expression-level
+// temporaries into a view: a digest built from a temporary std::string would
+// dangle before compute_generation_digest reads it (heap-use-after-free).
 struct GenerationIdentityInput {
-    std::string_view application_id;
-    std::string_view source_digest;
+    std::string application_id;
+    std::string source_digest;
     // Empty when no provenance-valid attestation was supplied.
-    std::string_view bytecode_attestation_digest;
+    std::string bytecode_attestation_digest;
     SelectedArtifactKind selected_artifact = SelectedArtifactKind::kSource;
-    std::string_view normalized_app_config_digest;
-    std::string_view effective_policy_digest;
-    std::string_view effective_resource_digest;
-    std::string_view host_config_digest;
-    std::string_view secret_revision;
-    std::string_view runtime_compatibility_id;
+    std::string normalized_app_config_digest;
+    std::string effective_policy_digest;
+    std::string effective_resource_digest;
+    std::string host_config_digest;
+    std::string secret_revision;
+    std::string runtime_compatibility_id;
 };
 
 // Returns "sha256:" plus lowercase SHA-256 of this binary record:

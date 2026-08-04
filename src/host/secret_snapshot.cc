@@ -501,6 +501,15 @@ SecretSnapshotCompileResult compile_secret_snapshot(
         environment_json += '}';
     }
     environment_json += "]}";
+    // The metadata document has its own ceiling: key IDs and opaque
+    // revisions are identifier material that can legitimately exceed the
+    // name/value budget, but the committed document is still bounded so a
+    // hostile secret root cannot force an unbounded generation.
+    if (environment_json.size() > kMaxEnvironmentMetadataJsonBytes) {
+        set_error(result, ErrorCode::kSnapshotTooLarge, "/permissions/env",
+                  "environment metadata exceeds the size limit");
+        return result;
+    }
     result.snapshot.effective_environment_json_ = std::move(environment_json);
     result.snapshot.secret_revision_ = sha256_hex(revision_message);
 
