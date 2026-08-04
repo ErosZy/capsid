@@ -102,10 +102,13 @@ if(CAPSID_BUILD_HOST)
             src/host/single_worker_server.cc)
         target_include_directories(capsid-host PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/src"
-            "${CMAKE_CURRENT_SOURCE_DIR}/include")
+            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+            "${CAPSID_GENERATED_DIR}")
         target_link_libraries(capsid-host PRIVATE
             capsid_runtime
             capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
             Boost::system
             capsid_sanitizers)
         set_target_properties(capsid-host PROPERTIES
@@ -147,7 +150,11 @@ if(CAPSID_BUILD_HOST)
         # The Admin HTTP transport uses Boost.Beast as the HTTP/1 framing
         # authority; it joins the host core only when Boost is available,
         # so a Boost-less platform still builds the pure Admin dispatcher.
-        target_sources(capsid_host_core PRIVATE src/host/admin_http.cc)
+        # The long-lived Admin service depends on the accepted-connection
+        # transport, so it joins in the same gate.
+        target_sources(capsid_host_core PRIVATE
+            src/host/admin_http.cc
+            src/host/admin_service.cc)
         target_link_libraries(capsid_host_core PRIVATE Boost::system)
     else()
         message(STATUS "capsid-host skipped: system Boost not found")

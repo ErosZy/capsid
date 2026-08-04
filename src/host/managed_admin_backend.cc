@@ -34,7 +34,8 @@ AsyncAdminBackend::AsyncAdminBackend(
                        ? 1
                        : options.max_pending_operations),
       activate_worker_(options.activate_worker),
-      retire_worker_(options.retire_worker) {
+      retire_worker_(options.retire_worker),
+      external_stop_(options.external_stop) {
     worker_ = std::thread(&AsyncAdminBackend::worker_loop, this);
 }
 
@@ -53,6 +54,16 @@ DeployOutcome AsyncAdminBackend::submit(
     DeployOutcome outcome;
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        // After a stop the executor rejects submissions synchronously.
+        if (stopping_ || (external_stop_ != nullptr &&
+                          external_stop_->load())) {
+            outcome.error = "admin operation rejected during shutdown";
+            if (status != nullptr) {
+                status->state = OperationState::kFailed;
+                status->error = outcome.error;
+            }
+            return outcome;
+        }
         // max_pending_ bounds RUNNING + queued operations (the count is
         // released only when the worker finishes); a full pool is
         // fail-closed.
@@ -95,9 +106,28 @@ void AsyncAdminBackend::worker_loop() {
         {
             std::unique_lock<std::mutex> lock(mutex_);
             condition_.wait(lock, [&]() {
-                return stopping_ || !queue_.empty();
+                return stopping_ || !queue_.empty() ||
+                       (external_stop_ != nullptr &&
+                        external_stop_->load());
             });
-            if (stopping_ && queue_.empty()) {
+            // Re-check the stop condition after the wake-up: the signal
+            // may have arrived while this thread was waiting.
+            const bool stop_requested =
+                stopping_ || (external_stop_ != nullptr &&
+                              external_stop_->load());
+            if (stop_requested) {
+                // Cancel path: queued operations are recorded as redacted
+                // Failed and dropped, the capacity slots they held are
+                // released, and the loop exits. The empty queue is never
+                // dereferenced.
+                for (PendingOperation& queued : queue_) {
+                    OperationStatus& entry = registry_[queued.operation_id];
+                    entry.state = OperationState::kFailed;
+                    entry.error = queued.retire ? "operation failed"
+                                                : "deployment failed";
+                }
+                pending_count_ -= queue_.size();
+                queue_.clear();
                 return;
             }
             pending = std::move(queue_.front());
@@ -237,7 +267,36 @@ DeployOutcome ManagedAdminBackend::deploy(const std::string& application,
         }
         return outcome;
     }
-    return managed_deploy(options, version, status);
+    // The permit is bound to the active App slot: a replacement deploy of
+    // an App that already holds its slot does not acquire again, and the
+    // global capacity is consumed BEFORE any spawn or durable activation.
+    bool newly_acquired = true;
+    if (capacity != nullptr) {
+        newly_acquired = capacity->acquire(application);
+        if (!newly_acquired && !capacity->holds(application)) {
+            DeployOutcome outcome;
+            outcome.error = "worker capacity exceeded";
+            if (status != nullptr) {
+                status->state = OperationState::kFailed;
+                status->error = outcome.error;
+            }
+            return outcome;
+        }
+    }
+    DeployOutcome outcome = managed_deploy(options, version, status);
+    if (capacity != nullptr) {
+        if (outcome.ok && outcome.worker != nullptr) {
+            // The activated worker HOLDS the slot until its retire; a
+            // replacement keeps its existing slot.
+            capacity->record_success(application);
+        } else if (newly_acquired) {
+            // Only a permit acquired BY THIS DEPLOY is returned when it
+            // settles without a live worker; a failed replacement leaves
+            // the old holder's slot untouched.
+            capacity->release(application);
+        }
+    }
+    return outcome;
 }
 
 DeployOutcome ManagedAdminBackend::retire(const std::string& application,
@@ -252,7 +311,12 @@ DeployOutcome ManagedAdminBackend::retire(const std::string& application,
         }
         return outcome;
     }
-    return managed_retire(options, status);
+    DeployOutcome outcome = managed_retire(options, status);
+    if (outcome.ok && capacity != nullptr) {
+        // The retired worker's slot returns to the global pool.
+        capacity->release(application);
+    }
+    return outcome;
 }
 
 OperationStatus ManagedAdminBackend::operation_status(

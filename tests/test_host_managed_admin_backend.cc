@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cerrno>
@@ -375,6 +376,23 @@ int main(int argc, char** argv) {
                     std::string::npos &&
                     response.body.find("orders-v1") != std::string::npos,
                 "Admin dispatch lost or changed real managed App status");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_async_rejects_submission_after_stop") {
+        BlockingAdminBackend inner;
+        std::atomic<bool> stop{true};
+        capsid::host::AsyncAdminBackendOptions options;
+        options.max_pending_operations = 2;
+        options.external_stop = &stop;
+        capsid::host::AsyncAdminBackend backend(&inner, options);
+        capsid::host::OperationStatus submitted;
+        const capsid::host::DeployOutcome outcome =
+            backend.deploy("orders", "v1", &submitted);
+        require(!outcome.ok && inner.calls() == 0 &&
+                    submitted.state == capsid::host::OperationState::kFailed,
+                "Admin accepted a new operation after shutdown began");
         std::cout << "PASS" << std::endl;
         return 0;
     }

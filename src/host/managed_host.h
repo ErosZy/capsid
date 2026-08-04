@@ -6,6 +6,7 @@ struct capsid_worker;
 #include "host/bytecode_attestation.h"
 #include "host/policy_compiler.h"
 
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -35,6 +36,11 @@ struct ManagedHostOptions {
     std::vector<capsid::host::TrustedBytecodeKey> trusted_keys;
     // The runtime compatibility ID the worker must report at READY.
     std::string runtime_compatibility_id;
+    // Optional process-level stop signal. When set and fired, the worker
+    // READY handshake aborts promptly (spawned worker destroyed, operation
+    // fails) instead of waiting out its 15-second deadline, so a SIGTERM
+    // shutdown can cancel a genuinely running deploy.
+    const std::atomic<bool>* stop_requested = nullptr;
 };
 
 enum class OperationState {

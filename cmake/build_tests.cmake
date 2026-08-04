@@ -231,13 +231,51 @@ if(BUILD_TESTING)
                     host_admin_http_framing_limits
                     host_admin_http_smuggling_rejected
                     host_admin_http_slow_header_timeout
-                    host_admin_http_slow_drip_deadlines)
+                    host_admin_http_slow_drip_deadlines
+                    host_admin_http_accepted_fd_remains_caller_owned)
                 add_test(
                     NAME "${CAPSID_ADMIN_HTTP_TEST_ID}"
                     COMMAND test-host-admin-http
                         "${CAPSID_ADMIN_HTTP_TEST_ID}")
                 set_tests_properties(
                     "${CAPSID_ADMIN_HTTP_TEST_ID}" PROPERTIES TIMEOUT 10)
+            endforeach()
+
+            # The one-connection transport above is intentionally not a
+            # daemon lifecycle. This suite freezes the owning long-lived
+            # service: repeated accepts, bounded stop from idle/slow-client
+            # states, and inode-safe pathname cleanup.
+            add_executable(
+                test-host-admin-service
+                tests/test_host_admin_service.cc)
+            target_include_directories(
+                test-host-admin-service PRIVATE include src)
+            target_link_libraries(test-host-admin-service PRIVATE
+                capsid_host_core
+                Boost::system
+                Threads::Threads
+                capsid_sanitizers)
+            set_target_properties(test-host-admin-service PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                target_compile_options(
+                    test-host-admin-service PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+            foreach(CAPSID_ADMIN_SERVICE_TEST_ID
+                    host_admin_service_multiple_connections
+                    host_admin_service_idle_stop
+                    host_admin_service_slow_client_stop
+                    host_admin_service_preserves_replaced_path
+                    host_admin_service_stop_burst_is_nonblocking)
+                add_test(
+                    NAME "${CAPSID_ADMIN_SERVICE_TEST_ID}"
+                    COMMAND test-host-admin-service
+                        "${CAPSID_ADMIN_SERVICE_TEST_ID}")
+                set_tests_properties(
+                    "${CAPSID_ADMIN_SERVICE_TEST_ID}" PROPERTIES TIMEOUT 10)
             endforeach()
         endif()
 
@@ -272,7 +310,8 @@ if(BUILD_TESTING)
                     host_admin_async_deploy_progress
                     host_admin_async_failure_and_capacity
                     host_managed_admin_routes_real_coordinator
-                    host_admin_managed_status_dispatch_round_trip)
+                    host_admin_managed_status_dispatch_round_trip
+                    host_admin_async_rejects_submission_after_stop)
                 add_test(
                     NAME "${CAPSID_MANAGED_ADMIN_TEST_ID}"
                     COMMAND test-host-managed-admin-backend
@@ -280,6 +319,52 @@ if(BUILD_TESTING)
                 set_tests_properties(
                     "${CAPSID_MANAGED_ADMIN_TEST_ID}" PROPERTIES TIMEOUT 10)
             endforeach()
+
+            if(UNIX AND Boost_FOUND AND TARGET capsid-host)
+                # The production process closure: unlike the M1A benchmark
+                # fixture, managed mode consumes host.json, owns the Admin
+                # service and warmed worker, and shuts both down on SIGTERM.
+                add_executable(
+                    test-host-managed-executable
+                    tests/test_host_managed_executable.cc)
+                target_link_libraries(test-host-managed-executable PRIVATE
+                    capsid_jansson
+                    capsid_sanitizers)
+                set_target_properties(test-host-managed-executable PROPERTIES
+                    CXX_STANDARD 20
+                    CXX_STANDARD_REQUIRED ON
+                    CXX_EXTENSIONS OFF)
+                if(CAPSID_STRICT_WARNINGS)
+                    target_compile_options(
+                        test-host-managed-executable PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+                add_dependencies(test-host-managed-executable
+                    capsid-host
+                    capsid-worker)
+                foreach(CAPSID_MANAGED_EXECUTABLE_TEST_ID
+                        host_managed_executable_deploy_and_shutdown
+                        host_managed_executable_stops_during_deploy
+                        host_managed_executable_recovers_on_restart
+                        host_managed_executable_rejects_host_config_fifo
+                        host_managed_executable_rejects_host_config_symlink
+                        host_managed_executable_rejects_embedded_nul_path
+                        host_managed_executable_rejects_ambiguous_secret_template
+                        host_managed_executable_rejects_unsafe_admin_mode
+                        host_managed_executable_enforces_global_worker_capacity
+                        host_managed_executable_redeploys_with_capacity_one
+                        host_managed_executable_recovery_consumes_capacity)
+                    add_test(
+                        NAME "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
+                        COMMAND test-host-managed-executable
+                            "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
+                            $<TARGET_FILE:capsid-host>
+                            $<TARGET_FILE:capsid-worker>)
+                    set_tests_properties(
+                        "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
+                        PROPERTIES TIMEOUT 40)
+                endforeach()
+            endif()
 
             # M1D managed host frozen suite: one binary, one mode per test.
             add_executable(
@@ -651,13 +736,14 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE:capsid-bytecode-compile>")
         endif()
 
-        if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN)
+        if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN)
             add_test(
                 NAME host_sanitizer_instrumentation
                 COMMAND "${CMAKE_COMMAND}"
                     "-DCAPSID_COMPILE_COMMANDS=${CMAKE_BINARY_DIR}/compile_commands.json"
                     "-DCAPSID_EXPECT_ASAN=${CAPSID_ENABLE_ASAN}"
                     "-DCAPSID_EXPECT_UBSAN=${CAPSID_ENABLE_UBSAN}"
+                    "-DCAPSID_EXPECT_TSAN=${CAPSID_ENABLE_TSAN}"
                     -P
                     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestHostSanitizerInstrumentation.cmake"
             )

@@ -9,9 +9,22 @@
 
 #include "host/single_worker_server.h"
 
+#include "build_identity.h"
+#include "capsid/runtime.h"
+#include "host/admin_service.h"
+#include "host/config.h"
+#include "host/managed_admin_backend.h"
+
+#include <jansson.h>
+
 #include <boost/asio/ip/address.hpp>
 #include <boost/system/error_code.hpp>
 
+#include <dirent.h>
+#include <signal.h>
+#include <sys/stat.h>
+
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -19,6 +32,8 @@
 #include <fstream>
 #include <limits>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -115,6 +130,596 @@ std::vector<std::uint8_t> read_bundle(const std::string& path) {
     return bytes;
 }
 
+// ---- managed mode: host.json authority, real coordinator, Admin service ----
+
+// Process-level stop signal. SIGTERM is blocked process-wide and waited
+// for with sigwait on the main thread, so no C++ object is ever touched
+// inside a signal handler.
+std::atomic<bool> g_stop{false};
+
+// Parsed host.json fields that drive the managed mode. The authoritative
+// schema validation runs first (validate_config_json); this extraction maps
+// the validated document onto the coordinator options and fails closed on
+// anything it cannot map.
+struct ManagedConfig {
+    std::string applications_root;
+    std::string state_root;
+    std::string secret_root_template;  // contains "{application}"
+    std::string admin_unix_path;
+    mode_t admin_mode = 0600;
+    capsid::host::HostPolicy policy;
+    // capacity.workersTotal: the process-global worker permit. It is
+    // consumed before any spawn/durable activation and returned when the
+    // operation settles. startupsConcurrent is NOT reinterpreted as the
+    // Admin pending-queue ceiling.
+    int worker_capacity = 1;
+};
+
+std::string json_string_field(json_t* object, const char* key) {
+    json_t* value = json_object_get(object, key);
+    return json_is_string(value) ? json_string_value(value) : std::string();
+}
+
+// "host:port" / "host" (any port); decimal ports only.
+bool parse_fetch_target_text(const std::string& text,
+                             capsid::host::FetchTarget* out) {
+    const std::size_t colon = text.find(':');
+    if (colon == std::string::npos) {
+        if (text.empty()) {
+            return false;
+        }
+        out->host = text;
+        return true;
+    }
+    out->host = text.substr(0, colon);
+    if (out->host.empty()) {
+        return false;
+    }
+    const std::string ports = text.substr(colon + 1);
+    std::size_t begin = 0;
+    while (begin <= ports.size()) {
+        const std::size_t comma = ports.find(',', begin);
+        const std::string part = ports.substr(
+            begin, comma == std::string::npos ? std::string::npos
+                                              : comma - begin);
+        if (part.empty()) {
+            return false;
+        }
+        char* end = nullptr;
+        const long port = std::strtol(part.c_str(), &end, 10);
+        if (end == nullptr || *end != '\0' || port <= 0 || port > 65535) {
+            return false;
+        }
+        out->ports.push_back(static_cast<std::uint16_t>(port));
+        if (comma == std::string::npos) {
+            break;
+        }
+        begin = comma + 1;
+    }
+    return !out->ports.empty();
+}
+
+// "256MiB" style size with explicit suffix (same grammar as the managed
+// coordinator's worker.memoryMax).
+bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
+    if (text.empty()) {
+        return false;
+    }
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long long base = std::strtoull(text.c_str(), &end, 10);
+    if (errno != 0 || end == text.c_str()) {
+        return false;
+    }
+    std::uint64_t multiplier = 0;
+    const std::string suffix(end);
+    if (suffix == "KiB") {
+        multiplier = 1024ULL;
+    } else if (suffix == "MiB") {
+        multiplier = 1024ULL * 1024ULL;
+    } else if (suffix == "GiB") {
+        multiplier = 1024ULL * 1024ULL * 1024ULL;
+    } else if (suffix == "KB") {
+        multiplier = 1000ULL;
+    } else if (suffix == "MB") {
+        multiplier = 1000ULL * 1000ULL;
+    } else if (suffix == "GB") {
+        multiplier = 1000ULL * 1000ULL * 1000ULL;
+    } else {
+        return false;
+    }
+    if (base > std::numeric_limits<std::uint64_t>::max() / multiplier) {
+        return false;
+    }
+    *out = static_cast<std::uint64_t>(base) * multiplier;
+    return true;
+}
+
+bool parse_string_array(json_t* parent, const char* key,
+                        std::vector<std::string>* out) {
+    json_t* value = json_object_get(parent, key);
+    if (value == nullptr) {
+        return true;
+    }
+    if (!json_is_array(value)) {
+        return false;
+    }
+    std::size_t index = 0;
+    json_t* item = nullptr;
+    json_array_foreach(value, index, item) {
+        if (!json_is_string(item)) {
+            return false;
+        }
+        out->push_back(json_string_value(item));
+    }
+    return true;
+}
+
+bool parse_managed_config(const std::string& json, ManagedConfig* out,
+                          std::string* error) {
+    json_error_t parse_error;
+    json_t* root = json_loadb(json.data(), json.size(),
+                              JSON_REJECT_DUPLICATES, &parse_error);
+    if (root == nullptr || !json_is_object(root)) {
+        *error = "invalid host.json";
+        if (root) {
+            json_decref(root);
+        }
+        return false;
+    }
+    out->applications_root = json_string_field(root, "applicationsRoot");
+    out->state_root = json_string_field(root, "stateRoot");
+    out->secret_root_template = json_string_field(root, "secretRootTemplate");
+    json_t* admin = json_object_get(root, "admin");
+    if (json_is_object(admin)) {
+        out->admin_unix_path = json_string_field(admin, "unix");
+        const std::string mode_text = json_string_field(admin, "mode");
+        if (!mode_text.empty()) {
+            char* end = nullptr;
+            const unsigned long parsed =
+                std::strtoul(mode_text.c_str(), &end, 8);
+            if (end == nullptr || *end != '\0' || parsed > 07777) {
+                *error = "invalid admin.mode";
+                json_decref(root);
+                return false;
+            }
+            // host-v1 has no management-group field, so a
+            // group/world-accessible pathname cannot be authorized
+            // coherently; managed mode keeps the socket at exact 0600.
+            if (static_cast<mode_t>(parsed) != 0600) {
+                *error = "admin.mode must be 0600";
+                json_decref(root);
+                return false;
+            }
+            out->admin_mode = static_cast<mode_t>(parsed);
+        }
+    }
+    json_t* permissions = json_object_get(root, "permissions");
+    if (json_is_object(permissions)) {
+        if (!parse_string_array(permissions, "modules",
+                                &out->policy.module_allowlist) ||
+            !parse_string_array(permissions, "environmentNames",
+                                &out->policy.env_patterns) ||
+            !parse_string_array(permissions, "fsReadRoots",
+                                &out->policy.fs_read_roots) ||
+            !parse_string_array(permissions, "storageNamespaces",
+                                &out->policy.storage_namespaces) ||
+            !parse_string_array(permissions, "stdioStreams",
+                                &out->policy.stdio_streams)) {
+            *error = "invalid host.json permissions";
+            json_decref(root);
+            return false;
+        }
+        out->policy.storage_allowed = !out->policy.storage_namespaces.empty();
+        out->policy.stdio_allowed = !out->policy.stdio_streams.empty();
+        std::vector<std::string> targets;
+        if (!parse_string_array(permissions, "fetchTargets", &targets)) {
+            *error = "invalid host.json fetchTargets";
+            json_decref(root);
+            return false;
+        }
+        for (const std::string& target : targets) {
+            capsid::host::FetchTarget parsed;
+            if (!parse_fetch_target_text(target, &parsed)) {
+                *error = "invalid host.json fetchTargets entry";
+                json_decref(root);
+                return false;
+            }
+            out->policy.fetch_targets.push_back(std::move(parsed));
+        }
+    }
+    json_t* isolation = json_object_get(root, "isolation");
+    if (json_is_object(isolation)) {
+        const std::string mode = json_string_field(isolation, "mode");
+        if (!mode.empty() && mode != "strict") {
+            *error = "isolation.mode must be strict";
+            json_decref(root);
+            return false;
+        }
+    }
+    json_t* maximums = json_object_get(root, "maximums");
+    if (json_is_object(maximums)) {
+        json_t* request = json_object_get(maximums, "request");
+        if (json_is_object(request)) {
+            json_t* inflight =
+                json_object_get(request, "maxInflightPerWorker");
+            if (json_is_integer(inflight)) {
+                out->policy.max_requests_per_worker =
+                    static_cast<std::uint64_t>(json_integer_value(inflight));
+            }
+        }
+        json_t* worker = json_object_get(maximums, "worker");
+        if (json_is_object(worker)) {
+            json_t* memory = json_object_get(worker, "memoryMax");
+            if (json_is_string(memory)) {
+                std::uint64_t bytes = 0;
+                if (!parse_size_bytes_text(json_string_value(memory),
+                                           &bytes)) {
+                    *error = "invalid maximums.worker.memoryMax";
+                    json_decref(root);
+                    return false;
+                }
+                out->policy.max_worker_memory_bytes = bytes;
+            }
+        }
+    }
+    json_t* capacity = json_object_get(root, "capacity");
+    if (json_is_object(capacity)) {
+        json_t* workers = json_object_get(capacity, "workersTotal");
+        if (json_is_integer(workers)) {
+            const json_int_t value = json_integer_value(workers);
+            if (value <= 0) {
+                *error = "capacity.workersTotal must be positive";
+                json_decref(root);
+                return false;
+            }
+            out->worker_capacity = static_cast<int>(value);
+        }
+    }
+    if (out->applications_root.empty() || out->state_root.empty() ||
+        out->admin_unix_path.empty() ||
+        out->secret_root_template.find("{application}") ==
+            std::string::npos) {
+        *error = "host.json is missing a required root or admin path";
+        json_decref(root);
+        return false;
+    }
+    json_decref(root);
+    return true;
+}
+
+// Safe open of a Host-owned directory: O_NOFOLLOW, directory, euid owner,
+// no group/other bits.
+int open_verified_root(const std::string& path, const char* what) {
+    const int fd = open(path.c_str(),
+                        O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) {
+        fail(std::string("cannot open ") + what);
+    }
+    struct stat st = {};
+    if (fstat(fd, &st) != 0 || !S_ISDIR(st.st_mode) ||
+        st.st_uid != geteuid() || (st.st_mode & 0077) != 0) {
+        close(fd);
+        fail(std::string("unverified ") + what);
+    }
+    return fd;
+}
+
+// Valid App ID (frozen lowercase grammar).
+bool valid_managed_app_id(const std::string& value) {
+    if (value.empty() || value.size() > 63) {
+        return false;
+    }
+    if (!((value[0] >= 'a' && value[0] <= 'z') ||
+          (value[0] >= '0' && value[0] <= '9'))) {
+        return false;
+    }
+    for (const char c : value) {
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+              c == '.' || c == '_' || c == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// True when the App has a durable active-state document (an active
+// generation or a retired tombstone). Recovery only needs a permit for
+// those; an App with no state cannot consume capacity.
+bool has_durable_active_state(const std::string& state_root,
+                              const std::string& application) {
+    const std::string path =
+        state_root + "/apps/" + application + "/active.json";
+    const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) {
+        return false;
+    }
+    close(fd);
+    return true;
+}
+
+// Discovers configured Apps beneath the verified applications root.
+std::vector<std::string> discover_applications(int apps_fd) {
+    std::vector<std::string> applications;
+    DIR* dir = fdopendir(dup(apps_fd));
+    if (dir == nullptr) {
+        fail("cannot enumerate applications root");
+    }
+    for (;;) {
+        errno = 0;
+        struct dirent* entry = readdir(dir);
+        if (entry == nullptr) {
+            if (errno != 0 && errno != EINTR) {
+                fail("cannot enumerate applications root");
+            }
+            break;
+        }
+        const std::string name(entry->d_name);
+        if (!valid_managed_app_id(name)) {
+            continue;
+        }
+        struct stat st = {};
+        if (fstatat(apps_fd, entry->d_name, &st, AT_SYMLINK_NOFOLLOW) == 0 &&
+            S_ISDIR(st.st_mode)) {
+            applications.push_back(name);
+        }
+    }
+    closedir(dir);
+    return applications;
+}
+
+// Cross-platform stat timestamp accessors: Apple spells the fields
+// st_mtimespec/st_ctimespec; other POSIX systems use st_mtim/st_ctim
+// (same pattern as the coordinator's platform macros).
+#if defined(__APPLE__)
+#define CAPSID_MAIN_MTIME_SEC(st) ((st).st_mtimespec.tv_sec)
+#define CAPSID_MAIN_MTIME_NSEC(st) ((st).st_mtimespec.tv_nsec)
+#define CAPSID_MAIN_CTIME_SEC(st) ((st).st_ctimespec.tv_sec)
+#define CAPSID_MAIN_CTIME_NSEC(st) ((st).st_ctimespec.tv_nsec)
+#else
+#define CAPSID_MAIN_MTIME_SEC(st) ((st).st_mtim.tv_sec)
+#define CAPSID_MAIN_MTIME_NSEC(st) ((st).st_mtim.tv_nsec)
+#define CAPSID_MAIN_CTIME_SEC(st) ((st).st_ctim.tv_sec)
+#define CAPSID_MAIN_CTIME_NSEC(st) ((st).st_ctim.tv_nsec)
+#endif
+
+// Bounded read of the host.json document: O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC,
+// only a Host-owned regular file, a size cap checked before reading and a
+// device/inode/size re-check after reading (a FIFO or symlink never blocks
+// or redirects startup, and a concurrent swap is rejected).
+std::string read_host_config(const std::string& path) {
+    const int fd = open(path.c_str(),
+                        O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    if (fd < 0) {
+        fail("cannot open --host-config: " + path);
+    }
+    struct stat before = {};
+    if (fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) ||
+        before.st_uid != geteuid() || before.st_size < 0 ||
+        static_cast<std::uint64_t>(before.st_size) > 1024U * 1024U) {
+        close(fd);
+        fail("--host-config is not a Host-owned regular file under 1 MiB");
+    }
+    std::string json;
+    char buffer[4096];
+    for (;;) {
+        const ssize_t count = read(fd, buffer, sizeof(buffer));
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        if (count < 0) {
+            close(fd);
+            fail("cannot read --host-config");
+        }
+        if (count == 0) {
+            break;
+        }
+        if (json.size() + static_cast<std::size_t>(count) > 1024U * 1024U) {
+            close(fd);
+            fail("--host-config exceeds 1 MiB");
+        }
+        json.append(buffer, static_cast<std::size_t>(count));
+    }
+    struct stat after = {};
+    if (fstat(fd, &after) != 0 || after.st_dev != before.st_dev ||
+        after.st_ino != before.st_ino || after.st_size != before.st_size ||
+        CAPSID_MAIN_MTIME_SEC(after) != CAPSID_MAIN_MTIME_SEC(before) ||
+        CAPSID_MAIN_MTIME_NSEC(after) != CAPSID_MAIN_MTIME_NSEC(before) ||
+        CAPSID_MAIN_CTIME_SEC(after) != CAPSID_MAIN_CTIME_SEC(before) ||
+        CAPSID_MAIN_CTIME_NSEC(after) != CAPSID_MAIN_CTIME_NSEC(before)) {
+        close(fd);
+        fail("--host-config changed while it was read");
+    }
+    close(fd);
+    return json;
+}
+
+int run_managed(const std::string& host_config_path,
+                const std::string& worker_path) {
+    // SIGTERM is blocked FIRST, before any thread exists: every thread
+    // inherits the mask, and the main thread waits with sigwait below.
+    sigset_t term_set;
+    sigemptyset(&term_set);
+    sigaddset(&term_set, SIGTERM);
+    if (sigprocmask(SIG_BLOCK, &term_set, nullptr) != 0) {
+        fail("cannot block SIGTERM");
+    }
+    const std::string host_json = read_host_config(host_config_path);
+    // The authoritative schema boundary runs first; no second lax parser.
+    const capsid::host::ConfigValidationResult validated =
+        capsid::host::validate_config_json(
+            capsid::host::ConfigDocument::kHost, host_json);
+    if (!validated.ok) {
+        fail("host.json rejected at " + validated.error.path + ": " +
+             validated.error.message);
+    }
+    ManagedConfig config;
+    std::string config_error;
+    if (!parse_managed_config(host_json, &config, &config_error)) {
+        fail(config_error);
+    }
+    // Safe-open the roots; the secret template's parent is the dirfd the
+    // coordinator opens App subdirectories from.
+    const int apps_fd = open_verified_root(config.applications_root,
+                                           "applications root");
+    // The template must be EXACTLY <parent>/{application}: a trailing
+    // suffix would be silently misinterpreted as part of the parent root.
+    const std::string secret_template = config.secret_root_template;
+    const std::string::size_type placeholder =
+        secret_template.find("/{application}");
+    const std::string secret_parent =
+        secret_template.substr(0, placeholder);
+    if (placeholder == std::string::npos || secret_parent.empty() ||
+        secret_template.size() !=
+            secret_parent.size() + std::string("/{application}").size()) {
+        fail("secretRootTemplate must be exactly "
+             "<root>/{application}");
+    }
+    const int secrets_fd = open_verified_root(secret_parent,
+                                              "secret root template");
+    const std::vector<std::string> applications =
+        discover_applications(apps_fd);
+    if (applications.empty()) {
+        fail("applications root contains no configured Apps");
+    }
+    // Stable ownership for every App's options (the coordinator stores
+    // pointers to them).
+    std::vector<std::unique_ptr<capsid::host::ManagedHostOptions>> owned;
+    std::vector<capsid::host::ManagedHostOptions*> app_options;
+    for (const std::string& application : applications) {
+        auto options = std::make_unique<capsid::host::ManagedHostOptions>();
+        options->applications_root_fd = apps_fd;
+        options->secret_root_template_fd = secrets_fd;
+        options->state_root = config.state_root;
+        options->application = application;
+        options->worker_path = worker_path;
+        options->host_policy = config.policy;
+        options->runtime_compatibility_id = CAPSID_BUILD_COMPATIBILITY_ID;
+        options->stop_requested = &g_stop;
+        app_options.push_back(options.get());
+        owned.push_back(std::move(options));
+    }
+    // Active workers owned by this process: App -> worker.
+    std::map<std::string, capsid_worker*> active_workers;
+    std::mutex workers_mutex;
+    const auto activate_worker =
+        [&](const std::string& application, capsid_worker* worker) {
+            std::lock_guard<std::mutex> lock(workers_mutex);
+            const std::map<std::string, capsid_worker*>::iterator existing =
+                active_workers.find(application);
+            if (existing != active_workers.end() &&
+                existing->second != nullptr) {
+                // Activation replaces the previous worker.
+                capsid_worker_destroy(existing->second);
+            }
+            active_workers[application] = worker;
+            return true;
+        };
+    const auto retire_worker = [&](const std::string& application) {
+        std::lock_guard<std::mutex> lock(workers_mutex);
+        const std::map<std::string, capsid_worker*>::iterator existing =
+            active_workers.find(application);
+        if (existing != active_workers.end() &&
+            existing->second != nullptr) {
+            capsid_worker_destroy(existing->second);
+            active_workers.erase(existing);
+        }
+    };
+    const auto reclaim_workers = [&]() {
+        std::lock_guard<std::mutex> lock(workers_mutex);
+        for (const auto& entry : active_workers) {
+            if (entry.second != nullptr) {
+                capsid_worker_destroy(entry.second);
+            }
+        }
+        active_workers.clear();
+    };
+    // The process-global worker permit (capacity.workersTotal). The slot
+    // is bound to an active App: replacements do not re-acquire, a failed
+    // replacement keeps the old slot, and only a newly acquired permit is
+    // returned when the operation settles without a live worker.
+    capsid::host::WorkerCapacityPermit capacity(config.worker_capacity);
+    // Startup recovery: a durable active App is revalidated and its
+    // replacement worker reaches READY before Admin readiness is
+    // published. The global permit is acquired BEFORE any spawn; an
+    // active-generation count beyond capacity fails closed at startup
+    // instead of overspawning first.
+    for (capsid::host::ManagedHostOptions* options : app_options) {
+        // Only an App with durable state may consume a permit; a fresh
+        // App never occupies capacity before its first deploy.
+        bool newly_acquired = false;
+        if (has_durable_active_state(options->state_root,
+                                     options->application)) {
+            newly_acquired = capacity.acquire(options->application);
+            if (!newly_acquired &&
+                !capacity.holds(options->application)) {
+                fail("active generation count exceeds "
+                     "capacity.workersTotal");
+            }
+        }
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome recovered =
+            capsid::host::managed_recover(options, &status);
+        if (!recovered.ok) {
+            if (newly_acquired) {
+                capacity.release(options->application);
+            }
+            fail("cannot recover active application " + options->application);
+        }
+        if (recovered.worker != nullptr) {
+            // READY succeeded: the recovered worker holds the slot.
+            capacity.record_success(options->application);
+            activate_worker(options->application, recovered.worker);
+        } else if (newly_acquired) {
+            // No active/retired generation: no permanent occupancy.
+            capacity.release(options->application);
+        }
+    }
+    capsid::host::ManagedAdminBackend managed(app_options);
+    managed.capacity = &capacity;
+    capsid::host::AsyncAdminBackendOptions async_options;
+    // Fixed bounded queue; startupsConcurrent is not the Admin ceiling.
+    async_options.max_pending_operations = 8;
+    async_options.external_stop = &g_stop;
+    async_options.activate_worker = activate_worker;
+    async_options.retire_worker = retire_worker;
+    auto async = std::make_unique<capsid::host::AsyncAdminBackend>(
+        &managed, async_options);
+    capsid::host::AdminServiceOptions service_options;
+    service_options.socket.path = config.admin_unix_path;
+    service_options.socket.mode = config.admin_mode;
+    service_options.http.api.authorization.allowed_uid =
+        static_cast<std::uint64_t>(geteuid());
+    service_options.http.api.max_header_bytes = 64U * 1024U;
+    service_options.http.api.max_body_bytes = 64U * 1024U;
+    service_options.http.header_timeout_ms = 5000;
+    service_options.http.body_timeout_ms = 5000;
+    service_options.http.write_timeout_ms = 5000;
+    capsid::host::AdminService service(service_options, async.get());
+    std::string service_error;
+    if (!service.start(&service_error)) {
+        fail("cannot start admin service: " + service_error);
+    }
+    // Shutdown order: stop the Admin control plane, cancel queued/running
+    // deploys, reclaim active workers, then exit. The service's wait
+    // removes the socket inode it created.
+    int signal_number = 0;
+    if (sigwait(&term_set, &signal_number) != 0) {
+        fail("cannot wait for SIGTERM");
+    }
+    g_stop.store(true);
+    service.request_stop();
+    if (!service.wait(&service_error)) {
+        fail("admin service failed: " + service_error);
+    }
+    // Explicitly wait for the async executor to settle (queued work
+    // cancelled, running deploys interrupted) BEFORE reclaiming workers;
+    // shutdown never depends on destructor ordering at function return.
+    async.reset();
+    reclaim_workers();
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -143,11 +748,23 @@ int main(int argc, char** argv) {
         return it->second;
     };
 
-    capsid::host::SingleWorkerServerOptions options;
     const std::string mode = require("mode");
-    if (mode != "single-worker") {
-        fail("--mode must be single-worker");
+    if (mode == "managed") {
+        // Strict managed CLI: only --host-config and --worker are allowed.
+        for (const std::pair<const std::string, std::string>& entry :
+             values) {
+            if (entry.first != "mode" && entry.first != "host-config" &&
+                entry.first != "worker") {
+                fail("--mode managed accepts only --host-config and "
+                     "--worker");
+            }
+        }
+        return run_managed(require("host-config"), require("worker"));
     }
+    if (mode != "single-worker") {
+        fail("--mode must be single-worker or managed");
+    }
+    capsid::host::SingleWorkerServerOptions options;
     options.worker_path = require("worker");
     options.source_bundle_path = require("source-bundle");
     options.source_name = require("source-name");

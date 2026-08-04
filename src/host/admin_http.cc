@@ -143,35 +143,27 @@ ssize_t read_until_deadline(
 }
 
 // Sends the static 403 for an unauthorized peer that may have sent
-// nothing at all, then closes the connection.
+// nothing at all. The accepted fd stays caller-owned; the wrapper that
+// accepted it is responsible for closing.
 void reject_unauthorized(int fd, const AdminHttpOptions& options) {
     const std::string response = http_response_text(
         403, "Forbidden", http_error_body("forbidden"));
     (void) write_all_bounded(fd, response, options.write_timeout_ms);
-    close(fd);
 }
 
 }  // namespace
 
-bool serve_one_admin_http_connection(int listener_fd,
-                                     const AdminHttpOptions& options,
-                                     AdminBackend* backend,
-                                     std::string* error) {
-    // One Unix connection; the listener stays owned by the caller.
-    const int fd = accept(listener_fd, nullptr, nullptr);
-    if (fd < 0) {
-        if (error != nullptr) {
-            *error = "cannot accept admin connection";
-        }
-        return false;
-    }
+bool serve_accepted_admin_http_connection(
+    int fd, const AdminHttpOptions& options, AdminBackend* backend,
+    std::string* error) {
+    // The accepted connection is served; the caller owns its lifecycle
+    // around this call.
     // Bind the connection to its kernel peer credentials and decide the
     // global authorization BEFORE reading any attacker-controlled HTTP
     // byte.
     AdminPeerCredentials peer;
     std::string credential_error;
     if (!query_admin_peer_credentials(fd, &peer, &credential_error)) {
-        close(fd);
         if (error != nullptr) {
             *error = "cannot query admin peer credentials";
         }
@@ -187,7 +179,6 @@ bool serve_one_admin_http_connection(int listener_fd,
     // Nonblocking I/O under poll deadlines for the whole exchange.
     const int flags = fcntl(fd, F_GETFL, 0);
     if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
-        close(fd);
         if (error != nullptr) {
             *error = "cannot prepare admin connection";
         }
@@ -205,7 +196,6 @@ bool serve_one_admin_http_connection(int listener_fd,
         const std::string response = http_response_text(
             status, reason, http_error_body(message));
         (void) write_all_bounded(fd, response, options.write_timeout_ms);
-        close(fd);
         if (error != nullptr) {
             error->clear();
         }
@@ -242,7 +232,6 @@ bool serve_one_admin_http_connection(int listener_fd,
                                      "request timeout");
         }
         if (count == -2) {
-            close(fd);
             if (error != nullptr) {
                 *error = "admin connection poll failed";
             }
@@ -250,7 +239,6 @@ bool serve_one_admin_http_connection(int listener_fd,
         }
         if (count == 0) {
             // EOF before the header completed.
-            close(fd);
             if (error != nullptr) {
                 *error = "admin request ended before its header";
             }
@@ -313,7 +301,6 @@ bool serve_one_admin_http_connection(int listener_fd,
                                      "request timeout");
         }
         if (count == -2) {
-            close(fd);
             if (error != nullptr) {
                 *error = "admin connection poll failed";
             }
@@ -321,7 +308,6 @@ bool serve_one_admin_http_connection(int listener_fd,
         }
         if (count == 0) {
             // EOF before the declared body completed.
-            close(fd);
             if (error != nullptr) {
                 *error = "admin request ended before its body";
             }
@@ -350,7 +336,6 @@ bool serve_one_admin_http_connection(int listener_fd,
         response.status, "Admin", response.body);
     const bool written =
         write_all_bounded(fd, response_text, options.write_timeout_ms);
-    close(fd);
     if (!written) {
         if (error != nullptr) {
             *error = "cannot write admin response";
@@ -361,6 +346,29 @@ bool serve_one_admin_http_connection(int listener_fd,
         error->clear();
     }
     return true;
+}
+
+bool serve_one_admin_http_connection(int listener_fd,
+                                     const AdminHttpOptions& options,
+                                     AdminBackend* backend,
+                                     std::string* error) {
+    // One Unix connection; the listener stays owned by the caller.
+    const int fd = accept(listener_fd, nullptr, nullptr);
+    if (fd < 0) {
+        if (error != nullptr) {
+            *error = "cannot accept admin connection";
+        }
+        return false;
+    }
+    const bool served = serve_accepted_admin_http_connection(
+        fd, options, backend, error);
+    // The wrapper owns the accepted fd: close it exactly once, whether
+    // the connection was served or rejected early.
+    close(fd);
+    if (error != nullptr && served) {
+        error->clear();
+    }
+    return served;
 }
 
 }  // namespace capsid::host

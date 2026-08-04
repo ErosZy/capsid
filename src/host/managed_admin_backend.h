@@ -4,11 +4,13 @@
 #include "host/admin_api.h"
 #include "host/managed_host.h"
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -21,6 +23,11 @@ struct AsyncAdminBackendOptions {
     // Bound on concurrently running plus queued operations. A full pool
     // rejects new submissions immediately.
     std::size_t max_pending_operations = 8;
+    // Process-level stop signal (SIGTERM shutdown). When it fires, queued
+    // operations are cancelled (recorded as redacted Failed) and the
+    // worker loop stops taking new work; a running managed deploy
+    // observes it through the coordinator's own stop_requested field.
+    const std::atomic<bool>* external_stop = nullptr;
     // Explicit worker ownership handoff. When a managed deploy succeeds
     // with a non-null worker, activate_worker(application, worker) is
     // called with the owning pointer. A true return transfers ownership to
@@ -75,6 +82,7 @@ private:
     std::size_t max_pending_;
     std::function<bool(const std::string&, capsid_worker*)> activate_worker_;
     std::function<void(const std::string&)> retire_worker_;
+    const std::atomic<bool>* external_stop_;
     std::mutex mutex_;
     std::condition_variable condition_;
     std::vector<PendingOperation> queue_;
@@ -85,6 +93,64 @@ private:
     // operation_id -> last recorded status; running and terminal states
     // both live here so operation_status can observe progress.
     std::map<std::string, OperationStatus> registry_;
+};
+
+// Process-global worker permit (capacity.workersTotal). The permit is
+// bound to an ACTIVE App slot: a replacement deploy of an App that already
+// holds the slot does not acquire again, a failed replacement leaves the
+// old holder's slot untouched, and only a newly acquired permit is
+// returned when the deploy settles without a live worker.
+class WorkerCapacityPermit {
+public:
+    explicit WorkerCapacityPermit(int capacity) : remaining_(capacity) {}
+
+    // Acquires the permit for `application`. Returns true when the permit
+    // was newly acquired (the caller must release it if the operation
+    // settles without a live worker); returns false when the App already
+    // holds its slot (replacement) or when the global capacity is
+    // exhausted.
+    bool acquire(const std::string& application) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (holders_.find(application) != holders_.end()) {
+            return false;  // replacement of an existing slot
+        }
+        int remaining = remaining_.load();
+        while (remaining > 0 &&
+               !remaining_.compare_exchange_weak(remaining,
+                                                 remaining - 1)) {
+        }
+        if (remaining <= 0) {
+            return false;  // capacity exhausted
+        }
+        holders_.insert(application);
+        return true;
+    }
+
+    // Records a live worker for the App (already-held slots are kept).
+    void record_success(const std::string& application) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        holders_.insert(application);
+    }
+
+    // Returns the slot: the App's activated worker no longer holds the
+    // permit (retire) or a newly acquired permit that settled without a
+    // worker.
+    void release(const std::string& application) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (holders_.erase(application) > 0) {
+            remaining_.fetch_add(1);
+        }
+    }
+
+    bool holds(const std::string& application) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return holders_.find(application) != holders_.end();
+    }
+
+private:
+    std::atomic<int> remaining_;
+    std::mutex mutex_;
+    std::set<std::string> holders_;
 };
 
 // Maps an exact App ID to its ManagedHostOptions and drives the REAL
@@ -109,6 +175,13 @@ private:
     ManagedHostOptions* find_application(const std::string& application);
 
     std::vector<ManagedHostOptions*> applications_;
+
+public:
+    // Optional process-global worker permit (capacity.workersTotal). A
+    // deploy consumes the App's slot BEFORE any spawn or durable
+    // activation; the slot stays bound to the active worker until its
+    // retire. Null disables the gate.
+    WorkerCapacityPermit* capacity = nullptr;
 };
 
 }  // namespace capsid::host

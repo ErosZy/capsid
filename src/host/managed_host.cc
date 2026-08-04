@@ -548,6 +548,15 @@ WarmResult warm_worker(const ManagedHostOptions& options,
             out.error = "worker event error";
             return out;
         }
+        // The process-level stop signal aborts the handshake promptly: a
+        // SIGTERM shutdown must not wait out the 15-second READY deadline.
+        if (options.stop_requested != nullptr &&
+            options.stop_requested->load()) {
+            capsid_worker_destroy(out.worker);
+            out.worker = nullptr;
+            out.error = "worker READY interrupted";
+            return out;
+        }
         if (std::chrono::steady_clock::now() >= deadline) {
             capsid_worker_destroy(out.worker);
             out.worker = nullptr;
@@ -555,8 +564,12 @@ WarmResult warm_worker(const ManagedHostOptions& options,
             return out;
         }
         // Wait through the WorkerEventSource adapter (the single Host
-        // adapter for the worker IPC descriptor).
-        event_source.wait(deadline);
+        // adapter for the worker IPC descriptor), in bounded slices so the
+        // stop signal is observed promptly.
+        const std::chrono::steady_clock::time_point wait_until =
+            std::min(deadline, std::chrono::steady_clock::now() +
+                                   std::chrono::milliseconds(100));
+        event_source.wait(wait_until);
     }
 }
 

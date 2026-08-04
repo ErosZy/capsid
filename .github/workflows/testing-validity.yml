@@ -285,15 +285,32 @@ jobs:
         with:
           submodules: recursive
 
+      # Keep the POSIX gate honest for the complete M1D Admin surface.  The
+      # transport and long-lived service are intentionally conditional on
+      # Boost, so relying on the runner image could silently skip their
+      # compilation (and miss Linux-only APIs in otherwise POSIX sources).
+      - name: Install macOS Host dependencies
+        run: brew install boost openssl@3.5
+
       - name: Configure macOS host library
         run: |
           cmake -S . -B build-macos \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3.5);$(brew --prefix boost)" \
+            -DCAPSID_BUILD_HOST=ON \
             -DCAPSID_BUILD_WORKER=OFF \
             -DCAPSID_ENABLE_LTO=ON
 
-      - name: Build macOS host library and unit gates
-        run: cmake --build build-macos --parallel 2
+      - name: Build macOS Host, Admin transport, and unit gates
+        run: |
+          cmake --build build-macos --parallel 2
+          # Named targets make a missing/quietly skipped Boost-backed Admin
+          # surface an explicit configuration failure.
+          cmake --build build-macos --parallel 2 --target \
+            capsid-host \
+            test-host-admin-api \
+            test-host-admin-http \
+            test-host-admin-service
 
       - name: Run POSIX host-side matrix
         run: |

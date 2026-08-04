@@ -17,6 +17,7 @@
 
 #include "host/admin_api.h"
 
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/un.h>
@@ -431,6 +432,40 @@ int main(int argc, char** argv) {
                 "Admin body deadline was reset by slow drip bytes");
         require(backend.total_calls() == 0,
                 "slow-drip Admin request reached the backend");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_http_accepted_fd_remains_caller_owned") {
+        // The long-lived service owns active_fd until it clears the slot
+        // under its shutdown mutex. The accepted-connection transport must
+        // therefore never close the caller's descriptor behind its back;
+        // serve_one is the wrapper that owns and closes its accepted fd.
+        int sockets[2] = {-1, -1};
+        require(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0,
+                           sockets) == 0,
+                "cannot create accepted-fd ownership fixture");
+        FakeAdminBackend backend;
+        bool served = false;
+        std::string server_error;
+        std::thread server([&]() {
+            served = capsid::host::serve_accepted_admin_http_connection(
+                sockets[0], http_options(), &backend, &server_error);
+        });
+        const std::string body = "{\"app\":\"orders\",\"version\":\"v1\"}";
+        const std::string request =
+            "POST /v1/deploy HTTP/1.1\r\nHost: local\r\n"
+            "Content-Type: application/json\r\nContent-Length: " +
+            std::to_string(body.size()) + "\r\n\r\n" + body;
+        send_all(sockets[1], request);
+        require(shutdown(sockets[1], SHUT_WR) == 0,
+                "cannot finish accepted-fd ownership request");
+        server.join();
+        require(served, "accepted-fd transport failed: " + server_error);
+        require(fcntl(sockets[0], F_GETFD) >= 0,
+                "accepted-fd transport closed its caller-owned descriptor");
+        close(sockets[0]);
+        close(sockets[1]);
         std::cout << "PASS" << std::endl;
         return 0;
     }
