@@ -50,6 +50,7 @@ JSModuleDef *tjs__load_builtin(
 #include <deque>
 #include <limits>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -87,8 +88,6 @@ typedef capsid::WorkerStartupConfig WorkerConfig;
  * credit is charged when bytes are accepted and the public wire protocol is
  * unchanged.
  */
-const uint32_t kResponseCoalesceAfter = 64u * 1024u;
-const size_t kResponseCoalesceTarget = 16u * 1024u;
 const size_t kStorageNamespaceQuota = 64u * 1024u;
 const size_t kStorageEntryLimit = 256u;
 const size_t kStorageKeyLimit = 256u;
@@ -146,11 +145,35 @@ const char *utility_implementation_module(
     return NULL;
 }
 
+// Result of a response-body enqueue (design §3.1).
+enum class EnqueueResult {
+    kQueued,     // all bytes entered the wire queue
+    kWouldBlock, // no credit / no wire space: promise stays pending
+    kFatal,      // protocol/state inconsistency: fail closed
+};
+
 struct PendingWrite {
-    std::vector<uint8_t> data;
-    size_t offset;
+    JSValue chunk;  // Uint8Array view, JS_DupValue'd (JS heap keeps bytes)
+    size_t offset;  // bytes already written to the wire queue
+    size_t size;
     JSValue resolve;
     JSValue reject;
+
+    PendingWrite()
+        : chunk(JS_UNDEFINED),
+          offset(0),
+          size(0),
+          resolve(JS_UNDEFINED),
+          reject(JS_UNDEFINED) {}
+};
+
+// A terminal (ResponseEnd / Error) that could not enter the wire queue
+// yet. Bounded metadata only; body bytes are discarded for errors.
+struct TerminalPending {
+    enum class Kind { kResponseEnd, kResponseError };
+    Kind kind;
+    std::string message;
+    uint32_t error_flags;
 };
 
 struct ResponseState {
@@ -159,8 +182,11 @@ struct ResponseState {
     uint64_t response_body_bytes_accepted;
     uint64_t deadline_ns;
     bool request_ended;
-    bool coalescing_started;
     std::deque<PendingWrite> pending;
+    // C++11 target: no std::optional; the flag marks a deferred terminal.
+    TerminalPending terminal;
+    bool terminal_pending;
+    bool pump_advanced;  // round-robin marker for this pump pass
 
     ResponseState()
         : credit(0),
@@ -168,7 +194,8 @@ struct ResponseState {
           response_body_bytes_accepted(0),
           deadline_ns(0),
           request_ended(false),
-          coalescing_started(false) {}
+          terminal_pending(false),
+          pump_advanced(false) {}
 };
 
 struct StorageNamespace {
@@ -189,8 +216,7 @@ public:
           deadline_timer_started_(false),
           poll_events_(UV_READABLE),
           write_offset_(0),
-          coalesced_response_wire_bytes_(0),
-          pending_response_bytes_(0),
+          pump_in_progress_(false),
           shutting_down_(false),
           bundle_is_trusted_bytecode_(false),
           bundle_name_("capsid:app/main"),
@@ -772,40 +798,44 @@ private:
         if (size == 0) {
             return JS_UNDEFINED;
         }
-        if (size > g_worker->config_.max_queued_bytes ||
-            g_worker->pending_response_bytes_ >
-                g_worker->config_.max_queued_bytes - size) {
-            return JS_ThrowRangeError(
-                ctx, "pending response data exceeds configured limit");
-        }
 
+        // Contract #3: pressure must never raise RangeError. The promise
+        // stays pending while the bytes await credit / wire space, and
+        // resolves once the whole chunk has been accepted.
         JSValue resolving[2];
         JSValue promise = JS_NewPromiseCapability(ctx, resolving);
         if (JS_IsException(promise)) {
             return promise;
         }
-        if (g_worker->queue_response_bytes_fast(
-                id,
-                bytes,
-                size,
-                &state->second)) {
-            JSValue result = JS_Call(ctx, resolving[0], JS_UNDEFINED, 0, NULL);
-            if (JS_IsException(result)) {
+        size_t fast_sent = 0;
+        const EnqueueResult result = g_worker->queue_response_bytes_fast(
+            id, bytes, size, &state->second, &fast_sent);
+        if (result == EnqueueResult::kQueued) {
+            JSValue resolve_result =
+                JS_Call(ctx, resolving[0], JS_UNDEFINED, 0, NULL);
+            if (JS_IsException(resolve_result)) {
                 JS_FreeValue(ctx, JS_GetException(ctx));
             }
-            JS_FreeValue(ctx, result);
+            JS_FreeValue(ctx, resolve_result);
             JS_FreeValue(ctx, resolving[0]);
             JS_FreeValue(ctx, resolving[1]);
             return promise;
         }
+        if (result == EnqueueResult::kFatal) {
+            JS_FreeValue(ctx, resolving[0]);
+            JS_FreeValue(ctx, resolving[1]);
+            return JS_ThrowInternalError(ctx, "response output is wedged");
+        }
+        // kWouldBlock: hold the JS view (no native copy), pump advances
+        // segments as credit and wire space become available.
         PendingWrite pending;
-        pending.data.assign(bytes, bytes + size);
-        pending.offset = 0;
+        pending.chunk = JS_DupValue(ctx, argv[1]);
+        pending.offset = fast_sent;
+        pending.size = size;
         pending.resolve = resolving[0];
         pending.reject = resolving[1];
         state->second.pending.push_back(std::move(pending));
-        g_worker->pending_response_bytes_ += size;
-        g_worker->flush_pending(id);
+        g_worker->pump_response_output();
         return promise;
     }
 
@@ -819,27 +849,17 @@ private:
         }
         std::map<uint64_t, ResponseState>::iterator state =
             g_worker->responses_.find(id);
-        if (state == g_worker->responses_.end() || !state->second.pending.empty()) {
-            return state == g_worker->responses_.end()
-                       ? JS_UNDEFINED
-                       : JS_ThrowReferenceError(
-                             ctx, "response is not ready to end");
+        if (state == g_worker->responses_.end()) {
+            return JS_UNDEFINED;
         }
-        if (state->second.coalescing_started &&
-            !g_worker->flush_coalesced_response(id)) {
-            return JS_ThrowInternalError(
-                ctx, "response output queue is full");
-        }
-        capsid::protocol::Frame frame;
-        frame.type = capsid::protocol::kResponseEnd;
-        frame.flags = 0;
-        frame.request_id = id;
-        if (!g_worker->queue_output(frame)) {
-            return JS_ThrowInternalError(
-                ctx, "response output queue is full");
-        }
-        g_worker->responses_.erase(state);
-        g_worker->remember_terminal(id);
+        // Contract #5/#6: a terminal must never be dropped because the
+        // queue is full. While body bytes are still pending, the end is
+        // deferred until they drain; the pump then sends it. Never throw
+        // "not ready to end" either.
+        TerminalPending terminal;
+        terminal.kind = TerminalPending::Kind::kResponseEnd;
+        terminal.error_flags = 0;
+        g_worker->queue_terminal_or_defer(id, terminal);
         return JS_UNDEFINED;
     }
 
@@ -858,20 +878,18 @@ private:
         }
         const bool timed_out =
             g_worker->interrupted_request_id_ == id;
-        if (state->second.coalescing_started &&
-            !g_worker->flush_coalesced_response(id)) {
-            return JS_ThrowInternalError(
-                ctx, "response output queue is full");
-        }
-        g_worker->send_error(
-            id,
-            to_string(ctx, argv[1]),
-            timed_out ? capsid::protocol::kErrorFlagTimeout : 0);
+        const std::string message = to_string(ctx, argv[1]);
+        const uint32_t flags =
+            timed_out ? capsid::protocol::kErrorFlagTimeout : 0;
+        // Discard the unsent body, then guarantee the error terminal.
         g_worker->reject_pending(
             state->second,
             timed_out ? "request timed out" : "response failed");
-        g_worker->responses_.erase(state);
-        g_worker->remember_terminal(id);
+        TerminalPending terminal;
+        terminal.kind = TerminalPending::Kind::kResponseError;
+        terminal.message = message;
+        terminal.error_flags = flags;
+        g_worker->queue_terminal_or_defer(id, terminal);
         if (timed_out) {
             g_worker->interrupted_request_id_ = 0;
         }
@@ -3118,7 +3136,6 @@ private:
             return true;
         }
         reject_pending(state->second, "request canceled");
-        discard_coalesced_response(id);
         const bool called = call_id_bridge(cancel_request_, id);
         responses_.erase(state);
         remember_terminal(id);
@@ -3160,7 +3177,7 @@ private:
             return false;
         }
         state.credit += credit;
-        flush_pending(frame.request_id);
+        pump_response_output();
         return true;
     }
 
@@ -3204,15 +3221,12 @@ private:
                 continue;
             }
             reject_pending(state->second, "request timed out");
-            discard_coalesced_response(id);
             interrupted_request_id_ = id;
             call_id_bridge(cancel_request_, id);
             send_error(
                 id,
                 "request deadline exceeded",
                 capsid::protocol::kErrorFlagTimeout);
-            responses_.erase(state);
-            remember_terminal(id);
             interrupted_request_id_ = 0;
             /*
              * The deadline timer is a native embedder handle. Drain the jobs
@@ -3223,87 +3237,210 @@ private:
         }
     }
 
-    void flush_pending(uint64_t id) {
-        std::map<uint64_t, ResponseState>::iterator state_it = responses_.find(id);
-        if (state_it == responses_.end()) {
-            return;
+    // Resolves and frees the front pending write (fully accepted by the
+    // wire queue). Single release point for the JS values.
+    void resolve_pending(ResponseState &state) {
+        PendingWrite &pending = state.pending.front();
+        JSValue result = JS_Call(ctx_, pending.resolve, JS_UNDEFINED, 0, NULL);
+        if (JS_IsException(result)) {
+            JS_FreeValue(ctx_, JS_GetException(ctx_));
         }
-        ResponseState &state = state_it->second;
-        /*
-         * A fast-path write can reserve older bytes in the per-request
-         * coalescing buffer before a newer write falls back to pending.
-         * Preserve wire order when output capacity later becomes available.
-         * Do not flush merely for a credit update when there is no pending
-         * write, because that would defeat bounded coalescing.
-         */
-        if (!state.pending.empty() &&
-            state.coalescing_started &&
-            !flush_coalesced_response(id)) {
-            return;
-        }
-        while (!state.pending.empty()) {
-            PendingWrite &pending = state.pending.front();
-            while (pending.offset < pending.data.size() && state.credit > 0) {
-                const size_t remaining = pending.data.size() - pending.offset;
-                const size_t chunk_size = static_cast<size_t>(
-                    std::min<uint64_t>(
-                        std::min<uint64_t>(remaining, capsid::protocol::kMaxPayloadSize),
-                        state.credit));
-                if (!queue_output_bytes(
-                        capsid::protocol::kResponseBody,
-                        0,
-                        id,
-                        &pending.data[pending.offset],
-                        chunk_size)) {
-                    return;
-                }
-                pending.offset += chunk_size;
-                state.credit -= chunk_size;
-                account_response_body_bytes(&state, chunk_size);
-            }
-            if (pending.offset != pending.data.size()) {
-                return;
-            }
-            JSValue result = JS_Call(ctx_, pending.resolve, JS_UNDEFINED, 0, NULL);
-            if (JS_IsException(result)) {
-                JS_FreeValue(ctx_, JS_GetException(ctx_));
-            }
-            JS_FreeValue(ctx_, result);
-            JS_FreeValue(ctx_, pending.resolve);
-            JS_FreeValue(ctx_, pending.reject);
-            pending_response_bytes_ -= pending.data.size();
-            state.pending.pop_front();
-        }
+        JS_FreeValue(ctx_, result);
+        JS_FreeValue(ctx_, pending.resolve);
+        JS_FreeValue(ctx_, pending.reject);
+        JS_FreeValue(ctx_, pending.chunk);
+        state.pending.pop_front();
     }
 
     void reject_pending(ResponseState &state, const char *message) {
         while (!state.pending.empty()) {
             PendingWrite &pending = state.pending.front();
             JSValue argument = JS_NewString(ctx_, message);
-            JSValue result = JS_Call(ctx_, pending.reject, JS_UNDEFINED, 1, &argument);
+            JSValue result =
+                JS_Call(ctx_, pending.reject, JS_UNDEFINED, 1, &argument);
             JS_FreeValue(ctx_, result);
             JS_FreeValue(ctx_, argument);
             JS_FreeValue(ctx_, pending.resolve);
             JS_FreeValue(ctx_, pending.reject);
-            pending_response_bytes_ -= pending.data.size();
+            JS_FreeValue(ctx_, pending.chunk);
             state.pending.pop_front();
         }
     }
 
-    void flush_all_pending() {
-        std::vector<uint64_t> ids;
-        for (std::map<uint64_t, ResponseState>::const_iterator it =
+    // Advances the front pending chunk by up to `quantum` bytes: reads
+    // from the held JS view, writes frames into the wire queue, resolves
+    // the promise once the chunk is fully accepted. Single-request byte
+    // order is preserved. Returns true when any progress was made.
+    bool advance_pending(ResponseState &state,
+                         uint64_t id,
+                         size_t quantum) {
+        bool progressed = false;
+        while (!state.pending.empty() && state.credit > 0 && quantum > 0) {
+            PendingWrite &pending = state.pending.front();
+            if (pending.offset == pending.size) {
+                resolve_pending(state);
+                progressed = true;
+                continue;
+            }
+            const size_t remaining = pending.size - pending.offset;
+            size_t chunk_size = static_cast<size_t>(
+                std::min<uint64_t>(
+                    std::min<uint64_t>(
+                        remaining, capsid::protocol::kMaxPayloadSize),
+                    std::min<uint64_t>(state.credit, quantum)));
+            const size_t cap = wire_payload_capacity();
+            if (chunk_size > cap) {
+                chunk_size = cap;
+            }
+            if (chunk_size == 0) {
+                break;
+            }
+            const size_t wire = chunk_size + capsid::protocol::kHeaderSize;
+            if (!has_output_capacity(wire)) {
+                break;
+            }
+            size_t view_size = 0;
+            uint8_t *bytes = JS_GetUint8Array(ctx_, &view_size, pending.chunk);
+            if (!bytes || pending.offset + chunk_size > view_size) {
+                // The JS view disappeared or shrank: fail the request
+                // closed rather than emitting corrupt bytes.
+                reject_pending(state, "response data vanished");
+                state.terminal.kind = TerminalPending::Kind::kResponseError;
+                state.terminal.message = "response data vanished";
+                state.terminal.error_flags = 0;
+                state.terminal_pending = true;
+                return false;
+            }
+            if (!capsid::protocol::append_encoded(
+                    capsid::protocol::kResponseBody,
+                    0,
+                    id,
+                    bytes + pending.offset,
+                    chunk_size,
+                    &output_)) {
+                return false;
+            }
+            pending.offset += chunk_size;
+            state.credit -= chunk_size;
+            quantum -= chunk_size;
+            account_response_body_bytes(&state, chunk_size);
+            progressed = true;
+            if (pending.offset == pending.size) {
+                resolve_pending(state);
+            }
+        }
+        return progressed;
+    }
+
+    // Returns true when the terminal frame entered the wire queue (the
+    // caller erases the response); false defers the terminal (bounded
+    // metadata) for a later pump. Never drops it.
+    bool try_send_terminal(uint64_t id,
+                           ResponseState &state,
+                           const TerminalPending &terminal) {
+        if (terminal.kind == TerminalPending::Kind::kResponseEnd) {
+            // The end waits until every body byte is on the wire.
+            if (!state.pending.empty()) {
+                state.terminal = terminal;
+                state.terminal_pending = true;
+                return false;
+            }
+            capsid::protocol::Frame frame;
+            frame.type = capsid::protocol::kResponseEnd;
+            frame.flags = 0;
+            frame.request_id = id;
+            if (!queue_output(frame)) {
+                state.terminal = terminal;
+                state.terminal_pending = true;
+                return false;
+            }
+            return true;
+        }
+        capsid::protocol::Frame frame;
+        frame.type = capsid::protocol::kError;
+        frame.flags = terminal.error_flags;
+        frame.request_id = id;
+        const size_t size = std::min<size_t>(
+            terminal.message.size(), capsid::protocol::kMaxPayloadSize);
+        frame.payload.assign(
+            terminal.message.begin(), terminal.message.begin() + size);
+        if (!queue_output(frame)) {
+            state.terminal = terminal;
+            state.terminal_pending = true;
+            return false;
+        }
+        return true;
+    }
+
+    // Terminal entry point from JS (responseEnd / responseError). Sends
+    // immediately when possible; otherwise the terminal is deferred and
+    // the pump completes it (contract #5/#6).
+    void queue_terminal_or_defer(uint64_t id,
+                                 const TerminalPending &terminal) {
+        std::map<uint64_t, ResponseState>::iterator state_it =
+            responses_.find(id);
+        if (state_it == responses_.end()) {
+            return;
+        }
+        ResponseState &state = state_it->second;
+        if (try_send_terminal(id, state, terminal)) {
+            responses_.erase(state_it);
+            remember_terminal(id);
+            pump_response_output();
+        } else {
+            pump_response_output();
+        }
+    }
+
+    // One unified advance pass (contract #7): each response moves at
+    // most one quantum (kMaxPayloadSize) per pass, so a large response
+    // cannot starve a small one. Triggered on socket space release, on
+    // credit arrival, and after new writes / terminal deferrals.
+    void pump_response_output() {
+        if (pump_in_progress_) {
+            return;
+        }
+        pump_in_progress_ = true;
+        std::vector<uint64_t> done;
+        for (std::map<uint64_t, ResponseState>::iterator it =
                  responses_.begin();
              it != responses_.end();
              ++it) {
-            if (!it->second.pending.empty() &&
-                it->second.credit != 0) {
-                ids.push_back(it->first);
+            if (it->second.pump_advanced) {
+                continue;
+            }
+            it->second.pump_advanced = true;
+            const bool progressed = advance_pending(
+                it->second, it->first, capsid::protocol::kMaxPayloadSize);
+            if (it->second.pending.empty() &&
+                it->second.terminal_pending) {
+                TerminalPending terminal = it->second.terminal;
+                it->second.terminal_pending = false;
+                if (try_send_terminal(it->first, it->second, terminal)) {
+                    done.push_back(it->first);
+                }
+            }
+            if (progressed) {
+                update_poll();
             }
         }
-        for (size_t index = 0; index < ids.size(); ++index) {
-            flush_pending(ids[index]);
+        for (std::vector<uint64_t>::const_iterator id = done.begin();
+             id != done.end();
+             ++id) {
+            std::map<uint64_t, ResponseState>::iterator it =
+                responses_.find(*id);
+            if (it != responses_.end()) {
+                responses_.erase(it);
+                remember_terminal(*id);
+            }
         }
+        for (std::map<uint64_t, ResponseState>::iterator it =
+                 responses_.begin();
+             it != responses_.end();
+             ++it) {
+            it->second.pump_advanced = false;
+        }
+        pump_in_progress_ = false;
     }
 
     void send_window_update(uint64_t id, uint32_t credit) {
@@ -3318,6 +3455,24 @@ private:
     void send_error(uint64_t id,
                     const std::string &message,
                     uint32_t flags = 0) {
+        if (id != 0) {
+            std::map<uint64_t, ResponseState>::iterator state_it =
+                responses_.find(id);
+            if (state_it != responses_.end()) {
+                // Discard the unsent body, then guarantee the error
+                // terminal (defer when the queue is full).
+                reject_pending(state_it->second, "request failed");
+                TerminalPending terminal;
+                terminal.kind = TerminalPending::Kind::kResponseError;
+                terminal.message = message;
+                terminal.error_flags = flags;
+                queue_terminal_or_defer(id, terminal);
+                return;
+            }
+        }
+        // Startup / broadcast errors (id == 0) or already-erased
+        // requests: no response state is waiting. The queue cannot be
+        // saturated at startup; send directly.
         capsid::protocol::Frame frame;
         frame.type = capsid::protocol::kError;
         frame.flags = flags;
@@ -3360,120 +3515,59 @@ private:
             frame.payload.size());
     }
 
-    bool queue_response_bytes_fast(uint64_t request_id,
-                                   const uint8_t *payload,
-                                   size_t payload_size,
-                                   ResponseState *state) {
+    // Fast path: writes as many bytes as credit and wire capacity allow,
+    // segmented to kMaxPayloadSize. The caller turns kWouldBlock into a
+    // pending entry (JS view held, no native copy) and the pump advances
+    // the remainder. Never raises RangeError on pressure (contract #3).
+    EnqueueResult queue_response_bytes_fast(uint64_t request_id,
+                                            const uint8_t *payload,
+                                            size_t payload_size,
+                                            ResponseState *state,
+                                            size_t *sent_out = NULL) {
         if (!payload || payload_size == 0 || !state) {
-            return false;
+            return EnqueueResult::kFatal;
         }
-        if (payload_size > state->credit) {
-            if (state->coalescing_started &&
-                !flush_coalesced_response(request_id)) {
-                return false;
+        size_t sent = 0;
+        while (sent < payload_size && state->credit > 0) {
+            const size_t remaining = payload_size - sent;
+            size_t chunk_size = static_cast<size_t>(
+                std::min<uint64_t>(
+                    std::min<uint64_t>(
+                        remaining, capsid::protocol::kMaxPayloadSize),
+                    state->credit));
+            const size_t cap = wire_payload_capacity();
+            if (chunk_size > cap) {
+                chunk_size = cap;
             }
-            return false;
-        }
-        const size_t max_payload = capsid::protocol::kMaxPayloadSize;
-        /*
-         * Remaining response credit is not a reliable byte counter because a
-         * host may replenish it after every delivered frame. Track accepted
-         * body bytes directly so the first 64 KiB stays immediate while long
-         * streams still coalesce under continuous WINDOW_UPDATE traffic.
-         */
-        if (!state->coalescing_started &&
-            state->response_body_bytes_accepted >=
-                kResponseCoalesceAfter) {
-            state->coalescing_started = true;
-        }
-        const bool small_write =
-            state->coalescing_started &&
-            payload_size < kResponseCoalesceTarget;
-        if (small_write) {
-            std::map<
-                uint64_t,
-                std::vector<uint8_t> >::iterator buffered =
-                    coalesced_responses_.find(request_id);
-            if (buffered != coalesced_responses_.end() &&
-                payload_size >
-                    kResponseCoalesceTarget -
-                        buffered->second.size() &&
-                !flush_coalesced_response(request_id)) {
-                return false;
+            if (chunk_size == 0) {
+                break;
             }
-            buffered = coalesced_responses_.find(request_id);
-            const bool empty =
-                buffered == coalesced_responses_.end();
-            const size_t wire_growth =
-                payload_size +
-                (empty
-                     ? capsid::protocol::kHeaderSize
-                     : 0);
-            if (!has_output_capacity(wire_growth)) {
-                return false;
+            const size_t wire = chunk_size + capsid::protocol::kHeaderSize;
+            if (!has_output_capacity(wire)) {
+                break;
             }
-            if (empty) {
-                buffered =
-                    coalesced_responses_.insert(
-                        std::make_pair(
-                            request_id,
-                            std::vector<uint8_t>()))
-                        .first;
-                buffered->second.reserve(kResponseCoalesceTarget);
-            }
-            buffered->second.insert(
-                buffered->second.end(),
-                payload,
-                payload + payload_size);
-            coalesced_response_wire_bytes_ += wire_growth;
-            state->credit -= payload_size;
-            account_response_body_bytes(state, payload_size);
-            if (buffered->second.size() ==
-                kResponseCoalesceTarget) {
-                /*
-                 * The bytes and their frame overhead were reserved before
-                 * mutation, so this move cannot hit the queue limit. If an
-                 * internal invariant is ever violated, keep the accepted
-                 * owned bytes buffered; returning false here would enqueue
-                 * the same JS write a second time.
-                 */
-                flush_coalesced_response(request_id);
-            }
-            return true;
-        }
-        if (state->coalescing_started &&
-            !flush_coalesced_response(request_id)) {
-            return false;
-        }
-        const size_t frame_count =
-            payload_size / max_payload +
-            (payload_size % max_payload != 0 ? 1 : 0);
-        const size_t wire_size =
-            payload_size + frame_count * capsid::protocol::kHeaderSize;
-        if (!has_output_capacity(wire_size)) {
-            return false;
-        }
-
-        output_.reserve(output_.size() + wire_size);
-        size_t offset = 0;
-        while (offset < payload_size) {
-            const size_t chunk_size =
-                std::min(max_payload, payload_size - offset);
             if (!capsid::protocol::append_encoded(
                     capsid::protocol::kResponseBody,
                     0,
                     request_id,
-                    payload + offset,
+                    payload + sent,
                     chunk_size,
                     &output_)) {
-                return false;
+                return EnqueueResult::kFatal;
             }
-            offset += chunk_size;
+            sent += chunk_size;
+            state->credit -= chunk_size;
+            account_response_body_bytes(state, chunk_size);
         }
-        state->credit -= payload_size;
-        account_response_body_bytes(state, payload_size);
-        update_poll();
-        return true;
+        if (sent > 0) {
+            update_poll();
+        }
+        if (sent_out != NULL) {
+            *sent_out = sent;
+        }
+        return sent == payload_size
+                   ? EnqueueResult::kQueued
+                   : EnqueueResult::kWouldBlock;
     }
 
     static void account_response_body_bytes(
@@ -3519,70 +3613,26 @@ private:
     }
 
     bool has_output_capacity(size_t additional) const {
+        // Contract #8: the native wire queue never exceeds
+        // max_queued_bytes. Pending entries hold JS views only, so they
+        // do not consume this budget.
         const size_t limit = config_.max_queued_bytes;
         const size_t queued = output_.size() - write_offset_;
-        return coalesced_response_wire_bytes_ <= limit &&
-               queued <=
-                   limit - coalesced_response_wire_bytes_ &&
-               additional <=
-                   limit - coalesced_response_wire_bytes_ -
-                       queued;
+        return queued <= limit && additional <= limit - queued;
     }
 
-    bool flush_coalesced_response(uint64_t request_id) {
-        std::map<
-            uint64_t,
-            std::vector<uint8_t> >::iterator buffered =
-                coalesced_responses_.find(request_id);
-        if (buffered == coalesced_responses_.end()) {
-            return true;
+    // Largest payload that fits the wire queue right now, after the
+    // frame header. A queue smaller than one frame still accepts
+    // payloads up to limit - header (segmented), never zero-sized
+    // frames.
+    size_t wire_payload_capacity() const {
+        const size_t limit = config_.max_queued_bytes;
+        const size_t queued = output_.size() - write_offset_;
+        if (queued > limit ||
+            limit - queued < capsid::protocol::kHeaderSize) {
+            return 0;
         }
-        const size_t wire_size =
-            capsid::protocol::kHeaderSize +
-            buffered->second.size();
-        const size_t queued =
-            output_.size() - write_offset_;
-        if (wire_size > coalesced_response_wire_bytes_ ||
-            coalesced_response_wire_bytes_ >
-                config_.max_queued_bytes ||
-            queued >
-                config_.max_queued_bytes -
-                    coalesced_response_wire_bytes_) {
-            return false;
-        }
-        output_.reserve(output_.size() + wire_size);
-        if (!capsid::protocol::append_encoded(
-                capsid::protocol::kResponseBody,
-                0,
-                request_id,
-                &buffered->second[0],
-                buffered->second.size(),
-                &output_)) {
-            return false;
-        }
-        coalesced_response_wire_bytes_ -= wire_size;
-        coalesced_responses_.erase(buffered);
-        update_poll();
-        return true;
-    }
-
-    void discard_coalesced_response(uint64_t request_id) {
-        std::map<
-            uint64_t,
-            std::vector<uint8_t> >::iterator buffered =
-                coalesced_responses_.find(request_id);
-        if (buffered == coalesced_responses_.end()) {
-            return;
-        }
-        const size_t wire_size =
-            capsid::protocol::kHeaderSize +
-            buffered->second.size();
-        if (wire_size <= coalesced_response_wire_bytes_) {
-            coalesced_response_wire_bytes_ -= wire_size;
-        } else {
-            coalesced_response_wire_bytes_ = 0;
-        }
-        coalesced_responses_.erase(buffered);
+        return limit - queued - capsid::protocol::kHeaderSize;
     }
 
     void flush_output() {
@@ -3605,7 +3655,7 @@ private:
         if (write_offset_ == output_.size()) {
             output_.clear();
             write_offset_ = 0;
-            flush_all_pending();
+            pump_response_output();
         }
         update_poll();
     }
@@ -3675,10 +3725,7 @@ private:
     int poll_events_;
     size_t write_offset_;
     std::vector<uint8_t> output_;
-    size_t coalesced_response_wire_bytes_;
-    std::map<uint64_t, std::vector<uint8_t> >
-        coalesced_responses_;
-    size_t pending_response_bytes_;
+    bool pump_in_progress_;
     bool shutting_down_;
     capsid::protocol::Parser parser_;
     capsid::WorkerStartupState startup_state_;

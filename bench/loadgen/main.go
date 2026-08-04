@@ -132,6 +132,26 @@ func main() {
 	case "json64k":
 		path = "/@capsid/orders/bench/json64k"
 		expectedLen = -1
+	case "json64k-pre":
+		path = "/@capsid/orders/bench/json64k-pre"
+		expectedLen = -1
+	case "json64k-bytes":
+		path = "/@capsid/orders/bench/json64k-bytes"
+		expectedLen = -1
+	case "json64k-octet":
+		path = "/@capsid/orders/bench/json64k-octet"
+		expectedLen = -1
+	case "text64k":
+		path = "/@capsid/orders/bench/text64k"
+		expectedLen = 65536
+	case "bytes65535":
+		path = "/@capsid/orders/bench/bytes65535"
+		expectedLen = 65535
+		expectedByte = byte(0x61)
+	case "bytes65537":
+		path = "/@capsid/orders/bench/bytes65537"
+		expectedLen = 65537
+		expectedByte = byte(0x61)
 	case "bytes64k":
 		path = "/@capsid/orders/bench/bytes64k"
 		expectedLen = 65536
@@ -195,9 +215,12 @@ func main() {
 			// 16384 streamed bytes: b*5462 c*5461 d*5461.
 			return len(body) == 16384 && body[0] == 0x62 &&
 				body[5462] == 0x63 && body[16383] == 0x64
-		case "json64k":
+		case "json64k", "json64k-pre", "json64k-bytes", "json64k-octet":
 			return len(body) > 64000 && body[0] == '{' &&
 				bytes.Contains(body, []byte(`"status":"ok"`))
+		case "text64k":
+			return len(body) == 65536 && body[0] == 't' &&
+				body[65535] == 't'
 		case "stream64k":
 			// 65536 streamed bytes: b*21846 c*21845 d*21845.
 			return len(body) == 65536 && body[0] == 0x62 &&
