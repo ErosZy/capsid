@@ -3013,6 +3013,45 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_fetch_cancel_lifecycle PROPERTIES TIMEOUT 15)
 
+        set(CAPSID_QUEUE_SATURATION_FIXTURE
+            "${CAPSID_GENERATED_DIR}/test-queue-saturation.js")
+        add_custom_command(
+            OUTPUT "${CAPSID_QUEUE_SATURATION_FIXTURE}"
+            COMMAND "${CAPSID_ESBUILD}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/queue-saturation.js"
+                --bundle
+                --target=esnext
+                --platform=neutral
+                --format=esm
+                "--outfile=${CAPSID_QUEUE_SATURATION_FIXTURE}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/queue-saturation.js"
+            VERBATIM
+        )
+        add_custom_target(test-queue-saturation-fixture
+            DEPENDS "${CAPSID_QUEUE_SATURATION_FIXTURE}")
+
+        add_executable(
+            test-response-queue-saturation
+            tests/test_response_queue_saturation.cc
+        )
+        target_link_libraries(
+            test-response-queue-saturation
+            PRIVATE capsid_runtime Threads::Threads
+        )
+        add_dependencies(
+            test-response-queue-saturation
+            test-queue-saturation-fixture
+        )
+        add_test(
+            NAME worker_response_queue_saturation
+            COMMAND test-response-queue-saturation
+                $<TARGET_FILE:capsid-worker>
+                "${CAPSID_QUEUE_SATURATION_FIXTURE}"
+        )
+        set_tests_properties(
+            worker_response_queue_saturation PROPERTIES TIMEOUT 90
+        )
+
         add_executable(
             test-direct-fetch-matrix
             tests/test_direct_fetch_matrix.cc

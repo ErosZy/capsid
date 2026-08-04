@@ -15,6 +15,15 @@
 // Workloads:
 //   fixed-1k      GET /@capsid/orders/fixed       -> 1024 bytes of 0x78
 //   cpu-template  GET /@capsid/orders/cpu         -> generated HTML template
+//   json          GET /@capsid/orders/bench/json  -> JSON document
+//   bytes         GET /@capsid/orders/bench/bytes -> 1024 bytes
+//   stream        GET /@capsid/orders/bench/stream -> 1024 streamed bytes
+//   json16k       GET /@capsid/orders/bench/json16k -> ~16 KiB JSON
+//   bytes16k      GET /@capsid/orders/bench/bytes16k -> 16384 bytes
+//   stream16k     GET /@capsid/orders/bench/stream16k -> 16384 streamed bytes
+//   json64k       GET /@capsid/orders/bench/json64k -> ~64 KiB JSON
+//   bytes64k      GET /@capsid/orders/bench/bytes64k -> 65536 bytes
+//   stream64k     GET /@capsid/orders/bench/stream64k -> 65536 streamed bytes
 package main
 
 import (
@@ -94,10 +103,66 @@ func main() {
 	path := "/@capsid/orders/fixed"
 	expectedLen := 1024
 	expectedByte := byte(0x78)
-	if workload == "cpu-template" {
+	switch workload {
+	case "cpu-template":
 		path = "/@capsid/orders/cpu"
 		expectedLen = -1
-	} else if workload != "fixed-1k" {
+	case "json":
+		path = "/@capsid/orders/bench/json"
+		expectedLen = -1
+	case "bytes":
+		path = "/@capsid/orders/bench/bytes"
+		expectedLen = 1024
+		expectedByte = byte(0x61)
+	case "stream":
+		path = "/@capsid/orders/bench/stream"
+		expectedLen = 1024
+		expectedByte = byte(0x62)
+	case "json16k":
+		path = "/@capsid/orders/bench/json16k"
+		expectedLen = -1
+	case "bytes16k":
+		path = "/@capsid/orders/bench/bytes16k"
+		expectedLen = 16384
+		expectedByte = byte(0x61)
+	case "stream16k":
+		path = "/@capsid/orders/bench/stream16k"
+		expectedLen = 16384
+		expectedByte = byte(0x62)
+	case "json64k":
+		path = "/@capsid/orders/bench/json64k"
+		expectedLen = -1
+	case "json64k-pre":
+		path = "/@capsid/orders/bench/json64k-pre"
+		expectedLen = -1
+	case "json64k-bytes":
+		path = "/@capsid/orders/bench/json64k-bytes"
+		expectedLen = -1
+	case "json64k-octet":
+		path = "/@capsid/orders/bench/json64k-octet"
+		expectedLen = -1
+	case "text64k":
+		path = "/@capsid/orders/bench/text64k"
+		expectedLen = 65536
+	case "bytes65535":
+		path = "/@capsid/orders/bench/bytes65535"
+		expectedLen = 65535
+		expectedByte = byte(0x61)
+	case "bytes65537":
+		path = "/@capsid/orders/bench/bytes65537"
+		expectedLen = 65537
+		expectedByte = byte(0x61)
+	case "bytes64k":
+		path = "/@capsid/orders/bench/bytes64k"
+		expectedLen = 65536
+		expectedByte = byte(0x61)
+	case "stream64k":
+		path = "/@capsid/orders/bench/stream64k"
+		expectedLen = 65536
+		expectedByte = byte(0x62)
+	case "fixed-1k":
+		// default above
+	default:
 		fatal("unknown workload: " + workload)
 	}
 
@@ -133,7 +198,37 @@ func main() {
 	)
 
 	verify := func(body []byte) bool {
-		if expectedLen >= 0 {
+		switch workload {
+		case "json":
+			// The JSON document starts with '{' and carries the marker.
+			return len(body) > 2 && body[0] == '{' &&
+				bytes.Contains(body, []byte(`"status":"ok"`))
+		case "stream":
+			// 1024 streamed bytes: b*341 c*341 d*342.
+			return len(body) == 1024 && body[0] == 0x62 &&
+				body[341] == 0x63 && body[1023] == 0x64
+		case "json16k":
+			// ~16 KiB JSON document with the status marker.
+			return len(body) > 16000 && body[0] == '{' &&
+				bytes.Contains(body, []byte(`"status":"ok"`))
+		case "stream16k":
+			// 16384 streamed bytes: b*5462 c*5461 d*5461.
+			return len(body) == 16384 && body[0] == 0x62 &&
+				body[5462] == 0x63 && body[16383] == 0x64
+		case "json64k", "json64k-pre", "json64k-bytes", "json64k-octet":
+			return len(body) > 64000 && body[0] == '{' &&
+				bytes.Contains(body, []byte(`"status":"ok"`))
+		case "text64k":
+			return len(body) == 65536 && body[0] == 't' &&
+				body[65535] == 't'
+		case "stream64k":
+			// 65536 streamed bytes: b*21846 c*21845 d*21845.
+			return len(body) == 65536 && body[0] == 0x62 &&
+				body[21846] == 0x63 && body[65535] == 0x64
+		case "cpu-template":
+			return len(body) > 0 && contains(body, "</ul>")
+		default:
+			// fixed-1k, bytes: uniform byte payload.
 			if len(body) != expectedLen {
 				return false
 			}
@@ -144,7 +239,6 @@ func main() {
 			}
 			return true
 		}
-		return len(body) > 0 && contains(body, "</ul>")
 	}
 
 	runPhase := func(phase string, seconds int) {

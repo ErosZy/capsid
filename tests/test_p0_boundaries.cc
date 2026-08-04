@@ -616,7 +616,41 @@ void test_configured_limits(const char *worker_path,
     require_result(
         capsid_worker_end_request(worker, 92),
         "end large response chunk");
-    wait_request_error(worker, 92);
+    // Queue-saturation fix: max_queued_bytes is a wire-queue limit, not
+    // a per-response size limit. A body larger than the queue segments
+    // and must complete, never fail closed (design §2 contract #2).
+    bool completed = false;
+    size_t bytes_received = 0;
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline && !completed) {
+        pump(worker);
+        capsid_event event;
+        while (next_event(worker, &event)) {
+            if (event.type == CAPSID_EVENT_REQUEST_CREDIT) {
+                continue;
+            }
+            if (event.type == CAPSID_EVENT_RESPONSE_BODY) {
+                bytes_received += event.payload.size;
+                require_result(
+                    capsid_worker_grant_response_credit(
+                        worker,
+                        92,
+                        static_cast<uint32_t>(event.payload.size)),
+                    "grant large-chunk credit");
+            } else if (event.type == CAPSID_EVENT_RESPONSE_END &&
+                       event.request_id == 92) {
+                completed = true;
+            } else if (event.type == CAPSID_EVENT_ERROR &&
+                       event.request_id == 92) {
+                fail("large body failed instead of segmenting");
+            } else if (event.type == CAPSID_EVENT_EXIT) {
+                fail("worker exited during large-chunk response");
+            }
+        }
+    }
+    require(completed, "large response chunk completed");
+    require(bytes_received == 8192, "large response chunk delivered 8192 bytes");
     capsid_worker_destroy(worker);
 }
 

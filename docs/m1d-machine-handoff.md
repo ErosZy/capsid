@@ -11,12 +11,14 @@
   风险记录在 [Bodyless 性能验收 waiver](bodyless-performance-waiver.md)。
 - M1D 正在实现。compiler round-trip、artifact safe-read、secret provider、policy
   compiler 的基础实现和第一轮审计返修已经形成 commit。
-- managed deploy/retire/recover 当前仍是未提交 WIP，尚未完成真实 worker 集成验收。
+- managed deploy/retire/recover 已保存为 `aeaca2c`；实施方报告六个真实 worker 场景通过，
+  但尚待新机器独立审计和统一 sanitizer/平台门复核。
 - Unix Admin API、完整恢复负控和 M1D 统一 sanitizer/平台/性能门尚未开始最终验收。
 - 优先级保持不变：**先完成 managed 真实 worker 闭环，再接 Unix Admin API**。
 
 任何路径在真实 worker 报告 READY、generation 已 durable commit 且 `active.json` 成功
-发布之前，都不得返回 Active。当前 managed WIP 不能作为生产部署接口使用。
+发布之前，都不得返回 Active。`aeaca2c` 是可迁移的实现 checkpoint，在完成剩余审计门前
+不能作为生产部署接口使用。
 
 ## 2. Git 保存点
 
@@ -24,16 +26,13 @@
 
 ```text
 branch: main
-HEAD:   436ee4b build: round-trip test depends on capsid-bytecode-compile and capsid-worker
-remote: origin/main = 439c106（本地 main 领先 5 个 commit）
-dirty:  src/host/managed_host.cc
-        src/host/managed_host.h
-        cmake/build_host.cmake
-        cmake/build_tests.cmake
-        tests/test_host_managed.cc（untracked）
+managed checkpoint: aeaca2c feat(host): M1D managed pipeline — real worker closure, policy/secret wiring, active-state persist
+CI follow-up:       e48f5b3 ci: install libboost-system-dev — capsid-host needs system Boost on runners
+remote: origin/main 包含上述两个 commit 和本交接文档的最终修订
+tree:   clean
 ```
 
-尚未推送的五个基础返修 commit：
+已推送的五个基础返修 commit：
 
 ```text
 b7a5336 fix(tools): publish safety — O_EXCL temps, no-replace publish, precise rollback, claim grammar
@@ -43,48 +42,20 @@ f388d59 fix(host): secret provider contract — exact 16 KiB, key-id grammar, mt
 436ee4b build: round-trip test depends on capsid-bytecode-compile and capsid-worker
 ```
 
-文档编辑期间另一个实现进程仍在继续写入 managed 集成；两次连续读取已经得到不同文件
-摘要，因此这里不保存一个看似精确、实际已过期的 hash。离开旧机器前必须先停止并行
-写入，再运行下方 `shasum` 命令并把最终输出保存到 WIP checkpoint 的 commit message、
-外部迁移记录或 patch 同目录的 checksum 文件中。文件摘要只证明迁移完整性，不代表 WIP
-已审计或可合并。
+上述基础返修、managed 实现、冻结测试、CMake 接线和本交接文档已经一并包含在
+`aeaca2c2f05fd0df4efea888c77f9e54156e4f7c`。Git object identity 已固定迁移内容；该 commit
+是实现保存点，不代表 M1D 整体验收。
 
 ### 离开旧机器前
 
-最安全的迁移方式是建立明确的 WIP checkpoint 并推送。不要依赖 `git stash`，因为普通
-stash 不会随 `git push` 迁移到另一台机器。
+保存动作已经完成。离开前只需确认本地与远端指向同一 commit；不要再创建只存在于旧机器
+的 stash：
 
 ```sh
 git status --short --branch
 git diff --check
-shasum -a 256 \
-  cmake/build_host.cmake cmake/build_tests.cmake \
-  src/host/managed_host.cc src/host/managed_host.h \
-  tests/test_host_managed.cc
-
-# 审阅后把 managed WIP 与本交接文档作为明确的 WIP checkpoint 提交。
-git add cmake/build_host.cmake cmake/build_tests.cmake \
-  src/host/managed_host.cc src/host/managed_host.h \
-  tests/test_host_managed.cc \
-  docs/m1d-machine-handoff.md docs/README.md \
-  docs/host-technical-design-review.md
-git commit -m "wip(host): checkpoint M1D managed deployment handoff"
-git push origin main
-```
-
-如果不允许提交 WIP，必须生成 binary patch 并通过仓库之外的可靠渠道复制；只保存在旧
-机器 `/tmp` 中没有迁移价值：
-
-```sh
-git diff --binary -- \
-  cmake/build_host.cmake cmake/build_tests.cmake \
-  src/host/managed_host.cc src/host/managed_host.h \
-  > capsid-m1d-managed-tracked.patch
-git diff --no-index --binary /dev/null tests/test_host_managed.cc \
-  > capsid-m1d-managed-test.patch || test $? -eq 1
-tar -czf capsid-m1d-managed-wip.tar.gz \
-  capsid-m1d-managed-tracked.patch capsid-m1d-managed-test.patch
-shasum -a 256 capsid-m1d-managed-wip.tar.gz
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+git merge-base --is-ancestor e48f5b3098272ddf7d5b573377a43b7891e82553 HEAD
 ```
 
 ## 3. 新机器恢复
@@ -101,16 +72,11 @@ git log --oneline -12
 git submodule status --recursive
 ```
 
-恢复后必须看到上述五个基础返修 commit，以及迁移时创建的 WIP checkpoint。如果使用
-外部 patch，则在干净 checkout 上执行并复核：
+恢复后必须看到上述五个基础返修 commit、managed checkpoint 和 CI follow-up：
 
 ```sh
-tar -xzf /path/to/capsid-m1d-managed-wip.tar.gz
-git apply --check capsid-m1d-managed-tracked.patch
-git apply capsid-m1d-managed-tracked.patch
-git apply --check capsid-m1d-managed-test.patch
-git apply capsid-m1d-managed-test.patch
-git diff --check
+git merge-base --is-ancestor e48f5b3098272ddf7d5b573377a43b7891e82553 HEAD
+git status --short --branch
 ```
 
 不要复制旧机器的 CMake build tree。新机器重新 configure，可以暴露路径、编译器、
@@ -127,15 +93,15 @@ OpenSSL 或未声明 target dependency 的问题。
 | artifact safe-read、Linux `openat2`/dirfd walk、身份复核 | `3c54792` | `8e29bb4` |
 | secret file provider、canary 零泄漏、revision | `82ec793` | `f388d59` |
 | Host/App policy compiler、权限交集、effective metadata | `783922d` | `7870d6b` |
-| managed coordinator 初始骨架 | `439c106` | 当前未提交 WIP |
+| managed coordinator 初始骨架 | `439c106` | 真实 worker checkpoint `aeaca2c` |
 
-审计前四个冻结测试曾在 Linux Release 容器中独立通过；上述五个返修 commit 合并后的
-普通、ASan、UBSan、TSan 和跨平台统一门仍需在新机器重新执行，不能沿用旧 build tree
-或口头结果。
+审计前四个冻结测试曾在 Linux Release 容器中独立通过；实施方报告 `aeaca2c` 新增的六个
+managed 场景全部通过。上述结果仍需在新机器从干净 build tree 独立复核，普通、ASan、
+UBSan、TSan 和跨平台统一门不能沿用旧 build tree 或口头结果。
 
-## 5. Managed WIP 已在尝试的内容
+## 5. Managed checkpoint 内容
 
-当前未提交差异正在接入：
+`aeaca2c` 声明接入：
 
 - 真实 attestation verification 和 trusted-bytecode/source fallback 选择；
 - policy、secret 和 generation identity；
@@ -145,21 +111,21 @@ OpenSSL 或未声明 target dependency 的问题。
 - retire/recover 和 App status 的严格状态读取。
 - `host_managed` 冻结测试及 CMake 接线。
 
-这些代码尚未经过最终编译、冻结测试或 sanitizer 审计，不应把注释中列出的流程视为已
-证明行为。
+这些代码已保存并带有冻结测试，但尚未经过新机器的独立审计和统一 sanitizer 门；不能只
+根据 commit message 把流程视为最终证明行为。该 commit 还更新了 workflow audit 固定的
+artifact action v6 SHA，新机器应连同 CI 审计一起复核。
 
-### 继续实现前必须审计的 WIP 风险
+### 继续实现前必须复核的风险
 
-1. `managed_host.cc` 当前直接调用 `capsid_worker_fd()`；Host 契约要求只有
-   `WorkerEventSource` adapter 可以接触该 POSIX fd。managed 层必须走 adapter，不能扩大
-   CMake source-audit 豁免。
+1. 证明只有 `WorkerEventSource` adapter 接触 `capsid_worker_fd()`；不得扩大 CMake
+   source-audit 豁免。
 2. 构造 `capsid_capability_policy` 时，任何保存到 ABI struct 的 `c_str()` 指针都必须在
    spawn 调用期间稳定；vector 后续扩容不能让 rule resource 指针悬垂。rule ID 也必须唯一、
    稳定并来自 policy compiler，而不是统一填 `1`。
 3. 不要在 managed 层维护第二套宽松 `capsid.json` parser。应复用冻结 schema、policy
    compiler 和 `compile_secret_snapshot()`；未知字段、重复字段、env 二选一及 secret 集合
    必须保持同一契约。
-4. operation ID 生成必须并发安全；进程内普通静态计数器不能在多线程调用下产生数据竞争。
+4. 证明 operation ID 生成并发安全；进程内普通静态计数器不能产生数据竞争。
 5. state/staging I/O 应以预打开 dirfd 为边界，完整处理 EINTR、short read/write、文件类型、
    symlink 和 fsync 错误；不要退回绝对路径拼接或一次 `write()` 即认为完整。
 6. `EEXIST` 只有在复核对象确实为本次期望目录/文件后才能接受。失败清理只能删除本次操作
@@ -177,7 +143,7 @@ OpenSSL 或未声明 target dependency 的问题。
 
 不要再把 M1D 拆成逐函数移交，按以下顺序完成一个合并批次：
 
-1. 修完上面的 managed WIP 风险并建立真实 worker 集成 RED；
+1. 独立审计 `aeaca2c`，补齐上面的 managed 风险负控；
 2. 覆盖源码、可信字节码、compatibility fallback、secret 进入 worker 四条路径；
 3. 覆盖签名/claim/digest 错误、staging/fsync/READY 失败且旧 active 保持不变；
 4. 完成 retire、restart recovery、stale temp、缺失/损坏 `COMPLETE` 负控；

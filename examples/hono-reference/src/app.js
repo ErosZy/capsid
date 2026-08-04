@@ -58,6 +58,151 @@ app.get('/routing/assets/*', context => context.text(
 ));
 app.all('/routing/all', context => context.text(`all:${context.req.method}`));
 
+// Single-process benchmark routes (hono vs slim comparison):
+// /bench/json  -> a fixed JSON document
+// /bench/bytes -> 1024 bytes of binary payload
+// /bench/stream -> a streamed response (3 chunks)
+app.get('/bench/json', context => context.json({
+    status: 'ok',
+    app: 'hono',
+    item: 'benchmark',
+    value: 42,
+}));
+app.get('/bench/bytes', context => new Response(
+    new Uint8Array(1024).fill(0x61),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+app.get('/bench/stream', context => new Response(
+    new ReadableStream({
+        type: 'bytes',
+        pull(controller) {
+            controller.enqueue(new Uint8Array(341).fill(0x62));
+            controller.enqueue(new Uint8Array(341).fill(0x63));
+            controller.enqueue(new Uint8Array(342).fill(0x64));
+            controller.close();
+        },
+    }),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+
+// 16 KiB payloads: json16k (pad field), bytes16k, stream16k.
+const pad16k = 'x'.repeat(16384);
+app.get('/bench/json16k', context => context.json({
+    status: 'ok',
+    app: 'hono',
+    pad: pad16k,
+}));
+app.get('/bench/bytes16k', context => new Response(
+    new Uint8Array(16384).fill(0x61),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+app.get('/bench/stream16k', context => new Response(
+    new ReadableStream({
+        type: 'bytes',
+        pull(controller) {
+            controller.enqueue(new Uint8Array(5462).fill(0x62));
+            controller.enqueue(new Uint8Array(5461).fill(0x63));
+            controller.enqueue(new Uint8Array(5461).fill(0x64));
+            controller.close();
+        },
+    }),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+
+// 64 KiB payloads.
+const pad64k = 'x'.repeat(65536);
+
+// Pre-computed JSON body: JSON.stringify once at startup to isolate
+// QuickJS JSON.stringify cost from the data-plane path.
+const json64kPreBody = JSON.stringify({ status: 'ok', app: 'hono', pad: pad64k });
+app.get('/bench/json64k-pre', () => new Response(json64kPreBody, {
+    headers: { 'content-type': 'application/json; charset=UTF-8' },
+}));
+
+// Pre-computed JSON **bytes**: same JSON payload, but as a Uint8Array body.
+// Isolates string-body vs byte-body data-plane difference.
+const json64kPreBytes = new TextEncoder().encode(json64kPreBody);
+app.get('/bench/json64k-bytes', () => new Response(json64kPreBytes, {
+    headers: { 'content-type': 'application/json; charset=UTF-8' },
+}));
+app.get('/bench/json64k-octet', () => new Response(json64kPreBytes, {
+    headers: { 'content-type': 'application/octet-stream' },
+}));
+
+// Plain string body (not JSON) at 64 KB. Isolates content-type from body type.
+const text64kBody = 't'.repeat(65536);
+app.get('/bench/text64k', () => new Response(text64kBody, {
+    headers: { 'content-type': 'text/plain; charset=UTF-8' },
+}));
+
+// Direct JS-level timing of JSON.stringify — logs to stderr on the worker
+app.get('/bench/stringify-cost', context => {
+    const N = 200;
+    const obj = { status: 'ok', app: 'hono', pad: pad64k };
+    const t0 = Date.now();
+    for (let i = 0; i < N; i++) JSON.stringify(obj);
+    const t1 = Date.now();
+    const perCall = (t1 - t0) / N;
+    const result = JSON.stringify(obj);
+    console.error(`[stringify-cost] ${N} calls: total=${t1-t0}ms per_call=${perCall.toFixed(2)}ms output_size=${result.length} max_qps=${(1000/perCall).toFixed(0)}`);
+    return context.json({
+        iterations: N,
+        total_ms: t1 - t0,
+        per_call_ms: parseFloat(perCall.toFixed(2)),
+        output_size: result.length,
+        max_qps: parseInt((1000 / perCall).toFixed(0)),
+    });
+});
+
+// Direct JS-level timing of TextEncoder().encode(64KB) — string→bytes path
+app.get('/bench/encode-cost', context => {
+    const N = 100;
+    const str = 'x'.repeat(65536);
+    const encoder = new TextEncoder();
+    let size = 0;
+    const t0 = Date.now();
+    for (let i = 0; i < N; i++) size = encoder.encode(str).byteLength;
+    const t1 = Date.now();
+    const perCall = (t1 - t0) / N;
+    console.error(`[encode-cost] ${N} calls: total=${t1-t0}ms per_call=${perCall.toFixed(2)}ms bytes=${size}`);
+    return context.json({
+        iterations: N,
+        total_ms: t1 - t0,
+        per_call_ms: parseFloat(perCall.toFixed(2)),
+        bytes: size,
+    });
+});
+
+app.get('/bench/json64k', context => context.json({
+    status: 'ok',
+    app: 'hono',
+    pad: pad64k,
+}));
+app.get('/bench/bytes64k', context => new Response(
+    new Uint8Array(65536).fill(0x61),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+app.get('/bench/bytes65537', context => new Response(
+    new Uint8Array(65537).fill(0x61),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+app.get('/bench/bytes65535', context => new Response(
+    new Uint8Array(65535).fill(0x61),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+app.get('/bench/stream64k', context => new Response(
+    new ReadableStream({
+        type: 'bytes',
+        pull(controller) {
+            controller.enqueue(new Uint8Array(21846).fill(0x62));
+            controller.enqueue(new Uint8Array(21845).fill(0x63));
+            controller.enqueue(new Uint8Array(21845).fill(0x64));
+            controller.close();
+        },
+    }),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
+
 const based = new Hono().basePath('/routing/base');
 based.get('/item/:id', context => context.text(
     `base:${context.req.param('id')}`,
