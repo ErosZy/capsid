@@ -34,7 +34,9 @@ public:
         : write_offset_(0), frame_end_(0), frame_start_(0) {}
 
     // Appends one encoded frame. The caller has already checked wire
-    // capacity; the frame-size limit is enforced here.
+    // capacity; the frame-size limit is enforced here. The sent prefix
+    // is compacted before the append so physical memory stays bounded
+    // even under sustained partial writes.
     bool append(uint16_t type,
                 uint32_t flags,
                 uint64_t request_id,
@@ -43,7 +45,7 @@ public:
         if (payload_size > capsid::protocol::kMaxPayloadSize) {
             return false;
         }
-        // TEMP: no compact
+        compact_if_needed();
         return capsid::protocol::append_encoded(
             type, flags, request_id, payload, payload_size, &storage_);
     }

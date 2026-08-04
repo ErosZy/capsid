@@ -50,6 +50,27 @@ ssize_t short_writer(const uint8_t *data, size_t size, void *opaque) {
     return static_cast<ssize_t>(n);
 }
 
+// Scripted writer: alternates a partial write with an EAGAIN stall, so
+// flush() never fully drains and the sent prefix accumulates across
+// rounds — the only path that exercises compact_if_needed().
+struct ScriptedWriterState {
+    size_t max_write;
+    bool next_stall;
+    size_t total_sent;
+};
+
+ssize_t scripted_writer(const uint8_t *data, size_t size, void *opaque) {
+    ScriptedWriterState *state = static_cast<ScriptedWriterState *>(opaque);
+    if (state->next_stall) {
+        state->next_stall = false;
+        return 0;  // EAGAIN
+    }
+    state->next_stall = true;
+    const size_t n = size < state->max_write ? size : state->max_write;
+    state->total_sent += n;
+    return static_cast<ssize_t>(n);
+}
+
 void drain(capsid::OutboundBuffer *buffer, WriterState *state) {
     int guard = 0;
     while (!buffer->drained() && guard < 400000) {
@@ -184,6 +205,62 @@ void test_mid_header_partial() {
     std::printf("mid-header: sent=%zu\n", state.total_sent);
 }
 
+// Interleaves append and flush for hundreds of rounds with a scripted
+// partial(32 KiB)/EAGAIN writer: whole frames complete across partials,
+// so the sent prefix of fully-sent frames accumulates and only
+// compact_if_needed() keeps physical storage bounded. The caller's
+// wire-limit backpressure is simulated by stopping append once the
+// logical queue reaches the limit. Removing the compact call from
+// append() must make this test fail (RED).
+void test_partial_eagain_compact() {
+    const size_t limit = 256u * 1024u;
+    const size_t frame = 65536u;
+    capsid::OutboundBuffer buffer;
+    ScriptedWriterState state = { 32768, false, 0 };
+
+    std::vector<uint8_t> payload(frame, 0x6d);
+    const size_t wire_per_frame = frame + capsid::protocol::kHeaderSize;
+    size_t storage_high = 0;
+    size_t logical_high = 0;
+    size_t appended = 0;
+    size_t rounds = 0;
+    for (int i = 0; i < 1000; ++i) {
+        // Caller backpressure: append only while it fits the limit.
+        if (buffer.logical_size() + wire_per_frame > limit) {
+            break;
+        }
+        require(buffer.append(
+                    capsid::protocol::kResponseBody, 0,
+                    static_cast<uint64_t>(i + 1), &payload[0], payload.size()),
+                "append");
+        appended += wire_per_frame;
+        buffer.flush(scripted_writer, &state);
+        rounds += 1;
+        if (buffer.storage_size() > storage_high) {
+            storage_high = buffer.storage_size();
+        }
+        if (buffer.logical_size() > logical_high) {
+            logical_high = buffer.logical_size();
+        }
+    }
+    require(rounds >= 4, "several append/flush rounds interleaved");
+    require(logical_high <= limit,
+            "logical queue never exceeds the wire limit");
+    require(storage_high <= limit + frame + capsid::protocol::kHeaderSize,
+            "physical storage bounded by one frame plus the wire limit "
+            "under partial+EAGAIN pressure (compact must run)");
+
+    // Resume with an always-succeeding writer and drain fully.
+    WriterState drain_state = { 1u << 20, state.total_sent, -1 };
+    while (!buffer.drained()) {
+        require(buffer.flush(short_writer, &drain_state), "drain flush");
+    }
+    require(drain_state.total_sent == appended,
+            "all appended bytes delivered after resume");
+    std::printf("partial+EAGAIN: storage_high=%zu logical_high=%zu sent=%zu rounds=%zu\n",
+                storage_high, logical_high, drain_state.total_sent, rounds);
+}
+
 void test_fatal_writer() {
     capsid::OutboundBuffer buffer;
     std::vector<uint8_t> payload(1024u, 0x7e);
@@ -204,6 +281,7 @@ int main() {
     test_compact_high_water();
     test_eagain_stall();
     test_mid_header_partial();
+    test_partial_eagain_compact();
     test_fatal_writer();
     std::printf("all outbound-buffer tests passed\n");
     return 0;

@@ -761,47 +761,25 @@ void test_pending_mutation_snapshot(const char *worker_path,
     capsid_worker_destroy(worker);
 }
 
-// Worker RSS in KB, via /proc (the only worker-visible handle is the
-// IPC fd; find the process by comm).
-uint64_t worker_rss_kb() {
-    uint64_t rss = 0;
-    std::FILE *pipe = popen(
-        "for p in /proc/[0-9]*; do "
-        "if grep -q capsid-worker $p/comm 2>/dev/null; then "
-        "awk '/VmRSS:/{print \$2}' $p/status; fi; done",
-        "r");
-    if (pipe == NULL) {
-        return 0;
-    }
-    char line[64];
-    while (fgets(line, sizeof(line), pipe) != NULL) {
-        rss += static_cast<uint64_t>(atoll(line));
-    }
-    pclose(pipe);
-    return rss;
-}
-
-// #14: under forced partial writes the output vector compacts, so the
-// worker's resident memory stays bounded while correctness holds.
+// #14: sustained large-response concurrency completes correctly and
+// leaves the worker usable. (The old variant injected a
+// CAPSID_TEST_PARTIAL_WRITE env hook that the worker never received and
+// asserted RSS; the exact physical high-water is covered by
+// test_outbound_buffer instead.)
 void test_partial_write_high_water(const char *worker_path,
                                    const std::string &bundle) {
-    // Force every IPC write to advance at most 1024 bytes so the sent
-    // prefix accumulates; compaction must keep physical memory bounded.
-    require(setenv("CAPSID_TEST_PARTIAL_WRITE", "1024", 1) == 0,
-            "set partial-write hook");
     capsid_worker *worker =
         spawn_with(worker_path, bundle, 4u * 1024u * 1024u, 16384, 5000);
-    const uint64_t rss_before = worker_rss_kb();
     std::vector<uint64_t> ids;
     for (uint64_t id = 98; id < 98 + 16; ++id) {
         require_result(
             capsid_worker_begin_request(
                 worker, id, "GET", "https://example.test/chunk-65537",
                 NULL, 0),
-            "begin partial-write request");
+            "begin stress request");
         require_result(
             capsid_worker_end_request(worker, id),
-            "end partial-write request");
+            "end stress request");
         ids.push_back(id);
     }
     Collector collector = drive(worker, ids, GrantMode::kImmediate, 10);
@@ -809,15 +787,6 @@ void test_partial_write_high_water(const char *worker_path,
     for (uint64_t id : ids) {
         expect_body(collector, id, 65537, 0x52);
     }
-    const uint64_t rss_after = worker_rss_kb();
-    std::fprintf(stderr,
-                 "partial-write RSS: %llu -> %llu KiB (delta %llu)\n",
-                 static_cast<unsigned long long>(rss_before),
-                 static_cast<unsigned long long>(rss_after),
-                 static_cast<unsigned long long>(
-                     rss_after > rss_before ? rss_after - rss_before : 0));
-    require(rss_before == 0 || rss_after < rss_before + 64u * 1024u,
-            "worker RSS bounded under partial writes");
     capsid_worker_destroy(worker);
 }
 
