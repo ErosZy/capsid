@@ -145,7 +145,7 @@ struct ServiceFixture {
 };
 
 int connect_client(const std::string& path) {
-    const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     require(fd >= 0, "cannot create Admin service client");
     struct sockaddr_un address = {};
     address.sun_family = AF_UNIX;
@@ -165,8 +165,13 @@ int connect_client(const std::string& path) {
 void write_all(int fd, const std::string& bytes) {
     std::size_t offset = 0;
     while (offset < bytes.size()) {
+#if defined(MSG_NOSIGNAL)
         const ssize_t count = send(fd, bytes.data() + offset,
                                    bytes.size() - offset, MSG_NOSIGNAL);
+#else
+        const ssize_t count = send(fd, bytes.data() + offset,
+                                   bytes.size() - offset, 0);
+#endif
         if (count < 0 && errno == EINTR) {
             continue;
         }

@@ -232,7 +232,8 @@ if(BUILD_TESTING)
                     host_admin_http_smuggling_rejected
                     host_admin_http_slow_header_timeout
                     host_admin_http_slow_drip_deadlines
-                    host_admin_http_accepted_fd_remains_caller_owned)
+                    host_admin_http_accepted_fd_remains_caller_owned
+                    host_admin_http_closed_peer_does_not_raise_sigpipe)
                 add_test(
                     NAME "${CAPSID_ADMIN_HTTP_TEST_ID}"
                     COMMAND test-host-admin-http
@@ -451,6 +452,7 @@ if(BUILD_TESTING)
                     host_managed_resource_fields_affect_identity
                     host_managed_resource_limits_reach_worker
                     host_managed_process_address_space_reaches_release_runtime
+                    host_managed_process_address_space_skipped_under_tsan
                     host_managed_failed_deploy_cleans_staging
                     host_managed_staging_mode_rejected
                     host_managed_generations_mode_rejected

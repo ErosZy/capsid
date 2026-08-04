@@ -69,6 +69,21 @@ jobs:
           git -C "${WPT_DIRECTORY}" checkout --detach FETCH_HEAD
           test "$(git -C "${WPT_DIRECTORY}" rev-parse HEAD)" = "${commit}"
 
+      # capsid-bytecode-compile and the Host trust chain require OpenSSL
+      # >= 3.5. ubuntu-24.04 supplies 3.0, so the Release build must use the
+      # same pinned provider source as the sanitizer Host build.
+      - name: Build OpenSSL 3.5 for Release
+        run: |
+          set -euo pipefail
+          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
+          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
+          sha256sum -c openssl.sha256
+          tar xzf openssl-3.5.7.tar.gz
+          cd openssl-3.5.7
+          ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
+          make -j2
+          sudo make install_sw
+
       - name: Configure Release/LTO with WPT and benchmarks
         env:
           WPT_DIRECTORY: ${{ runner.temp }}/wpt
@@ -79,6 +94,7 @@ jobs:
             -DCAPSID_USE_MIMALLOC=OFF \
             -DCAPSID_BUILD_BENCHMARKS=ON \
             -DCAPSID_GENERATE_LINK_MAP=ON \
+            -DCMAKE_PREFIX_PATH=/opt/openssl35 \
             -DCAPSID_WPT_ROOT="${WPT_DIRECTORY}"
 
       - name: Build
@@ -176,13 +192,10 @@ jobs:
             npm ci --ignore-scripts --prefix "${directory}"
           done
 
-      # The Capsid Host requires OpenSSL >= 3.5 (its digest/signature
-      # provider); ubuntu-24.04 ships 3.0, so the Host build provisions 3.5
-      # from the pinned source tarball (SHA-256 verified) into /opt/openssl35.
-      # Only the TSan entry builds the Host today; the asan/ubsan entries
-      # deliberately keep their previous configuration.
-      - name: Build OpenSSL 3.5 for the Host
-        if: matrix.build_host == '1'
+      # The worker-side bytecode compiler and the Host both require OpenSSL
+      # >= 3.5. Every sanitizer entry therefore provisions the same pinned
+      # provider, even when that matrix entry does not build capsid-host.
+      - name: Build OpenSSL 3.5 for sanitizer targets
         run: |
           set -euo pipefail
           echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
@@ -192,7 +205,7 @@ jobs:
           cd openssl-3.5.7
           ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
           make -j2
-          make install_sw
+          sudo make install_sw
 
       - name: Configure ${{ matrix.name }}
         run: |
@@ -200,9 +213,9 @@ jobs:
           if [ "${{ matrix.compiler }}" = "clang" ]; then
             compiler_args=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
           fi
-          host_args=()
+          host_args=(-DCMAKE_PREFIX_PATH=/opt/openssl35)
           if [ "${{ matrix.build_host }}" = "1" ]; then
-            host_args=(-DCAPSID_BUILD_HOST=ON -DCMAKE_PREFIX_PATH=/opt/openssl35)
+            host_args+=(-DCAPSID_BUILD_HOST=ON)
           fi
           cmake -S . -B "build-${{ matrix.name }}" -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \

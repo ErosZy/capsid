@@ -36,6 +36,17 @@
 #include <utility>
 #include <vector>
 
+#if defined(__SANITIZE_THREAD__)
+#define CAPSID_TEST_TSAN_BUILD 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define CAPSID_TEST_TSAN_BUILD 1
+#endif
+#endif
+#if !defined(CAPSID_TEST_TSAN_BUILD)
+#define CAPSID_TEST_TSAN_BUILD 0
+#endif
+
 #include "build_identity.h"
 
 namespace {
@@ -2342,7 +2353,7 @@ int main(int argc, char** argv) {
 
     if (mode ==
         "host_managed_process_address_space_reaches_release_runtime") {
-#if defined(__SANITIZE_ADDRESS__)
+#if defined(__SANITIZE_ADDRESS__) || CAPSID_TEST_TSAN_BUILD
         // A finite RLIMIT_AS is incompatible with ASan's shadow-memory
         // reservation. The production Release path remains required to
         // forward this field; its sanitizer build is covered by the
@@ -2367,6 +2378,29 @@ int main(int argc, char** argv) {
         std::cout << "PASS" << std::endl;
         return 0;
 #endif
+    }
+
+    if (mode ==
+        "host_managed_process_address_space_skipped_under_tsan") {
+#if CAPSID_TEST_TSAN_BUILD
+        // TSan, like ASan, reserves a vast shadow-memory address range. A
+        // finite RLIMIT_AS prevents an instrumented worker from reaching
+        // READY, so the managed Host must keep compile-time relation checks
+        // but skip forwarding processAddressSpace to the TSan worker.
+        write_file(
+            fixtures.vdir + "/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","worker":{"processAddressSpace":"1MiB"},"pool":{"minReady":1,"maxWorkers":1}})json");
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome deployed =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(deployed.ok && deployed.worker != nullptr,
+                "TSan managed Host forwarded an incompatible RLIMIT_AS: " +
+                    deployed.error);
+        capsid_worker_destroy(deployed.worker);
+#endif
+        std::cout << "PASS" << std::endl;
+        return 0;
     }
 
     if (mode == "host_managed_failed_deploy_cleans_staging") {

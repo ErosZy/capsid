@@ -270,7 +270,7 @@ void wait_for_socket(const Fixture& fixture) {
 }
 
 int connect_admin(const std::string& path) {
-    const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     require(fd >= 0, "cannot create managed Admin client");
     struct sockaddr_un address = {};
     address.sun_family = AF_UNIX;
@@ -292,8 +292,13 @@ std::string http_request(const std::string& path,
     const int fd = connect_admin(path);
     std::size_t offset = 0;
     while (offset < request.size()) {
+#if defined(MSG_NOSIGNAL)
         const ssize_t count = send(fd, request.data() + offset,
                                    request.size() - offset, MSG_NOSIGNAL);
+#else
+        const ssize_t count = send(fd, request.data() + offset,
+                                   request.size() - offset, 0);
+#endif
         if (count < 0 && errno == EINTR) {
             continue;
         }

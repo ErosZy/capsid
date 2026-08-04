@@ -252,6 +252,10 @@ int main(int argc, char** argv) {
                 "Admin listener ignored the configured 0600 mode");
         require(metadata.st_uid == geteuid(),
                 "Admin listener is not owned by the Host euid");
+        const int descriptor_flags = fcntl(listener, F_GETFD);
+        require(descriptor_flags >= 0 &&
+                    (descriptor_flags & FD_CLOEXEC) != 0,
+                "Admin listener can leak across worker exec");
         close(listener);
         require(unlink(path.c_str()) == 0,
                 "cannot remove Admin listener fixture");

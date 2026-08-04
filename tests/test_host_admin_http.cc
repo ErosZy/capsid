@@ -18,6 +18,7 @@
 #include "host/admin_api.h"
 
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/un.h>
@@ -44,6 +45,12 @@ void require(bool condition, const std::string& message) {
     if (!condition) {
         fail(message);
     }
+}
+
+volatile sig_atomic_t sigpipe_count = 0;
+
+void record_sigpipe(int) {
+    sigpipe_count = 1;
 }
 
 #if CAPSID_HAS_ADMIN_HTTP
@@ -442,7 +449,7 @@ int main(int argc, char** argv) {
         // therefore never close the caller's descriptor behind its back;
         // serve_one is the wrapper that owns and closes its accepted fd.
         int sockets[2] = {-1, -1};
-        require(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0,
+        require(socketpair(AF_UNIX, SOCK_STREAM, 0,
                            sockets) == 0,
                 "cannot create accepted-fd ownership fixture");
         FakeAdminBackend backend;
@@ -466,6 +473,47 @@ int main(int argc, char** argv) {
                 "accepted-fd transport closed its caller-owned descriptor");
         close(sockets[0]);
         close(sockets[1]);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_http_closed_peer_does_not_raise_sigpipe") {
+        // A management client may disappear after sending a complete request
+        // but before reading the response. Exercise the transport under the
+        // process-default SIGPIPE disposition: Linux uses MSG_NOSIGNAL while
+        // platforms without that flag (notably macOS) must suppress SIGPIPE
+        // on the socket itself. A temporary handler lets the test observe
+        // any attempted SIGPIPE without allowing it to terminate CTest.
+        int sockets[2] = {-1, -1};
+        require(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
+                "cannot create Admin SIGPIPE fixture");
+        const std::string body =
+            "{\"app\":\"orders\",\"version\":\"v1\"}";
+        const std::string request =
+            "POST /v1/deploy HTTP/1.1\r\nHost: local\r\n"
+            "Content-Type: application/json\r\nContent-Length: " +
+            std::to_string(body.size()) + "\r\n\r\n" + body;
+        send_all(sockets[1], request);
+        close(sockets[1]);
+
+        struct sigaction action = {};
+        action.sa_handler = record_sigpipe;
+        sigemptyset(&action.sa_mask);
+        struct sigaction previous = {};
+        require(sigaction(SIGPIPE, &action, &previous) == 0,
+                "cannot install Admin SIGPIPE observer");
+        sigpipe_count = 0;
+        FakeAdminBackend backend;
+        std::string server_error;
+        const bool served = capsid::host::serve_accepted_admin_http_connection(
+            sockets[0], http_options(), &backend, &server_error);
+        const sig_atomic_t observed = sigpipe_count;
+        require(sigaction(SIGPIPE, &previous, nullptr) == 0,
+                "cannot restore Admin SIGPIPE disposition");
+        close(sockets[0]);
+        require(!served, "closed Admin peer unexpectedly accepted a response");
+        require(observed == 0,
+                "closed Admin peer raised SIGPIPE in the Host");
         std::cout << "PASS" << std::endl;
         return 0;
     }
