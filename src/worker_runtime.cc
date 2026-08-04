@@ -234,6 +234,16 @@ struct StorageNamespace {
     StorageNamespace() : bytes(0) {}
 };
 
+// Diagnostic phase sampler: the deadline tick records which phase the
+// worker is in, giving a coarse but cheap attribution of worker CPU.
+enum class WorkerPhase {
+    kIdle,
+    kRead,
+    kProcess,
+    kJS,
+    kFlush,
+};
+
 class WorkerRuntime {
 public:
     WorkerRuntime(int fd, int network_namespace_fd)
@@ -245,6 +255,13 @@ public:
           deadline_timer_started_(false),
           poll_events_(UV_READABLE),
           pump_in_progress_(false),
+          diag_samples_(0),
+          bridge_calls_(0),
+          bridge_us_(0),
+          diag_enabled_(false),
+          current_phase_(WorkerPhase::kIdle),
+          phase_counts_(),
+          phase_samples_(0),
           shutting_down_(false),
           bundle_is_trusted_bytecode_(false),
           bundle_name_("capsid:app/main"),
@@ -344,6 +361,9 @@ public:
         options.bootstrap_opaque = this;
 
         g_worker = this;
+        const char *diag_env = std::getenv("CAPSID_PERF_DIAG");
+        diag_enabled_ =
+            diag_env != NULL && std::strcmp(diag_env, "1") == 0;
         runtime_ = TJS_NewRuntimeOptions(&options);
         if (!runtime_ || !ctx_) {
             return 1;
@@ -423,9 +443,28 @@ private:
     static void deadline_timer_callback(uv_timer_t *timer) {
         WorkerRuntime *self =
             static_cast<WorkerRuntime *>(timer->data);
-        if (self) {
-            self->expire_requests();
+        if (!self) {
+            return;
         }
+        if (!self->diag_enabled_) {
+            self->expire_requests();
+            return;
+        }
+        const size_t index = static_cast<size_t>(self->current_phase_);
+        if (index < 5) {
+            self->phase_counts_[index] += 1;
+        }
+        self->phase_samples_ += 1;
+        if (self->phase_samples_ % 300 == 0) {
+            std::fprintf(stderr,
+                         "PHASE idle=%llu read=%llu process=%llu js=%llu flush=%llu\n",
+                         static_cast<unsigned long long>(self->phase_counts_[0]),
+                         static_cast<unsigned long long>(self->phase_counts_[1]),
+                         static_cast<unsigned long long>(self->phase_counts_[2]),
+                         static_cast<unsigned long long>(self->phase_counts_[3]),
+                         static_cast<unsigned long long>(self->phase_counts_[4]));
+        }
+        self->expire_requests();
     }
 
     static int bootstrap(TJSRuntime *runtime, JSContext *ctx, void *opaque) {
@@ -2939,6 +2978,7 @@ private:
     }
 
     void drain_jobs() {
+        PhaseGuard guard(this, WorkerPhase::kJS);
         JSContext *job_ctx = NULL;
         while (JS_IsJobPending(JS_GetRuntime(ctx_))) {
             const int result = JS_ExecutePendingJob(JS_GetRuntime(ctx_), &job_ctx);
@@ -2980,7 +3020,18 @@ private:
         }
     }
 
+    struct PhaseGuard {
+        WorkerRuntime *self;
+        WorkerPhase phase;
+        explicit PhaseGuard(WorkerRuntime *s, WorkerPhase p)
+            : self(s), phase(p) {
+            self->current_phase_ = phase;
+        }
+        ~PhaseGuard() { self->current_phase_ = WorkerPhase::kIdle; }
+    };
+
     void read_input() {
+        PhaseGuard guard(this, WorkerPhase::kRead);
         uint8_t buffer[64 * 1024];
         for (;;) {
             const ssize_t count = read(fd_, buffer, sizeof(buffer));
@@ -3004,6 +3055,7 @@ private:
     }
 
     void process_frames() {
+        PhaseGuard guard(this, WorkerPhase::kProcess);
         for (;;) {
             capsid::protocol::Frame frame;
             const capsid::protocol::ParseResult result = parser_.next(&frame);
@@ -3329,7 +3381,18 @@ private:
     }
 
     bool call_bridge(JSValue function, int argc, JSValue *argv) {
+        const uint64_t t0 = diag_enabled_ ? uv_hrtime() : 0;
         JSValue result = JS_Call(ctx_, function, JS_UNDEFINED, argc, argv);
+        if (diag_enabled_) {
+            bridge_calls_ += 1;
+            bridge_us_ += uv_hrtime() - t0;
+            if (bridge_calls_ % 500 == 0) {
+                std::fprintf(stderr,
+                             "BRIDGE calls=%llu avg_us=%.1f\n",
+                             static_cast<unsigned long long>(bridge_calls_),
+                             static_cast<double>(bridge_us_) / bridge_calls_ / 1000.0);
+            }
+        }
         if (JS_IsException(result)) {
             send_error(0, exception_string());
             return false;
@@ -3514,6 +3577,9 @@ private:
     // per-request breakdown (handler / write / tail) to stderr.
     void diag_sample(uint64_t id, const ResponseState &state) {
         (void)id;
+        if (!diag_enabled_) {
+            return;
+        }
         diag_samples_ += 1;
         if (diag_samples_ % 256 != 0) {
             return;
@@ -3883,6 +3949,7 @@ private:
     }
 
     void flush_output() {
+        PhaseGuard guard(this, WorkerPhase::kFlush);
         if (!outbound_.flush(socket_writer, &fd_)) {
             shutdown();
             return;
@@ -3951,6 +4018,12 @@ private:
     capsid::OutboundBuffer outbound_;
     bool pump_in_progress_;
     uint64_t diag_samples_;
+    uint64_t bridge_calls_;
+    uint64_t bridge_us_;
+    bool diag_enabled_;
+    volatile WorkerPhase current_phase_;
+    uint64_t phase_counts_[5];
+    uint64_t phase_samples_;
     bool shutting_down_;
     capsid::protocol::Parser parser_;
     capsid::WorkerStartupState startup_state_;
