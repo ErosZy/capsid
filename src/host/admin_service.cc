@@ -97,7 +97,10 @@ void AdminService::request_stop() {
     // Wake the idle accept loop exactly once: the nonblocking pipe and the
     // one-shot gate make repeated stops idempotent and never blocking.
     if (!stop_written_.exchange(true)) {
-        (void)write(stop_pipe_[1], "x", 1);
+        // GCC's warn_unused_result ignores the (void) cast; assign and
+        // ignore explicitly. The wake byte is best-effort by design.
+        const ssize_t wake_bytes = write(stop_pipe_[1], "x", 1);
+        (void)wake_bytes;
     }
     // Wake an accepted connection mid-header: shutdown makes its read
     // return promptly instead of waiting out the HTTP deadline. The fd
