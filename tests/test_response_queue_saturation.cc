@@ -143,6 +143,8 @@ struct Collector {
     uint64_t body_frames = 0;
     uint64_t end_frames = 0;
     uint64_t error_frames = 0;
+    // Terminal arrival order (end/error), for ordering assertions.
+    std::vector<uint64_t> completion_order;
     std::map<uint64_t, uint64_t> pending_grant_bytes;
 };
 
@@ -222,11 +224,14 @@ Collector drive(capsid_worker *worker,
                 case CAPSID_EVENT_RESPONSE_END:
                     collector.end_frames += 1;
                     collector.outcomes[event.request_id].ended = true;
+                    collector.completion_order.push_back(event.request_id);
                     pending_ids.erase(event.request_id);
                     break;
                 case CAPSID_EVENT_ERROR:
+                case CAPSID_EVENT_REQUEST_TIMEOUT:
                     collector.error_frames += 1;
                     collector.outcomes[event.request_id].errored = true;
+                    collector.completion_order.push_back(event.request_id);
                     pending_ids.erase(event.request_id);
                     break;
                 case CAPSID_EVENT_EXIT:
@@ -508,6 +513,217 @@ void test_reusable_after_stress(const char *worker_path,
     capsid_worker_destroy(worker);
 }
 
+// #9: an error message larger than the whole queue must still deliver
+// a terminal (truncated to fit one frame) instead of wedging forever.
+void test_huge_error_message(const char *worker_path,
+                             const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 4096, 4096, 2000);
+    require_result(
+        capsid_worker_begin_request(
+            worker, 91, "GET",
+            "https://example.test/error-huge-message", NULL, 0),
+        "begin huge error message");
+    require_result(
+        capsid_worker_end_request(worker, 91),
+        "end huge error message");
+    Collector collector = drive(worker, { 91 }, GrantMode::kImmediate, 2);
+    expect_error(collector, 91);
+    capsid_worker_destroy(worker);
+}
+
+// #10: a real partial-write-then-error response (stream error after a
+// large chunk) still produces exactly one terminal within 2 s.
+void test_error_after_partial_write(const char *worker_path,
+                                    const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 4096, 4096, 2000);
+    require_result(
+        capsid_worker_begin_request(
+            worker, 92, "GET",
+            "https://example.test/error-after-write-real", NULL, 0),
+        "begin error-after-write-real");
+    require_result(
+        capsid_worker_end_request(worker, 92),
+        "end error-after-write-real");
+    Collector collector = drive(worker, { 92 }, GrantMode::kImmediate, 2);
+    expect_error(collector, 92);
+    capsid_worker_destroy(worker);
+}
+
+// #11: timeout under a saturated queue fires the cancel path exactly
+// once; the terminal is delivered exactly once (no re-cancel on later
+// timer ticks). 64 x 65537 keeps the 4 MiB wire queue full so the
+// hang request's error terminal has to wait; the phase must prevent
+// per-tick re-cancellation.
+void test_timeout_once_under_saturation(const char *worker_path,
+                                        const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 4u * 1024u * 1024u, 16384, 300);
+    std::vector<uint64_t> ids;
+    for (uint64_t id = 93; id < 93 + 64; ++id) {
+        require_result(
+            capsid_worker_begin_request(
+                worker, id, "GET", "https://example.test/chunk-65537",
+                NULL, 0),
+            "begin saturation for timeout");
+        require_result(
+            capsid_worker_end_request(worker, id),
+            "end saturation for timeout");
+        ids.push_back(id);
+    }
+    require_result(
+        capsid_worker_begin_request(
+            worker, 157, "GET", "https://example.test/hang", NULL, 0),
+        "begin hang for timeout");
+    require_result(
+        capsid_worker_end_request(worker, 157),
+        "end hang for timeout");
+    ids.push_back(157);
+    Collector collector = drive(worker, ids, GrantMode::kImmediate, 6);
+    require(!collector.saw_exit, "worker must not exit");
+    const auto hang = collector.outcomes.find(157);
+    require(hang != collector.outcomes.end() && hang->second.errored,
+            "hang request errored via deadline");
+    require(collector.error_frames == 1,
+            "timeout produced exactly one error terminal");
+    capsid_worker_destroy(worker);
+}
+
+// #12: with a small queue, the small response completes before the
+// large response and within a bounded number of pump passes (true
+// round-robin, not begin()-first ordering).
+void test_small_completes_first(const char *worker_path,
+                                const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 8192, 4096, 2000);
+    require_result(
+        capsid_worker_begin_request(
+            worker, 95, "GET", "https://example.test/chunk-65537",
+            NULL, 0),
+        "begin large for ordering");
+    require_result(
+        capsid_worker_end_request(worker, 95),
+        "end large for ordering");
+    require_result(
+        capsid_worker_begin_request(
+            worker, 96, "GET", "https://example.test/small", NULL, 0),
+        "begin small for ordering");
+    require_result(
+        capsid_worker_end_request(worker, 96),
+        "end small for ordering");
+    Collector collector = drive(worker, { 95, 96 }, GrantMode::kImmediate, 2);
+    const auto large = collector.outcomes.find(95);
+    const auto small = collector.outcomes.find(96);
+    require(large != collector.outcomes.end() && small != collector.outcomes.end(),
+            "both outcomes exist");
+    require(small->second.ended, "small response completed");
+    require(small->second.body == "small-ok",
+            "small response content correct");
+    // True round-robin: the small response's terminal arrives before
+    // the large response's, regardless of request id order.
+    require(collector.completion_order.size() == 2,
+            "both terminals arrived");
+    require(collector.completion_order[0] == 96,
+            "small response terminal arrived first");
+    capsid_worker_destroy(worker);
+}
+
+// #13: ownership-transfer semantics are frozen: enqueue detaches the
+// chunk's ArrayBuffer, so a later application mutation throws (caught
+// in the fixture); the response carries the bytes as they were at the
+// write call.
+void test_pending_mutation_snapshot(const char *worker_path,
+                                    const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 4096, 1024, 2000);
+    require_result(
+        capsid_worker_begin_request(
+            worker, 97, "GET",
+            "https://example.test/mutate-after-write", NULL, 0),
+        "begin mutation test");
+    require_result(
+        capsid_worker_end_request(worker, 97),
+        "end mutation test");
+    Collector collector = drive(worker, { 97 }, GrantMode::kImmediate, 5);
+    const auto it = collector.outcomes.find(97);
+    require(it != collector.outcomes.end() && it->second.ended,
+            "mutation response completed");
+    require(it->second.body.size() == 40000,
+            "mutation response size");
+    for (size_t i = 0; i < 20000; ++i) {
+        if (static_cast<uint8_t>(it->second.body[i]) != 0x55) {
+            fail("first chunk must carry enqueue-time bytes (0x55)");
+        }
+    }
+    for (size_t i = 20000; i < 40000; ++i) {
+        if (static_cast<uint8_t>(it->second.body[i]) != 0x66) {
+            fail("second chunk content wrong");
+        }
+    }
+    capsid_worker_destroy(worker);
+}
+
+// Worker RSS in KB, via /proc (the only worker-visible handle is the
+// IPC fd; find the process by comm).
+uint64_t worker_rss_kb() {
+    uint64_t rss = 0;
+    std::FILE *pipe = popen(
+        "for p in /proc/[0-9]*; do "
+        "if grep -q capsid-worker $p/comm 2>/dev/null; then "
+        "awk '/VmRSS:/{print \$2}' $p/status; fi; done",
+        "r");
+    if (pipe == NULL) {
+        return 0;
+    }
+    char line[64];
+    while (fgets(line, sizeof(line), pipe) != NULL) {
+        rss += static_cast<uint64_t>(atoll(line));
+    }
+    pclose(pipe);
+    return rss;
+}
+
+// #14: under forced partial writes the output vector compacts, so the
+// worker's resident memory stays bounded while correctness holds.
+void test_partial_write_high_water(const char *worker_path,
+                                   const std::string &bundle) {
+    // Force every IPC write to advance at most 1024 bytes so the sent
+    // prefix accumulates; compaction must keep physical memory bounded.
+    require(setenv("CAPSID_TEST_PARTIAL_WRITE", "1024", 1) == 0,
+            "set partial-write hook");
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 4u * 1024u * 1024u, 16384, 5000);
+    const uint64_t rss_before = worker_rss_kb();
+    std::vector<uint64_t> ids;
+    for (uint64_t id = 98; id < 98 + 16; ++id) {
+        require_result(
+            capsid_worker_begin_request(
+                worker, id, "GET", "https://example.test/chunk-65537",
+                NULL, 0),
+            "begin partial-write request");
+        require_result(
+            capsid_worker_end_request(worker, id),
+            "end partial-write request");
+        ids.push_back(id);
+    }
+    Collector collector = drive(worker, ids, GrantMode::kImmediate, 10);
+    require(!collector.saw_exit, "worker must not exit");
+    for (uint64_t id : ids) {
+        expect_body(collector, id, 65537, 0x52);
+    }
+    const uint64_t rss_after = worker_rss_kb();
+    std::fprintf(stderr,
+                 "partial-write RSS: %llu -> %llu KiB (delta %llu)\n",
+                 static_cast<unsigned long long>(rss_before),
+                 static_cast<unsigned long long>(rss_after),
+                 static_cast<unsigned long long>(
+                     rss_after > rss_before ? rss_after - rss_before : 0));
+    require(rss_before == 0 || rss_after < rss_before + 64u * 1024u,
+            "worker RSS bounded under partial writes");
+    capsid_worker_destroy(worker);
+}
+
 }  // namespace
 
 // Optional argv[3]: run only the numbered test (1..8). Without it the
@@ -537,6 +753,12 @@ int main(int argc, char **argv) {
     run_sel(only, argv[1], bundle, 6, test_small_not_starved);
     run_sel(only, argv[1], bundle, 7, test_cancel_pending);
     run_sel(only, argv[1], bundle, 8, test_reusable_after_stress);
+    run_sel(only, argv[1], bundle, 9, test_huge_error_message);
+    run_sel(only, argv[1], bundle, 10, test_error_after_partial_write);
+    run_sel(only, argv[1], bundle, 11, test_timeout_once_under_saturation);
+    run_sel(only, argv[1], bundle, 12, test_small_completes_first);
+    run_sel(only, argv[1], bundle, 13, test_pending_mutation_snapshot);
+    run_sel(only, argv[1], bundle, 14, test_partial_write_high_water);
     std::printf("all queue-saturation RED tests passed\n");
     return 0;
 }

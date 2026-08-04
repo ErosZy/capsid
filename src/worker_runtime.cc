@@ -46,6 +46,7 @@ JSModuleDef *tjs__load_builtin(
 #include <unistd.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <limits>
@@ -70,7 +71,22 @@ namespace {
 // since drained.
 static const size_t kMaxTerminalTombstones = 2048;
 
+// Sent-prefix compaction threshold for the output vector: below this
+// the prefix is cheap to carry, at/above it the vector is compacted so
+// physical memory stays bounded (see compact_output_if_needed).
+static const size_t kOutputCompactThreshold = 64u * 1024u;
+
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
+    // Test hook (CAPSID_TEST_PARTIAL_WRITE): cap every syscall so the
+    // sent prefix accumulates and the output compaction path is
+    // exercised deterministically.
+    const char *partial = getenv("CAPSID_TEST_PARTIAL_WRITE");
+    if (partial != NULL && *partial != '\0') {
+        const unsigned long cap = strtoul(partial, NULL, 10);
+        if (cap < size) {
+            size = static_cast<size_t>(cap);
+        }
+    }
 #ifdef MSG_NOSIGNAL
     return send(fd, data, size, MSG_NOSIGNAL);
 #else
@@ -176,6 +192,14 @@ struct TerminalPending {
     uint32_t error_flags;
 };
 
+// Response lifecycle (design §3.5): explicit phases so the timeout and
+// terminal paths execute exactly once even while the wire queue stays
+// saturated.
+enum class ResponsePhase {
+    kOpen,            // normal processing, timeout still armed
+    kTerminalPending, // a terminal is deferred (queue full / body draining)
+};
+
 struct ResponseState {
     uint64_t credit;
     uint64_t request_credit;
@@ -186,7 +210,7 @@ struct ResponseState {
     // C++11 target: no std::optional; the flag marks a deferred terminal.
     TerminalPending terminal;
     bool terminal_pending;
-    bool pump_advanced;  // round-robin marker for this pump pass
+    ResponsePhase phase;
 
     ResponseState()
         : credit(0),
@@ -195,7 +219,7 @@ struct ResponseState {
           deadline_ns(0),
           request_ended(false),
           terminal_pending(false),
-          pump_advanced(false) {}
+          phase(ResponsePhase::kOpen) {}
 };
 
 struct StorageNamespace {
@@ -216,6 +240,7 @@ public:
           deadline_timer_started_(false),
           poll_events_(UV_READABLE),
           write_offset_(0),
+          flush_frame_end_(0),
           pump_in_progress_(false),
           shutting_down_(false),
           bundle_is_trusted_bytecode_(false),
@@ -826,10 +851,20 @@ private:
             JS_FreeValue(ctx, resolving[1]);
             return JS_ThrowInternalError(ctx, "response output is wedged");
         }
-        // kWouldBlock: hold the JS view (no native copy), pump advances
-        // segments as credit and wire space become available.
+        // kWouldBlock: snapshot the bytes in the JS heap (design §3.2)
+        // so the application mutating the source array while the
+        // promise is pending cannot change the response bytes; the
+        // snapshot also keeps the data alive without GC pressure on the
+        // caller's buffer. The pump advances segments from the snapshot.
+        JSValue snapshot = JS_NewUint8ArrayCopy(ctx, bytes, size);
+        if (JS_IsException(snapshot)) {
+            JS_FreeValue(ctx, resolving[0]);
+            JS_FreeValue(ctx, resolving[1]);
+            return JS_ThrowInternalError(
+                ctx, "response snapshot allocation failed");
+        }
         PendingWrite pending;
-        pending.chunk = JS_DupValue(ctx, argv[1]);
+        pending.chunk = snapshot;
         pending.offset = fast_sent;
         pending.size = size;
         pending.resolve = resolving[0];
@@ -3011,6 +3046,7 @@ private:
                 ? std::numeric_limits<uint64_t>::max()
                 : now + timeout_ns;
         responses_[frame.request_id] = response;
+        pump_order_.push_back(frame.request_id);
         JSValue arguments[6] = {
             JS_DupValue(ctx_, application_handler_),
             JS_DupValue(ctx_, application_handler_this_),
@@ -3139,6 +3175,7 @@ private:
         const bool called = call_id_bridge(cancel_request_, id);
         responses_.erase(state);
         remember_terminal(id);
+        pump_response_output();
         if (interrupted_request_id_ == id) {
             interrupted_request_id_ = 0;
         }
@@ -3208,7 +3245,12 @@ private:
                  responses_.begin();
              it != responses_.end();
              ++it) {
-            if (it->second.deadline_ns != 0 &&
+            // Only kOpen requests have a live deadline: once a timeout
+            // or a deferred terminal moved the request to
+            // kTerminalPending, later ticks must not re-run the cancel
+            // path (design §3.5).
+            if (it->second.phase == ResponsePhase::kOpen &&
+                it->second.deadline_ns != 0 &&
                 now >= it->second.deadline_ns) {
                 expired.push_back(it->first);
             }
@@ -3220,6 +3262,11 @@ private:
             if (state == responses_.end()) {
                 continue;
             }
+            // Timeout fires exactly once: disarm the deadline and move
+            // to TerminalPending before the cancel bridge runs, so a
+            // saturated queue cannot re-trigger it on the next tick.
+            state->second.deadline_ns = 0;
+            state->second.phase = ResponsePhase::kTerminalPending;
             reject_pending(state->second, "request timed out");
             interrupted_request_id_ = id;
             call_id_bridge(cancel_request_, id);
@@ -3299,6 +3346,7 @@ private:
             if (!has_output_capacity(wire)) {
                 break;
             }
+            compact_output_if_needed();
             size_t view_size = 0;
             uint8_t *bytes = JS_GetUint8Array(ctx_, &view_size, pending.chunk);
             if (!bytes || pending.offset + chunk_size > view_size) {
@@ -3343,6 +3391,7 @@ private:
             if (!state.pending.empty()) {
                 state.terminal = terminal;
                 state.terminal_pending = true;
+                state.phase = ResponsePhase::kTerminalPending;
                 return false;
             }
             capsid::protocol::Frame frame;
@@ -3352,6 +3401,7 @@ private:
             if (!queue_output(frame)) {
                 state.terminal = terminal;
                 state.terminal_pending = true;
+                state.phase = ResponsePhase::kTerminalPending;
                 return false;
             }
             return true;
@@ -3361,12 +3411,13 @@ private:
         frame.flags = terminal.error_flags;
         frame.request_id = id;
         const size_t size = std::min<size_t>(
-            terminal.message.size(), capsid::protocol::kMaxPayloadSize);
+            terminal.message.size(), error_payload_capacity());
         frame.payload.assign(
             terminal.message.begin(), terminal.message.begin() + size);
         if (!queue_output(frame)) {
             state.terminal = terminal;
             state.terminal_pending = true;
+            state.phase = ResponsePhase::kTerminalPending;
             return false;
         }
         return true;
@@ -3402,27 +3453,40 @@ private:
         }
         pump_in_progress_ = true;
         std::vector<uint64_t> done;
-        for (std::map<uint64_t, ResponseState>::iterator it =
-                 responses_.begin();
-             it != responses_.end();
-             ++it) {
-            if (it->second.pump_advanced) {
+        // True round-robin (design §3.4): the rotation cursor survives
+        // across pump passes. Each pass walks the requests currently in
+        // pump_order_ front-to-back, advances one quantum each, and
+        // re-queues them at the back; the next pass starts where this
+        // one ended, so a low-id large response can never claim every
+        // pass's first slot.
+        const size_t rounds = pump_order_.size();
+        for (size_t i = 0; i < rounds; ++i) {
+            if (pump_order_.empty()) {
+                break;
+            }
+            const uint64_t id = pump_order_.front();
+            pump_order_.pop_front();
+            std::map<uint64_t, ResponseState>::iterator it =
+                responses_.find(id);
+            if (it == responses_.end()) {
+                // Completed/erased since enqueue: drop from the rotation.
                 continue;
             }
-            it->second.pump_advanced = true;
+            ResponseState &state = it->second;
             const bool progressed = advance_pending(
-                it->second, it->first, capsid::protocol::kMaxPayloadSize);
-            if (it->second.pending.empty() &&
-                it->second.terminal_pending) {
-                TerminalPending terminal = it->second.terminal;
-                it->second.terminal_pending = false;
-                if (try_send_terminal(it->first, it->second, terminal)) {
-                    done.push_back(it->first);
+                state, id, capsid::protocol::kMaxPayloadSize);
+            if (state.pending.empty() && state.terminal_pending) {
+                TerminalPending terminal = state.terminal;
+                state.terminal_pending = false;
+                if (try_send_terminal(id, state, terminal)) {
+                    done.push_back(id);
+                    continue;  // erased below; not requeued
                 }
             }
             if (progressed) {
                 update_poll();
             }
+            pump_order_.push_back(id);
         }
         for (std::vector<uint64_t>::const_iterator id = done.begin();
              id != done.end();
@@ -3433,12 +3497,6 @@ private:
                 responses_.erase(it);
                 remember_terminal(*id);
             }
-        }
-        for (std::map<uint64_t, ResponseState>::iterator it =
-                 responses_.begin();
-             it != responses_.end();
-             ++it) {
-            it->second.pump_advanced = false;
         }
         pump_in_progress_ = false;
     }
@@ -3462,6 +3520,7 @@ private:
                 // Discard the unsent body, then guarantee the error
                 // terminal (defer when the queue is full).
                 reject_pending(state_it->second, "request failed");
+                state_it->second.phase = ResponsePhase::kTerminalPending;
                 TerminalPending terminal;
                 terminal.kind = TerminalPending::Kind::kResponseError;
                 terminal.message = message;
@@ -3478,7 +3537,7 @@ private:
         frame.flags = flags;
         frame.request_id = id;
         const size_t size = std::min<size_t>(
-            message.size(), capsid::protocol::kMaxPayloadSize);
+            message.size(), error_payload_capacity());
         frame.payload.assign(message.begin(), message.begin() + size);
         queue_output(frame);
     }
@@ -3546,6 +3605,7 @@ private:
             if (!has_output_capacity(wire)) {
                 break;
             }
+            compact_output_if_needed();
             if (!capsid::protocol::append_encoded(
                     capsid::protocol::kResponseBody,
                     0,
@@ -3599,6 +3659,7 @@ private:
         if (!has_output_capacity(wire_size)) {
             return false;
         }
+        compact_output_if_needed();
         if (!capsid::protocol::append_encoded(
                 type,
                 flags,
@@ -3635,10 +3696,83 @@ private:
         return limit - queued - capsid::protocol::kHeaderSize;
     }
 
+    // Largest error payload that fits a single frame in this queue:
+    // never exceed the wire budget, so a long error message cannot
+    // wedge the terminal forever (design §3.5).
+    size_t error_payload_capacity() const {
+        const size_t limit = config_.max_queued_bytes;
+        const size_t max_by_queue =
+            limit > capsid::protocol::kHeaderSize
+                ? limit - capsid::protocol::kHeaderSize
+                : 0;
+        return std::min<size_t>(
+            capsid::protocol::kMaxPayloadSize, max_by_queue);
+    }
+
+    // Drops the already-sent prefix so the vector's physical size stays
+    // bounded by the wire limit even under sustained partial writes
+    // (contract #8). Erasing on every append would cost a memmove per
+    // frame; the threshold batches it.
+    void compact_output_if_needed() {
+        if (write_offset_ == 0) {
+            return;
+        }
+        if (write_offset_ >= output_.size()) {
+            output_.clear();
+            write_offset_ = 0;
+            flush_frame_end_ = 0;
+            return;
+        }
+        // Compact only on a frame boundary: erasing a prefix while a
+        // frame header is partially sent would corrupt the stream, and
+        // a mid-frame prefix is bounded by one frame anyway.
+        if (write_offset_ >= kOutputCompactThreshold &&
+            write_offset_ == flush_frame_end_) {
+            output_.erase(
+                output_.begin(),
+                output_.begin() + static_cast<ptrdiff_t>(write_offset_));
+            write_offset_ = 0;
+            flush_frame_end_ = 0;
+        }
+    }
+
+    // End offset of the complete frame starting at `offset`, or
+    // `offset` itself when the frame is not fully buffered yet. Frames
+    // are appended whole, so an incomplete frame only appears
+    // transiently.
+    size_t next_frame_end(size_t offset) const {
+        if (offset + capsid::protocol::kHeaderSize > output_.size()) {
+            return offset;
+        }
+        const uint8_t *header = &output_[offset];
+        // magic(4) version(2) type(2) flags(4) id(8) size(4), LE.
+        const uint32_t payload_size =
+            static_cast<uint32_t>(header[20]) |
+            (static_cast<uint32_t>(header[21]) << 8) |
+            (static_cast<uint32_t>(header[22]) << 16) |
+            (static_cast<uint32_t>(header[23]) << 24);
+        const size_t frame_size =
+            capsid::protocol::kHeaderSize + payload_size;
+        if (offset + frame_size > output_.size()) {
+            return offset;
+        }
+        return offset + frame_size;
+    }
+
     void flush_output() {
         while (write_offset_ < output_.size()) {
+            if (write_offset_ >= flush_frame_end_) {
+                // The current frame is fully sent; advance to the next
+                // whole-frame boundary so a partial write can never
+                // leave write_offset_ mid-header.
+                flush_frame_end_ = next_frame_end(write_offset_);
+                if (flush_frame_end_ <= write_offset_) {
+                    break;  // no complete frame buffered yet
+                }
+            }
+            const size_t remaining = flush_frame_end_ - write_offset_;
             const ssize_t count = write_socket(
-                fd_, &output_[write_offset_], output_.size() - write_offset_);
+                fd_, &output_[write_offset_], remaining);
             if (count > 0) {
                 write_offset_ += static_cast<size_t>(count);
                 continue;
@@ -3655,6 +3789,7 @@ private:
         if (write_offset_ == output_.size()) {
             output_.clear();
             write_offset_ = 0;
+            flush_frame_end_ = 0;
             pump_response_output();
         }
         update_poll();
@@ -3724,6 +3859,11 @@ private:
     bool deadline_timer_started_;
     int poll_events_;
     size_t write_offset_;
+    // End offset of the frame currently being flushed (a frame
+    // boundary). write_offset_ may sit inside it during a partial
+    // write; flush only sends up to this boundary so compaction never
+    // splits a frame header.
+    size_t flush_frame_end_;
     std::vector<uint8_t> output_;
     bool pump_in_progress_;
     bool shutting_down_;
@@ -3734,6 +3874,10 @@ private:
     bool bundle_is_trusted_bytecode_;
     std::string bundle_name_;
     std::map<uint64_t, ResponseState> responses_;
+    // Round-robin rotation order for pump_response_output (design §3.4):
+    // a request is enqueued on begin and rotated to the back after each
+    // pass, so the pump cursor persists across passes.
+    std::deque<uint64_t> pump_order_;
     // Bounded tombstone of ids whose response has ended (see
     // remember_terminal).
     std::set<uint64_t> terminal_requests_;

@@ -42,6 +42,47 @@ export default {
                 }));
             case '/error-immediate':
                 throw new Error('boom-immediate');
+            case '/error-huge-message':
+                // > 4 KiB error payload: must still deliver a terminal
+                // in a 4 KiB queue (truncated, never wedged).
+                throw new Error('E'.repeat(8192));
+            case '/error-after-write-real':
+                // Writes a large chunk, then the stream errors: the
+                // request must still receive exactly one terminal.
+                return new Response(new ReadableStream({
+                    type: 'bytes',
+                    pull(controller) {
+                        controller.enqueue(fill(20000, 0x54));
+                        controller.error(new Error('boom-after-write'));
+                    },
+                }));
+            case '/hang':
+                // Never resolves: exercises the request deadline.
+                await new Promise(() => {});
+                break;
+            case '/mutate-after-write': {
+                // Ownership-transfer semantics are frozen here: enqueue
+                // detaches the chunk's ArrayBuffer immediately, so any
+                // application mutation afterwards throws TypeError
+                // (caught here to keep the stream healthy). The
+                // response must carry the bytes as they were at the
+                // write call — never a later mutation.
+                const bytes = fill(20000, 0x55);
+                return new Response(new ReadableStream({
+                    type: 'bytes',
+                    pull(controller) {
+                        controller.enqueue(bytes);
+                        try {
+                            bytes.fill(0xaa);
+                        } catch (e) {
+                            // detached: the write call already owns the
+                            // bytes; mutation is impossible by contract.
+                        }
+                        controller.enqueue(fill(20000, 0x66));
+                        controller.close();
+                    },
+                }));
+            }
             default:
                 return new Response('unknown', { status: 404 });
         }

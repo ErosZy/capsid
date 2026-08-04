@@ -1,6 +1,6 @@
 # 响应队列饱和：活性修复设计（queue-saturation activity fix）
 
-状态：设计稿（RED 阶段）
+状态：已实现（commit 3f7e8b2 主修复 + 返修批次 2026-08-04）
 关联缺陷：`64 并发 × >64KiB 响应` 触发 `max_queued_bytes` 上限 →
 `capsidResponseWrite` 抛 RangeError → 响应不完整 → 请求挂死 20s+ →
 吞吐崩塌（见 bench 排查记录，json64k 46 QPS 实为 4MiB 边界问题，
@@ -78,11 +78,11 @@ struct ResponseState {
 };
 ```
 
-**关键：`PendingWrite` 保存 JSValue 引用而不是复制数据。** QuickJS 的
-ArrayBuffer 不移动（非移动 GC），`JS_DupValue` 防回收；pump 时
-`JS_GetUint8Array` 重新取指针、从 `offset` 处逐段写入 wire。native
-pending 只占元数据（约 64 字节/段），不会随数据大小增长 ——
-"不在压力出现时复制整块数据进入无界 native pending"。
+**已实现：`PendingWrite` 保存调用时快照。** `js_response_write` 在
+`kWouldBlock` 路径用 `JS_NewUint8ArrayCopy` 在 JS heap 复制字节；
+且 stream 层 enqueue 即 detach 原 ArrayBuffer —— 应用在 promise
+pending 期间修改源数组不可能改变响应字节（冻结"调用时快照 +
+所有权转移"语义，见测试 #13）。native pending 只占元数据。
 
 ### 3.3 write 路径（js_response_write）
 
@@ -106,7 +106,7 @@ EnqueueResult queue_response_bytes(id, bytes, size, state):
   （契约 #4 的"有界接纳"）。
 - 正常压力下永远不抛 RangeError（契约 #3）。
 
-### 3.4 统一推进：pump_response_output()
+### 3.4 统一推进：pump_response_output()（已实现）
 
 **触发点**（任一发生即调用）：
 1. `flush_output()` 后 output 清空（socket 释放空间）
@@ -114,36 +114,50 @@ EnqueueResult queue_response_bytes(id, bytes, size, state):
 3. 新 write 入队 / terminal 设置
 4. cancel / timeout 清理后
 
-**行为**（round-robin，契约 #7）：
+**行为**（持久轮转，契约 #7）：
 ```
 pump_response_output():
-    start = 上次轮转位置
-    for 每个 response（从 start 起，环形）:
-        if state.pump_advanced: continue
-        # 1) coalesced 缓冲 → wire（空间够时）
-        # 2) pending 推进一个 quantum（≤ kMaxPayloadSize）：
-        #    分段写入 wire，逐段扣 credit；全部入 wire 则 resolve promise
-        # 3) pending 空 && terminal 存在：
-        #    - kResponseEnd: 发 ResponseEnd 帧 → erase + remember_terminal
-        #    - kResponseError: 丢弃未发 body → 发 Error 帧 → erase
-        # 4) credit==0 || wire 满 → 标记停止（等下一次 pump 触发）
-        state.pump_advanced = true
-    重置 pump_advanced
+    rounds = pump_order_.size()          # 跨 pump 保留的 deque
+    for i in 0..rounds:
+        id = pump_order_.front(); pump_order_.pop_front()
+        if responses_.find(id) 不存在: continue   # 完成/取消：drop
+        advance_pending(state, id, kMaxPayloadSize)
+        if pending 空 && terminal_pending:
+            try_send_terminal → 成功: done（erase + remember）
+            continue                            # 不回队
+        pump_order_.push_back(id)       # 回队尾：真正的轮转
 ```
 
-- 每轮每个 request 最多推进一个 quantum —— 大响应不能占住整个
-  wire 队列（契约 #7）。
+- **跨 pump 持久轮转**：每轮从队头处理一圈，处理完回队尾 ——
+  下一轮起点即本轮结束处。低 ID 大响应不可能每轮抢占首位，
+  高 ID 小响应在固定 quantum 数内完成且先于大响应（测试 #12）。
+- 每请求每轮一个 quantum（≤ kMaxPayloadSize）。
 - 单请求字节顺序由 `offset` + 单段内顺序保证。
 - wire 高水位：`has_output_capacity()` 保持按
-  `output_ + coalesced ≤ max_queued_bytes` 检查（契约 #8）。
+  `output_ ≤ max_queued_bytes` 检查（契约 #8）。
 
-### 3.5 terminal 保障（契约 #5、#6）
+**帧安全的 flush / compact（返修 #4）：** `flush_output` 只发送完整帧
+（`next_frame_end` 解析帧边界，`flush_frame_end_` 跟踪当前帧尾），
+partial write 永不把 `write_offset_` 留在帧头中间；`compact_output_if_needed`
+只在帧边界删除已发送前缀（阈值 64 KiB），物理 vector 内存有界。
+测试 #14 用 `CAPSID_TEST_PARTIAL_WRITE` 钩子强制 partial write 验证。
+
+### 3.5 terminal 保障 + 生命周期阶段（契约 #5、#6，返修 #1/#3）
 
 | 入口 | 行为 |
 |---|---|
-| `js_response_end` | pending 空且 coalesced 清空 → 立即发帧；否则 `terminal = kResponseEnd`（有界元数据），pump 时发。**不再抛 "response is not ready to end"。** |
-| `js_response_error` | 丢弃 pending（reject_pending）+ 丢弃 coalesced → `terminal = kResponseError(msg, flags)`，pump 时发 Error 帧。**不再依赖 flush_coalesced 成功。** |
+| `js_response_end` | pending 空 → 立即发帧；否则 `terminal = kResponseEnd`（有界元数据），pump 时发。**不再抛 "response is not ready to end"。** |
+| `js_response_error` | 丢弃 pending → `terminal = kResponseError(msg, flags)`，pump 时发 Error 帧。 |
 | `send_error`（native 超时等） | **不得忽略 enqueue 结果**：失败 → 存 terminal 元数据 → pump 重试。 |
+
+**错误消息截断（返修 #1）：** error payload 上限 =
+`min(kMaxPayloadSize, max_queued_bytes - kHeaderSize)` —— 长错误消息
+在 4 KiB 队列下截断为单帧可容纳，绝不永久挂起（测试 #9）。
+
+**显式阶段（返修 #3）：** `ResponsePhase { kOpen, kTerminalPending }`。
+expire 只处理 `kOpen` 且首次超时即清除 deadline + 转换阶段 ——
+队列饱和时每个 timer tick 不再重复执行 cancel bridge / send_error /
+drain_jobs；cancel 一次、terminal 一次（测试 #11 冻结）。
 
 - 每请求精确一个 terminal：response 在 terminal 帧进入 wire 后才
   `erase` + `remember_terminal`。
@@ -161,13 +175,11 @@ pump_response_output():
 
 ## 4. 影响面
 
-- `src/worker_runtime.cc`（write/end/error/send_error/pump 核心）
-- `js/bootstrap.js`（无需改动 —— 已 `await capsidResponseWrite`，
-  promise pending 天然形成背压；仅验证 catch 路径仍正确）
-- `tests/test_response_queue_saturation.cc`（新 RED binary）
-- `tests/fixtures/queue-saturation.js`（新 fixture）
-- `tests/test_p0_boundaries.cc`（`test_configured_limits`：queue
-  limit 不再解释为 response-size limit，large-chunk 改为成功断言）
+- `src/worker_runtime.cc`（write/end/error/send_error/pump/flush/compact）
+- `js/bootstrap.js`（无需改动 —— 已 `await capsidResponseWrite`）
+- `tests/test_response_queue_saturation.cc`（14 场景 RED binary）
+- `tests/fixtures/queue-saturation.js`（fixture）
+- `tests/test_p0_boundaries.cc`（`test_configured_limits` 语义）
 - 不修改公共 ABI / 协议版本 / 4 MiB 默认值。
 
 ## 5. RED 测试清单
