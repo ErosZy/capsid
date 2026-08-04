@@ -1,0 +1,6 @@
+host_pid: 139426
+worker_pid: 139429
+host_cpu_ticks: 4283
+host_rss_kb_final: 7356
+worker_cpu_ticks: 14236
+worker_rss_kb_final: 35232

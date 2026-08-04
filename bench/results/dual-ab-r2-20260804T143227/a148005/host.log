@@ -1,0 +1,25 @@
+{"schema":"capsid-host-ready-v1","app":"orders","address":"127.0.0.1","port":18102}
+capsid-host: worker error: RangeError: pending response data exceeds configured limit
+    at capsidResponseWrite (native)
+    at <anonymous> (tjs:internal/capsid-bootstrap:16:1407)
+ (request 68323)
+capsid-host: worker error: RangeError: pending response data exceeds configured limit
+    at capsidResponseWrite (native)
+    at <anonymous> (tjs:internal/capsid-bootstrap:16:1407)
+ (request 70402)
+capsid-host: worker error: RangeError: pending response data exceeds configured limit
+    at capsidResponseWrite (native)
+    at <anonymous> (tjs:internal/capsid-bootstrap:16:1407)
+ (request 75733)
+capsid-host: worker error: RangeError: pending response data exceeds configured limit
+    at capsidResponseWrite (native)
+    at <anonymous> (tjs:internal/capsid-bootstrap:16:1407)
+ (request 77793)
+capsid-host: worker error: RangeError: pending response data exceeds configured limit
+    at capsidResponseWrite (native)
+    at <anonymous> (tjs:internal/capsid-bootstrap:16:1407)
+ (request 83125)
+capsid-host: worker error: RangeError: pending response data exceeds configured limit
+    at capsidResponseWrite (native)
+    at <anonymous> (tjs:internal/capsid-bootstrap:16:1407)
+ (request 85220)

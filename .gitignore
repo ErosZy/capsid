@@ -70,4 +70,6 @@
 !/bench/results/capsid-64k-*/**
 !/bench/results/queue-saturation-r1-*/
 !/bench/results/queue-saturation-r1-*/**
+!/bench/results/dual-ab-r2-*/
+!/bench/results/dual-ab-r2-*/**
 /0

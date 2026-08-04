@@ -10,7 +10,7 @@
 
 这是**正确性/活性缺陷**，不是性能优化：
 
-- 合法响应因并发组合失败（`pending_response_bytes_` 全局累计超 4 MiB）
+- 合法响应因并发组合失败（wire 队列累计超 4 MiB，64 并发 × 65 KiB 触发）
 - 失败后响应不产生 terminal event，连接被长期占用（hang 到 client
   30s timeout）
 - 错误链：`capsidResponseWrite` RangeError → bootstrap catch →
@@ -71,10 +71,10 @@ struct ResponseState {
     uint64_t response_body_bytes_accepted;
     uint64_t deadline_ns;
     bool request_ended;
-    bool coalescing_started;
-    std::deque<PendingWrite> pending;      // 元数据有界，数据在 JS heap
-    std::optional<TerminalPending> terminal; // 新：延迟 terminal
-    bool pump_advanced;                    // 新：本轮 pump 已推进（round-robin）
+    std::deque<PendingWrite> pending;      // 元数据有界，数据是调用时快照
+    TerminalPending terminal;              // 延迟 terminal（flag 标记）
+    bool terminal_pending;
+    ResponsePhase phase;                   // kOpen / kEndPending / kFailurePending
 };
 ```
 
@@ -93,8 +93,8 @@ EnqueueResult queue_response_bytes(id, bytes, size, state):
     if state.credit > 0 && wire 空间够:
         尝试直接入 wire（分段 ≤ kMaxPayloadSize，累计 ≤ max_queued_bytes）
         发走 min(credit, 空间) 字节；credit 记账
-    # 剩余字节 → PendingWrite（JS 引用 + offset）
-    pending.push_back({dup(chunk), offset=已发, size, resolve, reject})
+    # 剩余字节 → PendingWrite（调用时快照 + offset）
+    pending.push_back({snapshot(chunk), offset=已发, size, resolve, reject})
     pump_response_output()
     return kWouldBlock   # promise 挂起；数据被引用保活
 ```
@@ -136,11 +136,13 @@ pump_response_output():
 - wire 高水位：`has_output_capacity()` 保持按
   `output_ ≤ max_queued_bytes` 检查（契约 #8）。
 
-**帧安全的 flush / compact（返修 #4）：** `flush_output` 只发送完整帧
-（`next_frame_end` 解析帧边界，`flush_frame_end_` 跟踪当前帧尾），
-partial write 永不把 `write_offset_` 留在帧头中间；`compact_output_if_needed`
-只在帧边界删除已发送前缀（阈值 64 KiB），物理 vector 内存有界。
-测试 #14 用 `CAPSID_TEST_PARTIAL_WRITE` 钩子强制 partial write 验证。
+**可注入 OutboundBuffer（返修 #4）：** `src/outbound_buffer.h` 提供
+帧粒度的发送缓冲（逻辑队列 = storage - write_offset_），writer 可注入
+（生产为 socket，单测注入 short-write/EAGAIN）。flush 逐帧发送，
+`frame_start_` 保留当前帧已发送的头（partial write 可停在帧头中间），
+compact 删除 `frame_start_` 之前的完整帧 —— 物理存储 ≤ 一帧 +
+wire 上限（`tests/test_outbound_buffer.cc` 精确断言 logical 与
+storage 高水位）。
 
 ### 3.5 terminal 保障 + 生命周期阶段（契约 #5、#6，返修 #1/#3）
 
@@ -161,16 +163,18 @@ drain_jobs；cancel 一次、terminal 一次（测试 #11 冻结）。
 
 - 每请求精确一个 terminal：response 在 terminal 帧进入 wire 后才
   `erase` + `remember_terminal`。
-- 同一请求的 PendingWrite JSValue（chunk/resolve/reject）在
-  `cleanup_response()` 统一释放，且只释放一次（erase 时调用，
-  terminal 路径与 cancel/timeout/shutdown 路径共用）。
+- PendingWrite 的 JSValue（快照/resolve/reject）在 `resolve_pending`
+  （完成）或 `reject_pending`（cancel/timeout/shutdown/error）释放，
+  且只释放一次：terminal 发送或请求终结时 erase response，同一请求
+  的 JS 值不会再被触碰。
 
 ### 3.6 cancel / timeout / shutdown 清理（契约 #6）
 
-- cancel/timeout：`cleanup_response()` 释放所有 PendingWrite 的
-  JSValue（reject 后 free）、terminal 元数据、coalesced 缓冲，
-  然后 erase response。
-- shutdown：`reject_pending`（现有语义）+ 同一 cleanup。
+- cancel：`reject_pending`（释放所有 PendingWrite 的 JSValue）→
+  cancel bridge → erase → `remember_terminal` → pump（清理轮转）。
+- timeout：先清 deadline + 转 kFailurePending → `reject_pending` →
+  cancel bridge → `send_error`（terminal 保障）→ 后续 tick 跳过。
+- shutdown：`reject_pending`（现有语义）。
 - 所有路径幂等：response 已 erase 则不再触碰。
 
 ## 4. 影响面

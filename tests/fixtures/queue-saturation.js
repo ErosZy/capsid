@@ -16,6 +16,10 @@
 
 const fill = (size, byte) => new Uint8Array(size).fill(byte);
 
+// Counts cancel-bridge deliveries to the hang request; the runtime must
+// cancel exactly once even while the output queue stays saturated.
+let hangAbortCount = 0;
+
 export default {
     async fetch(request) {
         const url = new URL(request.url);
@@ -57,27 +61,30 @@ export default {
                     },
                 }));
             case '/hang':
-                // Never resolves: exercises the request deadline.
-                await new Promise(() => {});
+                // Never resolves until the deadline's cancel bridge
+                // aborts the request signal; counts deliveries.
+                await new Promise(resolve => {
+                    request.signal.addEventListener('abort', () => {
+                        hangAbortCount += 1;
+                        resolve();
+                    });
+                });
                 break;
+            case '/hang-count':
+                return new Response(fill(4, 0x30 + (hangAbortCount % 10)));
             case '/mutate-after-write': {
-                // Ownership-transfer semantics are frozen here: enqueue
-                // detaches the chunk's ArrayBuffer immediately, so any
-                // application mutation afterwards throws TypeError
-                // (caught here to keep the stream healthy). The
-                // response must carry the bytes as they were at the
-                // write call — never a later mutation.
+                // Plain (non-bytes) stream: the chunk stays writable
+                // after enqueue, so the application can mutate the
+                // array after the write call. The response must carry
+                // the bytes as they were at the write call (0x55) —
+                // call-time snapshot semantics, never a later mutation.
                 const bytes = fill(20000, 0x55);
                 return new Response(new ReadableStream({
-                    type: 'bytes',
                     pull(controller) {
                         controller.enqueue(bytes);
-                        try {
+                        setTimeout(() => {
                             bytes.fill(0xaa);
-                        } catch (e) {
-                            // detached: the write call already owns the
-                            // bytes; mutation is impossible by contract.
-                        }
+                        }, 0);
                         controller.enqueue(fill(20000, 0x66));
                         controller.close();
                     },

@@ -1,0 +1,2 @@
+worker_cpu_ticks: 14187
+worker_rss_kb_final: 31060

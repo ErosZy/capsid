@@ -761,6 +761,15 @@ if(BUILD_TESTING)
     add_test(NAME protocol COMMAND test-protocol)
 
     add_executable(
+        test-outbound-buffer
+        tests/test_outbound_buffer.cc
+        src/protocol.cc
+    )
+    target_include_directories(test-outbound-buffer PRIVATE src)
+    target_link_libraries(test-outbound-buffer PRIVATE capsid_sanitizers)
+    add_test(NAME outbound_buffer COMMAND test-outbound-buffer)
+
+    add_executable(
         test-cpu-topology
         tests/test_cpu_topology.cc
         src/cpu_topology.cc)

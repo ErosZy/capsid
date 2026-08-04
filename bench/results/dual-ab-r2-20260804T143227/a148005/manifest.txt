@@ -1,0 +1,19 @@
+side: a148005
+commit: a148005
+workdir: /tmp/capsid-a148005
+host_sha256: f49d52bb60ade6887c7936a560fbbacd7e9bf040abdaf19133af8d2fa6a03169
+worker_sha256: b43086788a8919cc8cd74816e1cbc713fdbbd7e83eabdd6386f349536280db0b
+loadgen_sha256: c312b79a476e9f4f8e195e524ecbaa6a1ca974cfeee1e4bd34530b2f1bdbf008
+bundle_sha256: b36386abf4795e5219770ee7e2060dd5982244deb382503546d122f91c3c6d8a
+initial_stream_window: 16384
+request_timeout_ms: 10000
+max_queued_bytes: default(4MiB)
+strict_sandbox: off
+warmup_s: 2
+duration_s: 5
+rounds: 3
+workloads: bytes64k bytes65537 json json16k
+connections: 63 64
+container: capsid-linux-bench
+Linux 23f68692c0bc 6.8.0-117-generic #117-Ubuntu SMP PREEMPT_DYNAMIC Tue May  5 19:26:24 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+4

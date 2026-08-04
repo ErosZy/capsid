@@ -1,0 +1,2 @@
+{"side":"3f7e8b2","round":2,"phase":"warmup","qps":1123.521560697259,"p50_ms":56.224028,"p95_ms":65.683777,"p99_ms":72.461121,"dispatch_wait_ms":0.9934428656006914,"completed":2314,"errors":0,"timeouts":0,"duration_s":2.059595544,"connections":64,"inflight":64}
+{"side":"3f7e8b2","round":2,"phase":"measured","qps":1143.0687257785182,"p50_ms":55.616657,"p95_ms":65.748518,"p99_ms":71.854165,"dispatch_wait_ms":0.8957031974877878,"completed":5732,"errors":0,"timeouts":0,"duration_s":5.014571627,"connections":64,"inflight":64}

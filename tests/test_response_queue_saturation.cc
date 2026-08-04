@@ -145,6 +145,8 @@ struct Collector {
     uint64_t error_frames = 0;
     // Terminal arrival order (end/error), for ordering assertions.
     std::vector<uint64_t> completion_order;
+    // Per-request terminal count: each request must produce exactly one.
+    std::map<uint64_t, uint32_t> terminal_counts;
     std::map<uint64_t, uint64_t> pending_grant_bytes;
 };
 
@@ -224,6 +226,7 @@ Collector drive(capsid_worker *worker,
                 case CAPSID_EVENT_RESPONSE_END:
                     collector.end_frames += 1;
                     collector.outcomes[event.request_id].ended = true;
+                    collector.terminal_counts[event.request_id] += 1;
                     collector.completion_order.push_back(event.request_id);
                     pending_ids.erase(event.request_id);
                     break;
@@ -231,6 +234,7 @@ Collector drive(capsid_worker *worker,
                 case CAPSID_EVENT_REQUEST_TIMEOUT:
                     collector.error_frames += 1;
                     collector.outcomes[event.request_id].errored = true;
+                    collector.terminal_counts[event.request_id] += 1;
                     collector.completion_order.push_back(event.request_id);
                     pending_ids.erase(event.request_id);
                     break;
@@ -548,18 +552,27 @@ void test_error_after_partial_write(const char *worker_path,
         "end error-after-write-real");
     Collector collector = drive(worker, { 92 }, GrantMode::kImmediate, 2);
     expect_error(collector, 92);
+    require(collector.body_frames > 0,
+            "partial write happened before the error");
+    require(collector.terminal_counts[92] == 1,
+            "error-after-write produced exactly one terminal");
     capsid_worker_destroy(worker);
 }
 
 // #11: timeout under a saturated queue fires the cancel path exactly
 // once; the terminal is delivered exactly once (no re-cancel on later
-// timer ticks). 64 x 65537 keeps the 4 MiB wire queue full so the
-// hang request's error terminal has to wait; the phase must prevent
-// per-tick re-cancellation.
+// timer ticks).
+//
+// Saturation is forced: 64 x 65537 with max_queued=1 MiB and initial
+// window 16 KiB fills the wire queue (64 x 16 KiB = 1 MiB) before any
+// credit is granted. The hang request times out (300 ms) while the
+// queue is still full, so its error terminal has to wait; the fixture
+// counts cancel-bridge deliveries via the abort signal, and the probe
+// asserts the count is exactly 1.
 void test_timeout_once_under_saturation(const char *worker_path,
                                         const std::string &bundle) {
     capsid_worker *worker =
-        spawn_with(worker_path, bundle, 4u * 1024u * 1024u, 16384, 300);
+        spawn_with(worker_path, bundle, 4u * 1024u * 1024u, 16u * 1024u, 300);
     std::vector<uint64_t> ids;
     for (uint64_t id = 93; id < 93 + 64; ++id) {
         require_result(
@@ -580,13 +593,95 @@ void test_timeout_once_under_saturation(const char *worker_path,
         capsid_worker_end_request(worker, 157),
         "end hang for timeout");
     ids.push_back(157);
-    Collector collector = drive(worker, ids, GrantMode::kImmediate, 6);
+
+    // Phase A: read until every request produced its first frame, then
+    // release deferred credits (per request 65536 + accumulated) so the
+    // worker can fill its 4 MiB outbound buffer.
+    const std::chrono::steady_clock::time_point first_deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    std::set<uint64_t> seen_first;
+    bool fired = false;
+    std::map<uint64_t, uint64_t> held;
+    while (std::chrono::steady_clock::now() < first_deadline && !fired) {
+        pump(worker);
+        capsid_event event;
+        while (next_event(worker, &event)) {
+            if (event.type == CAPSID_EVENT_RESPONSE_BODY) {
+                seen_first.insert(event.request_id);
+                if (fired) {
+                    require_result(
+                        capsid_worker_grant_response_credit(
+                            worker, event.request_id,
+                            static_cast<uint32_t>(event.payload.size)),
+                        "grant phase C");
+                } else {
+                    held[event.request_id] += event.payload.size;
+                }
+            }
+        }
+        if (!fired && seen_first.size() >= 64) {
+            fired = true;
+            for (std::map<uint64_t, uint64_t>::const_iterator it =
+                     held.begin();
+                 it != held.end();
+                 ++it) {
+                require_result(
+                    capsid_worker_grant_response_credit(
+                        worker, it->first,
+                        static_cast<uint32_t>(it->second) + 65536u),
+                    "grant deferred");
+                held[it->first] = 0;
+            }
+        }
+    }
+    require(fired, "all saturation requests produced first frames");
+
+    // Phase B: stop reading for 1.5 s. The worker keeps appending
+    // (credits were released), its socket and outbound buffer fill to
+    // the 4 MiB wire limit, and the hang request times out at ~300 ms
+    // with its error terminal wedged behind the full queue — several
+    // timer ticks pass, enough for a re-cancel bug to inflate the
+    // abort counter.
+    const std::chrono::steady_clock::time_point sat_deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+    while (std::chrono::steady_clock::now() < sat_deadline) {
+        const int fd = capsid_worker_fd(worker);
+        struct pollfd descriptor = {};
+        descriptor.fd = fd;
+        descriptor.events = 0;  // never readable: keep the queue full
+        poll(&descriptor, 1, 10);
+    }
+
+    // Phase C: read + grant everything, then probe the abort counter.
+    Collector collector = drive(worker, ids, GrantMode::kImmediate, 15);
     require(!collector.saw_exit, "worker must not exit");
     const auto hang = collector.outcomes.find(157);
     require(hang != collector.outcomes.end() && hang->second.errored,
             "hang request errored via deadline");
-    require(collector.error_frames == 1,
-            "timeout produced exactly one error terminal");
+    // The 64 saturation requests also hit the 300 ms deadline (they are
+    // wedged behind the full queue) — each gets exactly one error
+    // terminal; the hang request must also produce exactly one.
+    require(collector.terminal_counts[157] == 1,
+            "hang request produced exactly one terminal");
+    for (uint64_t id = 93; id < 157; ++id) {
+        require(collector.terminal_counts[id] == 1,
+                "saturation request produced exactly one terminal");
+    }
+
+    require_result(
+        capsid_worker_begin_request(
+            worker, 158, "GET", "https://example.test/hang-count",
+            NULL, 0),
+        "begin hang-count probe");
+    require_result(
+        capsid_worker_end_request(worker, 158),
+        "end hang-count probe");
+    Collector probe = drive(worker, { 158 }, GrantMode::kImmediate, 3);
+    const auto count = probe.outcomes.find(158);
+    require(count != probe.outcomes.end() && count->second.ended,
+            "hang-count probe completed");
+    require(count->second.body.size() == 4 && count->second.body[0] == '1',
+            "cancel bridge delivered exactly once");
     capsid_worker_destroy(worker);
 }
 
@@ -629,10 +724,12 @@ void test_small_completes_first(const char *worker_path,
     capsid_worker_destroy(worker);
 }
 
-// #13: ownership-transfer semantics are frozen: enqueue detaches the
-// chunk's ArrayBuffer, so a later application mutation throws (caught
-// in the fixture); the response carries the bytes as they were at the
-// write call.
+// #13: call-time snapshot semantics: a plain (non-bytes) stream keeps
+// the chunk writable after enqueue, so the application mutates the
+// array after the write call; the response must carry the bytes as
+// they were at the write call (0x55). Without the snapshot the later
+// mutation (0xaa) would leak into the response, so this test is RED
+// when the JS_NewUint8ArrayCopy snapshot is removed.
 void test_pending_mutation_snapshot(const char *worker_path,
                                     const std::string &bundle) {
     capsid_worker *worker =
