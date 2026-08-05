@@ -456,6 +456,8 @@ private:
     bool accept_armed_success_ = false;  // accept loop actually armed
     // Thread-safe worker availability for pool capacity reporting.
     std::atomic<bool> worker_available_ = false;
+    // Concurrent-wait guard: the first wait() call owns the joins.
+    std::once_flag wait_once_;
 
     // Bridge between the io thread and the worker thread.
     std::mutex mutex_;
@@ -917,13 +919,19 @@ bool Impl::wait(std::string* error) {
     // The event-loop thread exits when the acceptor and every session are
     // gone; the worker thread exits when its bounded shutdown completes.
     // Both joins make wait() block until the server is fully stopped —
-    // threads are never detached.
-    if (io_thread_.joinable()) {
-        io_thread_.join();
-    }
-    if (worker_thread_.joinable()) {
-        worker_thread_.join();
-    }
+    // threads are never detached. Concurrent-wait guard: two threads
+    // calling wait() at once would double-join (UB); call_once makes the
+    // first caller own the joins while concurrent/later callers BLOCK
+    // until they complete, so no caller returns before the server is
+    // actually stopped.
+    std::call_once(wait_once_, [this] {
+        if (io_thread_.joinable()) {
+            io_thread_.join();
+        }
+        if (worker_thread_.joinable()) {
+            worker_thread_.join();
+        }
+    });
     if (error != nullptr) {
         *error = "server stopped";
     }

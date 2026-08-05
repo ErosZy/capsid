@@ -115,12 +115,41 @@ if(CAPSID_ENABLE_TSAN)
     if(MSVC)
         message(FATAL_ERROR "TSan requires Clang or GCC on Linux")
     endif()
+    # GCC 15.x regressed: libstdc++'s std::atomic_thread_fence trips
+    # -Werror=tsan in every translation unit that includes <atomic>.
+    # Demote ONLY that warning class so the TSan instrumentation itself
+    # stays on — this is a downgraded compile diagnostic, never a race
+    # suppression. Clang does not need it (and is rejected below when its
+    # TSan runtime is missing).
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+        target_compile_options(capsid_sanitizers INTERFACE -Wno-error=tsan)
+    endif()
     target_compile_options(capsid_sanitizers INTERFACE
         -fsanitize=thread
         -fno-omit-frame-pointer
         -fno-sanitize-recover=all
     )
     target_link_options(capsid_sanitizers INTERFACE -fsanitize=thread)
+    # Clang on Alpine/musl ships no TSan runtime (libclang_rt.tsan_cxx.a).
+    # Fail at configure time with the remedy instead of at link time with
+    # an incomprehensible missing-library error.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        execute_process(
+            COMMAND "${CMAKE_CXX_COMPILER}" -print-runtime-dir
+            OUTPUT_VARIABLE CAPSID_CLANG_RUNTIME_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+            RESULT_VARIABLE CAPSID_CLANG_RUNTIME_RESULT
+        )
+        if(NOT CAPSID_CLANG_RUNTIME_RESULT EQUAL 0 OR
+           NOT EXISTS
+               "${CAPSID_CLANG_RUNTIME_DIR}/libclang_rt.tsan_cxx.a")
+            message(FATAL_ERROR
+                "Clang TSan runtime is not installed (Alpine/musl ships no "
+                "libclang_rt.tsan_cxx.a). Configure with GCC instead: "
+                "-DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc")
+        endif()
+    endif()
 endif()
 
 add_library(capsid_runtime STATIC

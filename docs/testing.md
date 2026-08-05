@@ -79,15 +79,26 @@ UBSan 将开关替换为 `CAPSID_ENABLE_UBSAN=ON`。fuzz 构建使用 Clang、
 
 ### TSan（M1C 门）
 
-`CAPSID_ENABLE_TSAN` 已配置：独立 Linux/Clang Debug 构建，不与
+`CAPSID_ENABLE_TSAN` 已配置：独立 Linux **GCC** Debug 构建，不与
 ASan/UBSan 共用（CMake 配置期拒绝组合）。M1C 验收前必须通过；M2 多 worker
 开始前是强制门。
 
-TSan 使用独立 Linux/Clang Debug 构建，不与 ASan、UBSan、LTO、fuzz 或 benchmark
-混跑。第一批至少覆盖 HTTP 事件循环与 worker 线程之间的 command/event handoff、并发
-keep-alive、disconnect/cancel、timeout 和 shutdown/reap。任何第一方代码报告均失败；
-第三方 suppression 必须限定到具体外部符号、写明原因，不能用宽泛规则隐藏 Host、Runtime
-或 IPC 代码。TSan 结果只证明竞态检测，不作为 QPS、延迟或 CPU 结论。
+TSan 使用独立 Linux/GCC Debug 构建，不与 ASan、UBSan、LTO、fuzz 或 benchmark
+混跑。**本环境的受支持 TSan 编译器是 GCC**：Alpine/musl 的 clang 不发布 TSan
+运行时（`libclang_rt.tsan_cxx.a` 不存在），配置期即拒绝并要求改用 GCC
+（`-DCMAKE_CXX_COMPILER=g++`）。第一批至少覆盖 HTTP 事件循环与 worker 线程之间
+的 command/event handoff、并发 keep-alive、disconnect/cancel、timeout 和
+shutdown/reap。任何第一方代码报告均失败；第三方 suppression 必须限定到具体外部
+符号、写明原因，不能用宽泛规则隐藏 Host、Runtime 或 IPC 代码。TSan 结果只证明
+竞态检测，不作为 QPS、延迟或 CPU 结论。
+
+**已知覆盖缺口（编译诊断降级，不是 race suppression）**：GCC 15.x 的 libstdc++
+在 `-fsanitize=thread` 下对 `std::atomic_thread_fence` 报
+`-Werror=tsan`（Boost.Asio 的 fenced block 使用该原语）。构建只把该警告类降级为
+非致命（`-Wno-error=tsan`，经 `capsid_sanitizers` INTERFACE 继承），TSan 插桩本身
+保持开启——已用注入 race 的探针验证仍被检出。代价是 **TSan 不插桩
+`std::atomic_thread_fence` 本身**，fence 附近的竞态可能漏检；这属于记录在案的诊断
+降级，不影响其他全部同步原语的检测。
 
 TSan 运行环境有硬性要求：Clang TSan 初始化必须调用
 `personality(ADDR_NO_RANDOMIZE)` 关闭 ASLR，因此默认 Docker/containerd

@@ -820,6 +820,56 @@ if(BUILD_TESTING)
                     LABELS "host;integration;m1"
                     TIMEOUT 30)
 
+            # M2 concurrent-wait gate: two threads calling wait() at once
+            # must not double-join, and the concurrent caller must block
+            # until the joins complete (never return early with a
+            # "stopped" claim).
+            add_executable(
+                test-host-concurrent-wait
+                tests/test_host_concurrent_wait.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            target_include_directories(
+                test-host-concurrent-wait PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(test-host-concurrent-wait PRIVATE
+                capsid_runtime
+                capsid_host_core
+                Boost::system
+                capsid_sanitizers)
+            set_target_properties(test-host-concurrent-wait PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-concurrent-wait PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-concurrent-wait PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(
+                            test-host-concurrent-wait PRIVATE
+                            -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_test(
+                NAME host_concurrent_shard_wait
+                COMMAND test-host-concurrent-wait shard
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_concurrent_pool_wait
+                COMMAND test-host-concurrent-wait pool
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_concurrent_shard_wait
+                host_concurrent_pool_wait PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+
             # Metrics-on variant: the same integration run with
             # CAPSID_HOST_IPC_METRICS=1, which arms the per-pump metrics
             # emission path. The acceptance A/B evidence is generated with

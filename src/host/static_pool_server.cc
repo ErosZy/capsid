@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -102,10 +103,18 @@ public:
     }
 
     bool wait(std::string* error) {
-        for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
-            std::string shard_error;
-            shard->wait(&shard_error);
-        }
+        // Concurrent-wait guard (TSan gate): wait() joins every shard's
+        // threads, and two threads calling it at once would double-join
+        // (UB). call_once makes the FIRST caller run the joins while every
+        // concurrent and later caller BLOCKS until they complete — a
+        // concurrent caller never returns before the pool is actually
+        // stopped, and a repeated caller observes the already-waited pool.
+        std::call_once(wait_once_, [this] {
+            for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
+                std::string shard_error;
+                shard->wait(&shard_error);
+            }
+        });
         if (error != nullptr) {
             *error = "static pool stopped";
         }
@@ -165,6 +174,7 @@ private:
     StaticPoolServerOptions options_;
     std::atomic<bool> start_gate_ = false;
     std::atomic<bool> stop_requested_ = false;
+    std::once_flag wait_once_;
     std::vector<std::unique_ptr<SingleWorkerServer>> shards_;
 };
 

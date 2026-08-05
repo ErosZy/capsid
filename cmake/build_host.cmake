@@ -143,14 +143,9 @@ if(CAPSID_BUILD_HOST)
                     target_compile_options(capsid-host PRIVATE
                         -Wno-maybe-uninitialized)
                 endif()
-                # TSan does not support std::atomic_thread_fence, which
-                # Boost.Asio uses for its fenced blocks; demote only that
-                # warning class so the TSan instrumentation itself stays on.
-                if(CAPSID_ENABLE_TSAN AND
-                   CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-                    target_compile_options(capsid-host PRIVATE
-                        -Wno-error=tsan)
-                endif()
+                # -Wno-error=tsan for GNU TSan builds now lives on the
+                # capsid_sanitizers interface (CMakeLists.txt), the single
+                # source of truth every sanitizer-linked target inherits.
             endif()
         endif()
         if(CAPSID_GENERATE_LINK_MAP)
