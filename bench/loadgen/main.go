@@ -210,6 +210,15 @@ func main() {
 		mismatch  int
 	)
 
+	// Precomputed expected payload for uniform-byte workloads: the
+	// per-request byte loop saturated the client on large bodies
+	// (bytes65537 verify ~100 µs/request vs ~1 ms server service),
+	// capping measured QPS below the server's real throughput.
+	// bytes.Equal is a memcmp (SIMD) and keeps the client unsaturated.
+	var expectedBuf []byte
+	if expectedLen > 0 {
+		expectedBuf = bytes.Repeat([]byte{expectedByte}, expectedLen)
+	}
 	verify := func(body []byte) bool {
 		switch workload {
 		case "json":
@@ -247,14 +256,12 @@ func main() {
 		case "cpu-template":
 			return len(body) > 0 && contains(body, "</ul>")
 		default:
-			// fixed-1k, bytes: uniform byte payload.
+			// fixed-1k, bytes: uniform byte payload (memcmp check).
 			if len(body) != expectedLen {
 				return false
 			}
-			for _, b := range body {
-				if b != expectedByte {
-					return false
-				}
+			if expectedLen > 0 {
+				return bytes.Equal(body, expectedBuf)
 			}
 			return true
 		}
