@@ -843,8 +843,11 @@ int main(int argc, char** argv) {
         const std::string workers_text = require("workers");
         workers = static_cast<std::uint32_t>(
             parse_positive_integer(workers_text, "workers"));
-        if (workers != 1 && workers != 2 && workers != 4) {
-            fail("--workers must be 1, 2 or 4 in static-pool mode");
+        // M2 pool sizing scans {1,2,4,6,8}; the benchmark-only entry
+        // accepts exactly this set (admission-sized pools come later).
+        if (workers != 1 && workers != 2 && workers != 4 &&
+            workers != 6 && workers != 8) {
+            fail("--workers must be 1, 2, 4, 6 or 8 in static-pool mode");
         }
     }
 

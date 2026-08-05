@@ -17,8 +17,8 @@ fi
 
 workers="${CAPSID_BENCH_WORKERS:-1}"
 case "$workers" in
-1|2|4) ;;
-*) echo "run-static-pool-host: CAPSID_BENCH_WORKERS must be 1, 2 or 4 (got $workers)" >&2; exit 2 ;;
+1|2|4|6|8) ;;
+*) echo "run-static-pool-host: CAPSID_BENCH_WORKERS must be 1, 2, 4, 6 or 8 (got $workers)" >&2; exit 2 ;;
 esac
 
 exec "${CAPSID_BENCH_HOST_BIN:?}" \

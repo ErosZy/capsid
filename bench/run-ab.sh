@@ -86,6 +86,11 @@ DURATION=10
 CONNECTIONS=16
 INFLIGHT=64
 CPUSET=""
+# Load-side cpuset, separate from the measured side (M2 pool sizing):
+# host+worker run on CPUSET, the loadgen on LOADGEN_CPUSET, so the load
+# side can never steal cores from the measured side. Defaults to CPUSET
+# for backward compatibility. Recorded in the manifest.
+LOADGEN_CPUSET=""
 BUILD_DIR=""
 HOST_BIN=""
 # Per-side Host binaries (M2 optimization A/B): --host-bin means both
@@ -138,6 +143,7 @@ while [ $# -gt 0 ]; do
     --connections) CONNECTIONS="${2:?}"; shift 2 ;;
     --inflight) INFLIGHT="${2:?}"; shift 2 ;;
     --cpuset) CPUSET="${2:?}"; shift 2 ;;
+    --loadgen-cpuset) LOADGEN_CPUSET="${2:?}"; shift 2 ;;
     --build-dir) BUILD_DIR="${2:?}"; shift 2 ;;
     --host-bin) HOST_BIN="${2:?}"; shift 2 ;;
     --baseline-host-bin) BASELINE_HOST_BIN="${2:?}"; shift 2 ;;
@@ -174,8 +180,8 @@ if [ "$STATISTIC" != "mean" ] && [ "$STATISTIC" != "median" ]; then
 fi
 for side_workers in "$BASELINE_WORKERS" "$CANDIDATE_WORKERS"; do
     case "$side_workers" in
-    1|2|4) ;;
-    *) echo "run-ab: worker count must be 1, 2 or 4 (got $side_workers)" >&2; exit 2 ;;
+    1|2|4|6|8) ;;
+    *) echo "run-ab: worker count must be 1, 2, 4, 6 or 8 (got $side_workers)" >&2; exit 2 ;;
     esac
 done
 
@@ -390,6 +396,7 @@ run_loadgen() {
         CAPSID_BENCH_ROUND="$round"
         CAPSID_BENCH_SAMPLES_OUT="$samples"
         CAPSID_BENCH_CORRECTNESS_OUT="$correctness"
+        ${LOADGEN_CPUSET:+taskset -c "$LOADGEN_CPUSET"} \
         ${CPUSET:+taskset -c "$CPUSET"})
     if [ "$round" = "0" ] && [ "$NO_PROFILE" != "1" ]; then
         # perf stat forwards the child's exit status, so the loadgen's
@@ -879,6 +886,7 @@ CANDIDATE_HOST_BIN_SHA=""
         "$WORKLOAD" "$ROUNDS" "$WARMUP" "$DURATION"
     printf 'CONNECTIONS=%s\nINFLIGHT=%s\nCPUSET=%s\n' \
         "$CONNECTIONS" "$INFLIGHT" "$CPUSET"
+    printf 'LOADGEN_CPUSET=%s\n' "$LOADGEN_CPUSET"
     printf 'APP=%s\nAUTHORITY=%s\nTIMEOUT_MS=%s\nWINDOW=%s\n' \
         "$APP" "$AUTHORITY" "$TIMEOUT_MS" "$WINDOW"
     printf 'TCP_NODELAY=%s\nTEST_MODE=%s\n' "$TCP_NODELAY_STATE" "$TEST_MODE"
