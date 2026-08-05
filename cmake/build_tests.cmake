@@ -398,6 +398,9 @@ if(BUILD_TESTING)
                 capsid-worker)
             foreach(CAPSID_MANAGED_TEST_ID
                     host_managed_deploy_integration
+                    host_managed_fixed_pool_deploy_and_recover
+                    host_managed_fixed_pool_warm_failure_is_atomic
+                    host_managed_admin_fixed_pool_handoff
                     host_managed_admin_worker_lifecycle
                     host_managed_trusted_bytecode
                     host_managed_compatibility_fallback
@@ -495,6 +498,35 @@ if(BUILD_TESTING)
         add_test(
             NAME host_policy_compiler
             COMMAND test-host-policy-compiler)
+
+        add_executable(
+            test-host-static-pool
+            tests/test_host_static_pool.cc)
+        target_include_directories(
+            test-host-static-pool PRIVATE include src)
+        target_link_libraries(test-host-static-pool PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-static-pool PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-static-pool PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-static-pool PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME host_static_pool_activates_only_when_all_ready
+            COMMAND test-host-static-pool all-ready)
+        add_test(
+            NAME host_static_pool_preserves_owner_shard
+            COMMAND test-host-static-pool owner-shard)
 
         add_executable(
             test-host-secret-snapshot
@@ -627,7 +659,152 @@ if(BUILD_TESTING)
             NAME host_worker_recovery
             COMMAND test-host-worker-recovery)
 
-        if(CAPSID_BUILD_WORKER)
+        if(TARGET capsid-host AND TARGET capsid-worker)
+            add_executable(
+                test-host-single-worker-lifecycle
+                tests/test_host_single_worker_lifecycle.cc
+                src/host/single_worker_server.cc)
+            target_include_directories(
+                test-host-single-worker-lifecycle PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-host-single-worker-lifecycle PRIVATE
+                capsid_runtime
+                capsid_host_core
+                Boost::system
+                capsid_sanitizers)
+            set_target_properties(
+                test-host-single-worker-lifecycle PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-single-worker-lifecycle PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-single-worker-lifecycle PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(
+                            test-host-single-worker-lifecycle PRIVATE
+                            -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_test(
+                NAME host_single_worker_controllable_lifecycle
+                COMMAND test-host-single-worker-lifecycle
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_single_worker_controllable_lifecycle PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+
+            # Batch B begins RED before the production source exists. The
+            # CONFIGURE_DEPENDS glob adds it to this isolated test target as
+            # soon as the implementation is created, without requiring the
+            # implementation agent to edit the frozen test registration.
+            file(GLOB CAPSID_STATIC_POOL_SERVER_TEST_SOURCE
+                CONFIGURE_DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/host/static_pool_server.cc")
+            add_executable(
+                test-host-static-pool-server
+                tests/test_host_static_pool_server.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            target_include_directories(
+                test-host-static-pool-server PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-host-static-pool-server PRIVATE
+                capsid_runtime
+                capsid_host_core
+                Boost::system
+                capsid_sanitizers)
+            set_target_properties(
+                test-host-static-pool-server PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-static-pool-server PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-static-pool-server PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(
+                            test-host-static-pool-server PRIVATE
+                            -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_test(
+                NAME host_static_pool_server_shared_port_lifecycle
+                COMMAND test-host-static-pool-server lifecycle
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_static_pool_server_atomic_start_failure
+                COMMAND test-host-static-pool-server atomic-failure
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_static_pool_server_shared_port_lifecycle
+                host_static_pool_server_atomic_start_failure PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+
+            add_executable(
+                test-host-static-pool-integration
+                tests/test_host_static_pool_integration.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            target_include_directories(
+                test-host-static-pool-integration PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-host-static-pool-integration PRIVATE
+                capsid_runtime
+                capsid_host_core
+                Boost::system
+                capsid_sanitizers)
+            set_target_properties(
+                test-host-static-pool-integration PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-static-pool-integration PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-static-pool-integration PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(
+                            test-host-static-pool-integration PRIVATE
+                            -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_test(
+                NAME host_static_pool_activation_barrier
+                COMMAND test-host-static-pool-integration activation-barrier
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_static_pool_worker_exit_isolation
+                COMMAND test-host-static-pool-integration worker-exit
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_static_pool_activation_barrier
+                host_static_pool_worker_exit_isolation PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+
             find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
             add_test(
                 NAME host_single_worker_integration

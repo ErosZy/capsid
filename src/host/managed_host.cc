@@ -574,6 +574,61 @@ WarmResult warm_worker(const ManagedHostOptions& options,
     }
 }
 
+struct WarmPoolResult {
+    bool ok = false;
+    std::vector<capsid_worker*> workers;
+    std::string error;  // static text
+};
+
+// Warm the ENTIRE fixed pool: exactly effective.workers distinct worker
+// processes, each READY and compatibility-verified. The pool is atomic:
+// when any single worker fails to warm, every already-warmed worker of the
+// new pool is destroyed and recycled and nothing escapes, so a partially
+// warmed pool can never be observed or handed off.
+WarmPoolResult warm_worker_pool(
+    const ManagedHostOptions& options,
+    const std::vector<std::uint8_t>& bundle,
+    bool trusted_bytecode,
+    const std::string& source_name,
+    const EffectiveConfig& effective,
+    const std::vector<std::pair<std::string, std::string>>& env_values) {
+    WarmPoolResult out;
+    out.workers.reserve(effective.workers);
+    for (std::uint32_t index = 0; index < effective.workers; ++index) {
+        const WarmResult warm = warm_worker(options, bundle, trusted_bytecode,
+                                            source_name, effective, env_values);
+        if (!warm.ok) {
+            for (capsid_worker* worker : out.workers) {
+                capsid_worker_destroy(worker);
+            }
+            out.workers.clear();
+            out.error = warm.error;
+            return out;
+        }
+        out.workers.push_back(warm.worker);
+    }
+    out.ok = true;
+    return out;
+}
+
+// Publish the warmed pool on the outcome. The legacy single-worker field
+// aliases workers[0] only for an exactly-one-worker pool; any other pool
+// size leaves it null so an old consumer cannot claim just one worker.
+void publish_pool(DeployOutcome* outcome, std::vector<capsid_worker*> workers) {
+    outcome->workers = std::move(workers);
+    if (outcome->workers.size() == 1) {
+        outcome->worker = outcome->workers[0];
+    }
+}
+
+// Destroy and recycle every worker of a pool (a failed deploy's own new
+// pool; the old active pool is never touched).
+void destroy_pool(const std::vector<capsid_worker*>& workers) {
+    for (capsid_worker* worker : workers) {
+        capsid_worker_destroy(worker);
+    }
+}
+
 // POSIX adapter for the active-state persist contract. All I/O is anchored
 // to the already-verified App state directory fd: openat/renameat only, with
 // O_NOFOLLOW on every component. No path concatenation reaches the
@@ -2708,7 +2763,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         }
         close(state_fd);
         status->state = OperationState::kWarming;
-        const WarmResult warm = warm_worker(
+        const WarmPoolResult warm = warm_worker_pool(
             *options,
             std::vector<std::uint8_t>(validated.bundle_bin.begin(),
                                       validated.bundle_bin.end()),
@@ -2731,7 +2786,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         const ActiveStatePersistResult persisted = persist_active_state(
             document, outcome.operation_id, filesystem);
         if (!persisted.ok) {
-            capsid_worker_destroy(warm.worker);
+            destroy_pool(warm.workers);
             status->state = OperationState::kFailed;
             status->error = "cannot persist active state";
             outcome.error = "cannot persist active state";
@@ -2739,7 +2794,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         }
         status->state = OperationState::kActive;
         outcome.ok = true;
-        outcome.worker = warm.worker;
+        publish_pool(&outcome, warm.workers);
         return outcome;
     }
     // mapping == -1: first publish of this Version ID; stage it.
@@ -2897,10 +2952,10 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     }
     close(state_fd);
 
-    // ---- 10-12. worker warm-up: spawn, load, READY, compatibility check.
-    // NO Active is reported before this succeeds.
+    // ---- 10-12. worker warm-up: the whole fixed pool must be READY.
+    // NO Active is reported before the ENTIRE pool succeeds.
     status->state = OperationState::kWarming;
-    const WarmResult warm = warm_worker(
+    const WarmPoolResult warm = warm_worker_pool(
         *options, bundle_bytes, selected == SelectedArtifactKind::kTrustedBytecode,
         source_name, effective, env_values);
     if (!warm.ok) {
@@ -2922,19 +2977,21 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     const ActiveStatePersistResult persisted = persist_active_state(
         document, outcome.operation_id, filesystem);
     if (!persisted.ok) {
-        capsid_worker_destroy(warm.worker);
+        // Atomic: the failed deploy recycles its own new pool; the old
+        // active.json and the old active pool stay untouched.
+        destroy_pool(warm.workers);
         status->state = OperationState::kFailed;
         status->error = "cannot persist active state";
         outcome.error = "cannot persist active state";
         return outcome;
     }
 
-    // The worker is warm; the caller publishes the data-plane routing and
-    // drains the old worker (single active App: routing publication is the
+    // The pool is warm; the caller publishes the data-plane routing and
+    // drains the old pool (single active App: routing publication is the
     // caller's step).
     status->state = OperationState::kActive;
     outcome.ok = true;
-    outcome.worker = warm.worker;
+    publish_pool(&outcome, warm.workers);
     return outcome;
 }
 
@@ -3130,7 +3187,7 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
         return outcome;
     }
     status->state = OperationState::kWarming;
-    const WarmResult warm = warm_worker(
+    const WarmPoolResult warm = warm_worker_pool(
         *options,
         std::vector<std::uint8_t>(validated.bundle_bin.begin(),
                                   validated.bundle_bin.end()),
@@ -3144,7 +3201,7 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
     }
     status->state = OperationState::kActive;
     outcome.ok = true;
-    outcome.worker = warm.worker;
+    publish_pool(&outcome, warm.workers);
     return outcome;
 }
 

@@ -1,10 +1,11 @@
-// Frozen RED: host_policy_compiler (M1D).
+// Frozen RED: host_policy_compiler (M1D + M2 static-pool boundary).
 //
 // Covers the Host/App effective-config compiler:
 //   - a legal App request compiles to the effective intersection;
 //   - modules, env, fs read, fetch, storage/stdio and worker/resource
 //     overreach each reject;
-//   - a non-1/1 pool and an app-decided isolation request reject;
+//   - a fixed N/N static pool compiles within the Host worker ceiling, while
+//     elastic/mismatched or over-ceiling pools reject;
 //   - rule ids are stable and unique;
 //   - effective.json records names, sources, key ids and opaque revisions
 //     only — a canary value never appears;
@@ -168,12 +169,59 @@ int main() {
                 "memory overreach accepted");
     }
 
-    // 8. Non-1/1 pool rejects; isolation is host-decided only.
+    // 8. M2 static pools accept fixed N/N within the Host ceiling. The
+    // compiler is a defense-in-depth entry point, so it must independently
+    // reject minReady != maxWorkers even though the JSON schema already
+    // rejects that shape. App isolation remains host-decided only.
     {
-        capsid::host::AppRequest app = legal_app();
-        app.workers = 2;
-        require(!compile_policy(default_host(), app, {}).ok,
-                "non-1/1 pool accepted");
+        capsid::host::HostPolicy host = default_host();
+        host.max_workers = 4;
+        // Host v1 has one worker-count ceiling (capacity.workersTotal), not
+        // a second minReady ceiling. Keep this legacy field at its default
+        // to prove it cannot silently cap an otherwise legal App pool.
+
+        capsid::host::AppRequest fixed = legal_app();
+        fixed.env.clear();
+        fixed.workers = 3;
+        fixed.min_ready = 3;
+        const PolicyCompileResult compiled =
+            compile_policy(host, fixed, {});
+        require(compiled.ok,
+                "fixed 3/3 static pool below Host ceiling rejected: " +
+                    compiled.error);
+        require(compiled.effective.workers == 3 &&
+                    compiled.effective.min_ready == 3,
+                "effective config lost the fixed pool size");
+        require(compiled.effective.effective_json.find(
+                    "\"workers\":3,\"minReady\":3") !=
+                    std::string::npos,
+                "effective.json lost the fixed pool contract or broke the "
+                "M1D canonical layout");
+
+        capsid::host::AppRequest elastic = fixed;
+        elastic.min_ready = 2;
+        const PolicyCompileResult elastic_result =
+            compile_policy(host, elastic, {});
+        require(!elastic_result.ok &&
+                    elastic_result.error.find("pool") != std::string::npos,
+                "minReady < maxWorkers escaped the static-pool gate");
+
+        capsid::host::AppRequest over_ceiling = fixed;
+        over_ceiling.workers = 5;
+        over_ceiling.min_ready = 5;
+        const PolicyCompileResult ceiling_result =
+            compile_policy(host, over_ceiling, {});
+        require(!ceiling_result.ok &&
+                    ceiling_result.error.find("worker") != std::string::npos,
+                "App pool above the Host worker ceiling was accepted");
+
+        capsid::host::HostPolicy unbounded = host;
+        unbounded.max_workers = 0;
+        const PolicyCompileResult unbounded_result =
+            compile_policy(unbounded, fixed, {});
+        require(!unbounded_result.ok &&
+                    unbounded_result.error.find("worker") != std::string::npos,
+                "unbounded Host worker capacity was accepted");
         // Isolation is host-decided only: AppRequest has no isolation
         // field by construction.
     }

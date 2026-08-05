@@ -32,6 +32,12 @@
 #     [--baseline-env 'K=V K2=V2'] [--candidate-env 'K=V K2=V2'] \
 #     [--statistic mean|median] [--require-ipc-counters] \
 #     [--baseline-host-profile]
+#     [--baseline-workers N] [--candidate-workers N]
+#
+# Multi-worker profiling (M2): --baseline-workers/--candidate-workers (1/2/4,
+# default 1) make the profile run require EXACTLY that many direct worker
+# children per side and attach one perf record/stat stream per shard; worker
+# counts land in the manifest. Single-worker evidence naming is unchanged.
 #
 # Statistical methodology: --statistic is frozen into the manifest before
 # the run starts (default mean). The report's verdict compares the sides on
@@ -82,6 +88,13 @@ INFLIGHT=64
 CPUSET=""
 BUILD_DIR=""
 HOST_BIN=""
+# Per-side Host binaries (M2 optimization A/B): --host-bin means both
+# sides use the same Host; the side-specific flags take precedence and let
+# an optimization A/B bind each side to the exact implementation that
+# produced its samples. A side without any Host stays unbound (fake
+# components do not consume one).
+BASELINE_HOST_BIN=""
+CANDIDATE_HOST_BIN=""
 APP="orders"
 AUTHORITY="public.example"
 TIMEOUT_MS=10000
@@ -92,6 +105,11 @@ CANDIDATE_ENV=""
 STATISTIC="mean"
 REQUIRE_IPC_COUNTERS=0
 BASELINE_HOST_PROFILE=0
+# Multi-worker profile: the fixed pool size per side (1/2/4). Default 1
+# keeps every single-worker evidence contract unchanged; a pool side must
+# expose exactly this many direct worker children for the profile run.
+BASELINE_WORKERS=1
+CANDIDATE_WORKERS=1
 # The runner always exports CAPSID_TCP_NODELAY to components; only the exact
 # value "0" disables it (default is on — single-connection latency drops
 # 43ms→1.3ms with no throughput regression).
@@ -122,6 +140,8 @@ while [ $# -gt 0 ]; do
     --cpuset) CPUSET="${2:?}"; shift 2 ;;
     --build-dir) BUILD_DIR="${2:?}"; shift 2 ;;
     --host-bin) HOST_BIN="${2:?}"; shift 2 ;;
+    --baseline-host-bin) BASELINE_HOST_BIN="${2:?}"; shift 2 ;;
+    --candidate-host-bin) CANDIDATE_HOST_BIN="${2:?}"; shift 2 ;;
     --application) APP="${2:?}"; shift 2 ;;
     --public-authority) AUTHORITY="${2:?}"; shift 2 ;;
     --timeout-ms) TIMEOUT_MS="${2:?}"; shift 2 ;;
@@ -131,6 +151,8 @@ while [ $# -gt 0 ]; do
     --statistic) STATISTIC="${2:?}"; shift 2 ;;
     --require-ipc-counters) REQUIRE_IPC_COUNTERS=1; shift ;;
     --baseline-host-profile) BASELINE_HOST_PROFILE=1; shift ;;
+    --baseline-workers) BASELINE_WORKERS="${2:?}"; shift 2 ;;
+    --candidate-workers) CANDIDATE_WORKERS="${2:?}"; shift 2 ;;
     *) echo "run-ab: unknown argument: $1" >&2; usage ;;
     esac
 done
@@ -150,6 +172,12 @@ if [ "$STATISTIC" != "mean" ] && [ "$STATISTIC" != "median" ]; then
     echo "run-ab: --statistic must be mean or median (got $STATISTIC)" >&2
     exit 2
 fi
+for side_workers in "$BASELINE_WORKERS" "$CANDIDATE_WORKERS"; do
+    case "$side_workers" in
+    1|2|4) ;;
+    *) echo "run-ab: worker count must be 1, 2 or 4 (got $side_workers)" >&2; exit 2 ;;
+    esac
+done
 
 # Per-side extra environment (K=V assignments). Validate every token so the
 # word-split injection into the component environment cannot smuggle shell
@@ -167,6 +195,19 @@ validate_env_list --baseline-env "$BASELINE_ENV"
 validate_env_list --candidate-env "$CANDIDATE_ENV"
 [ -x "$BASELINE" ] || { echo "run-ab: baseline is not executable: $BASELINE" >&2; exit 2; }
 [ -x "$CANDIDATE" ] || { echo "run-ab: candidate is not executable: $CANDIDATE" >&2; exit 2; }
+# Per-side Host identity: side-specific flags win over the shared --host-bin;
+# a provided Host must exist and be executable, an empty side stays unbound
+# (fake components never consume CAPSID_BENCH_HOST_BIN).
+BASELINE_HOST_BIN="${BASELINE_HOST_BIN:-$HOST_BIN}"
+CANDIDATE_HOST_BIN="${CANDIDATE_HOST_BIN:-$HOST_BIN}"
+for side_host in "$BASELINE_HOST_BIN" "$CANDIDATE_HOST_BIN"; do
+    if [ -n "$side_host" ]; then
+        [ -f "$side_host" ] && [ -x "$side_host" ] || {
+            echo "run-ab: Host binary is not executable: $side_host" >&2
+            exit 2
+        }
+    fi
+done
 [ -x "$LOADGEN" ] || { echo "run-ab: loadgen is not executable: $LOADGEN" >&2; exit 2; }
 [ -f "$BUNDLE" ] || { echo "run-ab: bundle not found: $BUNDLE" >&2; exit 2; }
 [ -f "$WORKER" ] || { echo "run-ab: worker not found: $WORKER" >&2; exit 2; }
@@ -222,12 +263,17 @@ start_component() {
     local identity_file="$OUT/.tmp/identity.$side.round$round.$$.json"
     # Per-side environment (--baseline-env/--candidate-env): the bodyless
     # off/on A/B runs the same capsid-host binary on both sides and differs
-    # only in these assignments.
+    # only in these assignments. Same for the fixed pool size: each side
+    # carries its own worker count to the static-pool wrapper.
     local side_env=""
+    local side_workers="$BASELINE_WORKERS"
+    local side_host_bin="$BASELINE_HOST_BIN"
     if [ "$side" = "baseline" ]; then
         side_env="$BASELINE_ENV"
     else
         side_env="$CANDIDATE_ENV"
+        side_workers="$CANDIDATE_WORKERS"
+        side_host_bin="$CANDIDATE_HOST_BIN"
     fi
 
     local ready_file="$OUT/ready.$side.$$"
@@ -252,9 +298,10 @@ start_component() {
         CAPSID_BENCH_TIMEOUT_MS="$TIMEOUT_MS" \
         CAPSID_BENCH_WINDOW="$WINDOW" \
         CAPSID_BENCH_SIDE="$side" \
-        CAPSID_BENCH_HOST_BIN="$HOST_BIN" \
+        CAPSID_BENCH_HOST_BIN="$side_host_bin" \
         CAPSID_BENCH_CPU_PROFILE="$profile_out" \
         CAPSID_BENCH_IDENTITY_OUT="$identity_file" \
+        CAPSID_BENCH_WORKERS="$side_workers" \
         CAPSID_TCP_NODELAY="${CAPSID_TCP_NODELAY:-1}" \
         ${metrics_env} \
         ${side_env} \
@@ -328,19 +375,31 @@ run_loadgen() {
     local side="$1" round="$2"
     local samples="$OUT/samples.$side.$round.$$.jsonl"
     local correctness="$OUT/correctness.$side.$round.$$.json"
-    env \
-        CAPSID_BENCH_TARGET="http://127.0.0.1:${COMPONENT_PORT[$side]}" \
-        CAPSID_BENCH_WORKLOAD="$WORKLOAD" \
-        CAPSID_BENCH_WARMUP_S="$WARMUP" \
-        CAPSID_BENCH_DURATION_S="$DURATION" \
-        CAPSID_BENCH_CONNECTIONS="$CONNECTIONS" \
-        CAPSID_BENCH_INFLIGHT="$INFLIGHT" \
-        CAPSID_BENCH_SIDE="$side" \
-        CAPSID_BENCH_ROUND="$round" \
-        CAPSID_BENCH_SAMPLES_OUT="$samples" \
-        CAPSID_BENCH_CORRECTNESS_OUT="$correctness" \
-        ${CPUSET:+taskset -c "$CPUSET"} \
-        "$LOADGEN"
+    # The loadgen environment, identical for headline rounds and the
+    # profile round. Only the profile round (round 0) is wrapped in perf
+    # stat so the evidence can tell whether the LOAD SIDE saturated its
+    # cores (headline rounds stay zero-probe).
+    local loadgen_env=(env
+        CAPSID_BENCH_TARGET="http://127.0.0.1:${COMPONENT_PORT[$side]}"
+        CAPSID_BENCH_WORKLOAD="$WORKLOAD"
+        CAPSID_BENCH_WARMUP_S="$WARMUP"
+        CAPSID_BENCH_DURATION_S="$DURATION"
+        CAPSID_BENCH_CONNECTIONS="$CONNECTIONS"
+        CAPSID_BENCH_INFLIGHT="$INFLIGHT"
+        CAPSID_BENCH_SIDE="$side"
+        CAPSID_BENCH_ROUND="$round"
+        CAPSID_BENCH_SAMPLES_OUT="$samples"
+        CAPSID_BENCH_CORRECTNESS_OUT="$correctness"
+        ${CPUSET:+taskset -c "$CPUSET"})
+    if [ "$round" = "0" ] && [ "$NO_PROFILE" != "1" ]; then
+        # perf stat forwards the child's exit status, so the loadgen's
+        # own return code is preserved exactly.
+        perf stat -e task-clock,context-switches,cpu-migrations,page-faults \
+            -o "$OUT/perf-stat/$side-loadgen.stat" \
+            "${loadgen_env[@]}" "$LOADGEN"
+    else
+        "${loadgen_env[@]}" "$LOADGEN"
+    fi
     local loadgen_rc=$?
     [ "$loadgen_rc" -eq 0 ] || { echo "run-ab: loadgen failed for $side round $round (rc=$loadgen_rc)" >&2; exit 1; }
 
@@ -391,24 +450,34 @@ if [ "$NO_PROFILE" != "1" ]; then
         start_component "$side" "$cmd" 0 "$profile_out"
 
         local_pid="${COMPONENT_PID[$side]}"
+        workers="$BASELINE_WORKERS"
+        [ "$side" = "candidate" ] && workers="$CANDIDATE_WORKERS"
 
-        # Worker process: the gateway spawns it directly, so match by parent
-        # pid first, then by command line (script-based fakes), skipping
-        # zombies (perf cannot attach to them).
-        worker_pid="$(ps -eo pid=,ppid=,stat=,cmd= | \
+        # Worker processes: the gateway spawns them directly, so match by
+        # parent pid, skipping zombies (perf cannot attach to them). A pool
+        # side must expose EXACTLY its configured worker count — one perf
+        # stream per shard, and a missing shard would silently halve the
+        # profile. The legacy cmdline fallback exists for script-based
+        # fakes and only ever applies to a single worker.
+        all_workers="$(ps -eo pid=,ppid=,stat=,cmd= | \
             awk -v gw="$local_pid" -v name="$WORKER_NAME" '
-                $2 == gw && $0 ~ name && $3 !~ /^Z/ { print $1; exit }')"
-        if [ -z "$worker_pid" ]; then
-            worker_pid="$(ps -eo pid=,ppid=,stat=,cmd= | \
-                awk -v gw="$local_pid" -v name="$WORKER_NAME" '
+                $2 == gw && $0 ~ name && $3 !~ /^Z/ { print $1 }')"
+        worker_count="$(printf '%s\n' "$all_workers" | grep -c . || true)"
+        if [ "$worker_count" -lt "$workers" ] && [ "$workers" -eq 1 ]; then
+            # Legacy cmdline fallback for script-based fakes; it must still
+            # match EXACTLY one process (never an over-broad partial match).
+            all_workers="$(ps -eo pid=,ppid=,stat=,cmd= | \
+                awk -v name="$WORKER_NAME" '
                     $0 ~ name && $3 !~ /^Z/ && $0 !~ /run-ab\.sh/ && $0 !~ /awk/ {
                         print $1; exit
                     }')"
+            worker_count="$(printf '%s\n' "$all_workers" | grep -c . || true)"
         fi
-        if [ -z "$worker_pid" ]; then
-            echo "run-ab: no live worker process found for $side profile run" >&2
+        if [ "$worker_count" -ne "$workers" ]; then
+            echo "run-ab: expected $workers worker processes for $side profile run, found $worker_count" >&2
             exit 2
         fi
+        mapfile -t worker_pids < <(printf '%s\n' "$all_workers" | head -n "$workers")
 
         # Resource sampling (RSS/PSS from /proc/<pid>/status, IPC syscalls
         # and bytes from /proc/<pid>/io) across the loadgen run.
@@ -436,7 +505,15 @@ if [ "$NO_PROFILE" != "1" ]; then
         }
         : >"$OUT/.tmp/resource.$side.profile.$$"
         snapshot_resource "$local_pid" "gateway"
-        snapshot_resource "$worker_pid" "worker"
+        worker_index=0
+        for worker_pid in "${worker_pids[@]}"; do
+            worker_index=$((worker_index + 1))
+            if [ "$workers" -eq 1 ]; then
+                snapshot_resource "$worker_pid" "worker"
+            else
+                snapshot_resource "$worker_pid" "worker.$worker_index"
+            fi
+        done
 
         # Candidate (C++) host: perf record. Baseline (Go) gateway: pprof via
         # CAPSID_BENCH_CPU_PROFILE; perf stat still applies to both sides.
@@ -452,19 +529,32 @@ if [ "$NO_PROFILE" != "1" ]; then
                 >"$OUT/perf-stat/baseline-gateway.record.log" 2>&1 &
             perf_record_pid=$!
         fi
-        perf record --call-graph dwarf -F 199 \
-            -o "$OUT/$side-worker.perf.data" -p "$worker_pid" \
-            >"$OUT/perf-stat/$side-worker.record.log" 2>&1 &
-        worker_record_pid=$!
+        # One perf record + stat stream per pool shard: the single-worker
+        # naming stays byte-identical (evidence regression), a pool side
+        # gets $side-worker.N.* files. All streams are attached up front so
+        # the loadgen window samples every shard equally.
+        worker_record_pids=()
+        worker_stat_pids=()
+        worker_index=0
+        for worker_pid in "${worker_pids[@]}"; do
+            worker_index=$((worker_index + 1))
+            worker_suffix=""
+            [ "$workers" -eq 1 ] || worker_suffix=".$worker_index"
+            perf record --call-graph dwarf -F 199 \
+                -o "$OUT/$side-worker$worker_suffix.perf.data" -p "$worker_pid" \
+                >"$OUT/perf-stat/$side-worker$worker_suffix.record.log" 2>&1 &
+            worker_record_pids+=("$!")
+            perf stat -e task-clock,context-switches,cpu-migrations,page-faults \
+                -p "$worker_pid" \
+                -o "$OUT/perf-stat/$side-worker$worker_suffix.stat" \
+                -- sleep "$DURATION" >/dev/null 2>&1 &
+            worker_stat_pids+=("$!")
+        done
 
         perf stat -e task-clock,context-switches,cpu-migrations,page-faults \
             -p "$local_pid" -o "$OUT/perf-stat/$side-gateway.stat" -- sleep "$DURATION" \
             >/dev/null 2>&1 &
         gateway_stat_pid=$!
-        perf stat -e task-clock,context-switches,cpu-migrations,page-faults \
-            -p "$worker_pid" -o "$OUT/perf-stat/$side-worker.stat" -- sleep "$DURATION" \
-            >/dev/null 2>&1 &
-        worker_stat_pid=$!
 
         # Diagnostic window IPC mechanism counters: the round-0 loadgen runs
         # with CAPSID_HOST_IPC_METRICS armed; count the per-pump delta
@@ -480,7 +570,15 @@ if [ "$NO_PROFILE" != "1" ]; then
         run_loadgen "$side" 0
 
         snapshot_resource "$local_pid" "gateway"
-        snapshot_resource "$worker_pid" "worker"
+        worker_index=0
+        for worker_pid in "${worker_pids[@]}"; do
+            worker_index=$((worker_index + 1))
+            if [ "$workers" -eq 1 ]; then
+                snapshot_resource "$worker_pid" "worker"
+            else
+                snapshot_resource "$worker_pid" "worker.$worker_index"
+            fi
+        done
 
         python3 - "$ipc_log" "$pre_metric_lines" \
             "$OUT/.tmp/ipc_window.$side.0.$$.json" <<'PY'
@@ -518,13 +616,13 @@ with open(out, "w", encoding="utf-8") as handle:
     json.dump({"window_lines": window_lines, "counters": totals}, handle)
 PY
 
-        for p in "$gateway_stat_pid" "$worker_stat_pid"; do
-            wait "$p" 2>/dev/null || true
+        for p in "$gateway_stat_pid" "${worker_stat_pids[@]}"; do
+            [ -n "$p" ] && wait "$p" 2>/dev/null || true
         done
-        for p in "$perf_record_pid" "$worker_record_pid"; do
+        for p in "$perf_record_pid" "${worker_record_pids[@]}"; do
             [ -n "$p" ] && kill -INT "$p" 2>/dev/null || true
         done
-        for p in "$perf_record_pid" "$worker_record_pid"; do
+        for p in "$perf_record_pid" "${worker_record_pids[@]}"; do
             [ -n "$p" ] && wait "$p" 2>/dev/null || true
         done
         stop_component "$side"
@@ -570,12 +668,15 @@ fi
 # least one user-space symbol resolved, and all perf stat counters must have
 # been supported.
 if [ "$NO_PROFILE" != "1" ]; then
-    for file in baseline-worker.perf.data candidate-host.perf.data \
-        candidate-worker.perf.data baseline-gateway.perf.data; do
-        if [ -s "$OUT/$file" ]; then
-            if perf report --stdio -i "$OUT/$file" --no-children 2>/dev/null \
+    # Worker profile files are $side-worker.perf.data for a single worker
+    # and $side-worker.N.perf.data for a pool side; the glob covers both.
+    for file in "$OUT"/baseline-worker*.perf.data "$OUT"/candidate-worker*.perf.data \
+        "$OUT"/candidate-host.perf.data "$OUT"/baseline-gateway.perf.data; do
+        [ -e "$file" ] || continue
+        if [ -s "$file" ]; then
+            if perf report --stdio -i "$file" --no-children 2>/dev/null \
                 | grep -q "Total Lost Samples: [1-9]"; then
-                fail_evidence "lost samples in $file"
+                fail_evidence "lost samples in $(basename "$file")"
             fi
             # A profile with zero resolved user-space symbols is not usable
             # evidence — every symbol column would be a kernel address.
@@ -585,9 +686,9 @@ if [ "$NO_PROFILE" != "1" ]; then
             # (unresolved user samples render as "[.] 0x...").
             # Test-mode runs (fake components) are exempt.
             if [ "$TEST_MODE" != "1" ] && \
-                ! perf report --stdio --no-children -i "$OUT/$file" \
+                ! perf report --stdio --no-children -i "$file" \
                 --sort symbol 2>/dev/null | grep -qE '%\s+\[\.\]\s+[^0\[]'; then
-                fail_evidence "zero user-space symbols in $file"
+                fail_evidence "zero user-space symbols in $(basename "$file")"
             fi
         fi
     done
@@ -685,8 +786,19 @@ if [ "$NO_PROFILE" != "1" ]; then
        [ ! -s "$OUT/baseline-gateway.perf.data" ]; then
         fail_evidence "missing or empty profile: baseline-gateway"
     fi
-    for file in baseline-worker.perf.data candidate-host.perf.data \
-        candidate-worker.perf.data; do
+    # Worker profiles: at least one $side-worker[.N].perf.data must exist
+    # and be non-empty; the gateway profiles stay single files.
+    for pattern in baseline-worker*.perf.data candidate-worker*.perf.data; do
+        if ! ls "$OUT"/$pattern >/dev/null 2>&1; then
+            fail_evidence "missing or empty profile: $pattern"
+        fi
+        for file in "$OUT"/$pattern; do
+            if [ ! -s "$file" ]; then
+                fail_evidence "missing or empty profile: $(basename "$file")"
+            fi
+        done
+    done
+    for file in candidate-host.perf.data; do
         if [ ! -s "$OUT/$file" ]; then
             fail_evidence "missing or empty profile: $file"
         fi
@@ -706,7 +818,9 @@ RESOURCE_JSON=""
     for f in "$OUT"/.tmp/resource.*.profile.*; do
         [ -f "$f" ] || continue
         side="$(basename "$f" | sed -E 's/resource\.([a-z]+)\..*/\1/')"
-        for label in gateway worker; do
+        # Labels are gateway plus worker (single) or worker.N (pool shards).
+        labels="$(grep -oE '^[a-z0-9.]+' "$f" | sort -u)"
+        for label in $labels; do
             before="$(grep "^$label|" "$f" | head -1 || true)"
             after="$(grep "^$label|" "$f" | tail -1 || true)"
             [ -n "$before" ] && [ -n "$after" ] || continue
@@ -738,6 +852,12 @@ COMMAND_ARGS="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \
     "${ORIGINAL_ARGV[@]}")"
 HOST_BIN_SHA=""
 [ -n "$HOST_BIN" ] && HOST_BIN_SHA="$(sha256sum "$HOST_BIN" | cut -d' ' -f1)"
+BASELINE_HOST_BIN_SHA=""
+[ -n "$BASELINE_HOST_BIN" ] && \
+    BASELINE_HOST_BIN_SHA="$(sha256sum "$BASELINE_HOST_BIN" | cut -d' ' -f1)"
+CANDIDATE_HOST_BIN_SHA=""
+[ -n "$CANDIDATE_HOST_BIN" ] && \
+    CANDIDATE_HOST_BIN_SHA="$(sha256sum "$CANDIDATE_HOST_BIN" | cut -d' ' -f1)"
 {
     for key in RUN_ID GENERATED_AT COMMIT BUILD_ARGS UNAME NPROC \
         CGROUP_CPU_MAX PERF_PARANOID; do
@@ -751,6 +871,10 @@ HOST_BIN_SHA=""
     printf 'LOADGEN_CMD=%s\nLOADGEN_SHA=%s\n' \
         "$LOADGEN" "$(sha256sum "$LOADGEN" | cut -d' ' -f1)"
     printf 'HOST_BIN_CMD=%s\nHOST_BIN_SHA=%s\n' "$HOST_BIN" "$HOST_BIN_SHA"
+    printf 'BASELINE_HOST_BIN_CMD=%s\nBASELINE_HOST_BIN_SHA=%s\n' \
+        "$BASELINE_HOST_BIN" "$BASELINE_HOST_BIN_SHA"
+    printf 'CANDIDATE_HOST_BIN_CMD=%s\nCANDIDATE_HOST_BIN_SHA=%s\n' \
+        "$CANDIDATE_HOST_BIN" "$CANDIDATE_HOST_BIN_SHA"
     printf 'WORKLOAD=%s\nROUNDS=%s\nWARMUP=%s\nDURATION=%s\n' \
         "$WORKLOAD" "$ROUNDS" "$WARMUP" "$DURATION"
     printf 'CONNECTIONS=%s\nINFLIGHT=%s\nCPUSET=%s\n' \
@@ -759,6 +883,8 @@ HOST_BIN_SHA=""
         "$APP" "$AUTHORITY" "$TIMEOUT_MS" "$WINDOW"
     printf 'TCP_NODELAY=%s\nTEST_MODE=%s\n' "$TCP_NODELAY_STATE" "$TEST_MODE"
     printf 'BASELINE_ENV=%s\nCANDIDATE_ENV=%s\n' "$BASELINE_ENV" "$CANDIDATE_ENV"
+    printf 'BASELINE_WORKERS=%s\nCANDIDATE_WORKERS=%s\n' \
+        "$BASELINE_WORKERS" "$CANDIDATE_WORKERS"
     printf 'BASELINE_HOST_PROFILE=%s\n' "$BASELINE_HOST_PROFILE"
     printf 'STATISTIC=%s\nREQUIRE_IPC_COUNTERS=%s\n' \
         "$STATISTIC" "$REQUIRE_IPC_COUNTERS"

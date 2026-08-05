@@ -308,7 +308,14 @@ public:
 
     ~Impl();
 
-    int run(const std::vector<std::uint8_t>& bundle);
+    bool start(const std::vector<std::uint8_t>& bundle, std::string* error);
+    void request_stop();
+    bool wait(std::string* error);
+    std::uint16_t bound_port() const { return bound_port_; }
+    bool activate_accept(std::string* error);
+    bool worker_available() const {
+        return worker_available_.load(std::memory_order_relaxed);
+    }
 
     // Called from Session (io thread).
     void begin_request(std::uint64_t request_id,
@@ -337,6 +344,7 @@ private:
     friend class Session;
 
     void do_accept();
+    void arm_accept_on_io_thread();
     void on_signal(int signal_number);
     void pump_events();
     void handle_worker_event(WorkerEvent event);
@@ -346,6 +354,7 @@ private:
     void io_post(std::function<void()> function);
     bool wait_for_ready();
     bool bind_listener();
+    void close_listener();
     bool write_ready_line();
     bool execute_command(Command command);
     bool batch_flush();
@@ -417,6 +426,36 @@ private:
     bool worker_dead_ = false;
     std::string bound_address_;
     std::uint16_t bound_port_ = 0;
+
+    // Controllable lifecycle (M2). start_gate_ rejects a second start
+    // (success or failure); stop_requested_ makes request_stop idempotent;
+    // shutdown_sent_ guarantees the Runtime shutdown frame is queued at
+    // most once (repeated stops can never trigger a double shutdown);
+    // io_running_ tells request_stop whether the event-loop thread exists,
+    // so the shutdown path never posts into a dead io_context.
+    std::atomic<bool> start_gate_ = false;
+    std::atomic<bool> stop_requested_ = false;
+    std::atomic<bool> shutdown_sent_ = false;
+    std::atomic<bool> io_running_ = false;
+    std::thread io_thread_;
+    // Pool barrier: while defer_accept is pending, the work guard pins the
+    // event loop alive (there is no accept work yet); activate_accept()
+    // queues the accept handler BEFORE releasing it, so the loop cannot
+    // return between the release and the accept arming. The guard is only
+    // ever touched on the owner io thread (activation, stop, kExit) so no
+    // control thread races the reactor.
+    std::optional<asio::executor_work_guard<asio::io_context::executor_type>>
+        accept_guard_;
+    std::atomic<bool> accept_activated_ = false;
+    // Activation acknowledgement: the io thread sets accept_armed_ after
+    // do_accept ran (or was rejected); activate_accept() waits for it so
+    // the pool publishes READY only after every accept is confirmed.
+    std::mutex activation_mutex_;
+    std::condition_variable activation_cv_;
+    bool accept_armed_ = false;        // handler completed (io thread)
+    bool accept_armed_success_ = false;  // accept loop actually armed
+    // Thread-safe worker availability for pool capacity reporting.
+    std::atomic<bool> worker_available_ = false;
 
     // Bridge between the io thread and the worker thread.
     std::mutex mutex_;
@@ -592,9 +631,15 @@ void Session::send_simple(http::status status,
 }
 
 Impl::~Impl() {
+    // A running object is torn down with a bounded stop: request_stop is
+    // idempotent, the event-loop thread drains through on_signal, and the
+    // worker thread's bounded terminate backstop forces the blocking
+    // destroy to finish promptly. Never std::terminate, never a leak.
+    request_stop();
+    if (io_thread_.joinable()) {
+        io_thread_.join();
+    }
     if (worker_thread_.joinable()) {
-        // The thread only lingers when it is blocked inside destroy(); the
-        // shutdown sequence below forces that path to finish promptly.
         worker_thread_.join();
     }
     if (worker_) {
@@ -603,7 +648,17 @@ Impl::~Impl() {
     }
 }
 
-int Impl::run(const std::vector<std::uint8_t>& bundle) {
+bool Impl::start(const std::vector<std::uint8_t>& bundle,
+                 std::string* error) {
+    if (start_gate_.exchange(true)) {
+        if (error != nullptr) {
+            *error = "server already started";
+        }
+        return false;
+    }
+    // ---- 1. spawn / load / flush (the same two-phase prepare as the
+    // legacy run path). Every failure below recycles what it created
+    // before returning false.
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = options_.worker_path.c_str();
@@ -612,16 +667,18 @@ int Impl::run(const std::vector<std::uint8_t>& bundle) {
     config.strict_sandbox = options_.strict_sandbox ? 1U : 0U;
     config.max_inflight_requests =
         static_cast<std::uint32_t>(kMaxInflightRequests);
-    // egress_policy and capability_policy stay NULL: every outbound Fetch is
-    // denied by the Runtime default.
+    // egress_policy and capability_policy stay NULL: every outbound Fetch
+    // is denied by the Runtime default.
 
     capsid_worker* worker = nullptr;
     const capsid_result spawn_result =
         capsid_worker_spawn(&config, &worker);
     if (spawn_result != CAPSID_OK) {
-        write_stderr(std::string("capsid-host: worker spawn failed: ") +
-                     capsid_result_string(spawn_result));
-        return 1;
+        if (error != nullptr) {
+            *error = "worker spawn failed: " +
+                     std::string(capsid_result_string(spawn_result));
+        }
+        return false;
     }
     worker_ = worker;
     source_.set_worker(worker);
@@ -629,21 +686,25 @@ int Impl::run(const std::vector<std::uint8_t>& bundle) {
     const capsid_result load_result = capsid_worker_load_bundle_named(
         worker_, bundle.data(), bundle.size(), options_.source_name.c_str());
     if (load_result != CAPSID_OK) {
-        write_stderr(std::string("capsid-host: bundle load failed: ") +
-                     capsid_result_string(load_result));
+        if (error != nullptr) {
+            *error = "bundle load failed: " +
+                     std::string(capsid_result_string(load_result));
+        }
         capsid_worker_destroy(worker_);
         worker_ = nullptr;
-        return 1;
+        return false;
     }
     // load_bundle_named only queues the frame; the worker must receive it
     // before it loads the application and emits READY.
     const capsid_result flush_result = capsid_worker_flush(worker_);
     if (flush_result != CAPSID_OK) {
-        write_stderr(std::string("capsid-host: bundle flush failed: ") +
-                     capsid_result_string(flush_result));
+        if (error != nullptr) {
+            *error = "bundle flush failed: " +
+                     std::string(capsid_result_string(flush_result));
+        }
         capsid_worker_destroy(worker_);
         worker_ = nullptr;
-        return 1;
+        return false;
     }
 
     // Diagnostic IPC metrics: CAPSID_HOST_IPC_METRICS=1 enables counters
@@ -690,53 +751,200 @@ int Impl::run(const std::vector<std::uint8_t>& bundle) {
     // finish promptly, and only then is the thread joined.
     if (!wait_for_ready()) {
         shutdown_worker_and_join();
-        return 1;
+        if (error != nullptr) {
+            *error = "worker did not become READY";
+        }
+        return false;
     }
+    worker_available_ = true;
     if (!bind_listener()) {
+        // bind_listener may have partially succeeded (open, set_option,
+        // bind, listen or local_endpoint): the acceptor is closed and
+        // reset here so a failed start never leaves the port occupied.
+        worker_available_ = false;
+        close_listener();
         shutdown_worker_and_join();
-        return 1;
+        if (error != nullptr) {
+            *error = "listener bind failed";
+        }
+        return false;
     }
     if (!write_ready_line()) {
+        // The listener was fully bound when the READY record failed: the
+        // port must be released BEFORE start() returns, so a caller that
+        // keeps the object alive (StaticPoolServer retry) can rebind.
+        worker_available_ = false;
+        close_listener();
         shutdown_worker_and_join();
-        return 1;
+        if (error != nullptr) {
+            *error = "failed to write the READY record";
+        }
+        return false;
     }
 
-    signals_.add(SIGTERM);
-    signals_.add(SIGINT);
-    signals_.async_wait([this](beast::error_code, int signal_number) {
-        on_signal(signal_number);
+    // ---- 2. signals + accept loop, then the event-loop thread. The
+    // accept is armed BEFORE the thread starts so start() returns with a
+    // live, immediately serviceable listener. Pool shards skip the
+    // process-level signal wiring: the pool owns signal delivery, and a
+    // shard must never race the pool's stop path.
+    if (options_.install_process_signals) {
+        signals_.add(SIGTERM);
+        signals_.add(SIGINT);
+        // Weak capture: the pending signal wait must never keep the Impl
+        // alive on its own; the facade owns the lifetime while running.
+        signals_.async_wait(
+            [weak = weak_from_this()](beast::error_code, int signal_number) {
+                if (const std::shared_ptr<Impl> alive = weak.lock()) {
+                    alive->on_signal(signal_number);
+                }
+            });
+    }
+
+    if (options_.defer_accept) {
+        // Pool barrier: the shard is fully prepared (worker READY,
+        // listener bound) but must not accept a single connection until
+        // the pool activates it. The work guard keeps the event loop
+        // alive through the activation wait.
+        accept_guard_.emplace(asio::make_work_guard(ioc_));
+    } else {
+        do_accept();
+    }
+    io_running_ = true;
+    io_thread_ = std::thread([this] {
+        ioc_.run();
+        io_running_ = false;
     });
+    return true;
+}
 
-    acceptor_->async_accept(
-        ioc_,
-        [self = shared_from_this()](beast::error_code ec, tcp::socket socket) {
-            if (self->shutting_down_) {
-                return;
+bool Impl::activate_accept(std::string* error) {
+    if (accept_activated_.exchange(true)) {
+        if (error != nullptr) {
+            *error = "accept already activated";
+        }
+        return false;
+    }
+    // The control thread must never read the guard (the io thread owns
+    // it); the OPTION decides whether activation is pending.
+    if (!options_.defer_accept) {
+        if (error != nullptr) {
+            *error = "accept activation is not pending";
+        }
+        return false;
+    }
+    // A dead worker or an already-stopping server rejects the activation
+    // synchronously: no post, no wait, no hang.
+    if (!worker_available_.load(std::memory_order_relaxed) ||
+        stop_requested_.load(std::memory_order_relaxed)) {
+        if (error != nullptr) {
+            *error = "accept activation rejected";
+        }
+        return false;
+    }
+    // The actual arming (guard release + do_accept) runs on the owner io
+    // thread; this call blocks until that thread reports the outcome. The
+    // confirmation distinguishes COMPLETED (the handler ran, possibly
+    // finding the shard dead) from SUCCEEDED (the accept loop is actually
+    // armed): a shard whose worker died or whose stop began in the window
+    // must confirm FAILURE, never a fake arm — so the pool only publishes
+    // READY when every shard truly accepts.
+    io_post([weak = weak_from_this()] {
+        if (const std::shared_ptr<Impl> alive = weak.lock()) {
+            alive->arm_accept_on_io_thread();
+        }
+    });
+    std::unique_lock<std::mutex> lock(activation_mutex_);
+    const bool completed = activation_cv_.wait_for(
+        lock, std::chrono::seconds(2),
+        [this] { return accept_armed_; });
+    if (!completed || !accept_armed_success_) {
+        if (error != nullptr) {
+            *error = "accept activation failed";
+        }
+        return false;
+    }
+    return true;
+}
+
+void Impl::arm_accept_on_io_thread() {
+    // Owner-io-thread arm: release the barrier guard and start accepting.
+    // do_accept() itself re-checks the shutdown state and the acceptor, so
+    // a worker that died between the gate check and this handler does not
+    // arm — and the outcome is reported as failed, never as a fake arm.
+    bool succeeded = false;
+    if (accept_guard_) {
+        accept_guard_->reset();
+    }
+    if (!shutting_down_ && acceptor_ && acceptor_->is_open()) {
+        do_accept();
+        succeeded = true;
+    }
+    {
+        std::lock_guard<std::mutex> lock(activation_mutex_);
+        accept_armed_ = true;
+        accept_armed_success_ = succeeded;
+    }
+    activation_cv_.notify_all();
+}
+
+void Impl::request_stop() {
+    if (stop_requested_.exchange(true)) {
+        return;  // idempotent: nothing is touched again
+    }
+    // The Runtime shutdown frame is queued at most once regardless of how
+    // many stop sources fire (request_stop, SIGTERM, destructor).
+    {
+        Command shutdown;
+        shutdown.type = CommandType::kShutdown;
+        if (!shutdown_sent_.exchange(true)) {
+            submit_command(std::move(shutdown));
+        }
+    }
+    // When the event-loop thread exists, the acceptor/session teardown
+    // runs on it (the only thread allowed to touch Beast objects). The
+    // weak capture is safe even from the destructor: if the loop already
+    // ended, the posted handler is dropped with the dead context.
+    if (io_running_.load()) {
+        io_post([self = weak_from_this()] {
+            if (const std::shared_ptr<Impl> alive = self.lock()) {
+                alive->on_signal(0);
             }
-            if (ec) {
-                self->do_accept();
-                return;
-            }
-            auto session = std::make_shared<Session>(self, std::move(socket));
-            self->sessions_[self->next_session_id_++] = session;
-            session->start();
-            self->do_accept();
         });
+    }
+}
 
-    ioc_.run();
+bool Impl::wait(std::string* error) {
+    // The event-loop thread exits when the acceptor and every session are
+    // gone; the worker thread exits when its bounded shutdown completes.
+    // Both joins make wait() block until the server is fully stopped —
+    // threads are never detached.
+    if (io_thread_.joinable()) {
+        io_thread_.join();
+    }
     if (worker_thread_.joinable()) {
         worker_thread_.join();
     }
-    return 0;
+    if (error != nullptr) {
+        *error = "server stopped";
+    }
+    return true;
 }
+
 
 void Impl::do_accept() {
     if (shutting_down_ || !acceptor_->is_open()) {
         return;
     }
+    // Weak capture: an idle accept must not keep the Impl alive after the
+    // facade released it. While the server is running the facade holds
+    // the only strong reference; a dead weak simply stops accepting.
     acceptor_->async_accept(
         ioc_,
-        [self = shared_from_this()](beast::error_code ec, tcp::socket socket) {
+        [weak = weak_from_this()](beast::error_code ec, tcp::socket socket) {
+            const std::shared_ptr<Impl> self = weak.lock();
+            if (!self) {
+                return;
+            }
             if (self->shutting_down_) {
                 return;
             }
@@ -744,7 +952,8 @@ void Impl::do_accept() {
                 self->do_accept();
                 return;
             }
-            auto session = std::make_shared<Session>(self, std::move(socket));
+            auto session =
+                std::make_shared<Session>(self, std::move(socket));
             self->sessions_[self->next_session_id_++] = session;
             session->start();
             self->do_accept();
@@ -756,9 +965,15 @@ void Impl::on_signal(int) {
         return;
     }
     shutting_down_ = true;
+    worker_available_ = false;
     if (acceptor_) {
         acceptor_->close();
     }
+    // Cancel the pending signal wait so the event loop drains instead of
+    // staying alive behind it; the wait handler completes with
+    // operation_aborted on the io thread and releases itself.
+    beast::error_code ignored;
+    signals_.cancel(ignored);
     // Close every client session; each close cancels its in-flight request.
     const std::vector<std::uint64_t> session_ids = [this] {
         std::vector<std::uint64_t> ids;
@@ -774,9 +989,23 @@ void Impl::on_signal(int) {
             it->second->close();
         }
     }
+    // The shutdown frame is queued at most once even when several stop
+    // sources fire (SIGTERM, request_stop, destructor): a duplicate would
+    // trigger a Runtime double shutdown.
     Command shutdown;
     shutdown.type = CommandType::kShutdown;
-    submit_command(std::move(shutdown));
+    if (!shutdown_sent_.exchange(true)) {
+        submit_command(std::move(shutdown));
+    }
+    // No ioc_.stop() here: every cancelled handler (signal wait, accept,
+    // sessions) completes on the io thread and releases its captures, so
+    // the loop drains naturally and run() returns with an empty queue. A
+    // hard stop would strand self-retaining handlers forever. A pending
+    // pool barrier (defer_accept) must be released here too, or the work
+    // guard would pin the loop forever.
+    if (accept_guard_) {
+        accept_guard_->reset();
+    }
 }
 
 void Impl::pump_events() {
@@ -1039,6 +1268,20 @@ void Impl::handle_worker_event(WorkerEvent event) {
     }
     case WorkerEvent::Type::kExit: {
         worker_dead_ = true;
+        worker_available_ = false;
+        // Fault isolation: the shard's worker process is gone, so this
+        // shard must stop accepting NEW connections immediately — with
+        // SO_REUSEPORT the kernel routes subsequent connections to the
+        // healthy shards only once this listener is closed. In-flight
+        // requests still receive their 502/close handling below. A
+        // pending pool barrier is released as well (the loop must be able
+        // to drain even if the worker died before activation).
+        if (acceptor_) {
+            acceptor_->close();
+        }
+        if (accept_guard_) {
+            accept_guard_->reset();
+        }
         const std::vector<std::uint64_t> request_ids = [this] {
             std::vector<std::uint64_t> ids;
             ids.reserve(requests_.size());
@@ -1427,6 +1670,20 @@ bool Impl::bind_listener() {
         write_stderr("capsid-host: listener option failed: " + ec.message());
         return false;
     }
+    // M2 shared-port pools: every shard must be able to bind the SAME
+    // address:port. SO_REUSEPORT is set before bind and is mandatory — an
+    // unsupported platform is rejected with a static, redacted message
+    // instead of silently degrading to a fake multi-process pool. The
+    // default (single-worker) path never asks for it.
+    if (options_.so_reuseport) {
+        const int enable = 1;
+        if (::setsockopt(acceptor_->native_handle(), SOL_SOCKET,
+                         SO_REUSEPORT, &enable, sizeof(enable)) != 0) {
+            write_stderr(
+                "capsid-host: listener reuse_port option is unavailable");
+            return false;
+        }
+    }
     acceptor_->bind(endpoint, ec);
     if (ec) {
         write_stderr("capsid-host: listener bind failed: " + ec.message());
@@ -1447,7 +1704,27 @@ bool Impl::bind_listener() {
     return true;
 }
 
+void Impl::close_listener() {
+    // Releases the listener completely: the bound socket is closed (the
+    // port becomes bindable immediately) and the optional state plus the
+    // bound endpoint record are reset so a failed start leaves no trace of
+    // a listener behind.
+    if (acceptor_) {
+        acceptor_->close();
+        acceptor_.reset();
+    }
+    bound_address_.clear();
+    bound_port_ = 0;
+}
+
 bool Impl::write_ready_line() {
+    if (!options_.write_ready_record) {
+        // Pool shard: the shard never publishes its own READY; the pool
+        // writes one canonical record only when EVERY shard is ready. A
+        // successful start() without a record still means the shard is
+        // fully warm and listening.
+        return true;
+    }
     const std::string line =
         "{\"schema\":\"capsid-host-ready-v1\",\"app\":\"" +
         options_.application + "\",\"address\":\"" + bound_address_ +
@@ -1879,9 +2156,15 @@ void Impl::queue_worker_event(WorkerEvent event) {
     }
     // Only post when the queue was empty — pump_events drains everything
     // in one call. New events that arrive while pump_events is running
-    // will see the (now-empty) queue and schedule their own post.
+    // will see the (now-empty) queue and schedule their own post. The
+    // weak capture guarantees a late post can never keep the Impl alive:
+    // once the facade stopped and released it, a stale event is dropped.
     if (need_post) {
-        io_post([self = shared_from_this()] { self->pump_events(); });
+        io_post([weak = weak_from_this()] {
+            if (const std::shared_ptr<Impl> alive = weak.lock()) {
+                alive->pump_events();
+            }
+        });
     }
 }
 
@@ -1894,8 +2177,14 @@ void Impl::queue_worker_exit_event() {
         exit_event_queued_ = true;
         // The exit event is always the last one, so a post is needed even if
         // the queue was non-empty — pump_events may already be running on
-        // earlier queued events and won't see this one without a post.
-        io_post([self = shared_from_this()] { self->pump_events(); });
+        // earlier queued events and won't see this one without a post. The
+        // weak capture mirrors queue_worker_event: a post that outlives the
+        // facade's stop is dropped, never a self-retaining handler.
+        io_post([weak = weak_from_this()] {
+            if (const std::shared_ptr<Impl> alive = weak.lock()) {
+                alive->pump_events();
+            }
+        });
     }
 }
 
@@ -1923,9 +2212,14 @@ void Impl::flush_pending_credit(std::uint64_t request_id,
 }
 
 void Impl::shutdown_worker_and_join() {
+    // Shares the exactly-once Runtime shutdown gate with request_stop,
+    // SIGTERM and the destructor: a start-failure path can never race a
+    // concurrent stop into a double shutdown frame.
     Command shutdown;
     shutdown.type = CommandType::kShutdown;
-    submit_command(std::move(shutdown));
+    if (!shutdown_sent_.exchange(true)) {
+        submit_command(std::move(shutdown));
+    }
     if (worker_thread_.joinable()) {
         worker_thread_.join();
     }
@@ -2110,10 +2404,53 @@ void Impl::write_metrics_line() {
 SingleWorkerServer::SingleWorkerServer(SingleWorkerServerOptions options)
     : impl_(std::make_shared<Impl>(std::move(options))) {}
 
-SingleWorkerServer::~SingleWorkerServer() = default;
+SingleWorkerServer::~SingleWorkerServer() {
+    // The facade owns the Impl and must stop it while it still holds the
+    // reference: long-lived handlers never own the Impl (weak captures),
+    // so destroying a running server performs the bounded stop here —
+    // listener closed, sessions closed, both threads joined, worker
+    // reaped — within the shutdown window. Impl::~Impl alone can never be
+    // relied on to initiate the stop.
+    impl_->request_stop();
+    std::string error;
+    impl_->wait(&error);
+    impl_.reset();
+}
+
+bool SingleWorkerServer::start(const std::vector<std::uint8_t>& bundle,
+                               std::string* error) {
+    return impl_->start(bundle, error);
+}
+
+void SingleWorkerServer::request_stop() { impl_->request_stop(); }
+
+bool SingleWorkerServer::wait(std::string* error) {
+    return impl_->wait(error);
+}
+
+std::uint16_t SingleWorkerServer::bound_port() const {
+    return impl_->bound_port();
+}
+
+bool SingleWorkerServer::activate_accept(std::string* error) {
+    return impl_->activate_accept(error);
+}
+
+bool SingleWorkerServer::worker_available() const {
+    return impl_->worker_available();
+}
 
 int SingleWorkerServer::run(const std::vector<std::uint8_t>& bundle) {
-    return impl_->run(bundle);
+    std::string error;
+    if (!impl_->start(bundle, &error)) {
+        write_stderr(std::string("capsid-host: ") + error);
+        return 1;
+    }
+    if (!impl_->wait(&error)) {
+        write_stderr(std::string("capsid-host: ") + error);
+        return 1;
+    }
+    return 0;
 }
 
 }  // namespace capsid::host

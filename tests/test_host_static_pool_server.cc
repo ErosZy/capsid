@@ -1,0 +1,287 @@
+// Frozen M2 Batch B RED: compose one independently owned HTTP/reactor/worker
+// shard per fixed-pool member. This batch freezes only shared-port ownership
+// and atomic lifecycle; queueing, P2C and SSE admission belong to later work.
+
+#if __has_include("host/static_pool_server.h")
+#include "host/static_pool_server.h"
+#define CAPSID_HAS_STATIC_POOL_SERVER 1
+#else
+#define CAPSID_HAS_STATIC_POOL_SERVER 0
+#endif
+
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace {
+
+[[noreturn]] void fail(const std::string& message) {
+    std::cerr << "FAIL: " << message << std::endl;
+    std::exit(1);
+}
+
+void require(bool condition, const std::string& message) {
+    if (!condition) {
+        fail(message);
+    }
+}
+
+#if CAPSID_HAS_STATIC_POOL_SERVER
+
+std::string read_one_ready_line(int fd) {
+    std::string line;
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (line.empty() || line.back() != '\n') {
+        require(std::chrono::steady_clock::now() < deadline,
+                "pool did not publish READY after start returned");
+        struct pollfd descriptor = {};
+        descriptor.fd = fd;
+        descriptor.events = POLLIN;
+        const int polled = poll(&descriptor, 1, 50);
+        require(polled >= 0, "cannot poll pool READY pipe");
+        if (polled == 0) {
+            continue;
+        }
+        char byte = 0;
+        require(read(fd, &byte, 1) == 1,
+                "pool READY pipe closed without a complete record");
+        line.push_back(byte);
+        require(line.size() <= 1024, "pool READY record is unbounded");
+    }
+    return line;
+}
+
+void require_no_second_ready_record(int fd) {
+    struct pollfd descriptor = {};
+    descriptor.fd = fd;
+    descriptor.events = POLLIN;
+    const int polled = poll(&descriptor, 1, 100);
+    require(polled == 0,
+            "pool exposed per-shard READY records instead of one pool record");
+}
+
+std::uint16_t ready_port(const std::string& line) {
+    const std::string marker = "\"port\":";
+    const std::string::size_type begin = line.find(marker);
+    require(begin != std::string::npos, "pool READY record has no port");
+    const char* digits = line.c_str() + begin + marker.size();
+    char* end = nullptr;
+    const unsigned long port = std::strtoul(digits, &end, 10);
+    require(end != digits && port > 0 && port <= 65535,
+            "pool READY record has an invalid port");
+    return static_cast<std::uint16_t>(port);
+}
+
+void require_http_response(std::uint16_t port) {
+    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    require(fd >= 0, "cannot create static-pool HTTP socket");
+    struct timeval timeout = {};
+    timeout.tv_sec = 3;
+    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                       sizeof(timeout)) == 0,
+            "cannot set static-pool HTTP timeout");
+    struct sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
+            "cannot encode static-pool loopback address");
+    require(connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+                    sizeof(address)) == 0,
+            "cannot connect to active static pool");
+    const std::string request =
+        "GET /@capsid/orders/static-pool HTTP/1.1\r\n"
+        "Host: public.example\r\n"
+        "Connection: close\r\n\r\n";
+    std::size_t sent = 0;
+    while (sent < request.size()) {
+        const ssize_t count =
+            send(fd, request.data() + sent, request.size() - sent, 0);
+        require(count > 0, "cannot write static-pool HTTP request");
+        sent += static_cast<std::size_t>(count);
+    }
+    std::string response;
+    char bytes[2048];
+    for (;;) {
+        const ssize_t count = recv(fd, bytes, sizeof(bytes), 0);
+        if (count == 0) {
+            break;
+        }
+        require(count > 0, "cannot read static-pool HTTP response");
+        response.append(bytes, static_cast<std::size_t>(count));
+    }
+    close(fd);
+    require(response.find(" 200 ") != std::string::npos &&
+                response.find("static-pool-ok") != std::string::npos,
+            "static pool did not preserve shard HTTP behavior");
+}
+
+std::uint16_t reserve_test_port() {
+    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    require(fd >= 0, "cannot create pool port-reservation socket");
+    struct sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = 0;
+    require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
+            "cannot encode pool port-reservation address");
+    require(bind(fd, reinterpret_cast<struct sockaddr*>(&address),
+                 sizeof(address)) == 0,
+            "cannot reserve static-pool test port");
+    socklen_t length = sizeof(address);
+    require(getsockname(fd, reinterpret_cast<struct sockaddr*>(&address),
+                        &length) == 0,
+            "cannot inspect static-pool test port");
+    const std::uint16_t port = ntohs(address.sin_port);
+    close(fd);
+    require(port != 0, "kernel selected an invalid static-pool test port");
+    return port;
+}
+
+void require_port_bindable(std::uint16_t port, const std::string& message) {
+    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    require(fd >= 0, "cannot create pool listener probe socket");
+    struct sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
+            "cannot encode pool listener probe address");
+    const int bound = bind(fd, reinterpret_cast<struct sockaddr*>(&address),
+                           sizeof(address));
+    close(fd);
+    require(bound == 0, message);
+}
+
+void require_port_closed(std::uint16_t port) {
+    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    require(fd >= 0, "cannot create stopped-pool probe socket");
+    struct sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
+            "cannot encode stopped-pool probe address");
+    const int connected = connect(
+        fd, reinterpret_cast<struct sockaddr*>(&address), sizeof(address));
+    close(fd);
+    require(connected != 0, "stopped static pool still accepted connections");
+}
+
+capsid::host::StaticPoolServerOptions make_options(
+    const char* worker_path, int ready_fd, std::uint32_t workers) {
+    capsid::host::StaticPoolServerOptions options;
+    options.workers = workers;
+    options.worker_options.worker_path = worker_path;
+    options.worker_options.source_bundle_path = "static-pool-inline";
+    options.worker_options.source_name = "file://orders/v1/bundle.mjs";
+    options.worker_options.application = "orders";
+    options.worker_options.listen_address = "127.0.0.1";
+    options.worker_options.listen_port = 0;
+    options.worker_options.public_scheme = "http";
+    options.worker_options.public_authority = "public.example";
+    options.worker_options.request_timeout_ms = 5000;
+    options.worker_options.initial_stream_window = 64U * 1024U;
+    options.worker_options.strict_sandbox = false;
+    options.worker_options.ready_fd = ready_fd;
+    return options;
+}
+
+const std::vector<std::uint8_t>& fixture_bundle() {
+    static const std::string source =
+        "export default { fetch: () => new Response('static-pool-ok') };";
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
+    return bundle;
+}
+
+void test_shared_port_lifecycle(const char* worker_path) {
+    int ready[2];
+    require(pipe(ready) == 0, "cannot create static-pool READY pipe");
+    capsid::host::StaticPoolServer pool(make_options(worker_path, ready[1], 3));
+    std::string error;
+    require(pool.start(fixture_bundle(), &error),
+            "cannot start three-shard static pool: " + error);
+    require(!pool.start(fixture_bundle(), &error),
+            "static pool accepted a duplicate start");
+    require(pool.active_workers() == 3,
+            "active pool does not own exactly three worker shards");
+    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
+    require_no_second_ready_record(ready[0]);
+    for (int request = 0; request < 24; ++request) {
+        require_http_response(port);
+    }
+    const auto began = std::chrono::steady_clock::now();
+    pool.request_stop();
+    pool.request_stop();
+    require(pool.wait(&error), "static pool wait failed: " + error);
+    require(std::chrono::steady_clock::now() - began <
+                std::chrono::seconds(2),
+            "static pool stop/wait exceeded its bounded shutdown window");
+    require(pool.active_workers() == 0,
+            "stopped pool still reports active worker shards");
+    require_port_closed(port);
+    close(ready[0]);
+    close(ready[1]);
+}
+
+void test_atomic_start_failure(const char* worker_path) {
+    const std::uint16_t port = reserve_test_port();
+    const int read_only_ready_fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    require(read_only_ready_fd >= 0,
+            "cannot create failed pool READY fixture");
+    auto options = make_options(worker_path, read_only_ready_fd, 3);
+    options.worker_options.listen_port = port;
+    capsid::host::StaticPoolServer pool(std::move(options));
+    std::string error;
+    const auto began = std::chrono::steady_clock::now();
+    require(!pool.start(fixture_bundle(), &error),
+            "pool accepted an unwritable public READY descriptor");
+    require(std::chrono::steady_clock::now() - began <
+                std::chrono::seconds(3),
+            "failed pool start exceeded its bounded rollback window");
+    require(pool.active_workers() == 0,
+            "failed pool start retained active worker shards");
+    require_port_bindable(
+        port, "failed pool start returned while a shard listener remained");
+    pool.request_stop();
+    require(pool.wait(&error), "failed pool could not complete wait: " + error);
+    close(read_only_ready_fd);
+
+    auto zero_options = make_options(worker_path, -1, 0);
+    capsid::host::StaticPoolServer zero(std::move(zero_options));
+    require(!zero.start(fixture_bundle(), &error),
+            "zero-worker static pool activated");
+    require(zero.active_workers() == 0,
+            "zero-worker static pool reported an active shard");
+}
+
+#endif  // CAPSID_HAS_STATIC_POOL_SERVER
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    require(argc == 3, "expected mode and capsid-worker path");
+#if !CAPSID_HAS_STATIC_POOL_SERVER
+    (void)argv;
+    fail("StaticPoolServer is not implemented");
+#else
+    const std::string mode = argv[1];
+    if (mode == "lifecycle") {
+        test_shared_port_lifecycle(argv[2]);
+    } else if (mode == "atomic-failure") {
+        test_atomic_start_failure(argv[2]);
+    } else {
+        fail("unknown static-pool server mode");
+    }
+    std::cout << "PASS" << std::endl;
+    return 0;
+#endif
+}

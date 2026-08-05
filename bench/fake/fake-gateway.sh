@@ -20,9 +20,18 @@ ready_fd="${CAPSID_BENCH_READY_FD:-3}"
 port="${CAPSID_BENCH_FAKE_PORT:-41234}"
 side="${CAPSID_BENCH_SIDE:-baseline}"
 
-# The real gateways spawn the worker themselves; the fake simulates that so the
-# runner's worker-profile lookup (pgrep by name) has a process to attach to.
-"${CAPSID_BENCH_WORKER:?}" &
+# The real gateways spawn the workers themselves; the fake simulates the
+# configured static-pool cardinality so the runner's per-shard profile and
+# resource evidence can be audited. CAPSID_BENCH_FAKE_EXTRA_WORKER is a
+# negative control: exact cardinality must be enforced rather than silently
+# profiling only the first N children.
+worker_count="${CAPSID_BENCH_WORKERS:-1}"
+if [ "${CAPSID_BENCH_FAKE_EXTRA_WORKER:-0}" = "1" ]; then
+    worker_count=$((worker_count + 1))
+fi
+for ((worker_index = 0; worker_index < worker_count; worker_index++)); do
+    "${CAPSID_BENCH_WORKER:?}" &
+done
 
 # The runner computes the bundle/worker SHA-256 from the files it hands out and
 # rejects a ready record that reports anything else.

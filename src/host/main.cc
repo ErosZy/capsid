@@ -8,6 +8,7 @@
 // stdout never carries readiness or logs; diagnostics go to stderr.
 
 #include "host/single_worker_server.h"
+#include "host/static_pool_server.h"
 
 #include "build_identity.h"
 #include "capsid/runtime.h"
@@ -761,8 +762,8 @@ int main(int argc, char** argv) {
         }
         return run_managed(require("host-config"), require("worker"));
     }
-    if (mode != "single-worker") {
-        fail("--mode must be single-worker or managed");
+    if (mode != "single-worker" && mode != "static-pool") {
+        fail("--mode must be single-worker, static-pool or managed");
     }
     capsid::host::SingleWorkerServerOptions options;
     options.worker_path = require("worker");
@@ -832,9 +833,31 @@ int main(int argc, char** argv) {
         fail("--ready-fd is not an open descriptor");
     }
 
+    // Benchmark-only static pool (NOT a managed production path): a fixed
+    // 1/2/4-worker pool sharing one SO_REUSEPORT listener, driven by the
+    // same worker/bundle/ready-fd parameters as the single-worker mode.
+    // The pool keeps the pool-level READY contract and SIGTERM-bounded
+    // shutdown; single-worker mode is unchanged.
+    std::uint32_t workers = 1;
+    if (mode == "static-pool") {
+        const std::string workers_text = require("workers");
+        workers = static_cast<std::uint32_t>(
+            parse_positive_integer(workers_text, "workers"));
+        if (workers != 1 && workers != 2 && workers != 4) {
+            fail("--workers must be 1, 2 or 4 in static-pool mode");
+        }
+    }
+
     const std::vector<std::uint8_t> bundle =
         read_bundle(options.source_bundle_path);
 
+    if (mode == "static-pool") {
+        capsid::host::StaticPoolServerOptions pool_options;
+        pool_options.workers = workers;
+        pool_options.worker_options = std::move(options);
+        capsid::host::StaticPoolServer pool(std::move(pool_options));
+        return pool.run(bundle);
+    }
     capsid::host::SingleWorkerServer server(std::move(options));
     return server.run(bundle);
 }

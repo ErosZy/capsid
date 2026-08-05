@@ -8,6 +8,7 @@ manifest.json, report.md. report.md is a derived view only — it is rebuilt
 from the raw files, never hand-edited.
 """
 
+import glob
 import hashlib
 import json
 import os
@@ -19,11 +20,15 @@ META_KEYS = [
     "RUN_ID", "GENERATED_AT", "COMMIT", "BUILD_ARGS", "COMMAND_ARGS",
     "BASELINE_CMD", "CANDIDATE_CMD", "WORKER_CMD", "WORKER_SHA",
     "BUNDLE_CMD", "BUNDLE_SHA", "LOADGEN_CMD", "LOADGEN_SHA",
-    "HOST_BIN_CMD", "HOST_BIN_SHA", "WORKLOAD", "ROUNDS", "WARMUP",
+    "HOST_BIN_CMD", "HOST_BIN_SHA",
+    "BASELINE_HOST_BIN_CMD", "BASELINE_HOST_BIN_SHA",
+    "CANDIDATE_HOST_BIN_CMD", "CANDIDATE_HOST_BIN_SHA",
+    "WORKLOAD", "ROUNDS", "WARMUP",
     "DURATION", "CONNECTIONS", "INFLIGHT", "CPUSET", "APP", "AUTHORITY",
     "TIMEOUT_MS", "WINDOW", "TCP_NODELAY", "TEST_MODE", "UNAME", "NPROC",
     "CGROUP_CPU_MAX", "PERF_PARANOID", "BASELINE_ENV", "CANDIDATE_ENV",
     "STATISTIC", "REQUIRE_IPC_COUNTERS", "BASELINE_HOST_PROFILE",
+    "BASELINE_WORKERS", "CANDIDATE_WORKERS",
     "IPC_MECHANISM_BASELINE", "IPC_MECHANISM_CANDIDATE",
 ]
 
@@ -161,6 +166,16 @@ def build_manifest(out, meta, evidence_status, incomplete_reasons):
             "cmd": meta.get("HOST_BIN_CMD", ""),
             "sha256": meta.get("HOST_BIN_SHA", ""),
         }
+    # Per-side Host identities (M2 optimization A/B): the exact
+    # implementation that produced each side's samples. Two distinct
+    # builds must never collapse into one shared identity.
+    for side in ("baseline", "candidate"):
+        cmd_key = f"{side.upper()}_HOST_BIN_CMD"
+        if meta.get(cmd_key):
+            components[f"{side}_host_bin"] = {
+                "cmd": meta.get(cmd_key, ""),
+                "sha256": meta.get(f"{side.upper()}_HOST_BIN_SHA", ""),
+            }
     try:
         command_args = json.loads(meta.get("COMMAND_ARGS", "[]"))
     except json.JSONDecodeError:
@@ -206,6 +221,8 @@ def build_manifest(out, meta, evidence_status, incomplete_reasons):
             "statistic": meta.get("STATISTIC", "mean"),
             "baseline_env": meta.get("BASELINE_ENV", ""),
             "candidate_env": meta.get("CANDIDATE_ENV", ""),
+            "baseline_workers": int(meta.get("BASELINE_WORKERS", "1") or 1),
+            "candidate_workers": int(meta.get("CANDIDATE_WORKERS", "1") or 1),
             "require_ipc_counters": meta.get("REQUIRE_IPC_COUNTERS", "0") == "1",
             "baseline_host_profile": meta.get("BASELINE_HOST_PROFILE", "0") == "1",
             "profile_runs": True,
@@ -229,6 +246,14 @@ def build_manifest(out, meta, evidence_status, incomplete_reasons):
         path = os.path.join(out, name)
         if os.path.exists(path):
             manifest["files"][name] = sha256(path)
+    # Pool-side worker profiles ($side-worker.N.perf.data) are not single
+    # files, so they cannot be REQUIRED_FILES entries; hash every worker
+    # profile that the run produced.
+    for worker_file in sorted(glob.glob(
+            os.path.join(out, "*-worker*.perf.data"))):
+        name = os.path.basename(worker_file)
+        if name not in manifest["files"]:
+            manifest["files"][name] = sha256(worker_file)
     # Perf-recorded baseline gateway (--baseline-host-profile) is not a
     # REQUIRED_FILE (the Go baseline writes a pprof instead); hash it when
     # the run produced it.
@@ -437,10 +462,19 @@ def build_report(out, meta, manifest):
         for s in samples if s.get("phase") == "measured"
     }
     for side in ("baseline", "candidate"):
-        for label in ("gateway", "worker"):
+        # The gateway row, then one row PER SHARD: "worker" for a
+        # single-worker side (legacy naming preserved), "worker.N" for a
+        # pool side. Every row pairs its resource entry with the perf-stat
+        # file of the exact same process.
+        labels = ["gateway"] + sorted(
+            key[len(side) + 1:]
+            for key in resource
+            if key.startswith(f"{side}_worker"))
+        for label in labels:
             key = f"{side}_{label}"
             entry = resource.get(key)
-            stat = parse_perf_stat(os.path.join(out, "perf-stat", f"{side}-{label}.stat"))
+            stat = parse_perf_stat(
+                os.path.join(out, "perf-stat", f"{side}-{label}.stat"))
             sample = samples_by_side_round0.get((side, 0))
             cpu_per_response = "n/a"
             if sample and sample.get("completed") and stat["cpu_ms"]:
@@ -460,12 +494,33 @@ def build_report(out, meta, manifest):
     lines.append("|------|---------|--------|-----------------|----------------|"
                  "------------|-------------|")
     for side in ("baseline", "candidate"):
-        for label in ("gateway", "worker"):
-            stat = parse_perf_stat(os.path.join(out, "perf-stat", f"{side}-{label}.stat"))
+        # Loadgen row first: its CPU evidence decides whether the load
+        # side saturated its own cores (in which case QPS differences are
+        # client-bound, not Host/worker-bound).
+        loadgen_stat = parse_perf_stat(
+            os.path.join(out, "perf-stat", f"{side}-loadgen.stat"))
+        lines.append("| {} | loadgen | {:.1f} | {} | {} | {} | {} |".format(
+            side, loadgen_stat["cpu_ms"], loadgen_stat["context_switches"],
+            loadgen_stat["cpu_migrations"], loadgen_stat["page_faults"],
+            "; ".join(loadgen_stat["unsupported"]) or "-"))
+        stat = parse_perf_stat(os.path.join(out, "perf-stat", f"{side}-gateway.stat"))
+        lines.append("| {} | gateway | {:.1f} | {} | {} | {} | {} |".format(
+            side, stat["cpu_ms"], stat["context_switches"],
+            stat["cpu_migrations"], stat["page_faults"],
+            "; ".join(stat["unsupported"]) or "-"))
+        # Worker stat files: $side-worker.stat for one worker,
+        # $side-worker.N.stat per pool shard.
+        worker_stats = sorted(glob.glob(
+            os.path.join(out, "perf-stat", f"{side}-worker*.stat")))
+        if not worker_stats:
+            worker_stats = [os.path.join(out, "perf-stat", f"{side}-worker.stat")]
+        for worker_stat in worker_stats:
+            label = os.path.basename(worker_stat)[len(side) + 1:-5]
+            parsed = parse_perf_stat(worker_stat)
             lines.append("| {} | {} | {:.1f} | {} | {} | {} | {} |".format(
-                side, label, stat["cpu_ms"], stat["context_switches"],
-                stat["cpu_migrations"], stat["page_faults"],
-                "; ".join(stat["unsupported"]) or "-"))
+                side, label, parsed["cpu_ms"], parsed["context_switches"],
+                parsed["cpu_migrations"], parsed["page_faults"],
+                "; ".join(parsed["unsupported"]) or "-"))
     lines.append("")
     lines.append("## Dominant stacks (profile runs)")
     lines.append("")
@@ -473,20 +528,30 @@ def build_report(out, meta, manifest):
     if not os.path.exists(baseline_gateway_profile):
         baseline_gateway_profile = os.path.join(
             out, "baseline-gateway.perf.data")
-    for label, path in [
+    profile_files = [
         ("baseline-gateway (Go pprof top)" if
             baseline_gateway_profile.endswith(".pprof")
             else "baseline-gateway (perf top, self)",
             baseline_gateway_profile),
-        ("baseline-worker (perf top, self)", os.path.join(out, "baseline-worker.perf.data")),
         ("candidate-host (perf top, self)", os.path.join(out, "candidate-host.perf.data")),
-        ("candidate-worker (perf top, self)", os.path.join(out, "candidate-worker.perf.data")),
-    ]:
+    ]
+    # Worker profiles: $side-worker.perf.data for one worker,
+    # $side-worker.N.perf.data per pool shard — every shard gets its own
+    # dominant-stack section.
+    for side in ("baseline", "candidate"):
+        worker_files = sorted(glob.glob(
+            os.path.join(out, f"{side}-worker*.perf.data")))
+        if not worker_files:
+            worker_files = [os.path.join(out, f"{side}-worker.perf.data")]
+        for path in worker_files:
+            profile_files.append(
+                (f"{os.path.basename(path)} (perf top, self)", path))
+    for label, path in profile_files:
         lines.append("")
         lines.extend(profile_summary(out, label, path))
     lines.append("")
-    lines.append("Profiles: see baseline-gateway.pprof, baseline-worker.perf.data, "
-                 "candidate-host.perf.data, candidate-worker.perf.data, perf-stat/.")
+    lines.append("Profiles: see baseline-gateway.pprof, candidate-host.perf.data, "
+                 "perf-stat/, and one worker file per shard.")
     return "\n".join(lines) + "\n", verdict
 
 

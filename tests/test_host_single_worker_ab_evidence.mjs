@@ -113,6 +113,11 @@ const requiredFiles = [
     }
     const statDir = path.join(result.out, 'perf-stat');
     assert.ok(fs.readdirSync(statDir).length > 0, 'perf-stat/ is empty');
+    for (const side of [ 'baseline', 'candidate' ]) {
+        const loadgenStat = path.join(statDir, `${side}-loadgen.stat`);
+        assert.ok(fs.existsSync(loadgenStat) && fs.statSync(loadgenStat).size > 0,
+            `missing ${side} loadgen CPU evidence`);
+    }
     const manifest = JSON.parse(fs.readFileSync(path.join(result.out, 'manifest.json'), 'utf8'));
     // TEST_MODE=1 runs produce "diagnostic" status, not "complete".
     assert.equal(manifest.evidence_status, 'diagnostic');
@@ -267,6 +272,115 @@ const requiredFiles = [
         'baseline_host_profile not recorded in manifest');
     assert.ok(manifest.files['baseline-gateway.perf.data'],
         'baseline-gateway.perf.data digest missing from manifest');
+}
+
+// ---- GREEN: multi-worker evidence is complete only when every configured
+// shard has its own profile, perf-stat and resource row. This is the M2
+// saturation-curve evidence contract; omitting worker.N resources from the
+// derived report makes a pool profile impossible to interpret. ----
+{
+    const result = await runnerOutput(args, {
+        extraArgs: [
+            '--baseline-workers', '2',
+            '--candidate-workers', '4',
+            '--baseline-host-profile',
+        ],
+    });
+    assert.equal(result.code, 0,
+        `runner rejected complete pool evidence: ${result.stderr}`);
+    const manifest = JSON.parse(fs.readFileSync(
+        path.join(result.out, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.params.baseline_workers, 2);
+    assert.equal(manifest.params.candidate_workers, 4);
+    for (const [ side, workers ] of [
+        [ 'baseline', 2 ],
+        [ 'candidate', 4 ],
+    ]) {
+        for (let index = 1; index <= workers; index += 1) {
+            const profile = `${side}-worker.${index}.perf.data`;
+            const stat = path.join(
+                result.out, 'perf-stat', `${side}-worker.${index}.stat`);
+            assert.ok(fs.statSync(path.join(result.out, profile)).size > 0,
+                `missing pool profile ${profile}`);
+            assert.ok(fs.statSync(stat).size > 0,
+                `missing pool perf-stat ${path.basename(stat)}`);
+            assert.ok(manifest.files[profile],
+                `pool profile digest missing for ${profile}`);
+            assert.ok(manifest.resource[`${side}_worker.${index}`],
+                `pool resource evidence missing for ${side} worker.${index}`);
+        }
+    }
+    const report = fs.readFileSync(path.join(result.out, 'report.md'), 'utf8');
+    const resourceSection = report.split(
+        '## CPU/response and resources (profile runs)')[1]?.split(
+        '## perf-stat summary')[0] ?? '';
+    assert.match(resourceSection, /\| baseline \| worker\.1 \|/,
+        'report omits baseline pool-worker resources');
+    assert.match(resourceSection, /\| baseline \| worker\.2 \|/,
+        'report omits the final baseline pool-worker resources');
+    assert.match(resourceSection, /\| candidate \| worker\.1 \|/,
+        'report omits candidate pool-worker resources');
+    assert.match(resourceSection, /\| candidate \| worker\.4 \|/,
+        'report omits the final candidate pool-worker resources');
+    const perfStatSection = report.split('## perf-stat summary')[1]?.split(
+        '## Dominant stacks')[0] ?? '';
+    assert.match(perfStatSection, /\| baseline \| loadgen \|/,
+        'report omits baseline loadgen CPU');
+    assert.match(perfStatSection, /\| candidate \| loadgen \|/,
+        'report omits candidate loadgen CPU');
+}
+
+// ---- RED: the profile process tree must contain exactly the configured
+// number of direct worker children. Accepting an extra child and profiling
+// only the first N makes CPU/PSS evidence incomplete and can hide a leaked
+// or accidentally active shard. ----
+{
+    const result = await runnerOutput(args, {
+        extraArgs: [
+            '--baseline-workers', '2',
+            '--candidate-workers', '2',
+        ],
+        env: { CAPSID_BENCH_FAKE_EXTRA_WORKER: '1' },
+    });
+    assert.notEqual(result.code, 0,
+        'an extra direct worker child must invalidate pool evidence');
+    assert.match(result.stderr,
+        /expected 2 worker processes .* found 3/,
+        'runner did not report the exact worker-count mismatch');
+}
+
+// ---- GREEN: an optimization A/B may compare two Host builds, so the
+// runner must bind each side to its actual Host binary and record both
+// identities independently. A single shared --host-bin identity cannot
+// prove which implementation produced either side's samples. ----
+{
+    const baselineHost = path.join(args.get('build-dir'), 'capsid-host');
+    const candidateHost = path.join(args.get('build-dir'), 'capsid-worker');
+    assert.ok(fs.existsSync(baselineHost) && fs.existsSync(candidateHost),
+        'host identity fixtures are missing from the build directory');
+    const result = await runnerOutput(args, {
+        extraArgs: [
+            '--baseline-host-bin', baselineHost,
+            '--candidate-host-bin', candidateHost,
+            '--baseline-host-profile',
+        ],
+    });
+    assert.equal(result.code, 0,
+        `runner rejected distinct Host build identities: ${result.stderr}`);
+    const manifest = JSON.parse(fs.readFileSync(
+        path.join(result.out, 'manifest.json'), 'utf8'));
+    const baselineIdentity = manifest.components.baseline_host_bin;
+    const candidateIdentity = manifest.components.candidate_host_bin;
+    assert.equal(baselineIdentity?.cmd, baselineHost,
+        'baseline Host path is not bound to its side');
+    assert.equal(candidateIdentity?.cmd, candidateHost,
+        'candidate Host path is not bound to its side');
+    assert.match(baselineIdentity?.sha256 ?? '', /^[0-9a-f]{64}$/,
+        'baseline Host digest is missing');
+    assert.match(candidateIdentity?.sha256 ?? '', /^[0-9a-f]{64}$/,
+        'candidate Host digest is missing');
+    assert.notEqual(baselineIdentity.sha256, candidateIdentity.sha256,
+        'the two distinct Host builds collapsed to one identity');
 }
 
 // ---- RED: --require-ipc-counters with no counters emitted. ----

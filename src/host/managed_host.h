@@ -63,9 +63,14 @@ struct DeployOutcome {
     bool ok = false;
     std::string operation_id;
     std::string error;  // static text
-    // The warmed worker (READY + compatibility verified), owned by the
-    // caller after a successful deploy; the caller wires the data plane
-    // and drains the previous worker. Null on failure.
+    // The whole owning pool: every warmed worker (READY + compatibility
+    // verified), all owned by the caller after a successful deploy; the
+    // caller wires the data plane and drains the previous pool. The pool
+    // is atomic — on any failure it is empty and no worker escapes.
+    std::vector<capsid_worker*> workers;
+    // Legacy single-worker entry. Only valid when workers.size() == 1,
+    // where it aliases workers[0]; null for any other pool size, so an
+    // old consumer can never be handed just one worker of a bigger pool.
     capsid_worker* worker = nullptr;
 };
 

@@ -144,14 +144,28 @@ PolicyCompileResult compile_policy(
     const std::vector<EffectiveEnvEntry>& resolved_secrets) {
     PolicyCompileResult result;
 
-    // Pool: M1D forces 1/1.
-    if (app.workers != 1 || app.min_ready != 1 ||
-        host.max_workers != 1 || host.min_ready != 1) {
-        result.error = "M1D requires exactly one worker (pool 1/1)";
+    // Pool: a fixed N/N static pool within the Host worker ceiling. The App
+    // must state a positive pool with minReady == maxWorkers; elastic or
+    // mismatched pools reject here even though the JSON schema already
+    // forbids them (defense in depth). The Host has exactly one
+    // worker-count ceiling (capacity.workersTotal -> host.max_workers), and
+    // it must stay bounded: 0 means no worker capacity at all, not
+    // unlimited like the other Host ceilings. Isolation is host-decided
+    // only.
+    if (app.workers == 0 || app.min_ready == 0) {
+        result.error = "pool must be positive";
         return result;
     }
-    result.effective.workers = 1;
-    result.effective.min_ready = 1;
+    if (app.min_ready != app.workers) {
+        result.error = "static pool requires minReady == maxWorkers";
+        return result;
+    }
+    if (host.max_workers == 0 || app.workers > host.max_workers) {
+        result.error = "pool exceeds the Host worker ceiling";
+        return result;
+    }
+    result.effective.workers = app.workers;
+    result.effective.min_ready = app.min_ready;
     result.effective.strict_sandbox = host.strict_sandbox;
 
     // Modules: app request must be inside the host allowlist; duplicates

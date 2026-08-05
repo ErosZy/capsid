@@ -39,6 +39,8 @@ if(CAPSID_BUILD_HOST)
         src/host/secret_file_provider.cc
         src/host/secret_snapshot.cc
         src/host/service_lifecycle.cc
+        src/host/static_pool.cc
+        src/host/static_pool_server.cc
         src/host/worker_event_source.cc
         src/host/worker_recovery.cc
     )

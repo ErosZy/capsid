@@ -12,6 +12,8 @@
 
 #include <openssl/evp.h>
 
+#include <algorithm>
+#include <atomic>
 #include <dirent.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -31,6 +33,7 @@
 #include <mutex>
 #include <poll.h>
 #include <set>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -224,6 +227,9 @@ const char* kSecretAppConfig =
 const char* kLiteralEnvAppConfig =
     R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"],"env":{"APP_MODE":{"value":"literal-managed"}}},"pool":{"minReady":1,"maxWorkers":1}})json";
 
+const char* kThreeWorkerAppConfig =
+    R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":3,"maxWorkers":3}})json";
+
 void create_version(const Fixtures& fixtures, const std::string& version,
                     const std::string& config, const std::string& bundle) {
     const std::string directory =
@@ -273,6 +279,19 @@ bool set_async_worker_lifecycle(Options* options,
     (void) options;
     (void) activate;
     (void) retire;
+    return false;
+}
+
+template <typename Options, typename Activate>
+bool set_async_pool_lifecycle(Options* options, Activate activate) {
+    if constexpr (requires(Options& value, Activate activate_callback) {
+                      value.activate_pool = activate_callback;
+                  }) {
+        options->activate_pool = std::move(activate);
+        return true;
+    }
+    (void) options;
+    (void) activate;
     return false;
 }
 
@@ -428,6 +447,40 @@ std::string run_request(capsid_worker* worker) {
         descriptor.events = POLLIN;
         poll(&descriptor, 1, 50);
     }
+}
+
+template <typename Outcome>
+std::vector<capsid_worker*> outcome_workers(const Outcome& outcome) {
+    if constexpr (requires(const Outcome& value) { value.workers; }) {
+        if (!outcome.workers.empty()) {
+            return outcome.workers;
+        }
+    }
+    if (outcome.worker != nullptr) {
+        return { outcome.worker };
+    }
+    return {};
+}
+
+void destroy_workers(const std::vector<capsid_worker*>& workers) {
+    std::set<capsid_worker*> unique;
+    for (capsid_worker* worker : workers) {
+        require(worker != nullptr, "pool contains a null worker");
+        require(unique.insert(worker).second,
+                "pool contains a duplicate owning worker pointer");
+    }
+    for (capsid_worker* worker : workers) {
+        capsid_worker_destroy(worker);
+    }
+}
+
+std::uint64_t percentile_us(std::vector<std::uint64_t> values,
+                            std::size_t percentile) {
+    require(!values.empty(), "cannot compute a percentile without samples");
+    std::sort(values.begin(), values.end());
+    const std::size_t index =
+        ((values.size() - 1) * percentile) / 100;
+    return values[index];
 }
 
 // ---- attestation helpers ----
@@ -610,6 +663,306 @@ int main(int argc, char** argv) {
                 "retired recovery returned a worker");
         require(recover_status.state != capsid::host::OperationState::kActive,
                 "retired app must not start a worker");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_fixed_pool_deploy_and_recover") {
+        write_file(fixtures.vdir + "/capsid.json", kThreeWorkerAppConfig);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        options.host_policy.max_workers = 3;
+
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome deployed =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(deployed.ok, "fixed 3/3 deploy failed: " + deployed.error);
+        require(status.state == capsid::host::OperationState::kActive,
+                "fixed pool deploy did not become Active");
+        const std::vector<capsid_worker*> deployed_workers =
+            outcome_workers(deployed);
+        require(deployed_workers.size() == 3,
+                "fixed 3/3 deploy did not return three READY workers");
+        std::set<std::int64_t> deployed_pids;
+        for (capsid_worker* worker : deployed_workers) {
+            require(run_request(worker) == "managed-ok",
+                    "a deployed pool worker could not serve the bundle");
+            require(deployed_pids.insert(capsid_worker_pid(worker)).second,
+                    "fixed pool reused a worker process");
+        }
+        destroy_workers(deployed_workers);
+
+        capsid::host::OperationStatus recover_status;
+        const capsid::host::DeployOutcome recovered =
+            capsid::host::managed_recover(&options, &recover_status);
+        require(recovered.ok, "fixed 3/3 recovery failed: " + recovered.error);
+        require(recover_status.state == capsid::host::OperationState::kActive,
+                "fixed pool recovery did not become Active");
+        const std::vector<capsid_worker*> recovered_workers =
+            outcome_workers(recovered);
+        require(recovered_workers.size() == 3,
+                "fixed 3/3 recovery did not return three READY workers");
+        std::set<std::int64_t> recovered_pids;
+        for (capsid_worker* worker : recovered_workers) {
+            require(run_request(worker) == "managed-ok",
+                    "a recovered pool worker could not serve the bundle");
+            require(recovered_pids.insert(capsid_worker_pid(worker)).second,
+                    "recovery reused a worker process inside the pool");
+        }
+        destroy_workers(recovered_workers);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    // Manual Release benchmark probe, intentionally not registered in
+    // CTest. This isolates managed-pool + Runtime IPC scaling before the
+    // later HTTP/shard router exists. It is not the final end-to-end Host
+    // benchmark and must never be reported as one.
+    if (mode == "host_managed_pool_benchmark_probe") {
+        const char* worker_count_env = std::getenv("CAPSID_POOL_BENCH_WORKERS");
+        const char* duration_env = std::getenv("CAPSID_POOL_BENCH_SECONDS");
+        require(worker_count_env != nullptr && duration_env != nullptr,
+                "benchmark requires CAPSID_POOL_BENCH_WORKERS and "
+                "CAPSID_POOL_BENCH_SECONDS");
+        const unsigned long parsed_workers =
+            std::strtoul(worker_count_env, nullptr, 10);
+        const unsigned long parsed_seconds =
+            std::strtoul(duration_env, nullptr, 10);
+        require(parsed_workers > 0 && parsed_workers <= 64 &&
+                    parsed_seconds > 0 && parsed_seconds <= 300,
+                "benchmark worker count or duration is out of range");
+        const std::uint32_t worker_count =
+            static_cast<std::uint32_t>(parsed_workers);
+        const std::string config =
+            "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
+            "\"permissions\":{\"modules\":[\"capsid:env\"]},\"pool\":"
+            "{\"minReady\":" + std::to_string(worker_count) +
+            ",\"maxWorkers\":" + std::to_string(worker_count) + "}}";
+        write_file(fixtures.vdir + "/capsid.json", config);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        options.host_policy.max_workers = worker_count;
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome deployed =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(deployed.ok, "benchmark pool deploy failed: " + deployed.error);
+        const std::vector<capsid_worker*> workers = outcome_workers(deployed);
+        require(workers.size() == worker_count,
+                "benchmark did not receive the requested pool size");
+
+        // Warm every code path once before opening the measured barrier.
+        for (capsid_worker* worker : workers) {
+            require(run_request(worker) == "managed-ok",
+                    "benchmark warm-up request failed");
+        }
+        std::barrier start(static_cast<std::ptrdiff_t>(workers.size() + 1));
+        std::atomic<bool> stop{false};
+        std::vector<std::vector<std::uint64_t>> latencies(workers.size());
+        std::vector<std::thread> threads;
+        threads.reserve(workers.size());
+        for (std::size_t index = 0; index < workers.size(); ++index) {
+            threads.emplace_back([&, index]() {
+                start.arrive_and_wait();
+                while (!stop.load(std::memory_order_relaxed)) {
+                    const auto began = std::chrono::steady_clock::now();
+                    require(run_request(workers[index]) == "managed-ok",
+                            "benchmark measured request failed");
+                    const auto elapsed = std::chrono::duration_cast<
+                        std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - began);
+                    latencies[index].push_back(
+                        static_cast<std::uint64_t>(elapsed.count()));
+                }
+            });
+        }
+        start.arrive_and_wait();
+        const auto measured_start = std::chrono::steady_clock::now();
+        std::this_thread::sleep_for(std::chrono::seconds(parsed_seconds));
+        stop.store(true, std::memory_order_relaxed);
+        for (std::thread& thread : threads) {
+            thread.join();
+        }
+        const double elapsed_seconds =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                          measured_start).count();
+        std::vector<std::uint64_t> all_latencies;
+        std::vector<std::int64_t> pids;
+        for (std::size_t index = 0; index < workers.size(); ++index) {
+            all_latencies.insert(all_latencies.end(), latencies[index].begin(),
+                                 latencies[index].end());
+            pids.push_back(capsid_worker_pid(workers[index]));
+        }
+        require(!all_latencies.empty(), "benchmark completed no requests");
+        std::cout << "{\"kind\":\"managed-pool-ipc-probe\",\"workers\":"
+                  << worker_count << ",\"duration_s\":" << elapsed_seconds
+                  << ",\"completed\":" << all_latencies.size()
+                  << ",\"qps\":"
+                  << static_cast<double>(all_latencies.size()) /
+                         elapsed_seconds
+                  << ",\"p50_us\":" << percentile_us(all_latencies, 50)
+                  << ",\"p95_us\":" << percentile_us(all_latencies, 95)
+                  << ",\"p99_us\":" << percentile_us(all_latencies, 99)
+                  << ",\"pids\":[";
+        for (std::size_t index = 0; index < pids.size(); ++index) {
+            if (index != 0) {
+                std::cout << ',';
+            }
+            std::cout << pids[index];
+        }
+        std::cout << "]}" << std::endl;
+        destroy_workers(workers);
+        return 0;
+    }
+
+    if (mode == "host_managed_fixed_pool_warm_failure_is_atomic") {
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        options.host_policy.max_workers = 3;
+        capsid::host::OperationStatus first_status;
+        const capsid::host::DeployOutcome first =
+            capsid::host::managed_deploy(&options, "v1", &first_status);
+        require(first.ok && first.worker != nullptr,
+                "cannot establish the old active worker");
+        const std::string active_before = read_file(
+            fixtures.state_root + "/apps/orders/active.json");
+
+        create_version(fixtures, "v2", kThreeWorkerAppConfig, kSourceBundle);
+        const std::string wrapper = fixtures.apps_root + "/fail-third-worker.sh";
+        const std::string slots = fixtures.apps_root + "/worker-slots";
+        require(mkdir(slots.c_str(), 0700) == 0,
+                "cannot create worker wrapper state");
+        const std::string pid_log = slots + "/pids";
+        std::ostringstream script;
+        script << "#!/bin/sh\n"
+               << "if mkdir '" << slots << "/one' 2>/dev/null; then\n"
+               << "  printf '%s\\n' \"$$\" >> '" << pid_log << "'\n"
+               << "  exec '" << fixtures.worker_path << "' \"$@\"\n"
+               << "elif mkdir '" << slots << "/two' 2>/dev/null; then\n"
+               << "  printf '%s\\n' \"$$\" >> '" << pid_log << "'\n"
+               << "  exec '" << fixtures.worker_path << "' \"$@\"\n"
+               << "else\n"
+               << "  printf '%s\\n' \"$$\" >> '" << pid_log << "'\n"
+               << "  exit 42\n"
+               << "fi\n";
+        write_file(wrapper, script.str());
+        require(chmod(wrapper.c_str(), 0700) == 0,
+                "cannot make worker failure wrapper executable");
+        options.worker_path = wrapper;
+
+        capsid::host::OperationStatus failed_status;
+        const capsid::host::DeployOutcome failed =
+            capsid::host::managed_deploy(&options, "v2", &failed_status);
+        require(!failed.ok &&
+                    failed_status.state == capsid::host::OperationState::kFailed,
+                "pool activated after one worker failed to warm");
+        require(outcome_workers(failed).empty(),
+                "failed pool returned partially warmed workers");
+        require(read_file(fixtures.state_root + "/apps/orders/active.json") ==
+                    active_before,
+                "failed pool warm changed the old active generation");
+        require(run_request(first.worker) == "managed-ok",
+                "failed replacement damaged the old active worker");
+
+        std::istringstream pids(read_file(pid_log));
+        std::int64_t pid = 0;
+        std::size_t pid_count = 0;
+        while (pids >> pid) {
+            ++pid_count;
+            errno = 0;
+            require(kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH,
+                    "failed pool leaked a worker process");
+        }
+        require(pid_count == 3,
+                "failure probe did not reach the third worker warm-up");
+        capsid_worker_destroy(first.worker);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_admin_fixed_pool_handoff") {
+        write_file(fixtures.vdir + "/capsid.json", kThreeWorkerAppConfig);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        options.host_policy.max_workers = 3;
+        std::vector<capsid::host::ManagedHostOptions*> applications = {
+            &options,
+        };
+        capsid::host::ManagedAdminBackend managed(applications);
+        std::mutex lifecycle_mutex;
+        std::condition_variable lifecycle_condition;
+        std::vector<capsid_worker*> active_pool;
+        int legacy_activate_calls = 0;
+
+        capsid::host::AsyncAdminBackendOptions async_options;
+        async_options.max_pending_operations = 2;
+        async_options.activate_worker =
+            [&](const std::string&, capsid_worker*) {
+                ++legacy_activate_calls;
+                return false;
+            };
+        const auto activate_pool =
+            [&](const std::string& application,
+                std::vector<capsid_worker*> workers) {
+                if (application != "orders" || workers.size() != 3) {
+                    return false;
+                }
+                std::lock_guard<std::mutex> lock(lifecycle_mutex);
+                if (!active_pool.empty()) {
+                    return false;
+                }
+                active_pool = std::move(workers);
+                lifecycle_condition.notify_all();
+                return true;
+            };
+        require(set_async_pool_lifecycle(&async_options, activate_pool),
+                "Async Admin backend has no atomic pool ownership handoff");
+        async_options.retire_worker = [&](const std::string& application) {
+            std::vector<capsid_worker*> retired;
+            {
+                std::lock_guard<std::mutex> lock(lifecycle_mutex);
+                if (application == "orders") {
+                    retired.swap(active_pool);
+                }
+            }
+            destroy_workers(retired);
+            lifecycle_condition.notify_all();
+        };
+        capsid::host::AsyncAdminBackend backend(&managed, async_options);
+
+        capsid::host::OperationStatus submitted;
+        const capsid::host::DeployOutcome deployment =
+            backend.deploy("orders", "v1", &submitted);
+        require(deployment.ok, "fixed pool Admin deploy was not accepted");
+        const capsid::host::OperationStatus active =
+            wait_admin_operation(&backend, deployment.operation_id);
+        require(active.state == capsid::host::OperationState::kActive,
+                "fixed pool Admin deploy did not activate");
+        {
+            std::unique_lock<std::mutex> lock(lifecycle_mutex);
+            require(lifecycle_condition.wait_for(
+                        lock, std::chrono::seconds(2),
+                        [&]() { return active_pool.size() == 3; }),
+                    "Admin did not atomically hand off all three workers");
+            require(legacy_activate_calls == 0,
+                    "multi-worker pool used the legacy single-worker handoff");
+            std::set<std::int64_t> pids;
+            for (capsid_worker* worker : active_pool) {
+                require(pids.insert(capsid_worker_pid(worker)).second,
+                        "Admin pool handoff contained duplicate processes");
+            }
+        }
+
+        capsid::host::OperationStatus retire_submitted;
+        const capsid::host::DeployOutcome retired =
+            backend.retire("orders", &retire_submitted);
+        require(retired.ok, "fixed pool Admin retire was not accepted");
+        const capsid::host::OperationStatus retired_status =
+            wait_admin_operation(&backend, retired.operation_id);
+        require(retired_status.state == capsid::host::OperationState::kActive,
+                "fixed pool Admin retire did not settle");
+        {
+            std::unique_lock<std::mutex> lock(lifecycle_mutex);
+            require(lifecycle_condition.wait_for(
+                        lock, std::chrono::seconds(2),
+                        [&]() { return active_pool.empty(); }),
+                    "Admin retire did not reclaim the full active pool");
+        }
         std::cout << "PASS" << std::endl;
         return 0;
     }

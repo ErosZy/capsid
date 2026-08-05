@@ -37,6 +37,17 @@ struct AsyncAdminBackendOptions {
     // Failed. retire_worker(application) is invoked after a successful
     // retire so the owner can reclaim and destroy the drained worker.
     std::function<bool(const std::string&, capsid_worker*)> activate_worker;
+    // Atomic POOL ownership handoff. A deploy of a fixed N>1 pool warms
+    // the whole pool before Active is reported; activate_pool(application,
+    // workers) then receives the entire owning pool. A true return
+    // transfers ownership of every worker to the callback (the Async
+    // backend must neither destroy nor leak any of them); a missing
+    // callback, a false return or an exception destroys the whole pool and
+    // marks the public operation as a redacted Failed. A multi-worker pool
+    // NEVER falls back to the legacy activate_worker: an old single-worker
+    // callback would claim just one process of a bigger pool.
+    std::function<bool(const std::string&,
+                       std::vector<capsid_worker*>)> activate_pool;
     std::function<void(const std::string&)> retire_worker;
 };
 
@@ -81,6 +92,8 @@ private:
     AdminBackend* inner_;
     std::size_t max_pending_;
     std::function<bool(const std::string&, capsid_worker*)> activate_worker_;
+    std::function<bool(const std::string&,
+                       std::vector<capsid_worker*>)> activate_pool_;
     std::function<void(const std::string&)> retire_worker_;
     const std::atomic<bool>* external_stop_;
     std::mutex mutex_;

@@ -76,3 +76,10 @@ bench/results/<run-id>/
 - 正确性、隔离和 fail-closed 契约不能为了 QPS 绕过；
 - 默认 worker/inflight/queue 数值只有在代表性 workload 扫描后才能冻结；
 - 每次性能改动都跑正确性、sanitizer、故障注入和同条件回归。
+
+## M2 基线重定义（2026-08-05）
+
+三组隔离 A/B（64/64、5 轮、20s、cpuset 0-7）证明：fixed-1k 单 worker 在本机为
+**~1300-1345 QPS**（空白对照 delta +4.2%、single vs static-pool-1 -1.2%、fda9dcc Host vs
+当前 Host -1.4%，loadgen ~0.25 core 未饱和）。此前的 1600+ QPS 数字来自不同环境/commit，
+**不得再作为本机对比基准**；任何跨版本对标一律以同机同条件重跑为准。

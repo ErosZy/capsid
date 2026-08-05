@@ -27,6 +27,21 @@ struct SingleWorkerServerOptions {
     std::uint32_t initial_stream_window = 0;
     bool strict_sandbox = false;
     int ready_fd = -1;
+    // M2 static-pool composition. write_ready_record=false skips the READY
+    // publication (the pool writes one canonical record only after every
+    // shard is READY); install_process_signals=false skips the process-level
+    // SIGTERM/SIGINT wiring (the pool owns signal delivery); so_reuseport
+    // shares one address:port across several listeners and is rejected
+    // statically when the platform cannot honor it — never degraded to a
+    // fake multi-process.
+    bool write_ready_record = true;
+    bool install_process_signals = true;
+    bool so_reuseport = false;
+    // Pool barrier mode: the listener is bound and the worker is READY,
+    // but the server does NOT accept connections until activate_accept()
+    // is called. The pool starts every shard "prepared but not accepting"
+    // and activates them only when the whole pool is READY.
+    bool defer_accept = false;
 };
 
 // M1A single-worker Host data plane: one Boost.Asio io_context owner, one
@@ -42,9 +57,47 @@ public:
     SingleWorkerServer(const SingleWorkerServer&) = delete;
     SingleWorkerServer& operator=(const SingleWorkerServer&) = delete;
 
-    // Runs the spawn/READY/listen/ready-fd sequence, then the event loop,
-    // until SIGTERM/SIGINT. Returns the process exit code.
+    // Controllable lifecycle (M2). start() runs the spawn/load/READY/
+    // listen/ready-fd sequence and then starts the HTTP event loop on a
+    // background thread; it returns true only once the server can serve
+    // requests immediately. A second start() on the same object returns
+    // false without touching the first start's service. Any failure inside
+    // start() recycles every created worker/thread/listener before it
+    // returns false.
+    bool start(const std::vector<std::uint8_t>& bundle, std::string* error);
+
+    // Thread-safe, idempotent stop request: repeated calls never close
+    // twice, corrupt a descriptor or trigger a Runtime double shutdown.
+    void request_stop();
+
+    // Waits for the event-loop thread and the worker owner thread to exit
+    // completely (never detaches); returns true on a normal stop. Errors
+    // use static, redacted text only.
+    bool wait(std::string* error);
+
+    // Compatibility wrapper preserving the CLI behavior: runs start() then
+    // waits for SIGTERM/SIGINT; returns the process exit code.
     int run(const std::vector<std::uint8_t>& bundle);
+
+    // The port the listener actually bound after a successful start(); 0
+    // when the server is not listening (start failed or not yet started).
+    // Lets a pool query the first shard's kernel-assigned port and hand it
+    // to the remaining shards.
+    std::uint16_t bound_port() const;
+
+    // Pool barrier entry: arms the accept loop for a server started with
+    // defer_accept=true. Fails without effect when the server was not
+    // started in defer mode or the accept was already activated. The
+    // activation happens on the server's own io thread and this call
+    // returns only after that thread confirmed the accept is armed (or
+    // rejected the activation); it never hangs on a stopped/dead shard.
+    bool activate_accept(std::string* error);
+
+    // Thread-safe worker availability: true from the successful READY
+    // handshake until the worker exits (kExit), stop completes or a
+    // startup failure; false otherwise. Lets a pool report its live
+    // capacity (N → N−1 on a worker fault) without caching.
+    bool worker_available() const;
 
 private:
     std::shared_ptr<Impl> impl_;

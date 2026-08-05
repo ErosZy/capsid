@@ -35,8 +35,11 @@ struct HostPolicy {
     std::vector<std::string> storage_namespaces;
     std::vector<std::string> stdio_streams;
     bool stdio_allowed = false;
+    // The single worker-count ceiling (capacity.workersTotal). Unlike the
+    // other Host maximums, 0 is NOT unlimited: a bounded pool is required,
+    // so 0 means no worker capacity at all and rejects every App.
     std::uint32_t max_workers = 1;
-    std::uint32_t min_ready = 1;
+    std::uint32_t min_ready = 1;  // legacy; not a ceiling (see compile_policy)
     std::uint64_t max_requests_per_worker = 0;  // 0 = unlimited
     std::uint64_t max_worker_memory_bytes = 0;
     bool strict_sandbox = true;  // isolation is host-decided only
@@ -68,7 +71,7 @@ struct AppRequest {
     std::uint64_t js_heap_bytes = 0;         // worker.jsHeap
     std::uint64_t process_address_bytes = 0; // worker.processAddressSpace
     std::uint64_t file_descriptors = 0;      // worker.fileDescriptors, 0 = unset
-    std::uint32_t workers = 1;  // M1D: must be 1
+    std::uint32_t workers = 1;  // fixed static pool, min_ready == workers
     std::uint32_t min_ready = 1;
 };
 

@@ -35,6 +35,7 @@ AsyncAdminBackend::AsyncAdminBackend(
                        ? 1
                        : options.max_pending_operations),
       activate_worker_(options.activate_worker),
+      activate_pool_(options.activate_pool),
       retire_worker_(options.retire_worker),
       external_stop_(options.external_stop) {
     worker_ = std::thread(&AsyncAdminBackend::worker_loop, this);
@@ -139,14 +140,13 @@ void AsyncAdminBackend::worker_loop() {
         recorded.version = pending.version;
         recorded.state = OperationState::kValidating;
         bool succeeded = false;
-        capsid_worker* claimed_worker = nullptr;
+        DeployOutcome outcome;
         try {
             if (pending.retire) {
-                DeployOutcome outcome = inner_->retire(pending.application,
-                                                       &recorded);
+                outcome = inner_->retire(pending.application, &recorded);
                 succeeded = outcome.ok;
                 if (succeeded) {
-                    // The owner reclaims the drained worker after a
+                    // The owner reclaims the drained pool after a
                     // successful retire. A throwing callback is caught
                     // below and fails the public operation (never
                     // std::terminate).
@@ -155,39 +155,55 @@ void AsyncAdminBackend::worker_loop() {
                     }
                 }
             } else {
-                DeployOutcome outcome = inner_->deploy(
-                    pending.application, pending.version, &recorded);
+                outcome = inner_->deploy(pending.application,
+                                         pending.version, &recorded);
                 succeeded = outcome.ok;
-                claimed_worker = outcome.worker;
-                if (succeeded && claimed_worker != nullptr) {
-                    // Explicit ownership handoff: activate_worker returns
-                    // true only when it took ownership of the worker.
+                if (succeeded && !outcome.workers.empty()) {
+                    // Ownership handoff: the whole pool moves to exactly
+                    // one callback. A multi-worker pool MUST go through
+                    // the atomic activate_pool — the legacy activate_worker
+                    // would claim just one process of a bigger pool — while
+                    // the single-worker pool keeps the legacy path. A true
+                    // return transfers ownership of every worker; anything
+                    // else (missing callback, false return, exception)
+                    // leaves the pool unclaimed for the tail cleanup to
+                    // recycle and marks the public operation as a redacted
+                    // Failed.
                     bool activated = false;
-                    if (activate_worker_) {
-                        activated = activate_worker_(pending.application,
-                                                     claimed_worker);
+                    if (outcome.workers.size() > 1) {
+                        if (activate_pool_) {
+                            activated = activate_pool_(
+                                pending.application, outcome.workers);
+                        }
+                    } else if (activate_worker_) {
+                        activated = activate_worker_(
+                            pending.application, outcome.workers[0]);
                     }
-                    if (!activated) {
-                        // Nobody claimed the worker: destroy it and mark
-                        // the public operation as a redacted Failed.
-                        capsid_worker_destroy(claimed_worker);
-                        claimed_worker = nullptr;
+                    if (activated) {
+                        // Ownership transferred: the pool is no longer ours
+                        // (the tail cleanup would double-free).
+                        outcome.workers.clear();
+                        outcome.worker = nullptr;
+                    } else {
                         succeeded = false;
                     }
                 }
             }
         } catch (const std::exception&) {
-            succeeded = false;
-        } catch (...) {
             // A background exception must become a redacted Failed state,
             // never std::terminate.
             succeeded = false;
+        } catch (...) {
+            succeeded = false;
         }
-        if (!succeeded && claimed_worker != nullptr) {
-            // An exception after a successful handoff claim must still not
-            // leak the worker.
-            capsid_worker_destroy(claimed_worker);
-            claimed_worker = nullptr;
+        if (!succeeded && !outcome.workers.empty()) {
+            // An exception or an unclaimed pool must still not leak: every
+            // worker of the failed deploy's own new pool is recycled.
+            for (capsid_worker* worker : outcome.workers) {
+                capsid_worker_destroy(worker);
+            }
+            outcome.workers.clear();
+            outcome.worker = nullptr;
         }
         std::lock_guard<std::mutex> lock(mutex_);
         // The task is no longer running: the capacity slot opens for the
@@ -286,8 +302,8 @@ DeployOutcome ManagedAdminBackend::deploy(const std::string& application,
     }
     DeployOutcome outcome = managed_deploy(options, version, status);
     if (capacity != nullptr) {
-        if (outcome.ok && outcome.worker != nullptr) {
-            // The activated worker HOLDS the slot until its retire; a
+        if (outcome.ok && !outcome.workers.empty()) {
+            // The activated pool HOLDS the slot until its retire; a
             // replacement keeps its existing slot.
             capacity->record_success(application);
         } else if (newly_acquired) {
