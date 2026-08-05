@@ -46,6 +46,8 @@ App/pool、多 worker 与安全部署闭环（M1D）继续实现中。里程碑�
 ## 性能
 
 - [性能证据规则](performance-benchmarks.md)：profile、A/B、原始数据和结论边界
+- [M1P 无人值守性能优化作战手册](performance-optimization-playbook.md)：DeepSeek 连续执行的
+  baseline、profile、TDD、A/B、验收/撤销与停止条件
 - [Bodyless 性能验收 waiver](bodyless-performance-waiver.md)：机制验收通过、
   性能门未达成的产品决策记录（waiver 不是自动通过）
 - [响应队列饱和活性修复](queue-saturation-activity-fix.md)：worker 输出队列

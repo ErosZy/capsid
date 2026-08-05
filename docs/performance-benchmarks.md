@@ -1,8 +1,9 @@
 # 性能证据规则
 
-性能结论必须能回到同一 commit 的原始样本和 profile。当前仓库没有 benchmark runner
-与历史原始结果，因此不把以前文档中的 QPS、PSS 或百分比继续当作当前可复核结论。
-恢复 runner 并重新采样之前，只能把这些数字视为容量假设，不能用于发布承诺。
+性能结论必须能回到同一 commit 的原始样本和 profile。当前 runner 位于 `bench/`；历史
+结果只有在 manifest、二进制身份、原始样本和两侧 profile 均绑定同一被测 commit 时才可
+复用。缺少这些条件的旧 QPS、PSS 或百分比只能视为诊断记录，不能用于发布承诺。连续优化
+的执行流程见 [M1P 无人值守性能优化作战手册](performance-optimization-playbook.md)。
 
 ## 结论门槛
 
