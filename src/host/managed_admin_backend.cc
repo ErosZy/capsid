@@ -11,6 +11,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <thread>
+#include <unistd.h>
 #include <utility>
 
 namespace capsid::host {

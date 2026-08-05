@@ -902,11 +902,12 @@ private:
                 if (!text) {
                     return JS_EXCEPTION;
                 }
-                // Copy so the fast path and snapshot share stable bytes.
-                std::vector<uint8_t> copy(text, text + body_size);
-                JS_FreeCString(ctx, text);
+                // JS_NewUint8ArrayCopy copies the bytes; pass text
+                // directly to avoid a redundant intermediate vector.
                 body_copy = JS_NewUint8ArrayCopy(
-                    ctx, copy.empty() ? NULL : &copy[0], copy.size());
+                    ctx, reinterpret_cast<const uint8_t *>(text),
+                    body_size);
+                JS_FreeCString(ctx, text);
                 if (JS_IsException(body_copy)) {
                     return JS_EXCEPTION;
                 }
