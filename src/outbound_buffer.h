@@ -17,7 +17,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <sys/uio.h>
 #include <vector>
 
 #include "protocol.h"
@@ -51,14 +50,6 @@ public:
             type, flags, request_id, payload, payload_size, &storage_);
     }
 
-    // Writev writer: writes `iovcnt` scatter buffers; returns bytes
-    // written (>=0), 0 to stall, or -1 fatal. Production uses writev(2)
-    // so several complete frames share one syscall.
-    typedef ssize_t (*WritevWriter)(const struct iovec *iov, int iovcnt,
-                                    void *opaque);
-
-    static const int kMaxBatchFrames = 16;
-
     // Sends whole frames, one frame at a time; stops on a stall, a
     // partially buffered trailing frame, or a fatal writer error.
     // Returns false on fatal error only.
@@ -80,81 +71,6 @@ public:
             }
             if (count == 0) {
                 break;  // stall (EAGAIN)
-            }
-            return false;  // fatal
-        }
-        if (write_offset_ == storage_.size()) {
-            storage_.clear();
-            write_offset_ = 0;
-            frame_end_ = 0;
-            frame_start_ = 0;
-        }
-        return true;
-    }
-
-    // Batch variant: collects complete frames into iovecs and issues
-    // one writer call per batch. A partial write is located to the
-    // containing frame so the next call resumes exactly there (frame
-    // boundaries and frame_start_ stay exact).
-    bool flushv(WritevWriter writer, void *opaque) {
-        while (write_offset_ < storage_.size()) {
-            struct iovec iov[kMaxBatchFrames];
-            size_t frame_start[kMaxBatchFrames];
-            size_t frame_end[kMaxBatchFrames];
-            int count = 0;
-            size_t offset = write_offset_;
-            if (frame_end_ > write_offset_) {
-                // Resume the frame a partial write stopped inside; its
-                // header and absolute end are preserved, so no re-parse.
-                frame_start[0] = frame_start_;
-                frame_end[0] = frame_end_;
-                iov[0].iov_base = &storage_[write_offset_];
-                iov[0].iov_len = frame_end_ - write_offset_;
-                offset = frame_end_;
-                count = 1;
-            }
-            while (count < kMaxBatchFrames) {
-                const size_t end = next_frame_end(offset);
-                if (end <= offset) {
-                    break;  // trailing frame not fully buffered
-                }
-                frame_start[count] = offset;
-                frame_end[count] = end;
-                iov[count].iov_base = &storage_[offset];
-                iov[count].iov_len = end - offset;
-                offset = end;
-                count += 1;
-            }
-            if (count == 0) {
-                break;
-            }
-            const ssize_t total = writer(iov, count, opaque);
-            if (total > 0) {
-                write_offset_ += static_cast<size_t>(total);
-                // Locate the frame containing the partial write, so the
-                // next call resumes it exactly.
-                size_t remaining = static_cast<size_t>(total);
-                size_t k = 0;
-                while (k < static_cast<size_t>(count) &&
-                       remaining >= iov[k].iov_len) {
-                    remaining -= iov[k].iov_len;
-                    k += 1;
-                }
-                // remaining == 0: the batch was consumed exactly; no
-                // frame is mid-write. remaining > 0 and k < count: the
-                // partial write stopped inside frame k, whose boundaries
-                // are preserved for the next call.
-                if (remaining == 0) {
-                    frame_start_ = write_offset_;
-                    frame_end_ = 0;
-                } else {
-                    frame_start_ = frame_start[k];
-                    frame_end_ = frame_end[k];
-                }
-                continue;
-            }
-            if (total == 0) {
-                break;  // stall
             }
             return false;  // fatal
         }

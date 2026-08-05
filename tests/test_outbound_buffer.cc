@@ -261,59 +261,6 @@ void test_partial_eagain_compact() {
                 storage_high, logical_high, drain_state.total_sent, rounds);
 }
 
-// Writev variant of the scripted writer: alternates partial batches
-// (up to max_write bytes, possibly across frames) with EAGAIN stalls.
-struct WritevState {
-    size_t max_write;
-    bool next_stall;
-    size_t total_sent;
-};
-
-ssize_t scripted_writer_v(const struct iovec *iov, int iovcnt, void *opaque) {
-    WritevState *state = static_cast<WritevState *>(opaque);
-    if (state->next_stall) {
-        state->next_stall = false;
-        return 0;  // EAGAIN
-    }
-    state->next_stall = true;
-    size_t total = 0;
-    for (int i = 0; i < iovcnt && total < state->max_write; ++i) {
-        size_t n = iov[i].iov_len;
-        if (total + n > state->max_write) {
-            n = state->max_write - total;
-        }
-        total += n;
-    }
-    state->total_sent += total;
-    return static_cast<ssize_t>(total);
-}
-
-// flushv path: partial batches may stop inside a frame; the next call
-// must resume exactly there (frame boundaries preserved) and deliver
-// every byte.
-void test_flushv_partial_eagain() {
-    capsid::OutboundBuffer buffer;
-    WritevState state = { 32768, false, 0 };
-
-    std::vector<uint8_t> payload(65536u, 0x6e);
-    const size_t wire_per_frame = 65536u + capsid::protocol::kHeaderSize;
-    size_t appended = 0;
-    for (int i = 0; i < 4; ++i) {
-        require(buffer.append(
-                    capsid::protocol::kResponseBody, 0,
-                    static_cast<uint64_t>(i + 1), &payload[0], payload.size()),
-                "append");
-        appended += wire_per_frame;
-    }
-    for (int round = 0; round < 200 && !buffer.drained(); ++round) {
-        require(buffer.flushv(scripted_writer_v, &state), "flushv");
-    }
-    require(buffer.drained(), "flushv drained everything");
-    require(state.total_sent == appended,
-            "flushv delivered every byte across partials and stalls");
-    std::printf("flushv: sent=%zu\n", state.total_sent);
-}
-
 void test_fatal_writer() {
     capsid::OutboundBuffer buffer;
     std::vector<uint8_t> payload(1024u, 0x7e);
@@ -335,7 +282,6 @@ int main() {
     test_eagain_stall();
     test_mid_header_partial();
     test_partial_eagain_compact();
-    test_flushv_partial_eagain();
     test_fatal_writer();
     std::printf("all outbound-buffer tests passed\n");
     return 0;

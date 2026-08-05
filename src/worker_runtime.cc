@@ -3957,30 +3957,11 @@ private:
         }
     }
 
-    static ssize_t socket_writer_v(const struct iovec *iov, int iovcnt,
-                                   void *opaque) {
-        WriterOpaque *state = static_cast<WriterOpaque *>(opaque);
-        state->calls += 1;
-        for (;;) {
-            const ssize_t count = ::writev(state->fd, iov, iovcnt);
-            if (count >= 0) {
-                return count;
-            }
-            if (errno == EINTR) {
-                continue;
-            }
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                return 0;  // stall
-            }
-            return -1;
-        }
-    }
-
     void flush_output() {
         PhaseGuard guard(this, WorkerPhase::kFlush);
         writer_opaque_.fd = fd_;
         writer_opaque_.calls = 0;
-        if (!outbound_.flushv(socket_writer_v, &writer_opaque_)) {
+        if (!outbound_.flush(socket_writer, &writer_opaque_)) {
             shutdown();
             return;
         }
