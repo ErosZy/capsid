@@ -44,6 +44,7 @@ JSModuleDef *tjs__load_builtin(
 #endif
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -256,6 +257,8 @@ public:
           poll_events_(UV_READABLE),
           pump_in_progress_(false),
           diag_samples_(0),
+          flush_syscall_samples_(0),
+          flush_syscall_total_(0),
           bridge_calls_(0),
           bridge_us_(0),
           diag_enabled_(false),
@@ -3930,11 +3933,36 @@ private:
 
     // Production writer for OutboundBuffer: the IPC socket, with
     // EINTR retried and EAGAIN mapped to a stall.
+    struct WriterOpaque {
+        int fd;
+        uint64_t calls;
+    };
+
     static ssize_t socket_writer(const uint8_t *data, size_t size,
                                  void *opaque) {
-        const int fd = *static_cast<int *>(opaque);
+        WriterOpaque *state = static_cast<WriterOpaque *>(opaque);
+        state->calls += 1;
         for (;;) {
-            const ssize_t count = write_socket(fd, data, size);
+            const ssize_t count = write_socket(state->fd, data, size);
+            if (count >= 0) {
+                return count;
+            }
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return 0;  // stall
+            }
+            return -1;
+        }
+    }
+
+    static ssize_t socket_writer_v(const struct iovec *iov, int iovcnt,
+                                   void *opaque) {
+        WriterOpaque *state = static_cast<WriterOpaque *>(opaque);
+        state->calls += 1;
+        for (;;) {
+            const ssize_t count = ::writev(state->fd, iov, iovcnt);
             if (count >= 0) {
                 return count;
             }
@@ -3950,9 +3978,23 @@ private:
 
     void flush_output() {
         PhaseGuard guard(this, WorkerPhase::kFlush);
-        if (!outbound_.flush(socket_writer, &fd_)) {
+        writer_opaque_.fd = fd_;
+        writer_opaque_.calls = 0;
+        if (!outbound_.flushv(socket_writer_v, &writer_opaque_)) {
             shutdown();
             return;
+        }
+        if (diag_enabled_ && writer_opaque_.calls > 0) {
+            flush_syscall_samples_ += 1;
+            flush_syscall_total_ += writer_opaque_.calls;
+            if (flush_syscall_samples_ % 200 == 0) {
+                std::fprintf(stderr,
+                             "FLUSH syscalls=%llu samples=%llu avg=%.2f\n",
+                             static_cast<unsigned long long>(flush_syscall_total_),
+                             static_cast<unsigned long long>(flush_syscall_samples_),
+                             static_cast<double>(flush_syscall_total_) /
+                                 flush_syscall_samples_);
+            }
         }
         if (outbound_.drained()) {
             pump_response_output();
@@ -4016,8 +4058,11 @@ private:
     bool deadline_timer_started_;
     int poll_events_;
     capsid::OutboundBuffer outbound_;
+    WriterOpaque writer_opaque_;
     bool pump_in_progress_;
     uint64_t diag_samples_;
+    uint64_t flush_syscall_samples_;
+    uint64_t flush_syscall_total_;
     uint64_t bridge_calls_;
     uint64_t bridge_us_;
     bool diag_enabled_;

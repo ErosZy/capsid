@@ -11,6 +11,8 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -1276,7 +1278,27 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
             const_cast<char *>("--close-stdio");
     }
     arguments[argument_count] = NULL;
-    char *const worker_environment[] = {NULL};
+    extern char **environ;
+    // Forward CAPSID_* environment to the worker (diagnostic controls
+    // like CAPSID_PERF_DIAG); nothing else leaks across the boundary.
+    char **worker_environment = NULL;
+    size_t capsid_env_count = 0;
+    for (char **env = environ; env != NULL && *env != NULL; ++env) {
+        if (std::strncmp(*env, "CAPSID_", 7) == 0) {
+            capsid_env_count += 1;
+        }
+    }
+    if (capsid_env_count != 0) {
+        worker_environment = static_cast<char **>(
+            std::calloc(capsid_env_count + 1, sizeof(char *)));
+        size_t index = 0;
+        for (char **env = environ; env != NULL && *env != NULL; ++env) {
+            if (std::strncmp(*env, "CAPSID_", 7) == 0) {
+                worker_environment[index++] = *env;
+            }
+        }
+        worker_environment[index] = NULL;
+    }
 
     pid_t pid = -1;
     const int spawn_result = posix_spawn(
@@ -1286,6 +1308,9 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         NULL,
         arguments,
         worker_environment);
+    if (worker_environment != NULL) {
+        std::free(worker_environment);
+    }
     posix_spawn_file_actions_destroy(&actions);
     if (network_namespace_source_fd >= 0) {
         close(network_namespace_source_fd);
