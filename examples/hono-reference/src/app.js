@@ -43,6 +43,10 @@ app.notFound(context => context.text(
 ));
 
 app.get('/entry', context => context.text('hono-entry-ok'));
+app.get('/fixed', context => new Response(
+    new Uint8Array(1024).fill(0x78),
+    { headers: { 'content-type': 'application/octet-stream' } },
+));
 
 app.on(
     [ 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS' ],

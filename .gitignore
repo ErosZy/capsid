@@ -72,4 +72,6 @@
 !/bench/results/queue-saturation-r1-*/**
 !/bench/results/dual-ab-r2-*/
 !/bench/results/dual-ab-r2-*/**
+!/bench/results/m1p-gate0-*/
+!/bench/results/m1p-gate0-*/**
 /0
