@@ -28,7 +28,9 @@ struct StaticPoolServerOptions {
 // publishes exactly one canonical READY record — only after every shard is
 // READY — and startup is atomic: any shard failure (or a failed pool READY
 // publication) rolls back every started shard before start() returns.
-// Queueing, load selection and SSE admission belong to later M2 batches.
+// The StaticPoolState machine drives the activation contract
+// (register -> READY -> activate; see static_pool.h). Queueing, load
+// selection and SSE admission belong to later M2 batches.
 class StaticPoolServer {
 public:
     explicit StaticPoolServer(StaticPoolServerOptions options);

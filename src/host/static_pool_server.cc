@@ -2,6 +2,8 @@
 
 #include "host/static_pool_server.h"
 
+#include "host/static_pool.h"
+
 #include <signal.h>
 #include <unistd.h>
 
@@ -19,7 +21,8 @@ namespace capsid::host {
 class StaticPoolServerImpl {
 public:
     explicit StaticPoolServerImpl(StaticPoolServerOptions options)
-        : options_(std::move(options)) {}
+        : options_(std::move(options)),
+          state_(options_.workers) {}
 
     ~StaticPoolServerImpl() {
         // A running pool is torn down with the same bounded stop the
@@ -44,10 +47,24 @@ public:
             return false;
         }
         shards_.reserve(options_.workers);
+        // StaticPoolState wiring (E-4): register each worker under its
+        // immutable owner shard BEFORE it is spawned, mark READY the
+        // instant start() returns (barrier-mode start() completes
+        // spawn/load/READY/listen synchronously), and activate the state
+        // machine only when every target worker is READY. Every state
+        // machine write happens on this control thread while the pool is
+        // still starting; after activation the pool is fixed
+        // (minReady == maxWorkers) and the state is read-only — queueing
+        // and load selection (later M2 batches) must define their own
+        // cross-thread access before reading it from reactor threads.
         // The first shard binds the port (kernel-assigned when 0); every
         // later shard reuses the same address:port through SO_REUSEPORT.
         std::uint16_t shared_port = 0;
         for (std::uint32_t index = 0; index < options_.workers; ++index) {
+            if (!state_.register_starting(index, index)) {
+                rollback(shards_.size(), error);
+                return false;
+            }
             SingleWorkerServerOptions shard_options = options_.worker_options;
             shard_options.ready_fd = -1;           // pool owns the READY record
             shard_options.write_ready_record = false;  // pool-level READY
@@ -64,10 +81,20 @@ public:
                 rollback(shards_.size(), error);
                 return false;
             }
+            if (!state_.mark_ready(index)) {
+                rollback(shards_.size(), error);
+                return false;
+            }
             if (index == 0) {
                 shared_port = shard->bound_port();
             }
             shards_.push_back(std::move(shard));
+        }
+        // Activation gate: every target worker registered and READY.
+        // Nothing is armed before this holds.
+        if (!state_.can_activate() || !state_.activate()) {
+            rollback(shards_.size(), error);
+            return false;
         }
         // Pool-wide activation barrier: every shard is prepared (worker
         // READY + listener bound) but NOT accepting yet. Only now are the
@@ -172,6 +199,11 @@ private:
     }
 
     StaticPoolServerOptions options_;
+    // Fixed-pool activation state machine: written only by start() on the
+    // control thread, read-only afterwards (see the wiring comment in
+    // start()). Owns the register/READY/activate contract that gates the
+    // pool-level READY record.
+    StaticPoolState state_;
     std::atomic<bool> start_gate_ = false;
     std::atomic<bool> stop_requested_ = false;
     std::once_flag wait_once_;
