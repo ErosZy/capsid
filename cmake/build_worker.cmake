@@ -238,7 +238,7 @@ if(CAPSID_BUILD_WORKER)
     # the same QuickJS the worker links (the txiki overlay's tjs), emits the
     # canonical attestation and the frozen binary signing message. It never
     # sees a private key; signing is the offline pipeline's job.
-    find_package(OpenSSL 3.5 REQUIRED COMPONENTS Crypto)
+    find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
     if(NOT TARGET capsid_jansson)
         add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/jansson")
     endif()

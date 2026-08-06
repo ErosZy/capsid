@@ -19,7 +19,7 @@ if(CAPSID_BUILD_HOST)
             list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/openssl@3.5")
         endif()
     endif()
-    find_package(OpenSSL 3.5 REQUIRED COMPONENTS Crypto)
+    find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 
     if(NOT TARGET capsid_jansson)
         add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/jansson")

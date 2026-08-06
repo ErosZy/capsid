@@ -1,6 +1,6 @@
 if(BUILD_TESTING)
     if(CAPSID_BUILD_HOST)
-        find_package(OpenSSL 3.5 REQUIRED COMPONENTS Crypto)
+        find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 
         add_executable(test-host-config tests/test_host_config.cc)
         target_include_directories(test-host-config PRIVATE src)
