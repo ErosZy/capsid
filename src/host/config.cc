@@ -206,6 +206,7 @@ constexpr std::array kRequestMembers{
     Member{"maxInflightPerWorker", &kPositiveIntegerSchema, false},
     Member{"maxStreamingInflightPerWorker", &kIntegerSchema, false},
     Member{"streamIdleTimeoutMs", &kIntegerSchema, false},
+    Member{"writeTimeoutMs", &kIntegerSchema, false},
 };
 constexpr Schema kRequestSchema{
     Schema::Kind::kObject, std::span<const Member>(kRequestMembers)};

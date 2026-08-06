@@ -254,6 +254,13 @@ struct PendingRequest {
     // firing cancels the request and closes the connection. Owned by the io
     // thread, like every other PendingRequest member.
     std::optional<asio::steady_timer> idle_timer;
+    // M2 E-3 slow-client write deadline (§9.2): armed when a socket write
+    // is submitted, disarmed when it completes; a write that does not
+    // complete within write_timeout_ms_ (the client stopped reading)
+    // cancels the request and closes the connection. A separate timer from
+    // the stream idle watchdog and from the worker-side request timeout
+    // (§8.3 — the timers are independent, neither replaces the other).
+    std::optional<asio::steady_timer> write_timer;
 };
 
 // E-1 admission (§10.3): a request parked in the shard's bounded queue.
@@ -336,6 +343,7 @@ public:
           queue_timeout_ms_(options.queue_timeout_ms),
           max_streaming_inflight_(options.max_streaming_inflight_per_worker),
           stream_idle_timeout_ms_(options.stream_idle_timeout_ms),
+          write_timeout_ms_(options.write_timeout_ms),
           options_(std::move(options)),
           signals_(ioc_) {}
 
@@ -429,6 +437,12 @@ private:
                                PendingRequest& pending);
     void on_stream_idle_timer(std::uint64_t request_id,
                               const beast::error_code ec);
+    // M2 E-3 §9.2: arms the write deadline around one socket write
+    // submission; disarm_write_timer cancels it once that write completes.
+    void arm_write_timer(std::uint64_t request_id, PendingRequest& pending);
+    void disarm_write_timer(PendingRequest& pending);
+    void on_write_timer(std::uint64_t request_id,
+                        const beast::error_code ec);
     void shutdown_worker_and_join();
 
     // Diagnostic IPC metrics (CAPSID_HOST_IPC_METRICS=1 only; zero overhead
@@ -497,6 +511,12 @@ private:
     std::uint64_t max_streaming_inflight_ = 2;
     std::uint64_t stream_idle_timeout_ms_ = 60000;
     std::uint64_t streaming_inflight_ = 0;
+
+    // M2 E-3 slow-client write deadline (§9.2): a socket write outstanding
+    // longer than write_timeout_ms_ (0 = disabled) cancels the request and
+    // closes the connection. Host-side socket view; the worker-side request
+    // timeout stays a separate timer (§8.3).
+    std::uint64_t write_timeout_ms_ = 60000;
 
     SingleWorkerServerOptions options_;
     asio::io_context ioc_;
@@ -1267,6 +1287,9 @@ void Impl::handle_worker_event(WorkerEvent event) {
             *pending.response);
         pending.head_only = pending.method == "HEAD";
         pending.writing = true;
+        // E-3 §9.2: the head write has a deadline; a client that stops
+        // reading while the head is in flight is torn down.
+        arm_write_timer(event.request_id, pending);
         http::async_write_header(
             pending.session->stream(),
             *pending.serializer,
@@ -1285,6 +1308,9 @@ void Impl::handle_worker_event(WorkerEvent event) {
                 }
                 PendingRequest& pending = it->second;
                 pending.writing = false;
+                // E-3 §9.2: the head reached the client (or failed); the
+                // deadline for this write is spent.
+                self->disarm_write_timer(pending);
                 if (ec) {
                     self->fail_request(request_id, pending.session);
                     return;
@@ -1580,6 +1606,9 @@ void Impl::write_body_block(std::uint64_t request_id,
     pending.response->body().data = pending.outgoing.data();
     pending.response->body().size = pending.outgoing.size();
     pending.response->body().more = true;
+    // E-3 §9.2: each body write carries its own deadline — a client that
+    // stopped reading stalls here, not on a shared timer.
+    arm_write_timer(request_id, pending);
     http::async_write(
         pending.session->stream(),
         *pending.serializer,
@@ -1597,6 +1626,9 @@ void Impl::write_body_block(std::uint64_t request_id,
             }
             PendingRequest& pending = it->second;
             pending.writing = false;
+            // E-3 §9.2: the write completed (or failed); its deadline is
+            // spent. The next write arms its own.
+            self->disarm_write_timer(pending);
             if (ec && ec != http::error::need_buffer) {
                 self->fail_request(request_id, pending.session);
                 return;
@@ -1643,6 +1675,9 @@ void Impl::write_end_block(std::uint64_t request_id) {
     pending.response->body().data = nullptr;
     pending.response->body().size = 0;
     pending.response->body().more = false;
+    // E-3 §9.2: the chunked terminator is a write like any other; a client
+    // stalled on it is torn down too.
+    arm_write_timer(request_id, pending);
     http::async_write(
         pending.session->stream(),
         *pending.serializer,
@@ -1660,6 +1695,9 @@ void Impl::write_end_block(std::uint64_t request_id) {
             }
             PendingRequest& pending = it->second;
             pending.writing = false;
+            // E-3 §9.2: the terminator reached the client; the deadline for
+            // this write is spent. The erase below destroys the timer.
+            self->disarm_write_timer(pending);
             if (ec) {
                 self->fail_request(request_id, pending.session);
                 return;
@@ -2667,6 +2705,61 @@ void Impl::on_stream_idle_timer(std::uint64_t request_id,
     const std::shared_ptr<Session> session = pending.session;
     // The head reached the wire before the watchdog was armed, so after
     // the cancel only a connection close is legal (§9.3).
+    cancel_request(request_id);
+    if (session && !session->closed()) {
+        session->close();
+    }
+}
+
+// M2 E-3 §9.2: arms (or restarts) the write deadline around one socket
+// write. Armed at every async_write submission (head, body block, chunked
+// terminator), disarmed by that write's completion handler; a deadline that
+// fires means the write never completed — the client stopped reading. The
+// pending write keeps the serializer/session alive via the captured shared
+// pointers, so the fire path can cancel and close like any other
+// cancellation.
+void Impl::arm_write_timer(std::uint64_t request_id,
+                           PendingRequest& pending) {
+    if (write_timeout_ms_ == 0) {
+        return;
+    }
+    if (!pending.write_timer) {
+        pending.write_timer.emplace(ioc_);
+    }
+    pending.write_timer->expires_after(
+        std::chrono::milliseconds(write_timeout_ms_));
+    pending.write_timer->async_wait(
+        [self = shared_from_this(), request_id](const beast::error_code ec) {
+            self->on_write_timer(request_id, ec);
+        });
+}
+
+void Impl::disarm_write_timer(PendingRequest& pending) {
+    if (!pending.write_timer) {
+        return;
+    }
+    pending.write_timer->cancel();
+    pending.write_timer.reset();
+}
+
+void Impl::on_write_timer(std::uint64_t request_id,
+                          const beast::error_code ec) {
+    if (ec) {
+        // Cancelled by the write's own completion — the write finished in
+        // time (or the request was already torn down).
+        return;
+    }
+    auto it = requests_.find(request_id);
+    if (it == requests_.end()) {
+        return;
+    }
+    PendingRequest& pending = it->second;
+    const std::shared_ptr<Session> session = pending.session;
+    // §9.2: a write that has not completed within the deadline cancels the
+    // request and releases its resources. The head may already be on the
+    // wire (body/terminator writes), so a connection close is the only
+    // legal follow-up; the worker-side request timeout is a separate timer
+    // and is not charged for this (§8.3).
     cancel_request(request_id);
     if (session && !session->closed()) {
         session->close();

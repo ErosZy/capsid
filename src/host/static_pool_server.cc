@@ -104,6 +104,11 @@ public:
                 shard_options.stream_idle_timeout_ms =
                     options_.stream_idle_timeout_ms;
             }
+            // E-3 slow-client write deadline (§9.2): forwarded the same way;
+            // 0 = not set keeps the shard template value.
+            if (options_.write_timeout_ms != 0) {
+                shard_options.write_timeout_ms = options_.write_timeout_ms;
+            }
             if (index > 0) {
                 shard_options.listen_port = shared_port;
             }

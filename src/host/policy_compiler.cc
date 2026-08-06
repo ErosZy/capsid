@@ -415,9 +415,17 @@ PolicyCompileResult compile_policy(
         result.error = "stream idle timeout exceeds the Host maximum";
         return result;
     }
+    // E-3 slow-client write deadline (§9.2): cap-only, like the maximums
+    // above; 0 imposes no ceiling.
+    if (host.max_write_timeout_ms != 0 &&
+        app.write_timeout_ms > host.max_write_timeout_ms) {
+        result.error = "write timeout exceeds the Host maximum";
+        return result;
+    }
     result.effective.max_streaming_inflight_per_worker =
         app.max_streaming_inflight_per_worker;
     result.effective.stream_idle_timeout_ms = app.stream_idle_timeout_ms;
+    result.effective.write_timeout_ms = app.write_timeout_ms;
     result.effective.js_heap_bytes = app.js_heap_bytes;
     result.effective.process_address_bytes = app.process_address_bytes;
     result.effective.file_descriptors = app.file_descriptors;
@@ -652,6 +660,8 @@ PolicyCompileResult compile_policy(
          << result.effective.max_streaming_inflight_per_worker
          << ",\"streamIdleTimeoutMs\":"
          << result.effective.stream_idle_timeout_ms
+         << ",\"writeTimeoutMs\":"
+         << result.effective.write_timeout_ms
          << ",\"memoryBytes\":" << result.effective.memory_bytes
          << ",\"jsHeapBytes\":" << result.effective.js_heap_bytes
          << ",\"processAddressBytes\":" << result.effective.process_address_bytes
@@ -697,6 +707,7 @@ PolicyCompileResult compile_policy(
                << ";qtimeout:" << app.queue_timeout_ms
                << ";streaming:" << app.max_streaming_inflight_per_worker
                << ";idle:" << app.stream_idle_timeout_ms
+               << ";wtimeout:" << app.write_timeout_ms
                << ";mem:" << app.memory_bytes
                << ";heap:" << app.js_heap_bytes
                << ";addr:" << app.process_address_bytes

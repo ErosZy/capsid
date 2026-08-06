@@ -355,6 +355,7 @@ if(BUILD_TESTING)
                         host_managed_executable_enforces_global_worker_capacity
                         host_managed_executable_enforces_queue_maximums
                         host_managed_executable_enforces_streaming_maximums
+                        host_managed_executable_enforces_write_timeout_maximum
                         host_managed_executable_redeploys_with_capacity_one
                         host_managed_executable_recovery_consumes_capacity)
                     add_test(
@@ -402,6 +403,7 @@ if(BUILD_TESTING)
                     host_managed_deploy_integration
                     host_managed_queue_config_deploy
                     host_managed_sse_permit_config_deploy
+                    host_managed_write_timeout_config_deploy
                     host_managed_fixed_pool_deploy_and_recover
                     host_managed_fixed_pool_warm_failure_is_atomic
                     host_managed_admin_fixed_pool_handoff
@@ -889,6 +891,63 @@ if(BUILD_TESTING)
                 host_sse_idle_timeout_cancels_and_releases
                 host_sse_plain_chunked_no_permit
                 host_sse_max_inflight_one_boundary PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+
+            # M2 E-3 slow-client write deadline (§9.2): a socket write that
+            # does not complete within write_timeout_ms cancels the request
+            # and closes the connection; independent from the worker-side
+            # request timeout (§8.3); fast responses untouched.
+            add_executable(
+                test-host-write-timeout
+                tests/test_host_write_timeout.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            target_include_directories(
+                test-host-write-timeout PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-host-write-timeout PRIVATE
+                capsid_runtime
+                capsid_host_core
+                Boost::system
+                capsid_sanitizers)
+            set_target_properties(
+                test-host-write-timeout PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-write-timeout PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-write-timeout PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(
+                            test-host-write-timeout PRIVATE
+                            -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_test(
+                NAME host_write_timeout_cancels
+                COMMAND test-host-write-timeout write-timeout-cancels
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_worker_deadline_independent
+                COMMAND test-host-write-timeout worker-deadline-independent
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_fast_response_untouched
+                COMMAND test-host-write-timeout fast-response-untouched
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_write_timeout_cancels
+                host_worker_deadline_independent
+                host_fast_response_untouched PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 

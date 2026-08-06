@@ -64,6 +64,12 @@ struct SingleWorkerServerOptions {
     // Silence past this deadline cancels the stream and closes the
     // connection (heartbeat keep-alive; 0 = no idle timeout).
     std::uint64_t stream_idle_timeout_ms = 60000;
+    // M2 E-3 slow-client write deadline (§9.2). A socket write that has
+    // not completed within this deadline — the client stopped reading —
+    // cancels the request and releases its resources. Host-side socket
+    // view only: the worker-side request timeout is a separate timer
+    // (§8.3, independent accounting). 0 = disabled.
+    std::uint64_t write_timeout_ms = 60000;
 };
 
 // M1A single-worker Host data plane: one Boost.Asio io_context owner, one

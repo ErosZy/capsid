@@ -1382,6 +1382,7 @@ std::string host_policy_identity(const HostPolicy& host) {
         << ";qtimeout:" << host.max_queue_timeout_ms
         << ";streaming:" << host.max_streaming_inflight_per_worker
         << ";idle:" << host.max_stream_idle_timeout_ms
+        << ";wtimeout:" << host.max_write_timeout_ms
         << ";sandbox:" << (host.strict_sandbox ? 1 : 0);
     return sha256_hex(out.str());
 }
@@ -1789,6 +1790,19 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
                 return false;
             }
             app->stream_idle_timeout_ms = static_cast<std::uint64_t>(value);
+        }
+        // E-3 slow-client write deadline (§9.2): the Host-side socket-view
+        // deadline for a write that does not complete. 0 = field not set
+        // (the shard keeps its 60s default).
+        json_t* write_timeout = json_object_get(request, "writeTimeoutMs");
+        if (json_is_integer(write_timeout)) {
+            const json_int_t value = json_integer_value(write_timeout);
+            if (value < 0) {
+                *error = "invalid capsid.json request.writeTimeoutMs";
+                json_decref(root);
+                return false;
+            }
+            app->write_timeout_ms = static_cast<std::uint64_t>(value);
         }
     }
     json_decref(root);

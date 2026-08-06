@@ -16,9 +16,9 @@ class StaticPoolServerImpl;
 
 // M2 fixed-pool composition options. worker_options is the template for
 // every shard; workers is the fixed pool size (0 rejects startup). The
-// admission fields (E-1, design §10.3) and SSE-permit fields (E-2, §9.3)
-// are pool-level: they are forwarded into every shard at start(), and a
-// shard's own values (when set) win.
+// admission fields (E-1, design §10.3), SSE-permit fields (E-2, §9.3) and
+// the write-deadline field (E-3, §9.2) are pool-level: they are forwarded
+// into every shard at start(), and a shard's own values (when set) win.
 struct StaticPoolServerOptions {
     SingleWorkerServerOptions worker_options;
     std::uint32_t workers = 0;
@@ -28,6 +28,7 @@ struct StaticPoolServerOptions {
     std::uint64_t queue_timeout_ms = 0;
     std::uint64_t max_streaming_inflight_per_worker = 0;  // 0 = not set
     std::uint64_t stream_idle_timeout_ms = 0;             // 0 = not set
+    std::uint64_t write_timeout_ms = 0;                   // 0 = not set
 };
 
 // M2 fixed-pool Host data plane: N independently owned shards, each with

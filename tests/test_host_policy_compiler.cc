@@ -279,6 +279,40 @@ int main() {
                 "stream idle timeout above the Host maximum accepted");
     }
 
+    // 7d. E-3 slow-client write deadline (request.writeTimeoutMs, §9.2):
+    // cap-only intersection like the other request maximums; the effective
+    // config carries the compiled value into the data plane.
+    {
+        capsid::host::AppRequest writer = legal_app();
+        writer.write_timeout_ms = 5000;
+        EffectiveEnvEntry resolved;
+        resolved.name = "APP_TOKEN";
+        resolved.from_secret = true;
+        resolved.secret_key_id = "api-token";
+        resolved.secret_revision = "file-v1:1:2:3:4:5";
+        {
+            const PolicyCompileResult result =
+                compile_policy(default_host(), writer, { resolved });
+            require(result.ok, "legal write-timeout config rejected: " +
+                                   result.error);
+            require(result.effective.write_timeout_ms == 5000,
+                    "effective config lost the write deadline");
+            require(result.effective.effective_json.find(
+                        "\"writeTimeoutMs\":5000") != std::string::npos,
+                    "effective.json lost the write deadline");
+        }
+        capsid::host::HostPolicy write_capped = default_host();
+        write_capped.max_write_timeout_ms = 60000;
+        capsid::host::AppRequest long_write = writer;
+        long_write.write_timeout_ms = 300000;
+        const PolicyCompileResult write_result =
+            compile_policy(write_capped, long_write, { resolved });
+        require(!write_result.ok &&
+                    write_result.error.find("write timeout") !=
+                        std::string::npos,
+                "write deadline above the Host maximum accepted");
+    }
+
     // 8. M2 static pools accept fixed N/N within the Host ceiling. The
     // compiler is a defense-in-depth entry point, so it must independently
     // reject minReady != maxWorkers even though the JSON schema already

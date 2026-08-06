@@ -443,6 +443,19 @@ bool parse_managed_config(const std::string& json, ManagedConfig* out,
                 out->policy.max_stream_idle_timeout_ms =
                     static_cast<std::uint64_t>(value);
             }
+            // E-3 slow-client write deadline cap (§9.2): 0 = no ceiling.
+            json_t* write_timeout =
+                json_object_get(request, "writeTimeoutMs");
+            if (json_is_integer(write_timeout)) {
+                const json_int_t value = json_integer_value(write_timeout);
+                if (value < 0) {
+                    *error = "invalid maximums.request.writeTimeoutMs";
+                    json_decref(root);
+                    return false;
+                }
+                out->policy.max_write_timeout_ms =
+                    static_cast<std::uint64_t>(value);
+            }
         }
         json_t* worker = json_object_get(maximums, "worker");
         if (json_is_object(worker)) {
@@ -1026,6 +1039,13 @@ int main(int argc, char** argv) {
     if (idle_text != nullptr) {
         options.stream_idle_timeout_ms = parse_nonnegative_integer(
             *idle_text, "stream-idle-timeout");
+    }
+    // M2 E-3 slow-client write deadline (§9.2): CLI 0 = unlimited, the same
+    // data-plane semantics as the other CLI fields above.
+    const std::string* write_timeout_text = optional_value("write-timeout");
+    if (write_timeout_text != nullptr) {
+        options.write_timeout_ms = parse_nonnegative_integer(
+            *write_timeout_text, "write-timeout");
     }
 
     const std::vector<std::uint8_t> bundle =

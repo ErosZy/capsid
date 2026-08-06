@@ -524,6 +524,38 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_executable_enforces_write_timeout_maximum") {
+        // E-3 §9.2: host.json maximums.request.writeTimeoutMs caps the App
+        // slow-client write deadline; an App that exceeds it must fail the
+        // deploy (same cap-only consumption as the E-2 streaming maximums).
+        fixture.replace_host_text(
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000}}",
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000,"
+            "\"writeTimeoutMs\":60000}}");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+
+        // A compliant write deadline deploys active.
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"writeTimeoutMs":5000}})json");
+        const std::string compliant = deploy(fixture);
+        require(wait_terminal_state(fixture, compliant) == "active",
+                "write deadline within the Host maximum did not deploy active");
+
+        // An over-ceiling write deadline fails the deploy.
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"writeTimeoutMs":300000}})json");
+        const std::string overreach = deploy(fixture);
+        require(wait_terminal_state(fixture, overreach) == "failed",
+                "write deadline above the Host maximum deployed");
+        require_active_app(fixture);
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_deploy_and_shutdown") {
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);

@@ -54,6 +54,9 @@ struct HostPolicy {
     // imposes no ceiling; the 1/1 boundary rule is enforced at the shard.
     std::uint64_t max_streaming_inflight_per_worker = 0;
     std::uint64_t max_stream_idle_timeout_ms = 0;
+    // Host-side slow-client write deadline maximum (host.json
+    // maximums.request.writeTimeoutMs, E-3 §9.2): 0 = no ceiling.
+    std::uint64_t max_write_timeout_ms = 0;
     bool strict_sandbox = true;  // isolation is host-decided only
 };
 
@@ -86,6 +89,9 @@ struct AppRequest {
     // the 1/1 boundary is validated at the shard.
     std::uint64_t max_streaming_inflight_per_worker = 0;  // 0 = unset
     std::uint64_t stream_idle_timeout_ms = 0;             // 0 = unset
+    // request.writeTimeoutMs (E-3 §9.2): 0 = unset keeps the shard default
+    // (60s). The slow-client write deadline is a Host-side socket view.
+    std::uint64_t write_timeout_ms = 0;                   // 0 = unset
     // worker.* resource fields. memory_bytes is worker.memoryMax (the
     // process memory ceiling); the three sub-resources keep their own
     // slots so none of them impersonates another at the Runtime boundary.
@@ -129,6 +135,7 @@ struct EffectiveConfig {
     std::uint64_t queue_timeout_ms = 0;     // pool.queueTimeout
     std::uint64_t max_streaming_inflight_per_worker = 0;  // request.*, 0 = unset
     std::uint64_t stream_idle_timeout_ms = 0;             // request.*, 0 = unset
+    std::uint64_t write_timeout_ms = 0;                   // request.*, 0 = unset
     // The effective process-memory permit: the largest stated ceiling
     // (memoryMax, jsHeap, processAddressSpace) for Host-budget accounting.
     std::uint64_t memory_bytes = 0;

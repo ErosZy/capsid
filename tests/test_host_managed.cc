@@ -711,6 +711,28 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_write_timeout_config_deploy") {
+        // E-3 §9.2: request.writeTimeoutMs rides the frozen capsid/app-v1
+        // document like the E-2 SSE-permit fields — a zero-consumption
+        // field would let the slow-client deadline silently disappear
+        // from the effective contract.
+        write_file(fixtures.vdir + "/capsid.json",
+                   R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"writeTimeoutMs":5000}})json");
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome outcome =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(outcome.ok, "write-timeout deploy failed: " + outcome.error);
+        require(status.state == capsid::host::OperationState::kActive,
+                "write-timeout deploy not Active");
+        require(outcome.worker != nullptr, "no warmed worker returned");
+        require(run_request(outcome.worker) == "managed-ok",
+                "write-timeout worker did not serve the bundle");
+        capsid_worker_destroy(outcome.worker);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_fixed_pool_deploy_and_recover") {
         write_file(fixtures.vdir + "/capsid.json", kThreeWorkerAppConfig);
         capsid::host::ManagedHostOptions options = make_options(fixtures);
