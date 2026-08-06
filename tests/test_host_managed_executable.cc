@@ -457,6 +457,39 @@ int main(int argc, char** argv) {
             "expected mode, capsid-host and capsid-worker paths");
     const std::string mode = argv[1];
     Fixture fixture;
+    if (mode == "host_managed_executable_enforces_queue_maximums") {
+        // E-1 §10.3: host.json maximums.pool.queueRequests caps the App
+        // queue; an App whose pool.queueRequests exceeds it must fail the
+        // deploy (the zero-consumption field now has a consumer).
+        fixture.replace_host_text(
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000}}",
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000},"
+            "\"pool\":{\"queueRequests\":8,\"queueHeaderBytes\":\"1MiB\","
+            "\"queueTimeout\":\"1s\"}}");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+
+        // A compliant queue deploys active.
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1,"queueRequests":4,"queueHeaderBytes":"512KiB","queueTimeout":"250ms"}})json");
+        const std::string compliant = deploy(fixture);
+        require(wait_terminal_state(fixture, compliant) == "active",
+                "queue within the Host maximums did not deploy active");
+
+        // An over-ceiling queue fails the deploy.
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1,"queueRequests":16,"queueHeaderBytes":"512KiB","queueTimeout":"250ms"}})json");
+        const std::string overreach = deploy(fixture);
+        require(wait_terminal_state(fixture, overreach) == "failed",
+                "queue above the Host maximums deployed");
+        require_active_app(fixture);
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_deploy_and_shutdown") {
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);

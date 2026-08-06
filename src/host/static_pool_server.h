@@ -15,10 +15,16 @@ namespace capsid::host {
 class StaticPoolServerImpl;
 
 // M2 fixed-pool composition options. worker_options is the template for
-// every shard; workers is the fixed pool size (0 rejects startup).
+// every shard; workers is the fixed pool size (0 rejects startup). The
+// admission fields (E-1, design §10.3) are pool-level: they are forwarded
+// into every shard at start(), and a shard's own values (when set) win.
 struct StaticPoolServerOptions {
     SingleWorkerServerOptions worker_options;
     std::uint32_t workers = 0;
+    std::uint64_t max_inflight_per_worker = 0;
+    std::uint64_t queue_requests = 0;
+    std::uint64_t queue_header_bytes = 0;
+    std::uint64_t queue_timeout_ms = 0;
 };
 
 // M2 fixed-pool Host data plane: N independently owned shards, each with

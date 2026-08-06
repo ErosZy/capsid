@@ -169,6 +169,66 @@ int main() {
                 "memory overreach accepted");
     }
 
+    // 7b. E-1 admission queue (pool.queue*, §10.3): the App queue must not
+    // exceed the Host maximums; a Host maximum of 0 leaves the App free.
+    // The effective config carries the compiled queue into the data plane.
+    {
+        capsid::host::AppRequest queued = legal_app();
+        queued.queue_requests = 16;
+        queued.queue_header_bytes = 2U * 1024U * 1024U;
+        queued.queue_timeout_ms = 5000;
+        // legal_app() requests one secret; the resolved set must match.
+        EffectiveEnvEntry resolved;
+        resolved.name = "APP_TOKEN";
+        resolved.from_secret = true;
+        resolved.secret_key_id = "api-token";
+        resolved.secret_revision = "file-v1:1:2:3:4:5";
+        {
+            const PolicyCompileResult result =
+                compile_policy(default_host(), queued, { resolved });
+            require(result.ok, "legal queue rejected: " + result.error);
+            require(result.effective.queue_requests == 16 &&
+                        result.effective.queue_header_bytes ==
+                            2U * 1024U * 1024U &&
+                        result.effective.queue_timeout_ms == 5000,
+                    "effective config lost the queue fields");
+            require(result.effective.effective_json.find(
+                        "\"queueRequests\":16") != std::string::npos &&
+                        result.effective.effective_json.find(
+                            "\"queueHeaderBytes\":2097152") !=
+                            std::string::npos &&
+                        result.effective.effective_json.find(
+                            "\"queueTimeoutMs\":5000") != std::string::npos,
+                    "effective.json lost the queue fields");
+        }
+
+        capsid::host::HostPolicy capped = default_host();
+        capped.max_queue_requests = 8;
+        capsid::host::AppRequest deep = queued;
+        deep.queue_requests = 16;
+        const PolicyCompileResult deep_result =
+            compile_policy(capped, deep, { resolved });
+        require(!deep_result.ok &&
+                    deep_result.error.find("queue") != std::string::npos,
+                "queue depth above the Host maximum accepted");
+
+        capsid::host::HostPolicy bytes_capped = default_host();
+        bytes_capped.max_queue_header_bytes = 1U * 1024U * 1024U;
+        const PolicyCompileResult bytes_result =
+            compile_policy(bytes_capped, queued, { resolved });
+        require(!bytes_result.ok &&
+                    bytes_result.error.find("queue") != std::string::npos,
+                "queue header bytes above the Host maximum accepted");
+
+        capsid::host::HostPolicy timeout_capped = default_host();
+        timeout_capped.max_queue_timeout_ms = 1000;
+        const PolicyCompileResult timeout_result =
+            compile_policy(timeout_capped, queued, { resolved });
+        require(!timeout_result.ok &&
+                    timeout_result.error.find("queue") != std::string::npos,
+                "queue timeout above the Host maximum accepted");
+    }
+
     // 8. M2 static pools accept fixed N/N within the Host ceiling. The
     // compiler is a defense-in-depth entry point, so it must independently
     // reject minReady != maxWorkers even though the JSON schema already

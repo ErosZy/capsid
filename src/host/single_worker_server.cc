@@ -64,7 +64,6 @@ namespace http = beast::http;
 using tcp = asio::ip::tcp;
 using SteadyClock = std::chrono::steady_clock;
 
-constexpr std::uint64_t kMaxInflightRequests = 128;
 constexpr std::size_t kMaxRequestBodyBytes = 16u * 1024u * 1024u;
 constexpr auto kReadyTimeout = std::chrono::seconds(10);
 constexpr auto kShutdownGrace = std::chrono::seconds(2);
@@ -248,6 +247,24 @@ struct PendingRequest {
     std::uint32_t pending_response_credit = 0;
 };
 
+// E-1 admission (§10.3): a request parked in the shard's bounded queue.
+// Owns the full request (head + body) so the connection can keep being
+// drained while the worker is busy; the io thread pops FIFO entries once
+// an inflight slot frees up. deadline is engaged only when
+// queue_timeout_ms > 0.
+struct QueuedRequest {
+    std::shared_ptr<Session> session;
+    http::request<http::string_body> request;
+    NormalizedPublicRequest normalized;
+    std::size_t bytes = 0;  // estimated head+body size for the byte cap
+    std::optional<SteadyClock::time_point> deadline;
+};
+
+// Where the E-1 gate chain let the request through. kAccepted hands the
+// request to the worker; kQueued parks it in the bounded queue (the queue
+// owns the request state from then on); kQueueFull maps to 429.
+enum class AdmissionResult { kAccepted, kQueued, kQueueFull };
+
 // Session lives in the anonymous namespace; its Impl member is the
 // capsid::host::Impl forward-declared in the header, so name lookup finds it
 // through the enclosing capsid::host scope.
@@ -304,7 +321,12 @@ private:
 class Impl : public std::enable_shared_from_this<Impl> {
 public:
     explicit Impl(SingleWorkerServerOptions options)
-        : options_(std::move(options)), signals_(ioc_) {}
+        : max_inflight_(options.max_inflight_per_worker),
+          max_queue_requests_(options.queue_requests),
+          max_queue_header_bytes_(options.queue_header_bytes),
+          queue_timeout_ms_(options.queue_timeout_ms),
+          options_(std::move(options)),
+          signals_(ioc_) {}
 
     ~Impl();
 
@@ -322,6 +344,21 @@ public:
                        const std::shared_ptr<Session>& session,
                        const http::request<http::string_body>& request,
                        const NormalizedPublicRequest& normalized);
+    // E-1 admission (§10.3). Runs on the io thread like every request
+    // state transition. kAccepted requires no further action; kQueued
+    // hands the request to the bounded queue; kQueueFull maps to 429.
+    AdmissionResult admit_request(
+        const std::shared_ptr<Session>& session,
+        http::request<http::string_body>& request,
+        const NormalizedPublicRequest& normalized);
+    // Pops queued requests into free inflight slots (FIFO). Called after
+    // every inflight release and after queue-timer drains.
+    void pump_queue();
+    void arm_queue_timer();
+    void on_queue_timer(const beast::error_code ec);
+    // Removes a session's queued request (its connection closed while the
+    // request was parked; the session never reads the next request).
+    void cancel_queued(const std::shared_ptr<Session>& session);
     std::uint64_t allocate_request_id();
     void cancel_request(std::uint64_t request_id);
     // The session is taken by value: fail_request/finalize_request erase the
@@ -413,6 +450,21 @@ private:
     // skips request-direction credit and observes EOF immediately. The toggle
     // lets the same binary run the off/on A/B for M1C acceptance evidence.
     bool bodyless_enabled_ = true;
+
+    // E-1 admission (§10.3). All of this state lives on the io thread
+    // (written by handle_request/admit_request/pump_queue/queue-timer and
+    // read by the same thread), so no cross-thread access is introduced —
+    // the E-4 contract that StaticPoolState stays read-only after start()
+    // is untouched: the pool-level load selection reads it from reactor
+    // threads only in later M2 batches, and this shard admission does not
+    // read it at all.
+    std::uint64_t max_inflight_ = 128;
+    std::uint64_t max_queue_requests_ = 0;
+    std::uint64_t max_queue_header_bytes_ = 0;
+    std::uint64_t queue_timeout_ms_ = 0;
+    std::deque<QueuedRequest> queue_;
+    std::size_t queue_bytes_ = 0;
+    std::optional<asio::steady_timer> queue_timer_;
 
     SingleWorkerServerOptions options_;
     asio::io_context ioc_;
@@ -543,9 +595,14 @@ void Session::read_request() {
 }
 
 void Session::handle_request(http::request<http::string_body> request) {
+    // E-1 admission gate chain (§10.3), v1 fixed-pool form:
+    //   ① listener/header gate — the request head has been parsed; the v1
+    //     listener accepts into the shard and admits here.
+    //   ④ shard pool capacity — a dead worker means no READY worker on
+    //     this shard: 503, before any admission bookkeeping.
     if (impl_->worker_dead()) {
-        send_simple(http::status::bad_gateway, "worker unavailable", false,
-                    request.version());
+        send_simple(http::status::service_unavailable, "worker unavailable",
+                    false, request.version());
         return;
     }
 
@@ -577,17 +634,40 @@ void Session::handle_request(http::request<http::string_body> request) {
         return;
     }
 
-    const std::uint64_t request_id = impl_->allocate_request_id();
-    if (request_id == 0) {
-        send_simple(http::status::service_unavailable,
-                    "no worker request slots available", request.keep_alive(),
-                    request.version());
+    // ② Host-global inflight/queue gate is merged with ③ (the App
+    // queue gate) in the v1 single-App pool: admission is enforced per
+    // shard, and the pool's Host budget is the shard budget times the
+    // shard count (recorded in static_pool_server.cc).
+    // ③ App queue gate — the bounded queue, or 429 when full.
+    // ⑤ worker max-inflight hard boundary — enforced by the worker
+    // itself; the shard admission bounds what reaches it.
+    switch (impl_->admit_request(shared_from_this(), request,
+                                 normalized.request)) {
+    case AdmissionResult::kAccepted: {
+        const std::uint64_t request_id = impl_->allocate_request_id();
+        if (request_id == 0) {
+            send_simple(http::status::service_unavailable,
+                        "no worker request slots available",
+                        request.keep_alive(), request.version());
+            return;
+        }
+        current_id_ = request_id;
+        impl_->begin_request(request_id, shared_from_this(), request,
+                             normalized.request);
+        start_disconnect_probe();
         return;
     }
-    current_id_ = request_id;
-    impl_->begin_request(request_id, shared_from_this(), request,
-                         normalized.request);
-    start_disconnect_probe();
+    case AdmissionResult::kQueued:
+        // The bounded queue owns the request until an inflight slot frees
+        // (pump_queue) or its deadline expires (504). The session must not
+        // read the next request while one is parked: read_request is only
+        // resumed by finalize/close on this session.
+        return;
+    case AdmissionResult::kQueueFull:
+        send_simple(http::status::too_many_requests, "app queue full",
+                    request.keep_alive(), request.version());
+        return;
+    }
 }
 
 void Session::close() {
@@ -595,6 +675,10 @@ void Session::close() {
         return;
     }
     closed_ = true;
+    // A request parked in the admission queue has no request_id yet; it is
+    // owned by the queue and must be dropped here (its connection is
+    // closing, so the parked request can never be served).
+    impl_->cancel_queued(shared_from_this());
     if (current_id_) {
         impl_->cancel_request(*current_id_);
         current_id_.reset();
@@ -667,8 +751,11 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     config.request_timeout_ms = options_.request_timeout_ms;
     config.initial_stream_window = options_.initial_stream_window;
     config.strict_sandbox = options_.strict_sandbox ? 1U : 0U;
+    // E-1 §10.3 gate ⑤: the worker's own max-inflight hard boundary.
+    // 0 = unlimited (worker default); otherwise the shard and the worker
+    // share the same ceiling.
     config.max_inflight_requests =
-        static_cast<std::uint32_t>(kMaxInflightRequests);
+        static_cast<std::uint32_t>(max_inflight_);
     // egress_policy and capability_policy stay NULL: every outbound Fetch
     // is denied by the Runtime default.
 
@@ -1269,7 +1356,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
                 session->close();
             }
         } else if (session && !session->closed()) {
-            session->send_simple(http::status::bad_gateway,
+            session->send_simple(http::status::service_unavailable,
                                  "worker request failed", keep_alive, version);
         }
         return;
@@ -1277,11 +1364,26 @@ void Impl::handle_worker_event(WorkerEvent event) {
     case WorkerEvent::Type::kExit: {
         worker_dead_ = true;
         worker_available_ = false;
+        // E-1 admission: every parked request dies with the worker — no
+        // READY worker remains to serve it (§10.3 → 503). The queue and
+        // its timer are drained before the in-flight requests below.
+        while (!queue_.empty()) {
+            QueuedRequest abandoned = std::move(queue_.front());
+            queue_.pop_front();
+            queue_bytes_ -= abandoned.bytes;
+            if (abandoned.session && !abandoned.session->closed()) {
+                abandoned.session->send_simple(
+                    http::status::service_unavailable, "worker exited",
+                    abandoned.request.keep_alive(),
+                    abandoned.request.version());
+            }
+        }
+        queue_timer_.reset();
         // Fault isolation: the shard's worker process is gone, so this
         // shard must stop accepting NEW connections immediately — with
         // SO_REUSEPORT the kernel routes subsequent connections to the
         // healthy shards only once this listener is closed. In-flight
-        // requests still receive their 502/close handling below. A
+        // requests still receive their 503/close handling below. A
         // pending pool barrier is released as well (the loop must be able
         // to drain even if the worker died before activation).
         if (acceptor_) {
@@ -1317,7 +1419,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
                     session->close();
                 }
             } else if (session && !session->closed()) {
-                session->send_simple(http::status::bad_gateway,
+                session->send_simple(http::status::service_unavailable,
                                      "worker exited", keep_alive, version);
             }
         }
@@ -1479,6 +1581,11 @@ void Impl::write_end_block(std::uint64_t request_id) {
             const bool keep_alive = pending.keep_alive;
             Session* session = pending.session.get();
             self->requests_.erase(it);
+            // An inflight slot just freed: admit the next parked request
+            // (E-1). The chunked end-block is a request-completion path
+            // like finalize_request; without this, a parked request behind
+            // a chunked response would sit until its queue deadline.
+            self->pump_queue();
             if (session && !session->closed()) {
                 if (keep_alive) {
                     session->read_request();
@@ -1489,12 +1596,150 @@ void Impl::write_end_block(std::uint64_t request_id) {
         });
 }
 
+namespace {
+// Estimated wire bytes of one parked request (method + target + header
+// names/values + body): the shard's queue_header_bytes budget. Exactness
+// is not required — the cap exists to bound memory, so a per-field
+// constant is fine.
+std::size_t estimate_request_bytes(
+    const http::request<http::string_body>& request) {
+    std::size_t bytes = request.method_string().size() +
+                        request.target().size() + request.body().size() + 8;
+    for (const auto& field : request.base()) {
+        bytes += field.name_string().size() + field.value().size() + 4;
+    }
+    return bytes;
+}
+}  // namespace
+
+AdmissionResult Impl::admit_request(
+    const std::shared_ptr<Session>& session,
+    http::request<http::string_body>& request,
+    const NormalizedPublicRequest& normalized) {
+    // Fast path: a free inflight slot and nothing parked ahead of this
+    // request (the queue is FIFO; a request must not jump a parked one).
+    if (queue_.empty() &&
+        (max_inflight_ == 0 || requests_.size() < max_inflight_)) {
+        return AdmissionResult::kAccepted;
+    }
+    // Queueing disabled: the App quota is exhausted → 429 directly.
+    if (max_queue_requests_ == 0) {
+        return AdmissionResult::kQueueFull;
+    }
+    const std::size_t bytes = estimate_request_bytes(request);
+    if (queue_.size() >= max_queue_requests_ ||
+        (max_queue_header_bytes_ != 0 &&
+         queue_bytes_ + bytes > max_queue_header_bytes_)) {
+        return AdmissionResult::kQueueFull;
+    }
+    QueuedRequest entry;
+    entry.session = session;
+    entry.request = std::move(request);
+    entry.normalized = normalized;  // copy: the caller still owns its result
+    entry.bytes = bytes;
+    if (queue_timeout_ms_ != 0) {
+        entry.deadline =
+            SteadyClock::now() + std::chrono::milliseconds(queue_timeout_ms_);
+    }
+    queue_.push_back(std::move(entry));
+    queue_bytes_ += bytes;
+    arm_queue_timer();
+    return AdmissionResult::kQueued;
+}
+
+void Impl::pump_queue() {
+    while (!queue_.empty() &&
+           (max_inflight_ == 0 || requests_.size() < max_inflight_)) {
+        QueuedRequest entry = std::move(queue_.front());
+        queue_.pop_front();
+        queue_bytes_ -= entry.bytes;
+        // Deadline expiry while parked maps to 504 (§10.3: queue or Host
+        // deadline 到期 → 504). The connection stays eligible for the next
+        // request: this was a scheduling rejection, not a worker fault.
+        if (entry.deadline &&
+            SteadyClock::now() >= *entry.deadline) {
+            if (entry.session && !entry.session->closed()) {
+                entry.session->send_simple(
+                    http::status::gateway_timeout, "queued request timeout",
+                    entry.request.keep_alive(), entry.request.version());
+            }
+            continue;
+        }
+        const std::uint64_t request_id = allocate_request_id();
+        if (request_id == 0) {
+            // Unreachable: pump runs only when an inflight slot is free,
+            // and allocate_request_id fails only at the inflight cap.
+            if (entry.session && !entry.session->closed()) {
+                entry.session->send_simple(
+                    http::status::service_unavailable,
+                    "no worker request slots available",
+                    entry.request.keep_alive(), entry.request.version());
+            }
+            continue;
+        }
+        entry.session->current_id_ = request_id;
+        begin_request(request_id, entry.session, entry.request,
+                      entry.normalized);
+        entry.session->start_disconnect_probe();
+    }
+    arm_queue_timer();
+}
+
+void Impl::arm_queue_timer() {
+    if (queue_timeout_ms_ == 0 || queue_.empty()) {
+        queue_timer_.reset();
+        return;
+    }
+    if (!queue_timer_) {
+        queue_timer_.emplace(ioc_);
+    }
+    queue_timer_->expires_at(*queue_.front().deadline);
+    queue_timer_->async_wait(
+        [weak = weak_from_this()](const beast::error_code ec) {
+            if (const std::shared_ptr<Impl> self = weak.lock()) {
+                self->on_queue_timer(ec);
+            }
+        });
+}
+
+void Impl::on_queue_timer(const beast::error_code ec) {
+    if (ec == asio::error::operation_aborted || shutting_down_) {
+        return;
+    }
+    // Drain every parked request whose deadline has passed (the queue is
+    // FIFO, so once the head is fresh the rest are too). A drained entry
+    // never consumed an inflight slot, so no pump is needed here.
+    while (!queue_.empty() && queue_.front().deadline &&
+           SteadyClock::now() >= *queue_.front().deadline) {
+        QueuedRequest expired = std::move(queue_.front());
+        queue_.pop_front();
+        queue_bytes_ -= expired.bytes;
+        if (expired.session && !expired.session->closed()) {
+            expired.session->send_simple(
+                http::status::gateway_timeout, "queued request timeout",
+                expired.request.keep_alive(), expired.request.version());
+        }
+    }
+    arm_queue_timer();
+}
+
+void Impl::cancel_queued(const std::shared_ptr<Session>& session) {
+    for (auto it = queue_.begin(); it != queue_.end(); ++it) {
+        if (it->session == session) {
+            queue_bytes_ -= it->bytes;
+            queue_.erase(it);
+            return;
+        }
+    }
+}
+
 std::uint64_t Impl::allocate_request_id() {
     // Monotonic 64-bit non-zero request ids (design §9.4): the id space is
     // not a resource, so ids are never reused and late frames for a
     // cancelled request can never collide with a fresh one. The inflight
-    // cap bounds the count, not the id space.
-    if (requests_.size() >= kMaxInflightRequests) {
+    // cap bounds the count, not the id space. The cap is the E-1
+    // max_inflight_per_worker ceiling (0 = unlimited).
+    if (max_inflight_ != 0 && requests_.size() >= max_inflight_) {
         return 0;
     }
     std::uint64_t candidate;
@@ -1563,6 +1808,8 @@ void Impl::cancel_request(std::uint64_t request_id) {
     cancel.type = CommandType::kCancel;
     cancel.request_id = request_id;
     submit_command(std::move(cancel));
+    // An inflight slot just freed: admit the next parked request (E-1).
+    pump_queue();
 }
 
 void Impl::fail_request(std::uint64_t request_id,
@@ -1581,6 +1828,9 @@ void Impl::finalize_request(std::uint64_t request_id,
     }
     const bool keep_alive = it->second.keep_alive;
     requests_.erase(it);
+    // An inflight slot just freed: admit the next parked request (E-1)
+    // before resuming the session read.
+    pump_queue();
     if (session && !session->closed()) {
         if (keep_alive) {
             session->read_request();
@@ -2246,8 +2496,9 @@ void Impl::reject_response_head(std::uint64_t request_id,
     const unsigned version = it->second.version;
     cancel_request(request_id);
     if (session && !session->closed()) {
-        session->send_simple(http::status::bad_gateway, reason, keep_alive,
-                             version);
+        // §10.3: worker/IPC failure before the response head → 503.
+        session->send_simple(http::status::service_unavailable, reason,
+                             keep_alive, version);
     }
 }
 

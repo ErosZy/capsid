@@ -42,6 +42,13 @@ struct HostPolicy {
     std::uint32_t min_ready = 1;  // legacy; not a ceiling (see compile_policy)
     std::uint64_t max_requests_per_worker = 0;  // 0 = unlimited
     std::uint64_t max_worker_memory_bytes = 0;
+    // Host-side admission-queue maximums (host.json maximums.pool.*, E-1
+    // §10.3). 0 = not set: unlike the worker-count ceiling, queueing is
+    // App-decided and the Host only caps it, so 0 is the natural
+    // "no cap" sentinel.
+    std::uint64_t max_queue_requests = 0;      // 0 = no depth cap
+    std::uint64_t max_queue_header_bytes = 0;  // 0 = no header-bytes cap
+    std::uint64_t max_queue_timeout_ms = 0;    // 0 = no deadline cap
     bool strict_sandbox = true;  // isolation is host-decided only
 };
 
@@ -64,6 +71,11 @@ struct AppRequest {
     // of "stdin"/"stdout"/"stderr".
     std::vector<std::string> stdio_streams;
     std::uint64_t requests_per_worker = 0;
+    // pool.queue* (E-1 §10.3): the bounded per-shard admission queue.
+    // 0 = queueing disabled (inflight-full rejects with 429 directly).
+    std::uint64_t queue_requests = 0;       // queue depth; 0 = disabled
+    std::uint64_t queue_header_bytes = 0;   // 0 = unbounded header bytes
+    std::uint64_t queue_timeout_ms = 0;     // 0 = no queue deadline
     // worker.* resource fields. memory_bytes is worker.memoryMax (the
     // process memory ceiling); the three sub-resources keep their own
     // slots so none of them impersonates another at the Runtime boundary.
@@ -102,6 +114,9 @@ struct EffectiveConfig {
     std::vector<std::string> stdio_streams;  // canonical order
     std::vector<std::uint32_t> stdio_rule_ids;  // parallel to streams
     std::uint64_t requests_per_worker = 0;
+    std::uint64_t queue_requests = 0;       // pool.queueRequests
+    std::uint64_t queue_header_bytes = 0;   // pool.queueHeaderBytes
+    std::uint64_t queue_timeout_ms = 0;     // pool.queueTimeout
     // The effective process-memory permit: the largest stated ceiling
     // (memoryMax, jsHeap, processAddressSpace) for Host-budget accounting.
     std::uint64_t memory_bytes = 0;

@@ -353,6 +353,7 @@ if(BUILD_TESTING)
                         host_managed_executable_rejects_ambiguous_secret_template
                         host_managed_executable_rejects_unsafe_admin_mode
                         host_managed_executable_enforces_global_worker_capacity
+                        host_managed_executable_enforces_queue_maximums
                         host_managed_executable_redeploys_with_capacity_one
                         host_managed_executable_recovery_consumes_capacity)
                     add_test(
@@ -398,6 +399,7 @@ if(BUILD_TESTING)
                 capsid-worker)
             foreach(CAPSID_MANAGED_TEST_ID
                     host_managed_deploy_integration
+                    host_managed_queue_config_deploy
                     host_managed_fixed_pool_deploy_and_recover
                     host_managed_fixed_pool_warm_failure_is_atomic
                     host_managed_admin_fixed_pool_handoff
@@ -754,6 +756,71 @@ if(BUILD_TESTING)
             set_tests_properties(
                 host_static_pool_server_shared_port_lifecycle
                 host_static_pool_server_atomic_start_failure PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+
+            # M2 E-1 admission control (§10.3): five-level gate chain in its
+            # v1 fixed-pool form, frozen RED/GREEN in test_host_admission.cc.
+            add_executable(
+                test-host-admission
+                tests/test_host_admission.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            target_include_directories(
+                test-host-admission PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-host-admission PRIVATE
+                capsid_runtime
+                capsid_host_core
+                Boost::system
+                capsid_sanitizers)
+            set_target_properties(
+                test-host-admission PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-admission PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-admission PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(
+                            test-host-admission PRIVATE
+                            -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_test(
+                NAME host_admission_inflight_full_rejects
+                COMMAND test-host-admission inflight-full-rejects
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_admission_queue_full_rejects
+                COMMAND test-host-admission queue-full-rejects
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_admission_queue_timeout_returns_504
+                COMMAND test-host-admission queue-timeout-504
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_admission_worker_death_returns_503
+                COMMAND test-host-admission worker-death-503
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_admission_pool_forwards_options
+                COMMAND test-host-admission pool-forwards-admission
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_admission_inflight_full_rejects
+                host_admission_queue_full_rejects
+                host_admission_queue_timeout_returns_504
+                host_admission_worker_death_returns_503
+                host_admission_pool_forwards_options PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 

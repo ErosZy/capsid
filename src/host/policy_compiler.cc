@@ -380,6 +380,27 @@ PolicyCompileResult compile_policy(
         return result;
     }
     result.effective.requests_per_worker = app.requests_per_worker;
+    // E-1 admission-queue maximums (§10.3): the same intersection shape as
+    // requests_per_worker — the App queue must not exceed the Host caps,
+    // and a Host maximum of 0 means no cap (queueing stays App-decided).
+    if (host.max_queue_requests != 0 &&
+        app.queue_requests > host.max_queue_requests) {
+        result.error = "queue depth exceeds the Host maximum";
+        return result;
+    }
+    if (host.max_queue_header_bytes != 0 &&
+        app.queue_header_bytes > host.max_queue_header_bytes) {
+        result.error = "queue header bytes exceed the Host maximum";
+        return result;
+    }
+    if (host.max_queue_timeout_ms != 0 &&
+        app.queue_timeout_ms > host.max_queue_timeout_ms) {
+        result.error = "queue timeout exceeds the Host maximum";
+        return result;
+    }
+    result.effective.queue_requests = app.queue_requests;
+    result.effective.queue_header_bytes = app.queue_header_bytes;
+    result.effective.queue_timeout_ms = app.queue_timeout_ms;
     result.effective.js_heap_bytes = app.js_heap_bytes;
     result.effective.process_address_bytes = app.process_address_bytes;
     result.effective.file_descriptors = app.file_descriptors;
@@ -607,6 +628,9 @@ PolicyCompileResult compile_policy(
              << '"';
     }
     json << "],\"requestsPerWorker\":" << result.effective.requests_per_worker
+         << ",\"queueRequests\":" << result.effective.queue_requests
+         << ",\"queueHeaderBytes\":" << result.effective.queue_header_bytes
+         << ",\"queueTimeoutMs\":" << result.effective.queue_timeout_ms
          << ",\"memoryBytes\":" << result.effective.memory_bytes
          << ",\"jsHeapBytes\":" << result.effective.js_heap_bytes
          << ",\"processAddressBytes\":" << result.effective.process_address_bytes
@@ -647,6 +671,9 @@ PolicyCompileResult compile_policy(
         app_stream << stream << ',';
     }
     app_stream << ";rps:" << app.requests_per_worker
+               << ";qreq:" << app.queue_requests
+               << ";qbytes:" << app.queue_header_bytes
+               << ";qtimeout:" << app.queue_timeout_ms
                << ";mem:" << app.memory_bytes
                << ";heap:" << app.js_heap_bytes
                << ";addr:" << app.process_address_bytes

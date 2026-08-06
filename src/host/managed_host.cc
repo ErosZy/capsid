@@ -1377,6 +1377,9 @@ std::string host_policy_identity(const HostPolicy& host) {
         << ";ready:" << host.min_ready
         << ";rps:" << host.max_requests_per_worker
         << ";mem:" << host.max_worker_memory_bytes
+        << ";qreq:" << host.max_queue_requests
+        << ";qbytes:" << host.max_queue_header_bytes
+        << ";qtimeout:" << host.max_queue_timeout_ms
         << ";sandbox:" << (host.strict_sandbox ? 1 : 0);
     return sha256_hex(out.str());
 }
@@ -1410,6 +1413,39 @@ bool parse_size_bytes(const std::string& text, std::uint64_t* out) {
         multiplier = 1000ULL * 1000ULL;
     } else if (suffix == "GB") {
         multiplier = 1000ULL * 1000ULL * 1000ULL;
+    } else {
+        return false;
+    }
+    if (base > std::numeric_limits<std::uint64_t>::max() / multiplier) {
+        return false;
+    }
+    *out = static_cast<std::uint64_t>(base) * multiplier;
+    return true;
+}
+
+// Duration grammar for pool.queueTimeout: "250ms" / "5s" / "1m" — the same
+// explicit-suffix rule as main.cc's parse_duration_ms. A bare number is
+// rejected: an ambiguous "1" must not silently mean 1 second (or 1 ms)
+// when the operator meant something else. Rejects overflow and unknown
+// suffixes. 0 is a valid value (queueing without a deadline).
+bool parse_duration_ms(const std::string& text, std::uint64_t* out) {
+    if (text.empty()) {
+        return false;
+    }
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long long base = std::strtoull(text.c_str(), &end, 10);
+    if (errno == ERANGE || end == text.c_str()) {
+        return false;
+    }
+    std::uint64_t multiplier = 0;
+    const std::string suffix(end);
+    if (suffix == "ms") {
+        multiplier = 1;
+    } else if (suffix == "s") {
+        multiplier = 1000;
+    } else if (suffix == "m") {
+        multiplier = 60ULL * 1000ULL;
     } else {
         return false;
     }
@@ -1626,6 +1662,39 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         if (json_is_integer(max_workers)) {
             app->workers =
                 static_cast<std::uint32_t>(json_integer_value(max_workers));
+        }
+        // E-1 admission queue (§10.3): parsed here so the effective config
+        // can enforce the Host maximums (compile_policy) and forward the
+        // queue to the data plane (queueRequests / queueHeaderBytes /
+        // queueTimeout). 0 = queueing disabled or field not set — the same
+        // sentinel the data plane uses.
+        json_t* queue_requests = json_object_get(pool, "queueRequests");
+        if (json_is_integer(queue_requests)) {
+            const json_int_t value = json_integer_value(queue_requests);
+            if (value < 0) {
+                *error = "invalid capsid.json pool.queueRequests";
+                json_decref(root);
+                return false;
+            }
+            app->queue_requests = static_cast<std::uint64_t>(value);
+        }
+        json_t* queue_header_bytes = json_object_get(pool, "queueHeaderBytes");
+        if (json_is_string(queue_header_bytes)) {
+            if (!parse_size_bytes(json_string_value(queue_header_bytes),
+                                  &app->queue_header_bytes)) {
+                *error = "invalid capsid.json pool.queueHeaderBytes";
+                json_decref(root);
+                return false;
+            }
+        }
+        json_t* queue_timeout = json_object_get(pool, "queueTimeout");
+        if (json_is_string(queue_timeout)) {
+            if (!parse_duration_ms(json_string_value(queue_timeout),
+                                   &app->queue_timeout_ms)) {
+                *error = "invalid capsid.json pool.queueTimeout";
+                json_decref(root);
+                return false;
+            }
         }
     }
     // Worker resources. Each field keeps its own slot: jsHeap bounds the

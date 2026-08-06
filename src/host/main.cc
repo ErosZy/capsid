@@ -84,6 +84,73 @@ std::uint64_t parse_positive_integer(const std::string& value,
     return static_cast<std::uint64_t>(parsed);
 }
 
+// Non-negative integer: allows the explicit 0 that disables a feature
+// (e.g. --queue-requests 0).
+std::uint64_t parse_nonnegative_integer(const std::string& value,
+                                        const char* name) {
+    if (value.empty()) {
+        fail(std::string("--") + name + " requires a non-negative integer");
+    }
+    for (const char c : value) {
+        if (c < '0' || c > '9') {
+            fail(std::string("--") + name +
+                 " requires a non-negative integer: " + value);
+        }
+    }
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long long parsed = std::strtoull(value.c_str(), &end, 10);
+    if (errno != 0 || end == nullptr || *end != '\0' ||
+        parsed > static_cast<unsigned long long>(
+                      std::numeric_limits<std::int64_t>::max())) {
+        fail(std::string("--") + name +
+             " requires a non-negative integer: " + value);
+    }
+    return static_cast<std::uint64_t>(parsed);
+}
+
+// "250ms" / "5s" / "1m" style duration (the same grammar the effective
+// config uses for queueTimeout). Unit suffix is required.
+std::uint64_t parse_duration_ms(const std::string& value,
+                                const char* name) {
+    std::string::size_type number_end = 0;
+    for (std::string::size_type index = 0; index < value.size(); ++index) {
+        const char c = value[index];
+        if (c < '0' || c > '9') {
+            break;
+        }
+        number_end = index + 1;
+    }
+    if (number_end == 0 || number_end == value.size()) {
+        fail(std::string("--") + name +
+             " requires a duration like 250ms or 5s: " + value);
+    }
+    const std::string number_text = value.substr(0, number_end);
+    const std::string unit = value.substr(number_end);
+    std::uint64_t multiplier = 0;
+    if (unit == "ms") {
+        multiplier = 1;
+    } else if (unit == "s") {
+        multiplier = 1000;
+    } else if (unit == "m") {
+        multiplier = 60U * 1000U;
+    } else {
+        fail(std::string("--") + name +
+             " requires ms, s or m units: " + value);
+    }
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long long parsed =
+        std::strtoull(number_text.c_str(), &end, 10);
+    if (errno != 0 || end == nullptr || *end != '\0' || parsed == 0 ||
+        parsed > static_cast<unsigned long long>(
+                      std::numeric_limits<std::uint64_t>::max() /
+                      multiplier)) {
+        fail(std::string("--") + name + " is out of range: " + value);
+    }
+    return static_cast<std::uint64_t>(parsed) * multiplier;
+}
+
 // host:port; only decimal ports and non-empty hosts are accepted.
 void parse_listen(const std::string& value,
                   std::string* out_address,
@@ -361,6 +428,41 @@ bool parse_managed_config(const std::string& json, ManagedConfig* out,
                     return false;
                 }
                 out->policy.max_worker_memory_bytes = bytes;
+            }
+        }
+        // E-1 admission-queue caps (maximums.pool.*, §10.3): the Host
+        // ceilings the App queue is compiled against in compile_policy.
+        // Each cap is optional; an absent cap leaves the App free to set
+        // its own queue values.
+        json_t* pool = json_object_get(maximums, "pool");
+        if (json_is_object(pool)) {
+            json_t* queue_requests = json_object_get(pool, "queueRequests");
+            if (json_is_integer(queue_requests)) {
+                const json_int_t value = json_integer_value(queue_requests);
+                if (value < 0) {
+                    *error = "invalid maximums.pool.queueRequests";
+                    json_decref(root);
+                    return false;
+                }
+                out->policy.max_queue_requests =
+                    static_cast<std::uint64_t>(value);
+            }
+            json_t* queue_header_bytes =
+                json_object_get(pool, "queueHeaderBytes");
+            if (json_is_string(queue_header_bytes)) {
+                std::uint64_t bytes = 0;
+                if (!parse_size_bytes_text(json_string_value(queue_header_bytes),
+                                           &bytes)) {
+                    *error = "invalid maximums.pool.queueHeaderBytes";
+                    json_decref(root);
+                    return false;
+                }
+                out->policy.max_queue_header_bytes = bytes;
+            }
+            json_t* queue_timeout = json_object_get(pool, "queueTimeout");
+            if (json_is_string(queue_timeout)) {
+                out->policy.max_queue_timeout_ms = parse_duration_ms(
+                    json_string_value(queue_timeout), "maximums.pool.queueTimeout");
             }
         }
     }
@@ -851,12 +953,49 @@ int main(int argc, char** argv) {
         }
     }
 
+    // M2 E-1 admission (§10.3): the benchmark CLI mirrors the effective
+    // config's request/pool fields (the production path compiles the same
+    // values through config → effective tier; see policy_compiler.cc).
+    // Every field is optional; a missing value keeps the data plane
+    // default. There is no main.cc hardcoding — the values flow into
+    // StaticPoolServerOptions / SingleWorkerServerOptions below.
+    const auto optional_value = [&values](const std::string& name)
+        -> const std::string* {
+        const auto it = values.find(name);
+        return it == values.end() ? nullptr : &it->second;
+    };
+    const std::string* inflight_text = optional_value("max-inflight-per-worker");
+    if (inflight_text != nullptr) {
+        options.max_inflight_per_worker = parse_positive_integer(
+            *inflight_text, "max-inflight-per-worker");
+    }
+    const std::string* queue_text = optional_value("queue-requests");
+    if (queue_text != nullptr) {
+        options.queue_requests =
+            parse_nonnegative_integer(*queue_text, "queue-requests");
+    }
+    const std::string* queue_bytes_text = optional_value("queue-header-bytes");
+    if (queue_bytes_text != nullptr) {
+        if (!parse_size_bytes_text(*queue_bytes_text, &options.queue_header_bytes)) {
+            fail("--queue-header-bytes must be a byte size (e.g. 2MiB)");
+        }
+    }
+    const std::string* queue_timeout_text = optional_value("queue-timeout");
+    if (queue_timeout_text != nullptr) {
+        options.queue_timeout_ms = parse_duration_ms(
+            *queue_timeout_text, "queue-timeout");
+    }
+
     const std::vector<std::uint8_t> bundle =
         read_bundle(options.source_bundle_path);
 
     if (mode == "static-pool") {
         capsid::host::StaticPoolServerOptions pool_options;
         pool_options.workers = workers;
+        // The admission values ride in the shard template (options above);
+        // the pool-level StaticPoolServerOptions admission fields exist for
+        // the production config route (effective tier → pool options, M2
+        // managed-pool batch) and override the template when set.
         pool_options.worker_options = std::move(options);
         capsid::host::StaticPoolServer pool(std::move(pool_options));
         return pool.run(bundle);

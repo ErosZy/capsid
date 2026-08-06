@@ -42,6 +42,18 @@ struct SingleWorkerServerOptions {
     // is called. The pool starts every shard "prepared but not accepting"
     // and activates them only when the whole pool is READY.
     bool defer_accept = false;
+    // M2 E-1 admission control (design §10.3). The shard's inflight ceiling
+    // (0 = unlimited) is forwarded to the worker as its max-inflight hard
+    // boundary and bounds the Host-side request table; the bounded queue
+    // (queueRequests slots, queueHeaderBytes cap, queueTimeout deadline)
+    // parks requests while every slot is busy. queue_requests == 0 disables
+    // queueing (an inflight-full shard rejects directly with 429);
+    // queue_header_bytes == 0 imposes no byte cap; queue_timeout_ms == 0
+    // waits indefinitely.
+    std::uint64_t max_inflight_per_worker = 128;
+    std::uint64_t queue_requests = 0;
+    std::uint64_t queue_header_bytes = 0;
+    std::uint64_t queue_timeout_ms = 0;
 };
 
 // M1A single-worker Host data plane: one Boost.Asio io_context owner, one

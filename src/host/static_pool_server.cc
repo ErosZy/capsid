@@ -71,6 +71,28 @@ public:
             shard_options.install_process_signals = false;  // pool owns signals
             shard_options.so_reuseport = true;     // one shared port
             shard_options.defer_accept = true;     // pool-wide activation barrier
+            // E-1 admission (§10.3): pool-level options are forwarded into
+            // every shard (a non-zero pool field overrides the shard
+            // template; 0 = not set). In the v1 single-App pool the
+            // Host-global gate is exactly the per-shard gate: the Host
+            // budget is the shard budget times the shard count, so no
+            // pool-level counter is needed (a cross-shard budget would
+            // require shared atomics and is deferred until the
+            // queue/load-selection batch defines its cross-thread access).
+            if (options_.max_inflight_per_worker != 0) {
+                shard_options.max_inflight_per_worker =
+                    options_.max_inflight_per_worker;
+            }
+            if (options_.queue_requests != 0) {
+                shard_options.queue_requests = options_.queue_requests;
+            }
+            if (options_.queue_header_bytes != 0) {
+                shard_options.queue_header_bytes =
+                    options_.queue_header_bytes;
+            }
+            if (options_.queue_timeout_ms != 0) {
+                shard_options.queue_timeout_ms = options_.queue_timeout_ms;
+            }
             if (index > 0) {
                 shard_options.listen_port = shared_port;
             }
