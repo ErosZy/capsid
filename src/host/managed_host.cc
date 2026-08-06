@@ -1380,6 +1380,8 @@ std::string host_policy_identity(const HostPolicy& host) {
         << ";qreq:" << host.max_queue_requests
         << ";qbytes:" << host.max_queue_header_bytes
         << ";qtimeout:" << host.max_queue_timeout_ms
+        << ";streaming:" << host.max_streaming_inflight_per_worker
+        << ";idle:" << host.max_stream_idle_timeout_ms
         << ";sandbox:" << (host.strict_sandbox ? 1 : 0);
     return sha256_hex(out.str());
 }
@@ -1759,6 +1761,34 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
                 return false;
             }
             app->requests_per_worker = static_cast<std::uint64_t>(value);
+        }
+        // E-2 SSE permit (§9.3): parsed here so the effective config can
+        // enforce the Host maximums (compile_policy) and forward the
+        // values to the data plane (maxStreamingInflightPerWorker /
+        // streamIdleTimeoutMs). 0 = field not set (the shard keeps its
+        // defaults of 2 slots and 60s idle).
+        json_t* max_streaming = json_object_get(
+            request, "maxStreamingInflightPerWorker");
+        if (json_is_integer(max_streaming)) {
+            const json_int_t value = json_integer_value(max_streaming);
+            if (value < 0) {
+                *error = "invalid capsid.json "
+                         "request.maxStreamingInflightPerWorker";
+                json_decref(root);
+                return false;
+            }
+            app->max_streaming_inflight_per_worker =
+                static_cast<std::uint64_t>(value);
+        }
+        json_t* stream_idle = json_object_get(request, "streamIdleTimeoutMs");
+        if (json_is_integer(stream_idle)) {
+            const json_int_t value = json_integer_value(stream_idle);
+            if (value < 0) {
+                *error = "invalid capsid.json request.streamIdleTimeoutMs";
+                json_decref(root);
+                return false;
+            }
+            app->stream_idle_timeout_ms = static_cast<std::uint64_t>(value);
         }
     }
     json_decref(root);

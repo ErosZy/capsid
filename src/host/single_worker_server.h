@@ -54,6 +54,16 @@ struct SingleWorkerServerOptions {
     std::uint64_t queue_requests = 0;
     std::uint64_t queue_header_bytes = 0;
     std::uint64_t queue_timeout_ms = 0;
+    // M2 E-2 SSE streaming permit (design §9.3). A text/event-stream
+    // response must acquire its permit before the head reaches the client;
+    // a permit-exhausted request is cancelled and answered with a
+    // synthesized 503. The permit is held only by the Content-Type, never
+    // by a missing Content-Length. Must stay below max_inflight_per_worker
+    // except for the single documented 1/1 boundary. 0 = unlimited.
+    std::uint64_t max_streaming_inflight_per_worker = 2;
+    // Silence past this deadline cancels the stream and closes the
+    // connection (heartbeat keep-alive; 0 = no idle timeout).
+    std::uint64_t stream_idle_timeout_ms = 60000;
 };
 
 // M1A single-worker Host data plane: one Boost.Asio io_context owner, one

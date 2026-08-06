@@ -229,6 +229,56 @@ int main() {
                 "queue timeout above the Host maximum accepted");
     }
 
+    // 7c. E-2 SSE permit (request.*, §9.3): the App stream fields must not
+    // exceed the Host maximums (cap-only, 0 = no ceiling); the effective
+    // config carries the compiled values into the data plane. The 1/1
+    // boundary rule is enforced at the shard, not in the compiler.
+    {
+        capsid::host::AppRequest streaming = legal_app();
+        streaming.max_streaming_inflight_per_worker = 3;
+        streaming.stream_idle_timeout_ms = 120000;
+        EffectiveEnvEntry resolved;
+        resolved.name = "APP_TOKEN";
+        resolved.from_secret = true;
+        resolved.secret_key_id = "api-token";
+        resolved.secret_revision = "file-v1:1:2:3:4:5";
+        {
+            const PolicyCompileResult result =
+                compile_policy(default_host(), streaming, { resolved });
+            require(result.ok, "legal SSE config rejected: " + result.error);
+            require(result.effective.max_streaming_inflight_per_worker == 3 &&
+                        result.effective.stream_idle_timeout_ms == 120000,
+                    "effective config lost the SSE permit fields");
+            require(result.effective.effective_json.find(
+                        "\"maxStreamingInflightPerWorker\":3") !=
+                        std::string::npos &&
+                        result.effective.effective_json.find(
+                            "\"streamIdleTimeoutMs\":120000") !=
+                            std::string::npos,
+                    "effective.json lost the SSE permit fields");
+        }
+
+        capsid::host::HostPolicy slot_capped = default_host();
+        slot_capped.max_streaming_inflight_per_worker = 2;
+        capsid::host::AppRequest deep = streaming;
+        deep.max_streaming_inflight_per_worker = 4;
+        const PolicyCompileResult slot_result =
+            compile_policy(slot_capped, deep, { resolved });
+        require(!slot_result.ok &&
+                    slot_result.error.find("streaming") != std::string::npos,
+                "streaming permit above the Host maximum accepted");
+
+        capsid::host::HostPolicy idle_capped = default_host();
+        idle_capped.max_stream_idle_timeout_ms = 60000;
+        capsid::host::AppRequest long_idle = streaming;
+        long_idle.stream_idle_timeout_ms = 300000;
+        const PolicyCompileResult idle_result =
+            compile_policy(idle_capped, long_idle, { resolved });
+        require(!idle_result.ok &&
+                    idle_result.error.find("stream") != std::string::npos,
+                "stream idle timeout above the Host maximum accepted");
+    }
+
     // 8. M2 static pools accept fixed N/N within the Host ceiling. The
     // compiler is a defense-in-depth entry point, so it must independently
     // reject minReady != maxWorkers even though the JSON schema already

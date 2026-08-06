@@ -401,6 +401,23 @@ PolicyCompileResult compile_policy(
     result.effective.queue_requests = app.queue_requests;
     result.effective.queue_header_bytes = app.queue_header_bytes;
     result.effective.queue_timeout_ms = app.queue_timeout_ms;
+    // E-2 SSE-permit maximums (§9.3): the same cap-only intersection as the
+    // queue maximums — a Host maximum of 0 imposes no ceiling; the 1/1
+    // boundary rule is enforced at the shard, not here.
+    if (host.max_streaming_inflight_per_worker != 0 &&
+        app.max_streaming_inflight_per_worker >
+            host.max_streaming_inflight_per_worker) {
+        result.error = "streaming permit exceeds the Host maximum";
+        return result;
+    }
+    if (host.max_stream_idle_timeout_ms != 0 &&
+        app.stream_idle_timeout_ms > host.max_stream_idle_timeout_ms) {
+        result.error = "stream idle timeout exceeds the Host maximum";
+        return result;
+    }
+    result.effective.max_streaming_inflight_per_worker =
+        app.max_streaming_inflight_per_worker;
+    result.effective.stream_idle_timeout_ms = app.stream_idle_timeout_ms;
     result.effective.js_heap_bytes = app.js_heap_bytes;
     result.effective.process_address_bytes = app.process_address_bytes;
     result.effective.file_descriptors = app.file_descriptors;
@@ -631,6 +648,10 @@ PolicyCompileResult compile_policy(
          << ",\"queueRequests\":" << result.effective.queue_requests
          << ",\"queueHeaderBytes\":" << result.effective.queue_header_bytes
          << ",\"queueTimeoutMs\":" << result.effective.queue_timeout_ms
+         << ",\"maxStreamingInflightPerWorker\":"
+         << result.effective.max_streaming_inflight_per_worker
+         << ",\"streamIdleTimeoutMs\":"
+         << result.effective.stream_idle_timeout_ms
          << ",\"memoryBytes\":" << result.effective.memory_bytes
          << ",\"jsHeapBytes\":" << result.effective.js_heap_bytes
          << ",\"processAddressBytes\":" << result.effective.process_address_bytes
@@ -674,6 +695,8 @@ PolicyCompileResult compile_policy(
                << ";qreq:" << app.queue_requests
                << ";qbytes:" << app.queue_header_bytes
                << ";qtimeout:" << app.queue_timeout_ms
+               << ";streaming:" << app.max_streaming_inflight_per_worker
+               << ";idle:" << app.stream_idle_timeout_ms
                << ";mem:" << app.memory_bytes
                << ";heap:" << app.js_heap_bytes
                << ";addr:" << app.process_address_bytes

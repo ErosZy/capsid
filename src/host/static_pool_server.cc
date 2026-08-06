@@ -93,6 +93,17 @@ public:
             if (options_.queue_timeout_ms != 0) {
                 shard_options.queue_timeout_ms = options_.queue_timeout_ms;
             }
+            // E-2 SSE permit (§9.3): a non-zero pool-level field overrides
+            // the shard template the same way; 0 = not set keeps the shard
+            // defaults (2 slots, 60s idle).
+            if (options_.max_streaming_inflight_per_worker != 0) {
+                shard_options.max_streaming_inflight_per_worker =
+                    options_.max_streaming_inflight_per_worker;
+            }
+            if (options_.stream_idle_timeout_ms != 0) {
+                shard_options.stream_idle_timeout_ms =
+                    options_.stream_idle_timeout_ms;
+            }
             if (index > 0) {
                 shard_options.listen_port = shared_port;
             }

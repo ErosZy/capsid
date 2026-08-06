@@ -354,6 +354,7 @@ if(BUILD_TESTING)
                         host_managed_executable_rejects_unsafe_admin_mode
                         host_managed_executable_enforces_global_worker_capacity
                         host_managed_executable_enforces_queue_maximums
+                        host_managed_executable_enforces_streaming_maximums
                         host_managed_executable_redeploys_with_capacity_one
                         host_managed_executable_recovery_consumes_capacity)
                     add_test(
@@ -400,6 +401,7 @@ if(BUILD_TESTING)
             foreach(CAPSID_MANAGED_TEST_ID
                     host_managed_deploy_integration
                     host_managed_queue_config_deploy
+                    host_managed_sse_permit_config_deploy
                     host_managed_fixed_pool_deploy_and_recover
                     host_managed_fixed_pool_warm_failure_is_atomic
                     host_managed_admin_fixed_pool_handoff
@@ -821,6 +823,72 @@ if(BUILD_TESTING)
                 host_admission_queue_timeout_returns_504
                 host_admission_worker_death_returns_503
                 host_admission_pool_forwards_options PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+
+            # M2 E-2 SSE streaming permit (§9.3): Content-Type-only permit,
+            # synthesized 503 before the head, exactly-once release on every
+            # completion/cancel path, stream idle timeout, 1/1 boundary.
+            add_executable(
+                test-host-sse-permit
+                tests/test_host_sse_permit.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            target_include_directories(
+                test-host-sse-permit PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-host-sse-permit PRIVATE
+                capsid_runtime
+                capsid_host_core
+                Boost::system
+                capsid_sanitizers)
+            set_target_properties(
+                test-host-sse-permit PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-sse-permit PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-sse-permit PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(
+                            test-host-sse-permit PRIVATE
+                            -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_test(
+                NAME host_sse_permit_full_rejects_503
+                COMMAND test-host-sse-permit permit-full-rejects-503
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_sse_permit_released_on_completion
+                COMMAND test-host-sse-permit permit-released-on-completion
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_sse_idle_timeout_cancels_and_releases
+                COMMAND test-host-sse-permit idle-timeout-cancels-and-releases
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_sse_plain_chunked_no_permit
+                COMMAND test-host-sse-permit plain-chunked-does-not-hold-permit
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_sse_max_inflight_one_boundary
+                COMMAND test-host-sse-permit max-inflight-one-boundary
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_sse_permit_full_rejects_503
+                host_sse_permit_released_on_completion
+                host_sse_idle_timeout_cancels_and_releases
+                host_sse_plain_chunked_no_permit
+                host_sse_max_inflight_one_boundary PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 

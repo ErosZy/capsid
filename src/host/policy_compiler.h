@@ -49,6 +49,11 @@ struct HostPolicy {
     std::uint64_t max_queue_requests = 0;      // 0 = no depth cap
     std::uint64_t max_queue_header_bytes = 0;  // 0 = no header-bytes cap
     std::uint64_t max_queue_timeout_ms = 0;    // 0 = no deadline cap
+    // Host-side SSE-permit maximums (host.json maximums.request.*, E-2
+    // §9.3). Same cap-only semantics as the queue maximums: 0 = the Host
+    // imposes no ceiling; the 1/1 boundary rule is enforced at the shard.
+    std::uint64_t max_streaming_inflight_per_worker = 0;
+    std::uint64_t max_stream_idle_timeout_ms = 0;
     bool strict_sandbox = true;  // isolation is host-decided only
 };
 
@@ -76,6 +81,11 @@ struct AppRequest {
     std::uint64_t queue_requests = 0;       // queue depth; 0 = disabled
     std::uint64_t queue_header_bytes = 0;   // 0 = unbounded header bytes
     std::uint64_t queue_timeout_ms = 0;     // 0 = no queue deadline
+    // request.* SSE permit (E-2 §9.3). 0 = unset: the shard keeps its
+    // defaults (2 slots, 60s idle). An explicit non-zero value overrides;
+    // the 1/1 boundary is validated at the shard.
+    std::uint64_t max_streaming_inflight_per_worker = 0;  // 0 = unset
+    std::uint64_t stream_idle_timeout_ms = 0;             // 0 = unset
     // worker.* resource fields. memory_bytes is worker.memoryMax (the
     // process memory ceiling); the three sub-resources keep their own
     // slots so none of them impersonates another at the Runtime boundary.
@@ -117,6 +127,8 @@ struct EffectiveConfig {
     std::uint64_t queue_requests = 0;       // pool.queueRequests
     std::uint64_t queue_header_bytes = 0;   // pool.queueHeaderBytes
     std::uint64_t queue_timeout_ms = 0;     // pool.queueTimeout
+    std::uint64_t max_streaming_inflight_per_worker = 0;  // request.*, 0 = unset
+    std::uint64_t stream_idle_timeout_ms = 0;             // request.*, 0 = unset
     // The effective process-memory permit: the largest stated ceiling
     // (memoryMax, jsHeap, processAddressSpace) for Host-budget accounting.
     std::uint64_t memory_bytes = 0;

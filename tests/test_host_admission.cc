@@ -373,6 +373,7 @@ void test_inflight_full_rejects(const char* worker_path) {
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;  // one in-flight slot
+    options.max_streaming_inflight_per_worker = 1;  // E-2 1/1 boundary
     options.queue_requests = 0;           // queueing disabled
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
@@ -408,6 +409,7 @@ void test_queue_full_rejects(const char* worker_path) {
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
+    options.max_streaming_inflight_per_worker = 1;  // E-2 1/1 boundary
     options.queue_requests = 1;
     options.queue_timeout_ms = 3000;  // long enough to never fire
     capsid::host::SingleWorkerServer server(std::move(options));
@@ -451,6 +453,7 @@ void test_queue_timeout_returns_504(const char* worker_path) {
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
+    options.max_streaming_inflight_per_worker = 1;  // E-2 1/1 boundary
     options.queue_requests = 2;
     options.queue_timeout_ms = 200;  // expires while the holder parks
     capsid::host::SingleWorkerServer server(std::move(options));
@@ -526,6 +529,7 @@ void test_pool_forwards_admission(const char* worker_path) {
     capsid::host::StaticPoolServerOptions options;
     options.workers = 1;
     options.max_inflight_per_worker = 1;
+    options.max_streaming_inflight_per_worker = 1;  // E-2 1/1 boundary
     options.queue_requests = 1;
     options.queue_timeout_ms = 3000;
     options.worker_options.worker_path = worker_path;

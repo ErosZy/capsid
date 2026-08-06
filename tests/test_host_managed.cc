@@ -689,6 +689,28 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_sse_permit_config_deploy") {
+        // E-2 SSE permit fields (request.*, §9.3) ride the frozen
+        // capsid/app-v1 document like the E-1 queue fields — a
+        // zero-consumption field would let the streaming budget silently
+        // disappear from the effective contract.
+        write_file(fixtures.vdir + "/capsid.json",
+                   R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"maxStreamingInflightPerWorker":3,"streamIdleTimeoutMs":90000}})json");
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome outcome =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(outcome.ok, "SSE-config deploy failed: " + outcome.error);
+        require(status.state == capsid::host::OperationState::kActive,
+                "SSE-config deploy not Active");
+        require(outcome.worker != nullptr, "no warmed worker returned");
+        require(run_request(outcome.worker) == "managed-ok",
+                "SSE-config worker did not serve the bundle");
+        capsid_worker_destroy(outcome.worker);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_fixed_pool_deploy_and_recover") {
         write_file(fixtures.vdir + "/capsid.json", kThreeWorkerAppConfig);
         capsid::host::ManagedHostOptions options = make_options(fixtures);

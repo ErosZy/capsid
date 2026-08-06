@@ -415,6 +415,34 @@ bool parse_managed_config(const std::string& json, ManagedConfig* out,
                 out->policy.max_requests_per_worker =
                     static_cast<std::uint64_t>(json_integer_value(inflight));
             }
+            // E-2 SSE-permit caps (maximums.request.*, §9.3): the Host
+            // ceilings the App stream config is compiled against in
+            // compile_policy. Each cap is optional; 0 = no ceiling.
+            json_t* max_streaming = json_object_get(
+                request, "maxStreamingInflightPerWorker");
+            if (json_is_integer(max_streaming)) {
+                const json_int_t value = json_integer_value(max_streaming);
+                if (value < 0) {
+                    *error = "invalid maximums.request."
+                             "maxStreamingInflightPerWorker";
+                    json_decref(root);
+                    return false;
+                }
+                out->policy.max_streaming_inflight_per_worker =
+                    static_cast<std::uint64_t>(value);
+            }
+            json_t* stream_idle =
+                json_object_get(request, "streamIdleTimeoutMs");
+            if (json_is_integer(stream_idle)) {
+                const json_int_t value = json_integer_value(stream_idle);
+                if (value < 0) {
+                    *error = "invalid maximums.request.streamIdleTimeoutMs";
+                    json_decref(root);
+                    return false;
+                }
+                out->policy.max_stream_idle_timeout_ms =
+                    static_cast<std::uint64_t>(value);
+            }
         }
         json_t* worker = json_object_get(maximums, "worker");
         if (json_is_object(worker)) {
@@ -984,6 +1012,20 @@ int main(int argc, char** argv) {
     if (queue_timeout_text != nullptr) {
         options.queue_timeout_ms = parse_duration_ms(
             *queue_timeout_text, "queue-timeout");
+    }
+    // M2 E-2 SSE permit (§9.3): the benchmark CLI mirrors the effective
+    // config's request fields. Unlike the JSON route (where 0 = field not
+    // set), a direct 0 here means unlimited — the same data-plane semantics
+    // as --max-inflight-per-worker 0.
+    const std::string* streaming_text = optional_value("max-streaming-inflight");
+    if (streaming_text != nullptr) {
+        options.max_streaming_inflight_per_worker = parse_nonnegative_integer(
+            *streaming_text, "max-streaming-inflight");
+    }
+    const std::string* idle_text = optional_value("stream-idle-timeout");
+    if (idle_text != nullptr) {
+        options.stream_idle_timeout_ms = parse_nonnegative_integer(
+            *idle_text, "stream-idle-timeout");
     }
 
     const std::vector<std::uint8_t> bundle =

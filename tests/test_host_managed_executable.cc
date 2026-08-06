@@ -490,6 +490,40 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_executable_enforces_streaming_maximums") {
+        // E-2 §9.3: host.json maximums.request.maxStreamingInflightPerWorker
+        // caps the App streaming permit; an App whose request exceeds it
+        // must fail the deploy (the zero-consumption field now has a
+        // consumer).
+        fixture.replace_host_text(
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000}}",
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000,"
+            "\"maxStreamingInflightPerWorker\":2,"
+            "\"streamIdleTimeoutMs\":120000}}");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+
+        // A compliant streaming config deploys active.
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"maxStreamingInflightPerWorker":1,"streamIdleTimeoutMs":90000}})json");
+        const std::string compliant = deploy(fixture);
+        require(wait_terminal_state(fixture, compliant) == "active",
+                "SSE permit within the Host maximums did not deploy active");
+
+        // An over-ceiling streaming config fails the deploy.
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"maxStreamingInflightPerWorker":4,"streamIdleTimeoutMs":90000}})json");
+        const std::string overreach = deploy(fixture);
+        require(wait_terminal_state(fixture, overreach) == "failed",
+                "SSE permit above the Host maximums deployed");
+        require_active_app(fixture);
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_deploy_and_shutdown") {
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);

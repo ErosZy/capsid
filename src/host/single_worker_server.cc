@@ -245,6 +245,15 @@ struct PendingRequest {
     std::size_t cl_remaining = 0;
     // Credit aggregation (diagnostic, zero bytes overhead when disabled).
     std::uint32_t pending_response_credit = 0;
+    // M2 E-2 SSE permit (§9.3): true while this response holds one of the
+    // worker's streaming slots. Released exactly once on every completion
+    // path (response end, cancel, worker exit) before requests_.erase.
+    bool holds_streaming_permit = false;
+    // Stream idle watchdog (E-2 §9.3): armed after the head reaches the
+    // wire, restarted by every body frame, cancelled by the permit release;
+    // firing cancels the request and closes the connection. Owned by the io
+    // thread, like every other PendingRequest member.
+    std::optional<asio::steady_timer> idle_timer;
 };
 
 // E-1 admission (§10.3): a request parked in the shard's bounded queue.
@@ -325,6 +334,8 @@ public:
           max_queue_requests_(options.queue_requests),
           max_queue_header_bytes_(options.queue_header_bytes),
           queue_timeout_ms_(options.queue_timeout_ms),
+          max_streaming_inflight_(options.max_streaming_inflight_per_worker),
+          stream_idle_timeout_ms_(options.stream_idle_timeout_ms),
           options_(std::move(options)),
           signals_(ioc_) {}
 
@@ -405,6 +416,19 @@ private:
         std::vector<std::pair<std::string, std::string>>* headers);
     void reject_response_head(std::uint64_t request_id,
                               const std::string& reason);
+    // M2 E-2 SSE permit (§9.3): acquires one streaming slot for the
+    // response (0 = unlimited), arming the idle watchdog; returns false
+    // when the worker has no slot left. The caller then cancels the request
+    // and answers with a synthesized 503 BEFORE the head reaches the wire.
+    bool acquire_streaming_permit(std::uint64_t request_id,
+                                  PendingRequest& pending);
+    // Returns the permit exactly once (idempotent), cancelling the idle
+    // watchdog; called on every requests_.erase completion path.
+    void release_streaming_permit(PendingRequest& pending);
+    void arm_stream_idle_timer(std::uint64_t request_id,
+                               PendingRequest& pending);
+    void on_stream_idle_timer(std::uint64_t request_id,
+                              const beast::error_code ec);
     void shutdown_worker_and_join();
 
     // Diagnostic IPC metrics (CAPSID_HOST_IPC_METRICS=1 only; zero overhead
@@ -465,6 +489,14 @@ private:
     std::deque<QueuedRequest> queue_;
     std::size_t queue_bytes_ = 0;
     std::optional<asio::steady_timer> queue_timer_;
+
+    // M2 E-2 SSE permit (§9.3): max_streaming_inflight_ bounds the number of
+    // responses that currently hold a streaming slot (0 = unlimited);
+    // stream_idle_timeout_ms_ (0 = none) is the silence deadline per held
+    // permit. All three live on the io thread like the admission state.
+    std::uint64_t max_streaming_inflight_ = 2;
+    std::uint64_t stream_idle_timeout_ms_ = 60000;
+    std::uint64_t streaming_inflight_ = 0;
 
     SingleWorkerServerOptions options_;
     asio::io_context ioc_;
@@ -739,6 +771,19 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     if (start_gate_.exchange(true)) {
         if (error != nullptr) {
             *error = "server already started";
+        }
+        return false;
+    }
+    // M2 E-2 §9.3: the streaming permit must stay below the inflight
+    // ceiling — except the single documented 1/1 boundary, where both are
+    // 1 and the worker explicitly forgoes concurrency for streaming. Both
+    // 0 values mean unlimited and are exempt.
+    if (max_streaming_inflight_ != 0 && max_inflight_ != 0 &&
+        max_streaming_inflight_ >= max_inflight_ &&
+        !(max_inflight_ == 1 && max_streaming_inflight_ == 1)) {
+        if (error != nullptr) {
+            *error = "max_streaming_inflight_per_worker must be below "
+                     "max_inflight_per_worker (except the 1/1 boundary)";
         }
         return false;
     }
@@ -1152,6 +1197,38 @@ void Impl::handle_worker_event(WorkerEvent event) {
                                  "invalid worker response headers");
             return;
         }
+        // M2 E-2 §9.3: the streaming permit is decided by the Content-Type
+        // alone — a text/event-stream response must hold a slot before its
+        // head reaches the client; a plain chunked response (no SSE type)
+        // stays on the ordinary inflight/credit path even without a
+        // Content-Length. A permit-exhausted stream is cancelled here and
+        // answered with a synthesized 503: never a 200 that is torn down.
+        bool is_sse = false;
+        for (const auto& [name, value] : event.headers) {
+            if (name.size() != 12 ||
+                !std::equal(name.begin(), name.end(), "content-type",
+                            [](unsigned char a, unsigned char b) {
+                                return std::tolower(a) == std::tolower(b);
+                            })) {
+                continue;
+            }
+            static constexpr std::string_view kEventStream =
+                "text/event-stream";
+            if (value.size() >= kEventStream.size() &&
+                std::equal(kEventStream.begin(), kEventStream.end(),
+                           value.begin(), [](unsigned char a, unsigned char b) {
+                               return std::tolower(a) == std::tolower(b);
+                           })) {
+                is_sse = true;
+            }
+            break;
+        }
+        if (is_sse &&
+            !acquire_streaming_permit(event.request_id, pending)) {
+            reject_response_head(event.request_id,
+                                 "streaming capacity exhausted");
+            return;
+        }
         pending.response =
             std::make_shared<http::response<http::buffer_body>>();
         pending.response->result(static_cast<http::status>(event.status));
@@ -1213,6 +1290,11 @@ void Impl::handle_worker_event(WorkerEvent event) {
                     return;
                 }
                 pending.head_sent = true;
+                if (pending.holds_streaming_permit) {
+                    // The stream is now on the wire: its silence deadline
+                    // starts here and is restarted by every body frame.
+                    self->arm_stream_idle_timer(request_id, pending);
+                }
                 if (!pending.body_queue.empty()) {
                     // Body events that arrived while the head was being
                     // written are queued here and flushed in order.
@@ -1239,6 +1321,10 @@ void Impl::handle_worker_event(WorkerEvent event) {
             return;
         }
         PendingRequest& pending = it->second;
+        if (pending.holds_streaming_permit) {
+            // Heartbeat (§9.3): any body frame keeps the stream alive.
+            arm_stream_idle_timer(event.request_id, pending);
+        }
         // Performance loop v1: return credit as soon as the frame is
         // received, not after the client write completes, while the
         // per-request write queue stays shallow. This removes one host
@@ -1580,6 +1666,9 @@ void Impl::write_end_block(std::uint64_t request_id) {
             }
             const bool keep_alive = pending.keep_alive;
             Session* session = pending.session.get();
+            // E-2 §9.3: the chunked end-block completed the response;
+            // return the streaming permit exactly once.
+            self->release_streaming_permit(pending);
             self->requests_.erase(it);
             // An inflight slot just freed: admit the next parked request
             // (E-1). The chunked end-block is a request-completion path
@@ -1796,6 +1885,9 @@ void Impl::cancel_request(std::uint64_t request_id) {
     if (it == requests_.end()) {
         return;
     }
+    // E-2 §9.3: every cancellation path (client disconnect, timeouts,
+    // worker exit) returns the streaming permit exactly once.
+    release_streaming_permit(it->second);
     requests_.erase(it);
     {
         // The tombstone drops late commands for this request; it is removed
@@ -1826,6 +1918,8 @@ void Impl::finalize_request(std::uint64_t request_id,
     if (it == requests_.end()) {
         return;
     }
+    // E-2 §9.3: the response completed; return the streaming permit.
+    release_streaming_permit(it->second);
     const bool keep_alive = it->second.keep_alive;
     requests_.erase(it);
     // An inflight slot just freed: admit the next parked request (E-1)
@@ -2499,6 +2593,83 @@ void Impl::reject_response_head(std::uint64_t request_id,
         // §10.3: worker/IPC failure before the response head → 503.
         session->send_simple(http::status::service_unavailable, reason,
                              keep_alive, version);
+    }
+}
+
+// M2 E-2 §9.3: acquires one streaming slot for a text/event-stream
+// response. 0 = unlimited; otherwise the request is refused when the
+// worker's slots are all held. Called from kResponseHead between the
+// header sanitize and the response construction — the client has not seen
+// a single response byte, so a refused permit can still be answered with a
+// synthesized 503.
+bool Impl::acquire_streaming_permit(std::uint64_t request_id,
+                                    PendingRequest& pending) {
+    (void)request_id;
+    if (max_streaming_inflight_ == 0) {
+        return true;
+    }
+    if (streaming_inflight_ >= max_streaming_inflight_) {
+        return false;
+    }
+    ++streaming_inflight_;
+    pending.holds_streaming_permit = true;
+    return true;
+}
+
+// Returns the permit exactly once (idempotent), cancelling the idle
+// watchdog. Every requests_.erase completion path calls this first:
+// response end (write_end_block/finalize_request), cancel_request (which
+// covers client disconnect, timeouts, and worker exit).
+void Impl::release_streaming_permit(PendingRequest& pending) {
+    if (!pending.holds_streaming_permit) {
+        return;
+    }
+    pending.holds_streaming_permit = false;
+    if (pending.idle_timer) {
+        pending.idle_timer->cancel();
+        pending.idle_timer.reset();
+    }
+    --streaming_inflight_;
+}
+
+// Arms (or restarts) the stream idle watchdog: any silence past
+// stream_idle_timeout_ms_ on a held permit cancels the request and closes
+// the connection. The head has reached the wire by the time this is first
+// called, so a fired watchdog can only tear the connection down.
+void Impl::arm_stream_idle_timer(std::uint64_t request_id,
+                                 PendingRequest& pending) {
+    if (stream_idle_timeout_ms_ == 0) {
+        return;
+    }
+    if (!pending.idle_timer) {
+        pending.idle_timer.emplace(ioc_);
+    }
+    pending.idle_timer->expires_after(
+        std::chrono::milliseconds(stream_idle_timeout_ms_));
+    pending.idle_timer->async_wait(
+        [self = shared_from_this(), request_id](const beast::error_code ec) {
+            self->on_stream_idle_timer(request_id, ec);
+        });
+}
+
+void Impl::on_stream_idle_timer(std::uint64_t request_id,
+                                const beast::error_code ec) {
+    if (ec) {
+        // Cancelled by the permit release — the response completed (or was
+        // cancelled) through a faster path.
+        return;
+    }
+    auto it = requests_.find(request_id);
+    if (it == requests_.end()) {
+        return;
+    }
+    PendingRequest& pending = it->second;
+    const std::shared_ptr<Session> session = pending.session;
+    // The head reached the wire before the watchdog was armed, so after
+    // the cancel only a connection close is legal (§9.3).
+    cancel_request(request_id);
+    if (session && !session->closed()) {
+        session->close();
     }
 }
 
