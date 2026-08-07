@@ -123,6 +123,14 @@ struct ManagedLifecycleSnapshot {
 };
 ManagedLifecycleSnapshot managed_read_lifecycle(ManagedHostOptions* options);
 
+// M2 item 6 (design §7.4): read the active health probe config from the
+// committed generation's capsid.json (re-read on every re-anchor, so a
+// redeployed healthCheck takes effect with the new generation). Fails
+// closed: any read/parse failure yields configured=false and the App
+// keeps passive signals only.
+HealthCheckConfig managed_read_health_check(ManagedHostOptions* options,
+                                            const std::string& generation);
+
 // Startup recovery: load active.json if present; validate the COMPLETE
 // generation (artifacts, policy, trusted keys, identity); spawn and warm
 // the worker; publish routing. Missing active.json means no active App.

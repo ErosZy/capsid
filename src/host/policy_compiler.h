@@ -60,6 +60,19 @@ struct HostPolicy {
     bool strict_sandbox = true;  // isolation is host-decided only
 };
 
+// M2 item 6 (design §7.4): the App's active health probe configuration.
+// The supervisor re-reads it from the committed generation's capsid.json
+// on every re-anchor, so a redeployed healthCheck takes effect with the
+// new generation.
+struct HealthCheckConfig {
+    bool configured = false;
+    std::string path;  // probe target, passed verbatim as the GET URL
+    // Probe deadline (healthCheck.timeout; default 5s when unset). The
+    // probe verdict is pending until the response completes or this
+    // deadline elapses, whichever comes first.
+    std::uint64_t timeout_ms = 5000;
+};
+
 struct AppRequest {
     std::vector<std::string> modules;
     struct EnvRequest {
@@ -92,6 +105,12 @@ struct AppRequest {
     // request.writeTimeoutMs (E-3 §9.2): 0 = unset keeps the shard default
     // (60s). The slow-client write deadline is a Host-side socket view.
     std::uint64_t write_timeout_ms = 0;                   // 0 = unset
+    // M2 item 6 (design §7.4): the App's active health probe. A
+    // healthCheck object with a path arms the probe; configured=false
+    // (no healthCheck, or no usable path) means the App keeps passive
+    // signals only and nothing is probed — the read never fabricates a
+    // probe for an unconfigured App.
+    HealthCheckConfig health_check;
     // worker.* resource fields. memory_bytes is worker.memoryMax (the
     // process memory ceiling); the three sub-resources keep their own
     // slots so none of them impersonates another at the Runtime boundary.

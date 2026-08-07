@@ -227,6 +227,13 @@ struct ManagedConfig {
     // applied during extraction; the pure decision functions fail closed
     // on a policy they cannot validate.
     capsid::host::WorkerRecoveryPolicy recovery;
+    // recovery.activeHealthInterval / activeHealthFailures (M2 item 6,
+    // design §7.4): the host-wide active health probe schedule. Defaults
+    // are the documented 30s period and 2 consecutive failures; 0 is NOT
+    // a valid explicit value (it would silently disable probing), so an
+    // explicit zero fails closed at startup.
+    std::uint64_t active_health_interval_ms = 30000;
+    std::uint32_t active_health_failures = 2;
 };
 
 std::string json_string_field(json_t* object, const char* key) {
@@ -615,6 +622,38 @@ bool parse_managed_config(const std::string& json, ManagedConfig* out,
             out->recovery.replacements_concurrent_per_app =
                 static_cast<std::uint32_t>(value);
         }
+        // M2 item 6 (design §7.4): the active health probe schedule. The
+        // interval is a duration string like the backoff fields; an
+        // explicit zero is rejected — a probe period of 0 would silently
+        // disable probing, which must not be a configuration outcome.
+        json_t* health_interval =
+            json_object_get(recovery, "activeHealthInterval");
+        if (json_is_string(health_interval)) {
+            const std::uint64_t interval = parse_duration_ms(
+                json_string_value(health_interval),
+                "recovery.activeHealthInterval");
+            if (interval == 0) {
+                *error =
+                    "recovery.activeHealthInterval must be a positive "
+                    "duration like \"30s\"";
+                json_decref(root);
+                return false;
+            }
+            out->active_health_interval_ms = interval;
+        }
+        json_t* health_failures =
+            json_object_get(recovery, "activeHealthFailures");
+        if (json_is_integer(health_failures)) {
+            const json_int_t value = json_integer_value(health_failures);
+            if (value <= 0) {
+                *error =
+                    "recovery.activeHealthFailures must be positive";
+                json_decref(root);
+                return false;
+            }
+            out->active_health_failures =
+                static_cast<std::uint32_t>(value);
+        }
     }
     // Defaults mirror the documented recovery shape (maxEvents 5 / 60s
     // window / 250ms..30s backoff / 20% jitter / 60s stable reset / 1
@@ -990,6 +1029,13 @@ int run_managed(const std::string& host_config_path,
         supervisor_options.discard_worker = discard_worker;
         supervisor_options.stop_requested = &g_stop;
         supervisor_options.startup_permits = &startup_permits;
+        // M2 item 6 (design §7.4): the active health probe schedule.
+        // Individual Apps opt in with capsid.json healthCheck; the host
+        // interval/failures apply to every configured App.
+        supervisor_options.active_health_interval_ms =
+            config.active_health_interval_ms;
+        supervisor_options.active_health_failures =
+            config.active_health_failures;
         supervisors.push_back(
             std::make_unique<capsid::host::WorkerSupervisor>(
                 std::move(supervisor_options)));

@@ -588,13 +588,33 @@ void require_quarantined(const Fixture& fixture) {
     require(json_is_false(json_object_get(apps, "active")),
             "quarantined App still reports active on the Admin API");
     json_decref(apps);
+    // The quarantine's own teardown of the current worker may still be
+    // in flight when the tombstone lands (the Host writes the tombstone
+    // before destroying the worker, and a slow ASan teardown can take
+    // hundreds of milliseconds): first drain it, then verify the window.
+    const auto drain = std::chrono::steady_clock::now() +
+                       std::chrono::seconds(10);
+    while (!live_worker_children().empty() &&
+           std::chrono::steady_clock::now() < drain) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    require(live_worker_children().empty(),
+            "worker never left after quarantine: " +
+                fixture.diagnostics());
     // The quarantine stops automatic replacement: a window strictly longer
     // than the replacement backoff must stay worker-less.
     const auto quiet = std::chrono::steady_clock::now() +
                        std::chrono::seconds(3);
     while (std::chrono::steady_clock::now() < quiet) {
         require(live_worker_children().empty(),
-                "Host spawned a worker after quarantine");
+                "Host spawned a worker after quarantine; live pids: " +
+                    [&] {
+                        std::string pids;
+                        for (const long pid : live_worker_children()) {
+                            pids += std::to_string(pid) + " ";
+                        }
+                        return pids;
+                    }() + "; " + fixture.diagnostics());
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 }
@@ -1322,6 +1342,114 @@ int main(int argc, char** argv) {
         }
         require(live_worker_children().size() == 2,
                 "orders replacement starved behind the invoices deploy");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    // M2 item 6: the active health probe (design §7.4). A configured
+    // healthCheck turns the supervisor's poll loop into a probe loop:
+    // every recovery.activeHealthInterval the worker's GET path is
+    // probed, two consecutive non-2xx verdicts (recovery
+    // .activeHealthFailures) recycle the worker through the item-5a
+    // replacement chain, and each recycle counts against the shared
+    // instability budget (§10.5.2) — a persistently unhealthy App reaches
+    // quarantine exactly like a crash loop. The worker is never killed
+    // here: every pid rotation is probe-driven.
+    if (mode ==
+        "host_managed_executable_active_health_recycles_unhealthy") {
+        Fixture fixture;
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"healthCheck":{"path":"/health","timeout":"500ms"}})json");
+        replace_file(
+            fixture.applications_root + "/orders/v1/bundle.mjs",
+            "export default { fetch: (request) => {"
+            // The probe delivers the data-plane URL shape (absolute URL,
+            // App id as the authority), so the handler matches the probe
+            // exactly like a real request to /health.
+            "  if (request.url === 'http://orders/health') {"
+            "    return new Response('down', { status: 503 });"
+            "  }"
+            "  return new Response('managed-executable-ok');"
+            "} };");
+        fixture.replace_host_text(
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}",
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1},"
+            "\"recovery\":{\"activeHealthInterval\":\"250ms\","
+            "\"activeHealthFailures\":2,"
+            "\"crashBudget\":{\"maxEvents\":2,\"window\":\"60s\"},"
+            "\"restartBackoff\":{\"initial\":\"250ms\",\"maximum\":\"30s\","
+            "\"jitter\":\"0%\"}}");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        wait_active(fixture, operation);
+        const long initial = current_worker_pid();
+        require(initial > 0,
+                "no live worker before the health probe loop");
+        // Two consecutive 503 verdicts recycle the worker: the first
+        // live pid that differs from `initial` is the probe-driven
+        // replacement (budget event 1 of maxEvents=2).
+        long worker = wait_replacement(fixture, initial);
+        // Recycle #2 (budget event 2)...
+        worker = wait_replacement(fixture, worker);
+        // Recycle #3 exceeds the budget: the Host must quarantine,
+        // never keep recycling. The diagnostics prove every rotation was
+        // probe-driven: consecutive-failure verdicts and the health
+        // recycle message, with NO crash-path message anywhere (nothing
+        // was killed in this test).
+        require_quarantined(fixture);
+        const std::string diagnostics = fixture.diagnostics();
+        require(diagnostics.find("health probe failed (2 consecutive)") !=
+                    std::string::npos,
+                "no probe-failure evidence in Host diagnostics");
+        require(diagnostics.find("replaced unhealthy worker") !=
+                    std::string::npos,
+                "replacement was not probe-driven in Host diagnostics");
+        require(diagnostics.find("replaced crashed worker") ==
+                    std::string::npos,
+                "a crash path claimed the probe-driven replacement");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    // A healthy probe path must never recycle: the worker stays put
+    // across many probe cycles and the App stays active. This guards the
+    // probe against an always-fail implementation (the passive signal
+    // must remain the sole replacement trigger for a healthy worker).
+    if (mode == "host_managed_executable_active_health_healthy_stays") {
+        Fixture fixture;
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"healthCheck":{"path":"/health","timeout":"500ms"}})json");
+        fixture.replace_host_text(
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}",
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1},"
+            "\"recovery\":{\"activeHealthInterval\":\"250ms\","
+            "\"activeHealthFailures\":2,"
+            "\"crashBudget\":{\"maxEvents\":2,\"window\":\"60s\"},"
+            "\"restartBackoff\":{\"initial\":\"250ms\",\"maximum\":\"30s\","
+            "\"jitter\":\"0%\"}}");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        wait_active(fixture, operation);
+        const long initial = current_worker_pid();
+        require(initial > 0,
+                "no live worker before the healthy probe window");
+        // ~16 probe cycles at 250ms; the worker must survive them all.
+        const auto window = std::chrono::steady_clock::now() +
+                            std::chrono::seconds(4);
+        while (std::chrono::steady_clock::now() < window) {
+            require(current_worker_pid() == initial,
+                    "healthy worker was recycled by the active health "
+                    "probe: " + fixture.diagnostics());
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(100));
+        }
+        require_active_app(fixture);
         stop_host(fixture);
         std::cout << "PASS" << std::endl;
         return 0;

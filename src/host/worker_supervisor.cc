@@ -12,6 +12,17 @@
 
 namespace capsid::host {
 
+// M2 item 6 (design §7.4): the fixed small probe response cap. A probe
+// body beyond this fails the verdict regardless of status. Bodies under
+// the worker's initial stream window flow without any credit grant; a
+// larger body would stall the worker anyway and hit the probe timeout.
+inline constexpr std::size_t kProbeResponseBodyCap = 4096;
+
+// A probe schedule marker meaning "never due" (unconfigured App, or
+// probing disabled by a zero host interval).
+inline constexpr std::uint64_t kProbeDisabled =
+    std::numeric_limits<std::uint64_t>::max();
+
 // M2 item 5a: the per-App supervisor thread. It owns the observation of the
 // current worker's IPC stream and every decision derived from it (design
 // §10.5): replacement with backoff, and quarantine when the crash budget is
@@ -92,6 +103,8 @@ void WorkerSupervisor::run() {
             observed_ = nullptr;
             recovery_anchored_ = false;
             tracking_stability_ = false;
+            probe_worker_ = nullptr;
+            probe_in_flight_ = false;
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
@@ -128,6 +141,59 @@ void WorkerSupervisor::run() {
             ready_since_ms_ = monotonic_ms();
             tracking_stability_ = true;
         }
+        // M2 item 6 (design §7.4): (re)arm the active health probe for a
+        // NEW worker. This is keyed on the worker identity, not the
+        // anchor branch above, so it also fires after our own replacement
+        // publish (the map hands out a worker probe_worker_ does not yet
+        // name). The config is re-read from the committed generation on
+        // every arm, so a redeployed healthCheck takes effect with the
+        // new generation; an unanchored worker is never probed.
+        if (worker != probe_worker_) {
+            probe_worker_ = worker;
+            probe_in_flight_ = false;
+            consecutive_probe_failures_ = 0;
+            health_check_ = HealthCheckConfig();
+            if (recovery_anchored_) {
+                health_check_ = managed_read_health_check(
+                    options_.managed_options, recovery_state_.generation);
+            }
+            // Every new worker gets at least one initial check: the
+            // initial probe is due immediately, in parallel with the 5a
+            // stability window.
+            next_probe_due_ms_ =
+                (recovery_anchored_ && health_check_.configured &&
+                 options_.active_health_interval_ms > 0)
+                    ? monotonic_ms()
+                    : kProbeDisabled;
+        }
+        // In-flight probe deadline: a verdict still pending past the
+        // App's healthCheck.timeout is a failed verdict (§7.4 gives the
+        // probe its own timeout, independent of the 100 ms poll slice).
+        // The request is cancelled so the worker frees its response slot.
+        if (probe_in_flight_ &&
+            monotonic_ms() > probe_deadline_ms_) {
+            // Cancel the request so the worker frees its response slot;
+            // the cancel frame must be flushed like any other command
+            // (the supervisor thread is the only command sender here).
+            (void)capsid_worker_cancel(worker, probe_request_id_);
+            (void)capsid_worker_flush(worker);
+            probe_in_flight_ = false;
+            probe_failure(worker);
+        } else if (!probe_in_flight_ &&
+                   next_probe_due_ms_ != kProbeDisabled &&
+                   monotonic_ms() >= next_probe_due_ms_) {
+            start_probe(worker);
+        }
+        // A probe verdict may have recycled the worker just observed:
+        // attempt_replacement's publish destroys it once the replacement
+        // is READY (the 5a crash path never falls through to the fd with
+        // a destroyed worker — its event branch continues immediately).
+        // Re-sync from the map, never touch a worker the map no longer
+        // names.
+        if (options_.current_worker(options_.managed_options->application) !=
+            worker) {
+            continue;
+        }
         const int fd = capsid_worker_fd(worker);
         if (fd < 0) {
             // No IPC channel: nothing observable. Treat as an exit.
@@ -140,25 +206,69 @@ void WorkerSupervisor::run() {
         pfd.revents = 0;
         const int polled = poll(&pfd, 1, 100);
         if (polled > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR)) != 0) {
-            capsid_event event;
-            const capsid_result result = capsid_worker_next_event(worker, &event);
-            if (result == CAPSID_OK &&
-                event.type != CAPSID_EVENT_EXIT &&
-                event.type != CAPSID_EVENT_ERROR) {
+            // Drain the parser, not one event per poll: a single read may
+            // deliver several frames (a log followed by the probe's head,
+            // body and end in one write), and poll cannot fire again once
+            // the socket has been drained into the parser — events would
+            // sit unread and every probe would fail by deadline.
+            for (;;) {
+                capsid_event event = {};
+                event.struct_size = sizeof(event);
+                const capsid_result result =
+                    capsid_worker_next_event(worker, &event);
+                if (result == CAPSID_WOULD_BLOCK) {
+                    break;
+                }
+                if (result != CAPSID_OK ||
+                    event.type == CAPSID_EVENT_EXIT ||
+                    event.type == CAPSID_EVENT_ERROR) {
+                    // EXIT, ERROR, EOF or an unexpected read failure.
+                    handle_worker_gone(worker);
+                    break;
+                }
                 // Consumable event: worker log or protocol noise. Managed
                 // mode has no data plane, so only logs are surfaced.
                 if (event.type == CAPSID_EVENT_LOG) {
+                    // Payload layout: string16(level) + message (the
+                    // worker's little-endian two-byte length prefix).
+                    const uint8_t* cursor = event.payload.data;
+                    const uint8_t* end = cursor + event.payload.size;
+                    std::string level;
+                    if (event.payload.size >= 2) {
+                        const std::size_t level_size =
+                            static_cast<std::size_t>(cursor[0]) |
+                            (static_cast<std::size_t>(cursor[1]) << 8);
+                        cursor += 2;
+                        if (level_size <=
+                            static_cast<std::size_t>(end - cursor)) {
+                            level.assign(
+                                reinterpret_cast<const char*>(cursor),
+                                level_size);
+                            cursor += level_size;
+                        }
+                    }
                     std::fprintf(
                         stderr,
-                        "capsid-host: [%s] worker log: %.*s\n",
+                        "capsid-host: [%s] worker %s: %.*s\n",
                         options_.managed_options->application.c_str(),
-                        static_cast<int>(event.payload.size),
-                        reinterpret_cast<const char*>(event.payload.data));
+                        level.c_str(),
+                        static_cast<int>(end - cursor),
+                        reinterpret_cast<const char*>(cursor));
                 }
-                continue;
+                if (probe_in_flight_ &&
+                    event.request_id == probe_request_id_) {
+                    handle_probe_event(worker, event);
+                    // A failed verdict may have recycled the worker
+                    // through attempt_replacement's publish, which
+                    // destroys it once the replacement is READY: never
+                    // touch it again in this drain.
+                    if (options_.current_worker(
+                            options_.managed_options->application) !=
+                        worker) {
+                        break;
+                    }
+                }
             }
-            // EXIT, ERROR, EOF or an unexpected read failure.
-            handle_worker_gone(worker);
             continue;
         }
         // Poll timeout: the worker has remained continuously READY through
@@ -181,6 +291,201 @@ void WorkerSupervisor::run() {
             }
         }
     }
+}
+
+// M2 item 6: fires one bodyless GET against the App's healthCheck.path
+// (design §7.4). The verdict comes back through the poll loop's event
+// dispatch; a body under the worker's initial stream window flows without
+// any credit grant. CAPSID_WOULD_BLOCK means the IPC command queue is
+// full — the only busy source in managed mode (there is no data plane) —
+// and the probe is SKIPPED: not counted as a success, and it does not
+// reset the consecutive-failure count (§7.4).
+void WorkerSupervisor::start_probe(capsid_worker* worker) {
+    // The probe URL mirrors the data-plane shape — an absolute URL with
+    // the App id as the authority — so the app's fetch handler observes
+    // the probe exactly like a real request. A bare relative path would
+    // not construct (the worker's URL parser requires a scheme).
+    std::string url = "http://" +
+                      options_.managed_options->application +
+                      (health_check_.path[0] == '/' ? "" : "/") +
+                      health_check_.path;
+    const capsid_result result = capsid_worker_begin_bodyless_request(
+        worker, ++probe_request_id_, "GET", url.c_str(), nullptr, 0);
+    if (result == CAPSID_OK) {
+        // The data plane flushes commands from its io thread; here the
+        // supervisor thread must flush the probe frame itself or the
+        // worker never sees it (its responses would then never arrive).
+        const capsid_result flushed = capsid_worker_flush(worker);
+        if (flushed != CAPSID_OK) {
+            // The probe could not be delivered: the worker is effectively
+            // unreachable. Fail the verdict.
+            probe_failure(worker);
+            return;
+        }
+        probe_in_flight_ = true;
+        probe_deadline_ms_ = monotonic_ms() + health_check_.timeout_ms;
+        probe_status_ = 0;
+        probe_body_bytes_ = 0;
+        return;
+    }
+    if (result == CAPSID_WOULD_BLOCK) {
+        std::fprintf(stderr,
+                     "capsid-host: [%s] health probe skipped (worker "
+                     "busy)\n",
+                     options_.managed_options->application.c_str());
+        schedule_next_probe();
+        return;
+    }
+    // Any other send failure is itself a protocol-level failed verdict.
+    probe_failure(worker);
+}
+
+void WorkerSupervisor::handle_probe_event(capsid_worker* worker,
+                                          const capsid_event& event) {
+    switch (event.type) {
+    case CAPSID_EVENT_RESPONSE_HEAD:
+        probe_status_ = static_cast<std::int32_t>(event.status);
+        break;
+    case CAPSID_EVENT_RESPONSE_BODY:
+        probe_body_bytes_ += event.payload.size;
+        if (probe_body_bytes_ > kProbeResponseBodyCap) {
+            // §7.4: the fixed small response cap is a protocol failure;
+            // stop the body and fail the verdict.
+            (void)capsid_worker_cancel(worker, probe_request_id_);
+            (void)capsid_worker_flush(worker);
+            probe_in_flight_ = false;
+            probe_failure(worker);
+        }
+        break;
+    case CAPSID_EVENT_RESPONSE_END:
+        probe_in_flight_ = false;
+        if (probe_status_ >= 200 && probe_status_ <= 299 &&
+            probe_body_bytes_ <= kProbeResponseBodyCap) {
+            probe_success();
+        } else {
+            probe_failure(worker);
+        }
+        break;
+    case CAPSID_EVENT_REQUEST_TIMEOUT:
+        probe_in_flight_ = false;
+        probe_failure(worker);
+        break;
+    default:
+        break;
+    }
+}
+
+void WorkerSupervisor::probe_success() {
+    consecutive_probe_failures_ = 0;
+    schedule_next_probe();
+}
+
+void WorkerSupervisor::probe_failure(capsid_worker* worker) {
+    ++consecutive_probe_failures_;
+    std::fprintf(stderr,
+                 "capsid-host: [%s] health probe failed (%u "
+                 "consecutive)\n",
+                 options_.managed_options->application.c_str(),
+                 consecutive_probe_failures_);
+    if (options_.active_health_failures > 0 &&
+        consecutive_probe_failures_ >= options_.active_health_failures) {
+        // §7.4: consecutive failed verdicts (timeout, non-2xx, protocol
+        // error or oversized body) make the worker UNHEALTHY: recycle it
+        // through the item-5a chain as a kHealthRecycle instability
+        // event, counting against the shared budget (§10.5.2).
+        handle_unhealthy_worker(worker);
+        return;
+    }
+    schedule_next_probe();
+}
+
+// Next probe due after the interval, jittered with the policy's
+// basis-point range (same scaling convention as the 5a backoff).
+void WorkerSupervisor::schedule_next_probe() {
+    const std::int64_t interval =
+        static_cast<std::int64_t>(options_.active_health_interval_ms);
+    const std::int64_t scaled =
+        interval * (10000 + jitter_basis_points());
+    next_probe_due_ms_ = monotonic_ms() +
+                         static_cast<std::uint64_t>(scaled / 10000);
+}
+
+// The probe-driven recycle decision: identical gates and decision chain
+// to handle_worker_gone, but the worker is still ALIVE — the map still
+// names it, so the identity checks hold and the replacement publish
+// destroys it exactly like a crashed worker. The only difference is the
+// instability kind: kHealthRecycle counts toward the crash budget
+// (§10.5.2: an active-health recycle is budgeted like a crash).
+void WorkerSupervisor::handle_unhealthy_worker(capsid_worker* worker) {
+    if (stop_requested()) {
+        observed_ = nullptr;
+        return;
+    }
+    if (options_.current_worker(options_.managed_options->application) !=
+        worker) {
+        observed_ = nullptr;
+        return;
+    }
+    const ManagedLifecycleSnapshot snapshot =
+        managed_read_lifecycle(options_.managed_options);
+    if (!snapshot.ok) {
+        std::fprintf(stderr,
+                     "capsid-host: [%s] cannot read lifecycle after "
+                     "health probe failure; stopping automatic recovery\n",
+                     options_.managed_options->application.c_str());
+        remove_current(worker);
+        observed_ = nullptr;
+        return;
+    }
+    if (!recovery_anchored_ ||
+        snapshot.state.phase != ServiceLifecyclePhase::kActive ||
+        snapshot.state.document->generation != recovery_state_.generation) {
+        // The active document moved while the probe was failing: the
+        // deploy owns the outcome. Clean up, never count.
+        remove_current(worker);
+        observed_ = nullptr;
+        return;
+    }
+    WorkerInstabilityObservation observation;
+    observation.kind = WorkerInstabilityKind::kHealthRecycle;
+    observation.worker_generation = recovery_state_.generation;
+    observation.now_ms = monotonic_ms();
+    observation.ready_workers_after_removal = 0;
+    observation.target_ready_workers = 1;
+    observation.replacements_in_flight_for_app = 0;
+    observation.chosen_jitter_basis_points = jitter_basis_points();
+    const WorkerRecoveryDecision decision = record_worker_instability(
+        recovery_state_, options_.policy, snapshot.state, observation);
+    recovery_state_ = decision.state;
+    if (!decision.ok) {
+        std::fprintf(stderr,
+                     "capsid-host: [%s] instability decision failed: %s; "
+                     "stopping automatic recovery\n",
+                     options_.managed_options->application.c_str(),
+                     decision.error.message.c_str());
+        remove_current(worker);
+        observed_ = nullptr;
+        return;
+    }
+    if (decision.disposition ==
+        GenerationRecoveryDisposition::kBeginQuarantine) {
+        quarantine(worker);
+        return;
+    }
+    if (decision.disposition == GenerationRecoveryDisposition::kContinueActive) {
+        if (decision.schedule_replacement) {
+            attempt_replacement(worker, decision,
+                                "replaced unhealthy worker");
+            return;
+        }
+        // Pool full or singleflight already present: nothing to replace.
+        remove_current(worker);
+        observed_ = nullptr;
+        return;
+    }
+    // kIgnoredExpectedEvent / kStaleGeneration / kUnavailable: not counted.
+    remove_current(worker);
+    observed_ = nullptr;
 }
 
 void WorkerSupervisor::handle_worker_gone(capsid_worker* worker) {
@@ -244,7 +549,7 @@ void WorkerSupervisor::handle_worker_gone(capsid_worker* worker) {
     }
     if (decision.disposition == GenerationRecoveryDisposition::kContinueActive) {
         if (decision.schedule_replacement) {
-            attempt_replacement(worker, decision);
+            attempt_replacement(worker, decision, "replaced crashed worker");
             return;
         }
         // Pool full or singleflight already present: nothing to replace.
@@ -259,8 +564,9 @@ void WorkerSupervisor::handle_worker_gone(capsid_worker* worker) {
     observed_ = nullptr;
 }
 
-void WorkerSupervisor::attempt_replacement(capsid_worker* worker,
-                                           const WorkerRecoveryDecision& first) {
+void WorkerSupervisor::attempt_replacement(
+    capsid_worker* worker, const WorkerRecoveryDecision& first,
+    const char* replaced_message) {
     WorkerRecoveryDecision decision = first;
     for (;;) {
         if (!sleep_interruptible(decision.replacement_delay_ms)) {
@@ -344,8 +650,9 @@ void WorkerSupervisor::attempt_replacement(capsid_worker* worker,
                 recovery_state_.last_observed_ms = ready_since_ms_;
                 recovery_state_.has_last_observed_time = true;
                 std::fprintf(stderr,
-                             "capsid-host: [%s] replaced crashed worker\n",
-                             options_.managed_options->application.c_str());
+                             "capsid-host: [%s] %s\n",
+                             options_.managed_options->application.c_str(),
+                             replaced_message);
             } else {
                 options_.discard_worker(recovered.worker);
                 observed_ = nullptr;

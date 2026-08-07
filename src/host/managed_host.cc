@@ -1805,6 +1805,35 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
             app->write_timeout_ms = static_cast<std::uint64_t>(value);
         }
     }
+    // M2 item 6: the active health probe (design §7.4). A healthCheck
+    // object with a usable path arms the probe; the timeout defaults to
+    // 5s. A healthCheck without a path, or an empty path, is NOT a probe
+    // config (fail closed: the Host never invents a probe target), and a
+    // zero deadline is rejected — an immediate-timeout probe is a
+    // degenerate config, not a decision.
+    json_t* health_check = json_object_get(root, "healthCheck");
+    if (health_check != nullptr && json_is_object(health_check)) {
+        json_t* path = json_object_get(health_check, "path");
+        if (json_is_string(path)) {
+            const std::string value = json_string_value(path);
+            if (!value.empty()) {
+                app->health_check.configured = true;
+                app->health_check.path = value;
+            }
+        }
+        json_t* timeout = json_object_get(health_check, "timeout");
+        if (json_is_string(timeout)) {
+            std::uint64_t timeout_ms = 0;
+            if (!parse_duration_ms(json_string_value(timeout),
+                                   &timeout_ms) ||
+                timeout_ms == 0) {
+                *error = "invalid capsid.json healthCheck.timeout";
+                json_decref(root);
+                return false;
+            }
+            app->health_check.timeout_ms = timeout_ms;
+        }
+    }
     json_decref(root);
     return true;
 }
@@ -3327,6 +3356,67 @@ ManagedLifecycleSnapshot managed_read_lifecycle(ManagedHostOptions* options) {
         break;
     }
     return snapshot;
+}
+
+// M2 item 6: read the active health probe config (design §7.4) from the
+// COMMITTED generation's capsid.json — the same verified dirfd walk and
+// bounded read boot recovery uses, so the supervisor re-reads it on every
+// re-anchor and a redeployed healthCheck takes effect with the new
+// generation. Fails closed: any read or parse failure yields
+// configured=false (the App keeps passive signals only) with a diagnostic
+// line — a probe is never fabricated from an unreadable document.
+HealthCheckConfig managed_read_health_check(ManagedHostOptions* options,
+                                            const std::string& generation) {
+    HealthCheckConfig result;
+    if (options == nullptr) {
+        return result;
+    }
+    const int state_fd = open_verified_state_root(options->state_root);
+    if (state_fd < 0) {
+        return result;
+    }
+    const int app_state_fd = open_verified_app_state_dir(
+        state_fd, options->application, /*create=*/false);
+    close(state_fd);
+    if (app_state_fd < 0) {
+        return result;
+    }
+    const int generations_fd =
+        prepare_subdir_at(app_state_fd, "generations");
+    close(app_state_fd);
+    if (generations_fd < 0) {
+        return result;
+    }
+    const int generation_fd =
+        open_verified_subdir(generations_fd, generation.c_str());
+    close(generations_fd);
+    if (generation_fd < 0) {
+        return result;
+    }
+    std::string capsid_json;
+    const ReadFileStatus status = read_file_at(
+        generation_fd, "capsid.json", kMaxConfigFileBytes, &capsid_json);
+    close(generation_fd);
+    if (status != ReadFileStatus::kOk) {
+        std::fprintf(stderr,
+                     "capsid-host: [%s] cannot read committed health "
+                     "check; passive signals only\n",
+                     options->application.c_str());
+        return result;
+    }
+    AppRequest app;
+    std::string error;
+    if (!parse_app_request(
+            std::vector<std::uint8_t>(capsid_json.begin(),
+                                      capsid_json.end()),
+            &app, &error)) {
+        std::fprintf(stderr,
+                     "capsid-host: [%s] cannot parse committed health "
+                     "check; passive signals only\n",
+                     options->application.c_str());
+        return result;
+    }
+    return app.health_check;
 }
 
 // Compares two environment metadata records (name, source kind, secret key
