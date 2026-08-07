@@ -15,6 +15,7 @@
 #include "host/admin_service.h"
 #include "host/config.h"
 #include "host/managed_admin_backend.h"
+#include "host/worker_supervisor.h"
 
 #include <jansson.h>
 
@@ -221,6 +222,11 @@ struct ManagedConfig {
     // operation settles. startupsConcurrent is NOT reinterpreted as the
     // Admin pending-queue ceiling.
     int worker_capacity = 1;
+    // recovery.*: the worker supervisor's crash-budget/backoff policy
+    // (design §10.5). Defaults mirror the documented example and are
+    // applied during extraction; the pure decision functions fail closed
+    // on a policy they cannot validate.
+    capsid::host::WorkerRecoveryPolicy recovery;
 };
 
 std::string json_string_field(json_t* object, const char* key) {
@@ -520,6 +526,122 @@ bool parse_managed_config(const std::string& json, ManagedConfig* out,
             out->worker_capacity = static_cast<int>(value);
         }
     }
+    // recovery.* (design §10.5): crashBudget/restartBackoff feed the
+    // worker supervisor's pure decision functions. All fields are
+    // optional; the documented defaults are applied below. jitter is a
+    // percentage string ("20%") mapped to basis points (20% -> 2000).
+    json_t* recovery = json_object_get(root, "recovery");
+    if (json_is_object(recovery)) {
+        json_t* crash_budget = json_object_get(recovery, "crashBudget");
+        if (json_is_object(crash_budget)) {
+            json_t* max_events = json_object_get(crash_budget, "maxEvents");
+            if (json_is_integer(max_events)) {
+                const json_int_t value = json_integer_value(max_events);
+                if (value <= 0 ||
+                    value > static_cast<json_int_t>(
+                                 capsid::host::kMaxTrackedInstabilityEvents)) {
+                    *error = "recovery.crashBudget.maxEvents out of range";
+                    json_decref(root);
+                    return false;
+                }
+                out->recovery.max_events =
+                    static_cast<std::uint32_t>(value);
+            }
+            json_t* window = json_object_get(crash_budget, "window");
+            if (json_is_string(window)) {
+                out->recovery.window_ms = parse_duration_ms(
+                    json_string_value(window),
+                    "recovery.crashBudget.window");
+            }
+        }
+        json_t* restart_backoff =
+            json_object_get(recovery, "restartBackoff");
+        if (json_is_object(restart_backoff)) {
+            json_t* initial = json_object_get(restart_backoff, "initial");
+            if (json_is_string(initial)) {
+                out->recovery.backoff_initial_ms = parse_duration_ms(
+                    json_string_value(initial),
+                    "recovery.restartBackoff.initial");
+            }
+            json_t* maximum = json_object_get(restart_backoff, "maximum");
+            if (json_is_string(maximum)) {
+                out->recovery.backoff_maximum_ms = parse_duration_ms(
+                    json_string_value(maximum),
+                    "recovery.restartBackoff.maximum");
+            }
+            json_t* stable_reset =
+                json_object_get(restart_backoff, "stableReset");
+            if (json_is_string(stable_reset)) {
+                out->recovery.stable_reset_ms = parse_duration_ms(
+                    json_string_value(stable_reset),
+                    "recovery.restartBackoff.stableReset");
+            }
+            json_t* jitter = json_object_get(restart_backoff, "jitter");
+            if (json_is_string(jitter)) {
+                const std::string text = json_string_value(jitter);
+                bool valid = !text.empty() && text.back() == '%';
+                std::uint64_t percent = 0;
+                if (valid) {
+                    for (const char c : text.substr(0, text.size() - 1)) {
+                        if (c < '0' || c > '9') {
+                            valid = false;
+                            break;
+                        }
+                        percent = percent * 10 +
+                                  static_cast<unsigned>(c - '0');
+                    }
+                }
+                if (!valid || percent > 100) {
+                    *error =
+                        "recovery.restartBackoff.jitter must be a "
+                        "percentage like \"20%\"";
+                    json_decref(root);
+                    return false;
+                }
+                out->recovery.jitter_basis_points =
+                    static_cast<std::uint32_t>(percent * 100);
+            }
+        }
+        json_t* concurrent =
+            json_object_get(recovery, "replacementsConcurrentPerApp");
+        if (json_is_integer(concurrent)) {
+            const json_int_t value = json_integer_value(concurrent);
+            if (value <= 0) {
+                *error =
+                    "recovery.replacementsConcurrentPerApp must be positive";
+                json_decref(root);
+                return false;
+            }
+            out->recovery.replacements_concurrent_per_app =
+                static_cast<std::uint32_t>(value);
+        }
+    }
+    // Defaults mirror the documented recovery shape (maxEvents 5 / 60s
+    // window / 250ms..30s backoff / 20% jitter / 60s stable reset / 1
+    // concurrent replacement). Zero marks "not set": the decision
+    // functions require every field positive, so an explicit zero would
+    // fail closed at startup instead of silently disabling recovery.
+    if (out->recovery.max_events == 0) {
+        out->recovery.max_events = 5;
+    }
+    if (out->recovery.window_ms == 0) {
+        out->recovery.window_ms = 60000;
+    }
+    if (out->recovery.backoff_initial_ms == 0) {
+        out->recovery.backoff_initial_ms = 250;
+    }
+    if (out->recovery.backoff_maximum_ms == 0) {
+        out->recovery.backoff_maximum_ms = 30000;
+    }
+    if (out->recovery.jitter_basis_points == 0) {
+        out->recovery.jitter_basis_points = 2000;
+    }
+    if (out->recovery.stable_reset_ms == 0) {
+        out->recovery.stable_reset_ms = 60000;
+    }
+    if (out->recovery.replacements_concurrent_per_app == 0) {
+        out->recovery.replacements_concurrent_per_app = 1;
+    }
     if (out->applications_root.empty() || out->state_root.empty() ||
         out->admin_unix_path.empty() ||
         out->secret_root_template.find("{application}") ==
@@ -738,6 +860,7 @@ int run_managed(const std::string& host_config_path,
         options->application = application;
         options->worker_path = worker_path;
         options->host_policy = config.policy;
+        options->recovery_policy = config.recovery;
         options->runtime_compatibility_id = CAPSID_BUILD_COMPATIBILITY_ID;
         options->stop_requested = &g_stop;
         app_options.push_back(options.get());
@@ -768,6 +891,25 @@ int run_managed(const std::string& host_config_path,
             capsid_worker_destroy(existing->second);
             active_workers.erase(existing);
         }
+    };
+    // The supervisor destroys a dead worker ONLY when the map still names
+    // exactly that worker: a raced deploy's live worker is never destroyed
+    // by the supervisor.
+    const auto remove_if_current =
+        [&](const std::string& application, capsid_worker* worker) {
+            std::lock_guard<std::mutex> lock(workers_mutex);
+            const std::map<std::string, capsid_worker*>::iterator existing =
+                active_workers.find(application);
+            if (existing != active_workers.end() &&
+                existing->second == worker) {
+                capsid_worker_destroy(existing->second);
+                active_workers.erase(existing);
+            }
+        };
+    const auto discard_worker = [&](capsid_worker* worker) {
+        // A worker the supervisor itself spawned but could not publish:
+        // never visible in the map, destroyed directly.
+        capsid_worker_destroy(worker);
     };
     const auto reclaim_workers = [&]() {
         std::lock_guard<std::mutex> lock(workers_mutex);
@@ -819,6 +961,32 @@ int run_managed(const std::string& host_config_path,
             capacity.release(options->application);
         }
     }
+    // M2 item 5a: one supervisor thread per App owns the observation of
+    // the current worker's IPC stream and the replacement/quarantine
+    // decisions derived from it (design §10.5). Created after startup
+    // recovery so recovered workers anchor the recovery state; joined on
+    // shutdown after the worker reclaim closes the observed channels.
+    std::vector<std::unique_ptr<capsid::host::WorkerSupervisor>> supervisors;
+    for (capsid::host::ManagedHostOptions* options : app_options) {
+        capsid::host::WorkerSupervisorOptions supervisor_options;
+        supervisor_options.managed_options = options;
+        supervisor_options.policy = config.recovery;
+        supervisor_options.current_worker =
+            [&](const std::string& application) -> capsid_worker* {
+                std::lock_guard<std::mutex> lock(workers_mutex);
+                const std::map<std::string, capsid_worker*>::const_iterator
+                    existing = active_workers.find(application);
+                return existing != active_workers.end() ? existing->second
+                                                        : nullptr;
+            };
+        supervisor_options.publish_worker = activate_worker;
+        supervisor_options.remove_if_current = remove_if_current;
+        supervisor_options.discard_worker = discard_worker;
+        supervisor_options.stop_requested = &g_stop;
+        supervisors.push_back(
+            std::make_unique<capsid::host::WorkerSupervisor>(
+                std::move(supervisor_options)));
+    }
     capsid::host::ManagedAdminBackend managed(app_options);
     managed.capacity = &capacity;
     capsid::host::AsyncAdminBackendOptions async_options;
@@ -861,6 +1029,12 @@ int run_managed(const std::string& host_config_path,
     // shutdown never depends on destructor ordering at function return.
     async.reset();
     reclaim_workers();
+    // The reclaim destroyed every observed worker, which closes its IPC fd;
+    // the supervisor threads see the channel die and exit. Joined after the
+    // reclaim so their stop is a no-op observation, never a counted event.
+    for (const auto& supervisor : supervisors) {
+        supervisor->join();
+    }
     return 0;
 }
 

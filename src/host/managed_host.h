@@ -5,6 +5,8 @@ struct capsid_worker;
 
 #include "host/bytecode_attestation.h"
 #include "host/policy_compiler.h"
+#include "host/service_lifecycle.h"
+#include "host/worker_recovery.h"
 
 #include <atomic>
 #include <cstdint>
@@ -41,6 +43,10 @@ struct ManagedHostOptions {
     // fails) instead of waiting out its 15-second deadline, so a SIGTERM
     // shutdown can cancel a genuinely running deploy.
     const std::atomic<bool>* stop_requested = nullptr;
+    // M2 item 5a: the crash-budget/backoff policy the worker supervisor
+    // decides against. Populated by the Host from recovery.*; the pure
+    // decision functions fail closed on an invalid policy.
+    WorkerRecoveryPolicy recovery_policy;
 };
 
 enum class OperationState {
@@ -97,6 +103,25 @@ DeployOutcome managed_deploy(ManagedHostOptions* options,
 // restart). Returns the operation id.
 DeployOutcome managed_retire(ManagedHostOptions* options,
                              OperationStatus* status);
+
+// M2 item 5a: persist the crash-budget quarantine tombstone (state
+// quarantined + CRASH_BUDGET_EXCEEDED) for the CURRENT active document,
+// mirroring the retire tombstone path. Idempotent: an already-quarantined
+// or retired App is a successful no-op (the App is already not serving).
+// The caller (the worker supervisor) stops automatic replacement and
+// removes the dead worker from the routing map after this returns.
+DeployOutcome managed_quarantine(ManagedHostOptions* options,
+                                 OperationStatus* status);
+
+// M2 item 5a: reads the current App lifecycle (active-state document +
+// phase) for the supervisor's decision input, through the same verified
+// dirfd walk and strict recovery rules as boot recovery. ok=false when
+// the state cannot be read at all.
+struct ManagedLifecycleSnapshot {
+    bool ok = false;
+    ServiceLifecycleState state;
+};
+ManagedLifecycleSnapshot managed_read_lifecycle(ManagedHostOptions* options);
 
 // Startup recovery: load active.json if present; validate the COMPLETE
 // generation (artifacts, policy, trusted keys, identity); spawn and warm

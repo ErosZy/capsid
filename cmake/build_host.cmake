@@ -43,6 +43,7 @@ if(CAPSID_BUILD_HOST)
         src/host/static_pool_server.cc
         src/host/worker_event_source.cc
         src/host/worker_recovery.cc
+        src/host/worker_supervisor.cc
     )
     # managed_host.cc and the Admin adapters call the worker API; the
     # dependency is PUBLIC so every consumer of the core links the worker
@@ -95,12 +96,18 @@ if(CAPSID_BUILD_HOST)
         # M1A design gate (design review §4.3): only the WorkerEventSource
         # adapter may call capsid_worker_fd(); every other Host module
         # observes the worker IPC through readable/writable semantics.
+        # M2 item 5a adds the worker supervisor: it polls the current
+        # worker's IPC fd to observe EXIT and drive replacement/quarantine
+        # (design §10.5) — a second legitimate owner, in the managed layer
+        # only, never touching the data plane.
         # Enforce the boundary at configure time.
         file(GLOB CAPSID_HOST_ALL_SOURCES
             "${CMAKE_CURRENT_SOURCE_DIR}/src/host/*.cc")
         foreach(CAPSID_HOST_AUDIT_SOURCE IN LISTS CAPSID_HOST_ALL_SOURCES)
             if(NOT CAPSID_HOST_AUDIT_SOURCE
-                   MATCHES "worker_event_source\\.cc$")
+                   MATCHES "worker_event_source\\.cc$"
+                   AND NOT CAPSID_HOST_AUDIT_SOURCE
+                   MATCHES "worker_supervisor\\.cc$")
                 file(READ "${CAPSID_HOST_AUDIT_SOURCE}"
                     CAPSID_HOST_AUDIT_TEXT)
                 if(CAPSID_HOST_AUDIT_TEXT MATCHES "capsid_worker_fd")

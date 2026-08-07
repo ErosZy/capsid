@@ -3198,6 +3198,137 @@ DeployOutcome managed_retire(ManagedHostOptions* options,
     return outcome;
 }
 
+// Internal quarantine body; the public wrapper records the terminal state.
+// The tombstone keeps the CURRENT active document's version and generation
+// (the quarantined generation) and marks the reason CRASH_BUDGET_EXCEEDED,
+// mirroring the retire tombstone path: same verified dirfd walk, same
+// per-App mutex, same persist chain. Idempotent: an already-quarantined
+// or retired App is a no-op success.
+DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
+                                       OperationStatus* status) {
+    DeployOutcome outcome;
+    outcome.operation_id = unique_operation_id();
+    status->operation_id = outcome.operation_id;
+    const int state_fd = open_verified_state_root(options->state_root);
+    if (state_fd < 0) {
+        outcome.error = "cannot open state root";
+        status->state = OperationState::kFailed;
+        return outcome;
+    }
+    const int app_state_fd = open_verified_app_state_dir(
+        state_fd, options->application, /*create=*/false);
+    close(state_fd);
+    if (app_state_fd < 0) {
+        outcome.error = "cannot open app state directory";
+        status->state = OperationState::kFailed;
+        return outcome;
+    }
+    // Per-App mutex: the quarantine read-modify-write must not interleave
+    // with a concurrent deploy/retire/recover on the same App.
+    std::lock_guard<std::mutex> app_lock(
+        app_operation_mutex(options->application));
+    PosixActiveStateFilesystem filesystem(app_state_fd);
+    const ActiveStateReadResult current = filesystem.read_active_file();
+    if (current.status == ActiveStateIoStatus::kNotFound) {
+        // No durable document at all: nothing to quarantine.
+        outcome.ok = true;
+        status->state = OperationState::kActive;
+        return outcome;
+    }
+    if (current.status != ActiveStateIoStatus::kOk) {
+        outcome.error = "cannot read active state";
+        status->state = OperationState::kFailed;
+        return outcome;
+    }
+    const ActiveStateDocumentResult parsed =
+        parse_active_state_json(options->application, current.bytes);
+    if (!parsed.ok) {
+        outcome.error = "cannot parse active state";
+        status->state = OperationState::kFailed;
+        return outcome;
+    }
+    if (parsed.document.state != ActiveServiceState::kActive) {
+        // Already quarantined or retired: the App is already not serving.
+        outcome.ok = true;
+        status->state = OperationState::kActive;
+        return outcome;
+    }
+    ActiveStateDocument document;
+    document.state = ActiveServiceState::kQuarantined;
+    document.application = options->application;
+    document.version = parsed.document.version;
+    document.generation = parsed.document.generation;
+    document.reason = std::string(kCrashBudgetExceededReason);
+    const ActiveStatePersistResult persisted = persist_active_state(
+        document, outcome.operation_id, filesystem);
+    if (!persisted.ok) {
+        outcome.error = "cannot persist quarantine tombstone";
+        status->state = OperationState::kFailed;
+        return outcome;
+    }
+    status->state = OperationState::kActive;
+    outcome.ok = true;
+    return outcome;
+}
+
+DeployOutcome managed_quarantine(ManagedHostOptions* options,
+                                 OperationStatus* status) {
+    DeployOutcome outcome;
+    if (options == nullptr || options->state_root.empty()) {
+        outcome.error = "invalid managed host arguments";
+        return outcome;
+    }
+    outcome = run_quarantine_operation(options, status);
+    record_operation(outcome.operation_id, *status);
+    return outcome;
+}
+
+ManagedLifecycleSnapshot managed_read_lifecycle(ManagedHostOptions* options) {
+    ManagedLifecycleSnapshot snapshot;
+    if (options == nullptr) {
+        return snapshot;
+    }
+    const int state_fd = open_verified_state_root(options->state_root);
+    if (state_fd < 0) {
+        return snapshot;
+    }
+    const int app_state_fd = open_verified_app_state_dir(
+        state_fd, options->application, /*create=*/false);
+    close(state_fd);
+    if (app_state_fd < 0) {
+        return snapshot;
+    }
+    // The strict recovery rules own the read: missing active.json is a
+    // successful kNone, retired/quarantined never inspect a generation,
+    // and an active document activates only when its generation is
+    // COMPLETE (the same fail-closed authority boot recovery uses).
+    PosixActiveStateFilesystem filesystem(app_state_fd);
+    const ActiveStateRecoveryResult recovered =
+        recover_active_state(options->application, filesystem);
+    if (!recovered.ok) {
+        return snapshot;
+    }
+    snapshot.ok = true;
+    switch (recovered.action) {
+    case ActiveStateRecoveryAction::kActivate:
+        snapshot.state.phase = ServiceLifecyclePhase::kActive;
+        snapshot.state.document = recovered.document;
+        break;
+    case ActiveStateRecoveryAction::kKeepRetired:
+        snapshot.state.phase = ServiceLifecyclePhase::kRetired;
+        snapshot.state.document = recovered.document;
+        break;
+    case ActiveStateRecoveryAction::kKeepQuarantined:
+        snapshot.state.phase = ServiceLifecyclePhase::kQuarantined;
+        snapshot.state.document = recovered.document;
+        break;
+    case ActiveStateRecoveryAction::kNone:
+        snapshot.state.phase = ServiceLifecyclePhase::kAbsent;
+        break;
+    }
+    return snapshot;
+}
+
 // Compares two environment metadata records (name, source kind, secret key
 // id, opaque revision) in lockstep. Both sides are compiler-sorted by name,
 // so order is a stable part of the comparison.

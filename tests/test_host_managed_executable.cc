@@ -27,6 +27,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -482,6 +483,151 @@ std::string active_generation(const Fixture& fixture) {
     const std::string value = json_string_value(generation);
     json_decref(root);
     return value;
+}
+
+// --- item 5a: worker crash observation helpers ---
+//
+// The managed worker is the Host's direct child (capsid_worker_spawn uses
+// posix_spawn). Linux /proc exposes the Host's live children; a SIGKILLed
+// worker stays in the children list as a zombie (the Host reaps it only
+// when it destroys the capsid_worker), so the state char in
+// /proc/<pid>/stat distinguishes a LIVE worker from its corpse.
+
+std::vector<long> live_worker_children() {
+    // /proc attributes a child to the thread that created it (posix_spawn
+    // runs on whichever Host thread executes the deploy), so the leader's
+    // own children file is not enough: scan every thread's children list.
+    std::vector<long> live;
+    const std::string task_dir =
+        "/proc/" + std::to_string(child_process) + "/task";
+    for (const auto& entry :
+         std::filesystem::directory_iterator(task_dir)) {
+        std::ifstream input(entry.path().string() + "/children");
+        std::string token;
+        while (input >> token) {
+            std::ifstream stat("/proc/" + token + "/stat");
+            std::string fields;
+            std::getline(stat, fields);
+            // /proc/<pid>/stat is "pid (comm) state ...": the state char
+            // is the first character after the final ") " (comm may
+            // contain spaces).
+            const std::string::size_type state = fields.rfind(") ");
+            if (state != std::string::npos && state + 2 < fields.size() &&
+                fields[state + 2] != 'Z') {
+                live.push_back(std::stol(token));
+            }
+        }
+    }
+    return live;
+}
+
+// The single live managed worker's pid, or -1 when none (or more than
+// one, which the single-worker App model never produces).
+long current_worker_pid() {
+    const std::vector<long> live = live_worker_children();
+    if (live.size() != 1) {
+        return -1;
+    }
+    return live[0];
+}
+
+// Waits for the Host to spawn a replacement worker after `exited` was
+// SIGKILLed — the first LIVE child whose pid differs. Dies with the Host
+// diagnostics if no replacement arrives (the item-5a wiring is absent).
+long wait_replacement(const Fixture& fixture, long exited) {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(20);
+    while (std::chrono::steady_clock::now() < deadline) {
+        for (const long pid : live_worker_children()) {
+            if (pid != exited) {
+                return pid;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    fail("managed Host did not replace the crashed worker: " +
+         fixture.diagnostics());
+    return -1;  // unreachable
+}
+
+// After the instability budget is exceeded the Host must publish the
+// quarantined tombstone (state=quarantined, CRASH_BUDGET_EXCEEDED), report
+// the App inactive on the Admin API, and never spawn another worker.
+void require_quarantined(const Fixture& fixture) {
+    const std::string tombstone =
+        fixture.state_root + "/apps/orders/active.json";
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(10);
+    bool published = false;
+    while (std::chrono::steady_clock::now() < deadline) {
+        json_t* root = json_loads(read_file(tombstone).c_str(),
+                                  JSON_REJECT_DUPLICATES, nullptr);
+        if (root != nullptr) {
+            json_t* state = json_object_get(root, "state");
+            json_t* reason = json_object_get(root, "reason");
+            if (json_is_string(state) && json_is_string(reason) &&
+                std::string(json_string_value(state)) == "quarantined" &&
+                std::string(json_string_value(reason)) ==
+                    "CRASH_BUDGET_EXCEEDED") {
+                published = true;
+            }
+            json_decref(root);
+        }
+        if (published) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    require(published,
+            "Host never published the quarantined tombstone: " +
+                fixture.diagnostics());
+    json_t* apps = parse_response(
+        http_request(fixture.socket_path,
+                     "GET /v1/apps/orders HTTP/1.1\r\nHost: local\r\n\r\n"),
+        200);
+    require(json_is_false(json_object_get(apps, "active")),
+            "quarantined App still reports active on the Admin API");
+    json_decref(apps);
+    // The quarantine stops automatic replacement: a window strictly longer
+    // than the replacement backoff must stay worker-less.
+    const auto quiet = std::chrono::steady_clock::now() +
+                       std::chrono::seconds(3);
+    while (std::chrono::steady_clock::now() < quiet) {
+        require(live_worker_children().empty(),
+                "Host spawned a worker after quarantine");
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+}
+
+// Drives the crash loop to quarantine against the explicitly configured
+// small budget (maxEvents=2: the 3rd window event exceeds it): SIGKILL the
+// live worker and wait for its replacement twice; the third kill must not
+// be replaced — the Host quarantines instead. Returns the generation that
+// was active when the loop started.
+std::string crash_to_quarantine(const Fixture& fixture) {
+    const std::string generation = active_generation(fixture);
+    long worker = current_worker_pid();
+    require(worker > 0, "no live worker before the crash loop");
+    for (int event = 1; event <= 2; ++event) {
+        require(kill(worker, SIGKILL) == 0,
+                "cannot SIGKILL the managed worker");
+        worker = wait_replacement(fixture, worker);
+    }
+    require(kill(worker, SIGKILL) == 0,
+            "cannot SIGKILL the managed worker");
+    require_quarantined(fixture);
+    return generation;
+}
+
+// Explicitly configured small instability budget: the crash-loop tests
+// must not depend on the default policy to reach quarantine within a test
+// deadline.
+void configure_small_crash_budget(Fixture& fixture) {
+    fixture.replace_host_text(
+        "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}}",
+        "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1},"
+        "\"recovery\":{\"crashBudget\":{\"maxEvents\":2,"
+        "\"window\":\"60s\"}}}");
 }
 
 // Plants a crashed deploy's staging remnant under stateRoot/staging/<op>.
@@ -989,6 +1135,139 @@ int main(int argc, char** argv) {
                         "CRASH_BUDGET_EXCEEDED",
                 "restart rewrote or lost the quarantined tombstone");
         json_decref(state);
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_crash_replaced") {
+        // M2 item 5a row 1: an unexpected worker exit (real SIGKILL, no
+        // clean drain) is observed by the Host and the worker is replaced
+        // against the SAME committed generation — the replacement
+        // revalidates the existing active generation and never rewrites
+        // active.json, so the generation digest is unchanged and the App
+        // keeps serving.
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        require(wait_terminal_state(fixture, operation) == "active",
+                "initial deploy failed before the replacement matrix");
+        const std::string g1 = active_generation(fixture);
+        const long first = current_worker_pid();
+        require(first > 0, "no live worker after the deploy");
+        require(kill(first, SIGKILL) == 0,
+                "cannot SIGKILL the managed worker");
+        (void)wait_replacement(fixture, first);
+        require(active_generation(fixture) == g1,
+                "replacement rewrote the committed generation");
+        require_active_app(fixture);
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_crash_loop_quarantines") {
+        // M2 item 5a rows 2-3: repeated unexpected exits within the
+        // instability window consume the generation's crash budget
+        // (explicitly configured: maxEvents=2, so the 3rd window event
+        // triggers). The Host must stop replacing, publish the quarantined
+        // tombstone with CRASH_BUDGET_EXCEEDED, report the App inactive,
+        // and never spawn again.
+        configure_small_crash_budget(fixture);
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        require(wait_terminal_state(fixture, operation) == "active",
+                "initial deploy failed before the crash-loop matrix");
+        (void)crash_to_quarantine(fixture);
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_quarantine_cleared_by_deploy") {
+        // M2 item 5a row 4: the kKeepQuarantined tombstone must not block
+        // a human-ordered deploy. An explicit deploy of a NEW Version
+        // clears the quarantine, activates a fresh generation, and resets
+        // the crash budget — the freshly activated worker may crash once
+        // and is replaced, not instantly re-quarantined (the counter did
+        // not carry over).
+        configure_small_crash_budget(fixture);
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        require(wait_terminal_state(fixture, operation) == "active",
+                "initial deploy failed before the quarantine-clear matrix");
+        const std::string g1 = crash_to_quarantine(fixture);
+
+        fixture.create_version("orders", "v2");
+        replace_file(
+            fixture.applications_root + "/orders/v2/bundle.mjs",
+            "export default { fetch: () => new Response('v2-different') };");
+        const std::string redeploy = deploy(fixture, "orders", "v2");
+        require(wait_terminal_state(fixture, redeploy) == "active",
+                "explicit deploy did not clear the quarantine");
+        require_active_app(fixture, "orders", "v2");
+        const std::string g2 = active_generation(fixture);
+        require(g2 != g1,
+                "deploy after quarantine reused the quarantined generation");
+        // Budget reset: one more crash is replaced, never re-quarantined.
+        const long fresh = current_worker_pid();
+        require(fresh > 0,
+                "no live worker after the quarantine-clearing deploy");
+        require(kill(fresh, SIGKILL) == 0,
+                "cannot SIGKILL the freshly activated worker");
+        (void)wait_replacement(fixture, fresh);
+        require_active_app(fixture, "orders", "v2");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_boot_recovery_bounded") {
+        // M2 item 5a boot boundedness: the crash budget is per-process
+        // memory, so a clean restart must not inherit a nearly-exhausted
+        // counter — a worker that consumed events 1-2 of the budget before
+        // shutdown must recover and survive two more crashes without
+        // instantly quarantining. The fresh counter must still close the
+        // loop: the 3rd post-restart event quarantines exactly as before.
+        configure_small_crash_budget(fixture);
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        require(wait_terminal_state(fixture, operation) == "active",
+                "initial deploy failed before the boot matrix");
+        long worker = current_worker_pid();
+        require(worker > 0, "no live worker after the deploy");
+        // Consume most of the budget, then stop cleanly (normal shutdown
+        // is not an instability event: no tombstone is expected).
+        for (int event = 1; event <= 2; ++event) {
+            require(kill(worker, SIGKILL) == 0,
+                    "cannot SIGKILL the managed worker");
+            worker = wait_replacement(fixture, worker);
+        }
+        stop_host(fixture);
+
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        require_active_app(fixture);
+        const std::string g1 = active_generation(fixture);
+        // The recovered worker serves the same committed generation and
+        // the budget starts from zero: two more crashes are replaced.
+        worker = current_worker_pid();
+        require(worker > 0, "no live worker after the restart");
+        for (int event = 1; event <= 2; ++event) {
+            require(kill(worker, SIGKILL) == 0,
+                    "cannot SIGKILL the managed worker");
+            worker = wait_replacement(fixture, worker);
+        }
+        require(active_generation(fixture) == g1,
+                "post-restart replacement rewrote the committed generation");
+        // The fresh budget is a real budget: the 3rd event still
+        // quarantines.
+        require(kill(worker, SIGKILL) == 0,
+                "cannot SIGKILL the managed worker");
+        require_quarantined(fixture);
         stop_host(fixture);
         std::cout << "PASS" << std::endl;
         return 0;

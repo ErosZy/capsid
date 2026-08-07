@@ -250,6 +250,7 @@ constexpr std::array kRestartBackoffMembers{
     Member{"initial", &kStringSchema, false},
     Member{"maximum", &kStringSchema, false},
     Member{"jitter", &kStringSchema, false},
+    Member{"stableReset", &kStringSchema, false},
 };
 constexpr Schema kRestartBackoffSchema{
     Schema::Kind::kObject, std::span<const Member>(kRestartBackoffMembers)};
