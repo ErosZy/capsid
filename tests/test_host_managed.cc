@@ -562,6 +562,38 @@ void compile_and_sign(const Fixtures& f, const TestKey& key,
     *attestation = read_file(attestation_out);
 }
 
+// Generalized compile+sign: the caller names the version directory and the
+// key id, so a rotated or re-keyed deployment can be built in-place with a
+// second key (compile_and_sign is the v1/test-key-1 specialization).
+void compile_and_sign_version(const Fixtures& f, const std::string& version,
+                              const std::string& key_id, const TestKey& key,
+                              std::string* attestation,
+                              std::vector<std::uint8_t>* signature) {
+    const std::string directory = f.apps_root + "/orders/" + version;
+    const std::string source_file = directory + "/compile-source.mjs";
+    write_file(source_file, kSourceBundle);
+    const std::string bytecode_out = directory + "/bundle.qjsb";
+    const std::string attestation_out = directory + "/bytecode.json";
+    const std::string message_out = directory + "/message.bin";
+    run_command({
+        f.compiler_tool,
+        "--source", source_file,
+        "--source-name", ("file://orders/" + version + "/bundle.qjsb"),
+        "--application", "orders",
+        "--version", version,
+        "--key-id", key_id,
+        "--bytecode-out", bytecode_out,
+        "--attestation-out", attestation_out,
+        "--signing-message-out", message_out,
+    });
+    const std::string message = read_file(message_out);
+    const std::vector<std::uint8_t> message_bytes(message.begin(), message.end());
+    *signature = sign(key, message_bytes);
+    write_file(directory + "/bytecode.sig",
+               std::string(signature->begin(), signature->end()));
+    *attestation = read_file(attestation_out);
+}
+
 std::string json_string_field(const std::string& json,
                               const std::string& field) {
     const std::string prefix = "\"" + field + "\":\"";
@@ -1276,6 +1308,239 @@ int main(int argc, char** argv) {
         require(fallback_generation != source_generation,
                 "compatibility fallback discarded verified attestation from "
                 "generation identity");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_bytecode_key_rotation_deploys") {
+        // M2 item 4 row 1. A key rotation replaces the trusted key: the old
+        // key leaves trusted_keys, the new key enters it, and the next
+        // deployment — signed with the new key — verifies and deploys as
+        // trusted bytecode. Rotation rides a new Version ID (the frozen
+        // version contract rejects same-Version-ID republishes).
+        const TestKey first_key = test_key();
+        std::vector<std::uint8_t> bytecode;
+        std::string attestation;
+        std::vector<std::uint8_t> signature;
+        compile_and_sign(fixtures, first_key, &bytecode, &attestation,
+                         &signature);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::TrustedBytecodeKey trusted;
+        trusted.key_id = "test-key-1";
+        trusted.public_key = std::span<const std::uint8_t>(
+            first_key.public_key.data(), first_key.public_key.size());
+        options.trusted_keys.push_back(trusted);
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome first =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(first.ok && first.worker != nullptr,
+                "initial trusted deploy failed: " + first.error);
+        capsid_worker_destroy(first.worker);
+        const std::string generation_before = json_string_field(
+            read_file(fixtures.state_root + "/apps/orders/active.json"),
+            "generation");
+
+        // Rotate: a NEW key id and key replace the trusted set.
+        const TestKey rotated_key = test_key();
+        create_version(fixtures, "v2", kMinimalAppConfig, kSourceBundle);
+        compile_and_sign_version(fixtures, "v2", "test-key-2", rotated_key,
+                                 &attestation, &signature);
+        options.trusted_keys.clear();
+        capsid::host::TrustedBytecodeKey rotated_trusted;
+        rotated_trusted.key_id = "test-key-2";
+        rotated_trusted.public_key = std::span<const std::uint8_t>(
+            rotated_key.public_key.data(), rotated_key.public_key.size());
+        options.trusted_keys.push_back(rotated_trusted);
+        const capsid::host::DeployOutcome rotated =
+            capsid::host::managed_deploy(&options, "v2", &status);
+        require(rotated.ok && rotated.worker != nullptr,
+                "rotated-key deploy failed: " + rotated.error);
+        require(run_request(rotated.worker) == "managed-ok",
+                "rotated-key worker did not serve trusted bytecode");
+        capsid_worker_destroy(rotated.worker);
+        const std::string generation_after = json_string_field(
+            read_file(fixtures.state_root + "/apps/orders/active.json"),
+            "generation");
+        require(generation_after != generation_before,
+                "key rotation did not change the generation digest");
+        // The rotated deployment is trusted bytecode, not a silent source
+        // fallback: the generation doc records the selection.
+        const std::string rotated_artifact = read_file(
+            fixtures.state_root + "/apps/orders/generations/" +
+            generation_after + "/artifact.json");
+        require(json_string_field(rotated_artifact, "selected") ==
+                    "trusted-bytecode",
+                "rotated-key deploy fell back to source");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_revoked_key_deploy_rejected") {
+        // M2 item 4 row 2. A deployment signed by a key that is no longer
+        // in trusted_keys must be REJECTED (kUnknownKey -> kReject), never
+        // silently downgraded: the deploy fails and the previously active
+        // generation stays active.
+        const TestKey revoked_key = test_key();
+        std::vector<std::uint8_t> bytecode;
+        std::string attestation;
+        std::vector<std::uint8_t> signature;
+        compile_and_sign(fixtures, revoked_key, &bytecode, &attestation,
+                         &signature);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::TrustedBytecodeKey trusted;
+        trusted.key_id = "test-key-1";
+        trusted.public_key = std::span<const std::uint8_t>(
+            revoked_key.public_key.data(), revoked_key.public_key.size());
+        options.trusted_keys.push_back(trusted);
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome first =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(first.ok && first.worker != nullptr,
+                "initial trusted deploy failed: " + first.error);
+        capsid_worker_destroy(first.worker);
+        const std::string active_before = read_file(
+            fixtures.state_root + "/apps/orders/active.json");
+
+        // Revoke: the deployment key leaves trusted_keys. A later deploy
+        // still signed with it must be rejected at the attestation gate.
+        const TestKey replacement_key = test_key();
+        create_version(fixtures, "v2", kMinimalAppConfig, kSourceBundle);
+        compile_and_sign_version(fixtures, "v2", "test-key-1", revoked_key,
+                                 &attestation, &signature);
+        options.trusted_keys.clear();
+        capsid::host::TrustedBytecodeKey replacement;
+        replacement.key_id = "test-key-2";
+        replacement.public_key = std::span<const std::uint8_t>(
+            replacement_key.public_key.data(),
+            replacement_key.public_key.size());
+        options.trusted_keys.push_back(replacement);
+        capsid::host::OperationStatus revoked_status;
+        const capsid::host::DeployOutcome revoked =
+            capsid::host::managed_deploy(&options, "v2", &revoked_status);
+        require(!revoked.ok, "deploy signed by a revoked key was accepted");
+        require(revoked.worker == nullptr,
+                "revoked-key deploy returned a worker");
+        require(revoked.error.find("bytecode attestation rejected") !=
+                    std::string::npos,
+                "revoked-key deploy failed outside the attestation gate: " +
+                    revoked.error);
+        require(revoked_status.state ==
+                    capsid::host::OperationState::kFailed,
+                "revoked-key deploy did not fail the operation");
+        const std::string active_after = read_file(
+            fixtures.state_root + "/apps/orders/active.json");
+        require(active_after == active_before,
+                "revoked-key rejection changed the old active");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_revoked_key_recovery_fail_closed") {
+        // M2 item 4 row 3 (§13:210). Key revocation affects restart
+        // recovery: a committed trusted generation is re-verified against
+        // the CURRENT trusted_keys, so once the signing key is revoked the
+        // generation must be REFUSED at recovery — fail-closed, never a
+        // silent fallback to the source bundle.
+        const TestKey key = test_key();
+        std::vector<std::uint8_t> bytecode;
+        std::string attestation;
+        std::vector<std::uint8_t> signature;
+        compile_and_sign(fixtures, key, &bytecode, &attestation, &signature);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::TrustedBytecodeKey trusted;
+        trusted.key_id = "test-key-1";
+        trusted.public_key = std::span<const std::uint8_t>(
+            key.public_key.data(), key.public_key.size());
+        options.trusted_keys.push_back(trusted);
+        capsid::host::OperationStatus deploy_status;
+        const capsid::host::DeployOutcome deployed =
+            capsid::host::managed_deploy(&options, "v1", &deploy_status);
+        require(deployed.ok && deployed.worker != nullptr,
+                "trusted baseline deploy failed: " + deployed.error);
+        capsid_worker_destroy(deployed.worker);
+        const std::string generation = json_string_field(
+            read_file(fixtures.state_root + "/apps/orders/active.json"),
+            "generation");
+
+        // Revoke the key, then restart. Recovery re-verifies the committed
+        // attestation against the current trusted set: kUnknownKey must
+        // REJECT the generation, not fall it back to source.
+        const TestKey new_key = test_key();
+        capsid::host::ManagedHostOptions restarted = make_options(fixtures);
+        capsid::host::TrustedBytecodeKey new_trusted;
+        new_trusted.key_id = "test-key-2";
+        new_trusted.public_key = std::span<const std::uint8_t>(
+            new_key.public_key.data(), new_key.public_key.size());
+        restarted.trusted_keys.push_back(new_trusted);
+        capsid::host::OperationStatus recover_status;
+        const capsid::host::DeployOutcome recovered =
+            capsid::host::managed_recover(&restarted, &recover_status);
+        require(!recovered.ok,
+                "recovery re-verified a revoked-key generation as trusted");
+        require(recovered.worker == nullptr,
+                "revoked-key recovery returned a worker");
+        require(recover_status.state ==
+                    capsid::host::OperationState::kFailed,
+                "revoked-key recovery did not fail closed");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_restart_identity_stable") {
+        // M2 item 4 row 4. Provenance is frozen into the committed
+        // generation: the generation document binds attestationDigest and
+        // the selected artifact kind. A restart that re-verifies with the
+        // SAME trusted keys must recover the SAME generation identity —
+        // same generation id, same attestation document, same trusted
+        // selection — with no drift.
+        const TestKey key = test_key();
+        std::vector<std::uint8_t> bytecode;
+        std::string attestation;
+        std::vector<std::uint8_t> signature;
+        compile_and_sign(fixtures, key, &bytecode, &attestation, &signature);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::TrustedBytecodeKey trusted;
+        trusted.key_id = "test-key-1";
+        trusted.public_key = std::span<const std::uint8_t>(
+            key.public_key.data(), key.public_key.size());
+        options.trusted_keys.push_back(trusted);
+        capsid::host::OperationStatus deploy_status;
+        const capsid::host::DeployOutcome deployed =
+            capsid::host::managed_deploy(&options, "v1", &deploy_status);
+        require(deployed.ok && deployed.worker != nullptr,
+                "trusted baseline deploy failed: " + deployed.error);
+        capsid_worker_destroy(deployed.worker);
+        const std::string generation_before = json_string_field(
+            read_file(fixtures.state_root + "/apps/orders/active.json"),
+            "generation");
+        const std::string artifact_before = read_file(
+            fixtures.state_root + "/apps/orders/generations/" +
+            generation_before + "/artifact.json");
+        require(json_string_field(artifact_before, "selected") ==
+                    "trusted-bytecode",
+                "baseline generation was not trusted bytecode");
+        require(json_string_field(artifact_before, "attestationDigest") !=
+                    "",
+                "trusted generation omitted its attestation digest");
+
+        capsid::host::OperationStatus recover_status;
+        const capsid::host::DeployOutcome recovered =
+            capsid::host::managed_recover(&options, &recover_status);
+        require(recovered.ok && recovered.worker != nullptr,
+                "trusted restart failed: " + recovered.error);
+        require(run_request(recovered.worker) == "managed-ok",
+                "trusted restart served the wrong bundle");
+        capsid_worker_destroy(recovered.worker);
+        const std::string generation_after = json_string_field(
+            read_file(fixtures.state_root + "/apps/orders/active.json"),
+            "generation");
+        require(generation_after == generation_before,
+                "restart changed the committed generation identity");
+        const std::string artifact_after = read_file(
+            fixtures.state_root + "/apps/orders/generations/" +
+            generation_after + "/artifact.json");
+        require(artifact_after == artifact_before,
+                "restart drifted the generation's provenance document");
         std::cout << "PASS" << std::endl;
         return 0;
     }

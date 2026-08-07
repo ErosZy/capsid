@@ -416,6 +416,10 @@ if(BUILD_TESTING)
                     host_managed_trusted_bytecode
                     host_managed_compatibility_fallback
                     host_managed_fallback_identity_retains_attestation
+                    host_managed_bytecode_key_rotation_deploys
+                    host_managed_revoked_key_deploy_rejected
+                    host_managed_revoked_key_recovery_fail_closed
+                    host_managed_restart_identity_stable
                     host_managed_secret_snapshot
                     host_managed_secret_snapshot_limit_precedes_staging
                     host_managed_secret_app_symlink_rejected
