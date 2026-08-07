@@ -15,6 +15,7 @@
 struct capsid_worker;
 
 namespace capsid::host {
+class StartupPermitCoordinator;
 
 // M2 item 5a: the per-App worker supervisor. One thread per configured
 // App owns the observation of its current worker's IPC stream and the
@@ -44,6 +45,12 @@ struct WorkerSupervisorOptions {
     // Process-level stop signal: when set, the thread stops observing and
     // exits without counting anything (shutdown is never instability).
     const std::atomic<bool>* stop_requested = nullptr;
+    // M2 item 5b: the process-global fair startup-permit queue (design
+    // §10.5.6). A replacement waits for its grant behind every queued
+    // request from other Apps, so a crash-looping App cannot persistently
+    // queue ahead of another App's deploy. The grant is held across the
+    // respawn. Null disables the queue (replacements start immediately).
+    StartupPermitCoordinator* startup_permits = nullptr;
 };
 
 class WorkerSupervisor {

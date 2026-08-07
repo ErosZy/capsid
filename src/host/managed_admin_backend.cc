@@ -300,7 +300,45 @@ DeployOutcome ManagedAdminBackend::deploy(const std::string& application,
             return outcome;
         }
     }
+    // M2 item 5b: the deploy joins the process-global fair startup-permit
+    // queue (design §10.5.6) after acquiring capacity and holds its grant
+    // across the whole pipeline — a crash-looping App cannot persistently
+    // queue ahead of this deploy. The target generation is unknown until
+    // COMPLETE, so the current active generation anchors the request (or
+    // the zero probe when the App was never active); the field only
+    // participates in replacement singleflight matching and identifier
+    // validation, never in fairness.
+    bool grant_held = false;
+    if (startup_permits != nullptr) {
+        std::string generation(kStartupPermitProbeGeneration);
+        const ManagedLifecycleSnapshot snapshot =
+            managed_read_lifecycle(options);
+        if (snapshot.ok &&
+            snapshot.state.phase == ServiceLifecyclePhase::kActive) {
+            generation = snapshot.state.document->generation;
+        }
+        StartupPermitRequest request;
+        request.application = application;
+        request.generation = generation;
+        request.lane = StartupPermitLane::kDeploy;
+        if (!startup_permits->enqueue_and_wait(request)) {
+            DeployOutcome outcome;
+            outcome.error = "startup permit queue rejected the deploy";
+            if (status != nullptr) {
+                status->state = OperationState::kFailed;
+                status->error = outcome.error;
+            }
+            if (newly_acquired) {
+                capacity->release(application);
+            }
+            return outcome;
+        }
+        grant_held = true;
+    }
     DeployOutcome outcome = managed_deploy(options, version, status);
+    if (grant_held) {
+        startup_permits->release_grant();
+    }
     if (capacity != nullptr) {
         if (outcome.ok && !outcome.workers.empty()) {
             // The activated pool HOLDS the slot until its retire; a

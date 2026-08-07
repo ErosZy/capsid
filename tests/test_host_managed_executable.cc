@@ -1273,6 +1273,60 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    // M2 item 5b §10.5.6: a crash-looping App's replacement requests must
+    // not starve another App's deploy — the shared fair startup-permit
+    // queue hands the next permit to the other App in bounded time, and
+    // the crash-looping App is slowed, never stopped.
+    if (mode == "host_managed_executable_crash_loop_does_not_starve_other_app") {
+        Fixture fixture;
+        fixture.create_application("invoices");
+        fixture.replace_host_text(
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}",
+            "\"capacity\":{\"workersTotal\":2,\"startupsConcurrent\":2},"
+            "\"recovery\":{\"crashBudget\":{\"maxEvents\":5,"
+            "\"window\":\"60s\"},\"restartBackoff\":{\"initial\":\"250ms\","
+            "\"maximum\":\"30s\",\"jitter\":\"0%\"}}");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string orders_operation = deploy(fixture, "orders", "v1");
+        wait_active(fixture, orders_operation);
+        require_active_app(fixture, "orders");
+        // Drive orders into a crash loop; the last grant is orders', so
+        // the queue's fairness state prefers another App next.
+        for (int cycle = 0; cycle < 2; ++cycle) {
+            const long pid = current_worker_pid();
+            require(pid > 0, "no orders worker to kill");
+            require(kill(pid, SIGKILL) == 0,
+                    "cannot SIGKILL the orders worker");
+            wait_replacement(fixture, pid);
+        }
+        // The third crash's replacement is still in backoff when the
+        // invoices deploy is issued; both join the shared queue.
+        const long orders_worker = current_worker_pid();
+        require(orders_worker > 0, "no orders worker for the third kill");
+        require(kill(orders_worker, SIGKILL) == 0,
+                "cannot SIGKILL the orders worker");
+        const std::string invoices_operation =
+            deploy(fixture, "invoices", "v1");
+        // The invoices deploy completes in bounded time even though the
+        // orders replacement keeps re-joining the queue behind it.
+        wait_active(fixture, invoices_operation);
+        require_active_app(fixture, "invoices");
+        // The orders replacement still arrives: the fair queue slows a
+        // crash-looping App but never starves it.
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(10);
+        while (live_worker_children().size() < 2 &&
+               std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        require(live_worker_children().size() == 2,
+                "orders replacement starved behind the invoices deploy");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_rejects_host_config_fifo") {
         require(unlink(fixture.host_config.c_str()) == 0 &&
                     mkfifo(fixture.host_config.c_str(), 0600) == 0,

@@ -366,7 +366,8 @@ if(BUILD_TESTING)
                         host_managed_executable_crash_replaced
                         host_managed_executable_crash_loop_quarantines
                         host_managed_executable_quarantine_cleared_by_deploy
-                        host_managed_executable_boot_recovery_bounded)
+                        host_managed_executable_boot_recovery_bounded
+                        host_managed_executable_crash_loop_does_not_starve_other_app)
                     add_test(
                         NAME "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
                         COMMAND test-host-managed-executable
@@ -386,6 +387,7 @@ if(BUILD_TESTING)
                     host_managed_executable_crash_loop_quarantines
                     host_managed_executable_quarantine_cleared_by_deploy
                     host_managed_executable_boot_recovery_bounded
+                    host_managed_executable_crash_loop_does_not_starve_other_app
                     PROPERTIES TIMEOUT 60)
             endif()
 

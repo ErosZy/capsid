@@ -961,6 +961,12 @@ int run_managed(const std::string& host_config_path,
             capacity.release(options->application);
         }
     }
+    // M2 item 5b: the process-global fair startup-permit queue (design
+    // §10.5.6). Both startup paths (deploy via the Admin backend,
+    // replacement via the supervisors) share this single instance; the
+    // queue decides order and fairness, capacity still decides
+    // concurrency. The bound matches the Admin pending-queue bound.
+    capsid::host::StartupPermitCoordinator startup_permits(&g_stop, 8);
     // M2 item 5a: one supervisor thread per App owns the observation of
     // the current worker's IPC stream and the replacement/quarantine
     // decisions derived from it (design §10.5). Created after startup
@@ -983,12 +989,14 @@ int run_managed(const std::string& host_config_path,
         supervisor_options.remove_if_current = remove_if_current;
         supervisor_options.discard_worker = discard_worker;
         supervisor_options.stop_requested = &g_stop;
+        supervisor_options.startup_permits = &startup_permits;
         supervisors.push_back(
             std::make_unique<capsid::host::WorkerSupervisor>(
                 std::move(supervisor_options)));
     }
     capsid::host::ManagedAdminBackend managed(app_options);
     managed.capacity = &capacity;
+    managed.startup_permits = &startup_permits;
     capsid::host::AsyncAdminBackendOptions async_options;
     // Fixed bounded queue; startupsConcurrent is not the Admin ceiling.
     async_options.max_pending_operations = 8;

@@ -1,6 +1,7 @@
 #include "host/worker_supervisor.h"
 
 #include "capsid/runtime.h"
+#include "host/managed_admin_backend.h"
 
 #include <poll.h>
 
@@ -270,11 +271,40 @@ void WorkerSupervisor::attempt_replacement(capsid_worker* worker,
             observed_ = nullptr;
             return;
         }
-        // The backoff elapsed. The map and the active document must still
-        // name the crashed worker's generation; anything else means a
-        // deploy or tombstone raced us and owns the outcome.
+        // M2 item 5b: the replacement joins the process-global fair
+        // startup-permit queue (design §10.5.6) and holds its grant
+        // across the respawn, so a crash-looping App cannot persistently
+        // queue ahead of another App's deploy. grant_held is true exactly
+        // between a successful enqueue_and_wait and release_grant.
+        bool grant_held = false;
+        if (options_.startup_permits != nullptr &&
+            decision.acquire_startup_permit) {
+            StartupPermitRequest request;
+            request.application = options_.managed_options->application;
+            request.generation = recovery_state_.generation;
+            request.lane = StartupPermitLane::kReplacement;
+            if (!options_.startup_permits->enqueue_and_wait(request)) {
+                if (stop_requested()) {
+                    observed_ = nullptr;
+                    return;
+                }
+                // The queue rejected the replacement (queue full): the
+                // startup could not be scheduled. Count it as a startup
+                // failure below — the same re-decision as a failed
+                // respawn, which may begin quarantine.
+            } else {
+                grant_held = true;
+            }
+        }
+        // The grant (or the queue rejection) elapsed. The map and the
+        // active document must still name the crashed worker's
+        // generation; anything else means a deploy or tombstone raced us
+        // and owns the outcome.
         if (options_.current_worker(options_.managed_options->application) !=
             worker) {
+            if (grant_held) {
+                options_.startup_permits->release_grant();
+            }
             observed_ = nullptr;
             return;
         }
@@ -284,6 +314,9 @@ void WorkerSupervisor::attempt_replacement(capsid_worker* worker,
             snapshot.state.phase != ServiceLifecyclePhase::kActive ||
             !recovery_anchored_ ||
             snapshot.state.document->generation != recovery_state_.generation) {
+            if (grant_held) {
+                options_.startup_permits->release_grant();
+            }
             remove_current(worker);
             observed_ = nullptr;
             return;
@@ -291,6 +324,11 @@ void WorkerSupervisor::attempt_replacement(capsid_worker* worker,
         capsid::host::OperationStatus status;
         const DeployOutcome recovered =
             managed_recover(options_.managed_options, &status);
+        if (grant_held) {
+            // The permit was consumed by this spawn/READY window; hand it
+            // to the next waiter regardless of the outcome.
+            options_.startup_permits->release_grant();
+        }
         if (recovered.ok && recovered.worker != nullptr) {
             // The replacement is READY against the same committed
             // generation. Publish only if the map still holds the crashed
@@ -325,8 +363,9 @@ void WorkerSupervisor::attempt_replacement(capsid_worker* worker,
             observed_ = nullptr;
             return;
         }
-        // Spawn/load/READY failure counts toward the crash budget (§10.5).
-        // The lifecycle snapshot above anchors the decision.
+        // Spawn/load/READY failure (or a rejected queue entry) counts
+        // toward the crash budget (§10.5). The lifecycle snapshot above
+        // anchors the decision.
         WorkerInstabilityObservation observation;
         observation.kind = WorkerInstabilityKind::kReplacementStartupFailure;
         observation.worker_generation = recovery_state_.generation;

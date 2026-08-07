@@ -1,11 +1,15 @@
+#include "host/managed_admin_backend.h"
 #include "host/worker_recovery.h"
 
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 
 namespace {
@@ -684,6 +688,180 @@ void test_startup_permits_are_fair_by_app_and_counted_by_lane() {
             "malformed last-granted App changed permit fairness state");
 }
 
+// M2 item 5b: the coordinator wires the pure FairStartupPermitQueue into
+// the two startup paths. The queue decides ORDER and fairness; the
+// coordinator decides timing: an idle queue grants the first request
+// immediately, a release hands the grant to the next waiter, the queue
+// limit rejects fail-closed, and the stop signal interrupts a wait and
+// withdraws the request so shutdown never leaves a stale holder.
+
+void test_startup_permit_coordinator_grants_idle_request_immediately() {
+    std::atomic<bool> stop{false};
+    StartupPermitCoordinator coordinator(&stop, 8);
+    StartupPermitRequest request;
+    request.application = "app-a";
+    request.generation = std::string(kGenerationTwo);
+    request.lane = StartupPermitLane::kDeploy;
+    require(coordinator.enqueue_and_wait(request),
+            "idle queue did not grant the first request");
+    coordinator.release_grant();
+}
+
+void test_startup_permit_coordinator_hands_grant_to_next_waiter() {
+    std::atomic<bool> stop{false};
+    StartupPermitCoordinator coordinator(&stop, 8);
+    StartupPermitRequest first;
+    first.application = "app-a";
+    first.generation = std::string(kGenerationTwo);
+    first.lane = StartupPermitLane::kDeploy;
+    require(coordinator.enqueue_and_wait(first),
+            "first App did not get the idle permit");
+    std::atomic<bool> waiting_started{false};
+    std::atomic<bool> waiting_granted{false};
+    std::thread waiting([&] {
+        waiting_started.store(true);
+        StartupPermitRequest second;
+        second.application = "app-b";
+        second.generation = std::string(kGenerationTwo);
+        second.lane = StartupPermitLane::kDeploy;
+        waiting_granted.store(coordinator.enqueue_and_wait(second));
+    });
+    while (!waiting_started.load()) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(!waiting_granted.load(),
+            "waiting App was granted before the holder released");
+    coordinator.release_grant();
+    waiting.join();
+    require(waiting_granted.load(),
+            "waiting App was not granted after the release");
+    coordinator.release_grant();
+}
+
+void test_startup_permit_coordinator_queue_limit_rejects_fail_closed() {
+    std::atomic<bool> stop{false};
+    StartupPermitCoordinator coordinator(&stop, 1);
+    StartupPermitRequest first;
+    first.application = "app-a";
+    first.generation = std::string(kGenerationTwo);
+    first.lane = StartupPermitLane::kDeploy;
+    require(coordinator.enqueue_and_wait(first),
+            "first startup did not hold the idle permit");
+    std::atomic<bool> waiting_started{false};
+    std::atomic<bool> waiting_granted{false};
+    std::thread waiting([&] {
+        waiting_started.store(true);
+        StartupPermitRequest second;
+        second.application = "app-b";
+        second.generation = std::string(kGenerationTwo);
+        second.lane = StartupPermitLane::kDeploy;
+        waiting_granted.store(coordinator.enqueue_and_wait(second));
+    });
+    while (!waiting_started.load()) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    StartupPermitRequest third;
+    third.application = "app-c";
+    third.generation = std::string(kGenerationTwo);
+    third.lane = StartupPermitLane::kDeploy;
+    require(!coordinator.enqueue_and_wait(third),
+            "queue limit did not reject the overflow startup");
+    coordinator.release_grant();
+    waiting.join();
+    require(waiting_granted.load(),
+            "queued startup was not granted after the release");
+    coordinator.release_grant();
+}
+
+void test_startup_permit_coordinator_replacement_singleflight_rejects() {
+    std::atomic<bool> stop{false};
+    StartupPermitCoordinator coordinator(&stop, 8);
+    StartupPermitRequest first;
+    first.application = "app-a";
+    first.generation = std::string(kGenerationTwo);
+    first.lane = StartupPermitLane::kDeploy;
+    require(coordinator.enqueue_and_wait(first),
+            "first startup did not hold the idle permit");
+    std::atomic<bool> waiting_started{false};
+    std::atomic<bool> waiting_granted{false};
+    std::thread waiting([&] {
+        waiting_started.store(true);
+        StartupPermitRequest second;
+        second.application = "app-a";
+        second.generation = std::string(kGenerationTwo);
+        second.lane = StartupPermitLane::kReplacement;
+        waiting_granted.store(coordinator.enqueue_and_wait(second));
+    });
+    while (!waiting_started.load()) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    // An exact (App, generation) replacement is already queued: the second
+    // request joins it, adds no queue entry and is rejected.
+    StartupPermitRequest duplicate;
+    duplicate.application = "app-a";
+    duplicate.generation = std::string(kGenerationTwo);
+    duplicate.lane = StartupPermitLane::kReplacement;
+    require(!coordinator.enqueue_and_wait(duplicate),
+            "duplicate replacement joined the queue instead of rejecting");
+    coordinator.release_grant();
+    waiting.join();
+    require(waiting_granted.load(),
+            "queued replacement was not granted after the release");
+    coordinator.release_grant();
+}
+
+void test_startup_permit_coordinator_stop_interrupts_and_withdraws() {
+    std::atomic<bool> stop{false};
+    StartupPermitCoordinator coordinator(&stop, 8);
+    StartupPermitRequest first;
+    first.application = "app-a";
+    first.generation = std::string(kGenerationTwo);
+    first.lane = StartupPermitLane::kDeploy;
+    require(coordinator.enqueue_and_wait(first),
+            "first startup did not hold the idle permit");
+    std::atomic<bool> waiting_started{false};
+    std::atomic<bool> waiting_done{false};
+    std::atomic<bool> waiting_result{true};
+    std::thread waiting([&] {
+        waiting_started.store(true);
+        StartupPermitRequest second;
+        second.application = "app-b";
+        second.generation = std::string(kGenerationTwo);
+        second.lane = StartupPermitLane::kDeploy;
+        waiting_result.store(coordinator.enqueue_and_wait(second));
+        waiting_done.store(true);
+    });
+    while (!waiting_started.load()) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    stop.store(true);
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(5);
+    while (!waiting_done.load() &&
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    require(waiting_done.load(),
+            "stop did not interrupt the queued wait in bounded time");
+    require(!waiting_result.load(),
+            "interrupted wait reported a granted permit");
+    waiting.join();
+    // The withdrawn request must not occupy the queue: the next request is
+    // granted immediately.
+    coordinator.release_grant();
+    StartupPermitRequest next;
+    next.application = "app-c";
+    next.generation = std::string(kGenerationTwo);
+    next.lane = StartupPermitLane::kDeploy;
+    require(coordinator.enqueue_and_wait(next),
+            "withdrawn request still occupied the queue");
+    coordinator.release_grant();
+}
+
 }  // namespace
 
 int main() {
@@ -693,5 +871,10 @@ int main() {
     test_backoff_jitter_cap_and_stable_reset();
     test_invalid_or_stale_recovery_input_fails_closed();
     test_startup_permits_are_fair_by_app_and_counted_by_lane();
+    test_startup_permit_coordinator_grants_idle_request_immediately();
+    test_startup_permit_coordinator_hands_grant_to_next_waiter();
+    test_startup_permit_coordinator_queue_limit_rejects_fail_closed();
+    test_startup_permit_coordinator_replacement_singleflight_rejects();
+    test_startup_permit_coordinator_stop_interrupts_and_withdraws();
     return 0;
 }
