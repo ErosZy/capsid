@@ -763,9 +763,24 @@ if(BUILD_TESTING)
                 NAME host_static_pool_server_atomic_start_failure
                 COMMAND test-host-static-pool-server atomic-failure
                     $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_static_pool_server_drain_inflight_completes
+                COMMAND test-host-static-pool-server drain-inflight-completes
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_static_pool_server_drain_deadline_forces
+                COMMAND test-host-static-pool-server drain-deadline-forces
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_static_pool_server_drain_idle_exits
+                COMMAND test-host-static-pool-server drain-idle-exits
+                    $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
                 host_static_pool_server_shared_port_lifecycle
-                host_static_pool_server_atomic_start_failure PROPERTIES
+                host_static_pool_server_atomic_start_failure
+                host_static_pool_server_drain_inflight_completes
+                host_static_pool_server_drain_deadline_forces
+                host_static_pool_server_drain_idle_exits PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 

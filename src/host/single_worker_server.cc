@@ -352,6 +352,16 @@ public:
     bool start(const std::vector<std::uint8_t>& bundle, std::string* error);
     void request_stop();
     bool wait(std::string* error);
+    void begin_drain(std::uint64_t deadline_ms);
+    SingleWorkerServer::DrainMetrics drain_metrics() const {
+        SingleWorkerServer::DrainMetrics metrics;
+        metrics.draining = draining_.load(std::memory_order_relaxed);
+        metrics.finished = drain_finished_.load(std::memory_order_relaxed);
+        metrics.total_ms = drain_total_ms_.load(std::memory_order_relaxed);
+        metrics.forced_cancellations =
+            forced_cancellations_.load(std::memory_order_relaxed);
+        return metrics;
+    }
     std::uint16_t bound_port() const { return bound_port_; }
     bool activate_accept(std::string* error);
     bool worker_available() const {
@@ -402,6 +412,15 @@ private:
     void do_accept();
     void arm_accept_on_io_thread();
     void on_signal(int signal_number);
+    // M2 §7.5 bounded drain (see the facade contract). The drain flag and
+    // the report counters are atomics so begin_drain (any thread) and the
+    // io-thread completion paths never race; the deadline timer lives on
+    // the io thread only.
+    void start_drain_on_io(std::uint64_t deadline_ms);
+    void on_drain_deadline(const beast::error_code ec);
+    void maybe_complete_drain();
+    void complete_drain();
+    static std::uint64_t steady_ms();
     void pump_events();
     void handle_worker_event(WorkerEvent event);
     void advance_request_body(std::uint64_t request_id);
@@ -577,6 +596,16 @@ private:
     WorkerEventSource source_;
     std::optional<SteadyClock::time_point> shutdown_deadline_;
     std::thread worker_thread_;
+    // M2 §7.5 bounded drain state and report. The io thread owns the
+    // deadline timer and the completion transitions; the atomics let any
+    // thread begin a drain and snapshot the report.
+    std::atomic<bool> draining_ = false;
+    std::atomic<bool> drain_finished_ = false;
+    std::atomic<std::uint64_t> drain_started_ms_ = 0;
+    std::atomic<std::uint64_t> drain_total_ms_ = 0;
+    std::atomic<std::uint64_t> forced_cancellations_ = 0;
+    std::optional<asio::steady_timer> drain_timer_;
+    std::optional<SteadyClock::time_point> drain_deadline_;
 };
 
 void Session::start() { read_request(); }
@@ -1166,6 +1195,146 @@ void Impl::on_signal(int) {
     if (accept_guard_) {
         accept_guard_->reset();
     }
+}
+
+void Impl::begin_drain(std::uint64_t deadline_ms) {
+    if (!draining_.exchange(true)) {
+        drain_started_ms_.store(steady_ms(), std::memory_order_relaxed);
+    }
+    if (io_running_.load()) {
+        io_post([self = weak_from_this(), deadline_ms] {
+            if (const std::shared_ptr<Impl> alive = self.lock()) {
+                alive->start_drain_on_io(deadline_ms);
+            }
+        });
+    }
+}
+
+void Impl::start_drain_on_io(std::uint64_t deadline_ms) {
+    if (shutting_down_) {
+        return;
+    }
+    // §7.5 row 1: the listener stops accepting new connections — the
+    // routing/registry has already stopped delivering to this pool.
+    // Existing sessions are untouched (row 2 keeps them serving).
+    if (acceptor_) {
+        acceptor_->close();
+    }
+    if (accept_guard_) {
+        accept_guard_->reset();
+    }
+    if (deadline_ms != 0) {
+        drain_deadline_ = SteadyClock::now() +
+                          std::chrono::milliseconds(deadline_ms);
+        if (!drain_timer_) {
+            drain_timer_.emplace(ioc_);
+        }
+        drain_timer_->expires_at(*drain_deadline_);
+        drain_timer_->async_wait(
+            [weak = weak_from_this()](const beast::error_code ec) {
+                if (const std::shared_ptr<Impl> self = weak.lock()) {
+                    self->on_drain_deadline(ec);
+                }
+            });
+    }
+    // An already-idle pool completes the drain immediately.
+    maybe_complete_drain();
+}
+
+void Impl::on_drain_deadline(const beast::error_code ec) {
+    if (ec == asio::error::operation_aborted || shutting_down_) {
+        return;
+    }
+    // §7.5 row 4: the deadline expired — cancel every remaining request.
+    // Each in-flight session counts as one forced cancellation; parked
+    // requests are counted per entry and dropped with their sessions.
+    for (const auto& entry : sessions_) {
+        if (entry.second->current_id_.has_value()) {
+            forced_cancellations_.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+    forced_cancellations_.fetch_add(queue_.size(), std::memory_order_relaxed);
+    const std::vector<std::uint64_t> session_ids = [this] {
+        std::vector<std::uint64_t> ids;
+        ids.reserve(sessions_.size());
+        for (const auto& entry : sessions_) {
+            ids.push_back(entry.first);
+        }
+        return ids;
+    }();
+    for (const std::uint64_t id : session_ids) {
+        auto it = sessions_.find(id);
+        if (it != sessions_.end()) {
+            it->second->close();
+        }
+    }
+    // Row 5: the brief grace runs inside the kShutdown execution, which
+    // arms the worker-thread terminate backstop (kShutdownGrace).
+    complete_drain();
+}
+
+void Impl::maybe_complete_drain() {
+    if (!draining_.load() || shutting_down_) {
+        return;
+    }
+    if (!requests_.empty() || !queue_.empty()) {
+        return;  // §7.5 row 2: keep serving the in-flight requests
+    }
+    complete_drain();
+}
+
+void Impl::complete_drain() {
+    if (shutting_down_) {
+        return;
+    }
+    shutting_down_ = true;
+    worker_available_ = false;
+    drain_finished_.store(true, std::memory_order_relaxed);
+    const std::uint64_t started =
+        drain_started_ms_.load(std::memory_order_relaxed);
+    if (started != 0) {
+        drain_total_ms_.store(steady_ms() - started,
+                              std::memory_order_relaxed);
+    }
+    if (accept_guard_) {
+        accept_guard_->reset();
+    }
+    // The deadline timer must not pin the io loop after the drain finished:
+    // destroy it here (safe from within its own handler) or run() would
+    // keep waiting for a deadline that no longer matters.
+    drain_timer_.reset();
+    // Idle keep-alive connections also close: the drained pool serves no
+    // further requests, and an idle session parked in read_request would
+    // otherwise pin the io loop forever. Sessions still holding a request
+    // (only possible on the forced path) are cancelled by Session::close.
+    const std::vector<std::uint64_t> session_ids = [this] {
+        std::vector<std::uint64_t> ids;
+        ids.reserve(sessions_.size());
+        for (const auto& entry : sessions_) {
+            ids.push_back(entry.first);
+        }
+        return ids;
+    }();
+    for (const std::uint64_t id : session_ids) {
+        auto it = sessions_.find(id);
+        if (it != sessions_.end()) {
+            it->second->close();
+        }
+    }
+    // §7.5 row 3: inflight cleared → shutdown; the worker flushes and
+    // reads to EXIT (never a forced terminate on this path).
+    Command shutdown;
+    shutdown.type = CommandType::kShutdown;
+    if (!shutdown_sent_.exchange(true)) {
+        submit_command(std::move(shutdown));
+    }
+}
+
+std::uint64_t Impl::steady_ms() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            SteadyClock::now().time_since_epoch())
+            .count());
 }
 
 void Impl::pump_events() {
@@ -1810,6 +1979,10 @@ void Impl::pump_queue() {
         entry.session->start_disconnect_probe();
     }
     arm_queue_timer();
+    // §7.5 row 3: the queue may have fully drained into inflight (or the
+    // last parked request expired); the drain completes only when BOTH the
+    // queue and the inflight table are empty, so re-check here.
+    maybe_complete_drain();
 }
 
 void Impl::arm_queue_timer() {
@@ -1940,6 +2113,8 @@ void Impl::cancel_request(std::uint64_t request_id) {
     submit_command(std::move(cancel));
     // An inflight slot just freed: admit the next parked request (E-1).
     pump_queue();
+    // §7.5 row 3: a cleared request may complete a drain.
+    maybe_complete_drain();
 }
 
 void Impl::fail_request(std::uint64_t request_id,
@@ -1970,6 +2145,8 @@ void Impl::finalize_request(std::uint64_t request_id,
             session->close();
         }
     }
+    // §7.5 row 3: a cleared request may complete a drain.
+    maybe_complete_drain();
 }
 
 void Impl::drop_session(const std::shared_ptr<Session>& session) {
@@ -2946,6 +3123,14 @@ bool SingleWorkerServer::start(const std::vector<std::uint8_t>& bundle,
 }
 
 void SingleWorkerServer::request_stop() { impl_->request_stop(); }
+
+void SingleWorkerServer::begin_drain(std::uint64_t deadline_ms) {
+    impl_->begin_drain(deadline_ms);
+}
+
+SingleWorkerServer::DrainMetrics SingleWorkerServer::drain_metrics() const {
+    return impl_->drain_metrics();
+}
 
 bool SingleWorkerServer::wait(std::string* error) {
     return impl_->wait(error);

@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -202,6 +203,213 @@ const std::vector<std::uint8_t>& fixture_bundle() {
     return bundle;
 }
 
+// The slow fixture: every request parks in the worker for 700 ms, so a test
+// can hold one inflight slot deterministically (same pattern as E-1).
+const std::vector<std::uint8_t>& slow_bundle() {
+    static const std::string source =
+        "export default { fetch: async () => { "
+        "  await new Promise((resolve) => setTimeout(resolve, 700)); "
+        "  return new Response('static-pool-ok'); } };";
+    static const std::vector<std::uint8_t> bundle(source.begin(),
+                                                  source.end());
+    return bundle;
+}
+
+// The hang fixture: the fetch promise never settles, so the request stays
+// inflight until the Host cancels it. The Host-side worker request timeout
+// must be disabled in the options for this to model a wedged worker.
+const std::vector<std::uint8_t>& hang_bundle() {
+    static const std::string source =
+        "export default { fetch: () => new Promise(() => {}) };";
+    static const std::vector<std::uint8_t> bundle(source.begin(),
+                                                  source.end());
+    return bundle;
+}
+
+int connect_to(std::uint16_t port) {
+    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    require(fd >= 0, "cannot create drain HTTP socket");
+    struct timeval timeout = {};
+    timeout.tv_sec = 5;
+    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                       sizeof(timeout)) == 0,
+            "cannot set drain HTTP receive timeout");
+    struct sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
+            "cannot encode drain loopback address");
+    require(connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+                    sizeof(address)) == 0,
+            "cannot connect to draining pool");
+    return fd;
+}
+
+void send_hold_request(int fd) {
+    const std::string request =
+        "GET /@capsid/orders/hold HTTP/1.1\r\n"
+        "Host: public.example\r\n"
+        "Connection: close\r\n\r\n";
+    std::size_t sent = 0;
+    while (sent < request.size()) {
+        const ssize_t count =
+            send(fd, request.data() + sent, request.size() - sent, 0);
+        require(count > 0, "cannot write drain HTTP request");
+        sent += static_cast<std::size_t>(count);
+    }
+}
+
+// Reads the connection until the server closes it. A normal response ends
+// with EOF because the drain fixture sends Connection: close; a drained
+// (force-cancelled) connection also ends in EOF/RST.
+std::string read_until_close(int fd) {
+    std::string response;
+    char bytes[2048];
+    for (;;) {
+        const ssize_t count = recv(fd, bytes, sizeof(bytes), 0);
+        if (count == 0) {
+            return response;  // clean EOF
+        }
+        if (count < 0) {
+            return response;  // RST: the server force-closed the session
+        }
+        response.append(bytes, static_cast<std::size_t>(count));
+    }
+}
+
+// §7.5 rows 1-3, 7 (normal path): after begin_drain the listener must stop
+// accepting new connections, the held inflight request must complete
+// normally (200, no cancellation), and the pool must then shut itself down
+// — the drain report shows zero forced cancellations and a positive drain
+// time.
+void test_drain_inflight_completes(const char* worker_path) {
+    int ready[2];
+    require(pipe(ready) == 0, "cannot create drain READY pipe");
+    capsid::host::StaticPoolServer pool(
+        make_options(worker_path, ready[1], 1));
+    std::string error;
+    require(pool.start(slow_bundle(), &error),
+            "cannot start draining pool: " + error);
+    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
+
+    // Hold the single inflight slot (the slow bundle answers in ~700 ms).
+    const int holder = connect_to(port);
+    send_hold_request(holder);
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
+    pool.begin_drain(5000);
+    // Row 1: the listener stops accepting once the drain lands on the io
+    // thread; a new connection must be refused.
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    require_port_closed(port);
+
+    // Row 2: the held request keeps running and completes normally.
+    const std::string response = read_until_close(holder);
+    close(holder);
+    require(response.find(" 200 ") != std::string::npos &&
+                response.find("static-pool-ok") != std::string::npos,
+            "drained inflight request did not complete normally");
+
+    // Row 3: inflight cleared → the pool shuts itself down; wait() must
+    // return without any further stop request and within a bounded window.
+    const auto began = std::chrono::steady_clock::now();
+    require(pool.wait(&error), "drained pool wait failed: " + error);
+    require(std::chrono::steady_clock::now() - began <
+                std::chrono::seconds(3),
+            "drain shutdown exceeded its bounded window");
+    require(pool.active_workers() == 0,
+            "drained pool still reports active worker shards");
+
+    // Row 7: the drain report.
+    const capsid::host::SingleWorkerServer::DrainMetrics metrics =
+        pool.drain_metrics();
+    require(metrics.draining && metrics.finished,
+            "drain report does not describe a finished drain");
+    require(metrics.forced_cancellations == 0,
+            "a naturally drained pool reported forced cancellations");
+    require(metrics.total_ms > 0,
+            "drain report omitted its total drain time");
+    close(ready[0]);
+    close(ready[1]);
+}
+
+// §7.5 rows 4-5, 7 (bounded path): a wedged inflight request is not waited
+// for forever — the drain deadline cancels it (counted), the grace period
+// runs, and the pool still terminates; the report records the forced
+// cancellation.
+void test_drain_deadline_forces(const char* worker_path) {
+    int ready[2];
+    require(pipe(ready) == 0, "cannot create drain deadline READY pipe");
+    auto options = make_options(worker_path, ready[1], 1);
+    options.worker_options.request_timeout_ms = 0;  // wedged worker model
+    capsid::host::StaticPoolServer pool(std::move(options));
+    std::string error;
+    require(pool.start(hang_bundle(), &error),
+            "cannot start drain deadline pool: " + error);
+    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
+
+    // The hung request holds the only inflight slot forever.
+    const int holder = connect_to(port);
+    send_hold_request(holder);
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
+    // A short deadline: the drain must not wait for the wedged worker.
+    pool.begin_drain(600);
+    // Row 4-5: the deadline cancels the request and the server closes the
+    // session; the client sees EOF/RST, then wait() returns.
+    const std::string response = read_until_close(holder);
+    close(holder);
+    require(response.empty() ||
+                response.find(" 200 ") == std::string::npos,
+            "a force-cancelled request completed with a 200 response");
+
+    const auto began = std::chrono::steady_clock::now();
+    require(pool.wait(&error), "force-drained pool wait failed: " + error);
+    require(std::chrono::steady_clock::now() - began <
+                std::chrono::seconds(3),
+            "force drain exceeded its bounded window");
+    require(pool.active_workers() == 0,
+            "force-drained pool still reports active worker shards");
+
+    const capsid::host::SingleWorkerServer::DrainMetrics metrics =
+        pool.drain_metrics();
+    require(metrics.finished,
+            "force drain report is not finished");
+    require(metrics.forced_cancellations == 1,
+            "drain deadline did not count its forced cancellation");
+    require(metrics.total_ms > 0,
+            "force drain report omitted its total drain time");
+    close(ready[0]);
+    close(ready[1]);
+}
+
+// §7.5 row 3 direct path: a pool with no inflight work shuts down
+// immediately when the drain begins — no deadline wait, no cancellation.
+void test_drain_idle_exits(const char* worker_path) {
+    int ready[2];
+    require(pipe(ready) == 0, "cannot create idle drain READY pipe");
+    capsid::host::StaticPoolServer pool(
+        make_options(worker_path, ready[1], 1));
+    std::string error;
+    require(pool.start(fixture_bundle(), &error),
+            "cannot start idle draining pool: " + error);
+    (void)ready_port(read_one_ready_line(ready[0]));
+
+    pool.begin_drain(60000);  // an idle drain must not wait anywhere near this
+    const auto began = std::chrono::steady_clock::now();
+    require(pool.wait(&error), "idle drained pool wait failed: " + error);
+    require(std::chrono::steady_clock::now() - began <
+                std::chrono::seconds(3),
+            "idle drain did not shut down promptly");
+
+    const capsid::host::SingleWorkerServer::DrainMetrics metrics =
+        pool.drain_metrics();
+    require(metrics.finished && metrics.forced_cancellations == 0,
+            "idle drain reported an unexpected forced cancellation");
+    close(ready[0]);
+    close(ready[1]);
+}
+
 void test_shared_port_lifecycle(const char* worker_path) {
     int ready[2];
     require(pipe(ready) == 0, "cannot create static-pool READY pipe");
@@ -278,6 +486,12 @@ int main(int argc, char** argv) {
         test_shared_port_lifecycle(argv[2]);
     } else if (mode == "atomic-failure") {
         test_atomic_start_failure(argv[2]);
+    } else if (mode == "drain-inflight-completes") {
+        test_drain_inflight_completes(argv[2]);
+    } else if (mode == "drain-deadline-forces") {
+        test_drain_deadline_forces(argv[2]);
+    } else if (mode == "drain-idle-exits") {
+        test_drain_idle_exits(argv[2]);
     } else {
         fail("unknown static-pool server mode");
     }

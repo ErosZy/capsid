@@ -200,6 +200,42 @@ public:
         return count;
     }
 
+    // M2 §7.5: the old generation's pool begins draining — every shard
+    // stops accepting and drains in parallel, each shutting down when its
+    // own inflight clears or its deadline forces cancellation.
+    void begin_drain(std::uint64_t deadline_ms) {
+        for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
+            shard->begin_drain(deadline_ms);
+        }
+    }
+
+    // §7.5 row 7: the pool-wide report. The drain spans from the first
+    // shard's begin to the LAST shard's completion (max total); forced
+    // cancellations sum across shards.
+    SingleWorkerServer::DrainMetrics drain_metrics() const {
+        SingleWorkerServer::DrainMetrics metrics;
+        metrics.draining = true;
+        metrics.finished = true;
+        for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
+            const SingleWorkerServer::DrainMetrics shard_metrics =
+                shard->drain_metrics();
+            metrics.draining =
+                metrics.draining && shard_metrics.draining;
+            metrics.finished =
+                metrics.finished && shard_metrics.finished;
+            metrics.forced_cancellations +=
+                shard_metrics.forced_cancellations;
+            if (shard_metrics.total_ms > metrics.total_ms) {
+                metrics.total_ms = shard_metrics.total_ms;
+            }
+        }
+        if (shards_.empty()) {
+            metrics.draining = false;
+            metrics.finished = false;
+        }
+        return metrics;
+    }
+
 private:
     // Stops and waits exactly the first `started` shards (the ones that
     // successfully started) and clears the pool state: atomic rollback of
@@ -266,6 +302,14 @@ bool StaticPoolServer::start(const std::vector<std::uint8_t>& bundle,
 }
 
 void StaticPoolServer::request_stop() { impl_->request_stop(); }
+
+void StaticPoolServer::begin_drain(std::uint64_t deadline_ms) {
+    impl_->begin_drain(deadline_ms);
+}
+
+SingleWorkerServer::DrainMetrics StaticPoolServer::drain_metrics() const {
+    return impl_->drain_metrics();
+}
 
 bool StaticPoolServer::wait(std::string* error) { return impl_->wait(error); }
 

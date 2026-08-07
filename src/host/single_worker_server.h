@@ -127,6 +127,29 @@ public:
     // capacity (N → N−1 on a worker fault) without caching.
     bool worker_available() const;
 
+    // M2 §7.5 bounded drain. Once the new pool has been published, the old
+    // pool begins draining: the listener stops accepting new connections
+    // (the routing/registry no longer delivers to it) while every in-flight
+    // request keeps running. When the inflight table and the admission
+    // queue both empty, the server shuts down on its own (worker flushes
+    // and reads to EXIT). When deadline_ms elapses first (0 = wait
+    // indefinitely), every remaining request is cancelled (counted) and,
+    // after the brief shutdown grace, the worker is terminated. The server
+    // is fully reaped by wait(); thread-safe and idempotent, safe to call
+    // before or after request_stop().
+    void begin_drain(std::uint64_t deadline_ms);
+
+    // §7.5 row 7: the drain report — total drain time (begin → inflight
+    // cleared or forced cancellation) and the number of requests cancelled
+    // by the deadline. Thread-safe snapshot; meaningful after wait().
+    struct DrainMetrics {
+        bool draining = false;
+        bool finished = false;
+        std::uint64_t total_ms = 0;
+        std::uint64_t forced_cancellations = 0;
+    };
+    DrainMetrics drain_metrics() const;
+
 private:
     std::shared_ptr<Impl> impl_;
 };

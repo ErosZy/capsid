@@ -71,6 +71,19 @@ public:
     // Never a cached startup count.
     std::size_t active_workers() const;
 
+    // M2 §7.5: begins the bounded drain of the whole pool (the old
+    // generation after a redeploy). Every shard stops accepting new
+    // connections and drains its in-flight requests; each shard shuts down
+    // when its own inflight clears or its deadline forces cancellation.
+    // The pool is reaped by the existing wait().
+    void begin_drain(std::uint64_t deadline_ms);
+
+    // §7.5 row 7: the pool-wide drain report. forced_cancellations is the
+    // sum across shards; total_ms spans the whole pool — from the first
+    // shard's begin to the LAST shard's drain completion. Meaningful after
+    // wait().
+    SingleWorkerServer::DrainMetrics drain_metrics() const;
+
     // Benchmark-only blocking entry (NOT a managed production path): starts
     // the pool, then waits for SIGTERM/SIGINT on the calling thread
     // (sigwait, no handler), performs the bounded stop/wait and returns
