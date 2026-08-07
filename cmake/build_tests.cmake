@@ -357,7 +357,11 @@ if(BUILD_TESTING)
                         host_managed_executable_enforces_streaming_maximums
                         host_managed_executable_enforces_write_timeout_maximum
                         host_managed_executable_redeploys_with_capacity_one
-                        host_managed_executable_recovery_consumes_capacity)
+                        host_managed_executable_recovery_consumes_capacity
+                        host_managed_executable_crash_mid_deploy_keeps_old
+                        host_managed_executable_crash_staging_remnants
+                        host_managed_executable_crash_orphan_generation
+                        host_managed_executable_crash_quarantined_not_resurrected)
                     add_test(
                         NAME "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
                         COMMAND test-host-managed-executable

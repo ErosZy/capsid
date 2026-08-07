@@ -450,6 +450,67 @@ void stop_host(const Fixture& fixture) {
             "managed Host left its Admin socket after shutdown");
 }
 
+// M2 item 2a crash injection: SIGKILL the Host and require it actually died
+// from the signal — the audit anchor proving the crash landed where the
+// test says it did (no clean-shutdown path ran, nothing was drained).
+void kill_host() {
+    require(kill(child_process, SIGKILL) == 0,
+            "cannot SIGKILL managed Host");
+    int status = 0;
+    require(waitpid(child_process, &status, 0) == child_process,
+            "cannot wait for crashed managed Host");
+    child_process = -1;
+    require(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL,
+            "managed Host did not die from SIGKILL");
+}
+
+bool path_exists(const std::string& path) {
+    struct stat metadata = {};
+    return stat(path.c_str(), &metadata) == 0;
+}
+
+// The generation digest the deployed active.json references.
+std::string active_generation(const Fixture& fixture) {
+    json_t* root = json_loads(
+        read_file(fixture.state_root + "/apps/orders/active.json").c_str(),
+        JSON_REJECT_DUPLICATES, nullptr);
+    require(root != nullptr && json_is_object(root),
+            "cannot parse the active state document");
+    json_t* generation = json_object_get(root, "generation");
+    require(json_is_string(generation),
+            "active state document has no generation");
+    const std::string value = json_string_value(generation);
+    json_decref(root);
+    return value;
+}
+
+// Plants a crashed deploy's staging remnant under stateRoot/staging/<op>.
+// Recovery must never treat it as an error, never clean it, and never let
+// it become the active generation. complete=false models a crash while a
+// staging file was being written (boundary #1: no COMPLETE); complete=true
+// models a crash after COMPLETE but before the generation rename (boundary
+// #2/#3: every staging file is visible, nothing was published).
+void plant_staging_remnant(const Fixture& fixture, const std::string& op,
+                           bool complete) {
+    const std::string staging_root = fixture.state_root + "/staging";
+    require(mkdir(staging_root.c_str(), 0700) == 0 || errno == EEXIST,
+            "cannot ensure the staging root exists");
+    const std::string dir = staging_root + "/" + op;
+    require(mkdir(dir.c_str(), 0700) == 0,
+            "cannot plant staging remnant directory");
+    write_file(dir + "/bundle.bin", "half of a bundle");
+    if (!complete) {
+        return;
+    }
+    write_file(dir + "/source.bin", "source");
+    write_file(dir + "/effective.json", "{}");
+    write_file(dir + "/env.json", "[]");
+    write_file(dir + "/capsid.json", "{}");
+    write_file(dir + "/artifact.json", "{}");
+    write_file(dir + "/generation.json", "{}");
+    write_file(dir + "/COMPLETE", "");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -595,6 +656,234 @@ int main(int argc, char** argv) {
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);
         require_active_app(fixture);
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_crash_mid_deploy_keeps_old") {
+        // M2 item 2a, boundary #7 (post version-mapping, pre active.json) —
+        // a REAL SIGKILL, no clean-shutdown path. The v2 deploy must hang
+        // in the worker-warm phase: by then the generation rename (Phase C)
+        // and the version mapping (Phase D) have both hit the disk, but
+        // persist_active_state (Phase F) has not run yet. The old active.json
+        // is then the only authority; restart must keep v1 active and
+        // serving, and the v2 generation + mapping must survive as inert
+        // orphans (recovery never half-clears a published generation).
+        //
+        // A plain blocking worker cannot serve here: once v1 is durably
+        // active, boot recovery waits for the replacement worker's READY
+        // BEFORE publishing Admin readiness, so a host started with a
+        // blocking worker never binds Admin (main.cc, "replacement worker
+        // reaches READY before Admin readiness is published"). The warm
+        // phase is instead hung with a self-forwarding worker script: the
+        // first spawn (v1 boot recovery) execs the real worker so Admin
+        // binds normally; the second spawn (v2 deploy warm) execs
+        // /bin/sleep 30 and never emits READY.
+        fixture.create_version("orders", "v2");
+        replace_file(
+            fixture.applications_root + "/orders/v2/bundle.mjs",
+            "export default { fetch: () => new Response('v2-different') };");
+        const std::string warm_hang_worker =
+            fixture.root + "/warm-hang-worker";
+        const std::string warm_counter = fixture.root + "/warm-counter";
+        write_file(warm_hang_worker,
+                   "#!/bin/sh\n"
+                   "if [ -f " + warm_counter + " ]; then\n"
+                   "  exec /bin/sleep 30\n"
+                   "fi\n"
+                   ": > " + warm_counter + "\n"
+                   "exec " + argv[3] + " \"$@\"\n");
+        require(chmod(warm_hang_worker.c_str(), 0700) == 0,
+                "cannot make warm-hang worker fixture executable");
+
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string first = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, first) == "active",
+                "initial v1 deploy failed before the crash matrix");
+        stop_host(fixture);
+        const std::string g1 = active_generation(fixture);
+
+        start_host(fixture, argv[2], warm_hang_worker.c_str());
+        wait_for_socket(fixture);
+        (void)deploy(fixture, "orders", "v2");
+        // The audit anchor for the crash point: wait until the v2
+        // generation AND its version mapping are both visible on disk
+        // (Phases C and D done, i.e. every durable trace of the new
+        // generation except active.json), while the warm phase is still
+        // hung on /bin/sleep (Phase F not started → active.json is still
+        // the old v1 document), then SIGKILL.
+        const std::string generations = fixture.state_root +
+                                        "/apps/orders/generations";
+        const std::string mapping = fixture.state_root +
+                                    "/apps/orders/versions/v2.json";
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(5);
+        bool published = false;
+        while (std::chrono::steady_clock::now() < deadline) {
+            for (const auto& entry :
+                 std::filesystem::directory_iterator(generations)) {
+                if (entry.path().filename().string() != g1) {
+                    published = true;
+                    break;
+                }
+            }
+            if (published && path_exists(mapping)) {
+                break;
+            }
+            published = false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        require(published,
+                "v2 generation and mapping never reached the disk before "
+                "the crash");
+        kill_host();
+        // SIGKILL skips the clean-shutdown unlink, so the Admin socket
+        // inode survives as crash evidence. The next boot removes it under
+        // the three-evidence rule before rebinding (admin_api.cc), but the
+        // fixture must not race that: wait_for_socket() only lstat's, so
+        // the stale pathname would pass it before the new Host binds.
+        require(path_exists(fixture.socket_path),
+                "SIGKILL must leave the Admin socket in place");
+        require(unlink(fixture.socket_path.c_str()) == 0,
+                "cannot clear the crashed Host's stale Admin socket");
+
+        // Restart: v1 must come back active and serving; the v2 generation
+        // and its version mapping must still be on disk (inert orphans).
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        require_active_app(fixture, "orders", "v1");
+        require(path_exists(fixture.state_root +
+                            "/apps/orders/versions/v2.json"),
+                "recovery cleaned a published version mapping");
+        std::size_t generations_on_disk = 0;
+        for (const auto& entry :
+             std::filesystem::directory_iterator(generations)) {
+            (void)entry;
+            ++generations_on_disk;
+        }
+        require(generations_on_disk == 2,
+                "recovery did not preserve the published orphan generation");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_crash_staging_remnants") {
+        // M2 item 2a, boundaries #1 and #2/#3 (staging phase): a crashed
+        // deploy leaves stateRoot/staging/<op>/ behind. Restart must
+        // succeed, keep the old version active, never treat the remnant as
+        // a candidate generation, and never clean it (the COMPLETE/generation
+        // boundary must not full-clean: a staged-but-unpublished tree is
+        // still potential history, not garbage).
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        require(wait_terminal_state(fixture, operation) == "active",
+                "initial deploy failed before the staging crash matrix");
+        stop_host(fixture);
+
+        plant_staging_remnant(fixture, "op-crash-partial", false);
+        plant_staging_remnant(fixture, "op-crash-complete", true);
+
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        require_active_app(fixture);
+        require(path_exists(fixture.state_root +
+                            "/staging/op-crash-partial/bundle.bin"),
+                "recovery cleaned a partial staging remnant");
+        require(path_exists(fixture.state_root +
+                            "/staging/op-crash-complete/COMPLETE"),
+                "recovery cleaned a COMPLETE-marked staging remnant");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_crash_orphan_generation") {
+        // M2 item 2a, boundaries #4-#7 (published generation, old active):
+        // a crash after the generation rename but before active.json
+        // covers both the visible-but-unsynced generation (an fsync crash
+        // leaves the same visible tree) and the committed generation with a
+        // version mapping but no active flip. The old active.json is the
+        // only authority: restart must serve v1 and leave the orphan
+        // generation + mapping inert on disk.
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        require(wait_terminal_state(fixture, operation) == "active",
+                "initial deploy failed before the orphan matrix");
+        stop_host(fixture);
+        const std::string g1 = active_generation(fixture);
+
+        const std::string g2 = "sha256:" + std::string(64, '2');
+        const std::string base = fixture.state_root +
+                                 "/apps/orders/generations/";
+        std::error_code copy_error;
+        std::filesystem::copy(base + g1, base + g2,
+                              std::filesystem::copy_options::recursive,
+                              copy_error);
+        require(!copy_error, "cannot plant orphan generation: " +
+                                 copy_error.message());
+        write_file(fixture.state_root + "/apps/orders/versions/v2.json",
+                   "{\"generation\":\"" + g2 + "\"}\n");
+
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        require_active_app(fixture, "orders", "v1");
+        require(path_exists(base + g2 + "/COMPLETE"),
+                "recovery removed a published orphan generation");
+        require(path_exists(fixture.state_root +
+                            "/apps/orders/versions/v2.json"),
+                "recovery removed an orphan version mapping");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_crash_quarantined_not_resurrected") {
+        // M2 item 2a: a quarantined tombstone (the item-5 QUARANTINING
+        // protocol's persisted state) must survive a restart — the Host
+        // must not resurrect a worker for it, must keep the document and
+        // its reason, and must still boot.
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        require(wait_terminal_state(fixture, operation) == "active",
+                "initial deploy failed before the quarantine matrix");
+        stop_host(fixture);
+        const std::string g1 = active_generation(fixture);
+
+        replace_file(
+            fixture.state_root + "/apps/orders/active.json",
+            "{\"schema\":\"capsid-active-v1\",\"app\":\"orders\","
+            "\"state\":\"quarantined\",\"version\":\"v1\","
+            "\"generation\":\"" + g1 + "\","
+            "\"reason\":\"CRASH_BUDGET_EXCEEDED\"}");
+
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        json_t* apps = parse_response(
+            http_request(fixture.socket_path,
+                         "GET /v1/apps/orders HTTP/1.1\r\nHost: local\r\n\r\n"),
+            200);
+        require(json_is_false(json_object_get(apps, "active")),
+                "quarantined App resurrected its worker on restart");
+        json_decref(apps);
+        json_t* state = json_loads(
+            read_file(fixture.state_root + "/apps/orders/active.json").c_str(),
+            JSON_REJECT_DUPLICATES, nullptr);
+        require(state != nullptr &&
+                    json_is_string(json_object_get(state, "state")) &&
+                    std::string(json_string_value(
+                        json_object_get(state, "state"))) == "quarantined" &&
+                    json_is_string(json_object_get(state, "reason")) &&
+                    std::string(json_string_value(
+                        json_object_get(state, "reason"))) ==
+                        "CRASH_BUDGET_EXCEEDED",
+                "restart rewrote or lost the quarantined tombstone");
+        json_decref(state);
         stop_host(fixture);
         std::cout << "PASS" << std::endl;
         return 0;
