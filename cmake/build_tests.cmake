@@ -358,6 +358,7 @@ if(BUILD_TESTING)
                         host_managed_executable_enforces_write_timeout_maximum
                         host_managed_executable_redeploys_with_capacity_one
                         host_managed_executable_recovery_consumes_capacity
+                        host_managed_executable_secret_canary_no_leak
                         host_managed_executable_crash_mid_deploy_keeps_old
                         host_managed_executable_crash_staging_remnants
                         host_managed_executable_crash_orphan_generation
@@ -419,6 +420,7 @@ if(BUILD_TESTING)
                     host_managed_secret_snapshot_limit_precedes_staging
                     host_managed_secret_app_symlink_rejected
                     host_managed_secret_value_not_persisted
+                    host_managed_secret_rotation_generates_new_pool
                     host_managed_recovery_accepts_large_valid_env_metadata
                     host_managed_deploy_fail_closed
                     host_managed_retire_and_recovery

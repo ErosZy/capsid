@@ -500,6 +500,74 @@ struct GenerationFixture {
     }
 };
 
+void test_secret_revision_frozen_golden_digest() {
+    // The aggregate revision is a FROZEN protocol. The digest below was
+    // computed from the canonical message by hand and pins the framing
+    // byte-for-byte:
+    //   "capsid-secret-revision-v1\0"           (domain with embedded NUL)
+    //   u32be(len) + "orders"                    (App ID)
+    //   u32be(9)  + "API_TOKEN"                  (env name, sorted)
+    //   u32be(16) + "orders-api-token"           (secret key ID)
+    //   u32be(26) + "file-v1:11:22:41:1700000000" (opaque revision)
+    // The literal APP_MODE entry contributes nothing to the message. Any
+    // drift — prefix width, byte order, field order, domain text, NUL
+    // handling, literal leakage, sort order — breaks this digest.
+    Fixture fixture;
+    const SecretSnapshotCompileResult result =
+        compile_secret_snapshot(fixture.input);
+    require(result.ok, "frozen-golden fixture was rejected: " +
+                           result.error.message);
+    require(result.snapshot.secret_revision() ==
+                "sha256:70513d980eef126857ed555bb1183f3dd1e5f709a1b0cf23"
+                "c4439d057b1e35ac",
+            "secret revision framing drifted from the frozen golden record");
+}
+
+void test_secret_revision_multi_secret_sorted_golden() {
+    // Two secret entries plus a literal, requested in the wrong order: the
+    // revision message must carry the secrets sorted by env name
+    // (API_TOKEN before DB_PASSWORD) and exclude the literal, matching
+    // this frozen digest for that exact byte sequence.
+    const std::string literal_value = "production\n";
+    const std::array<EnvironmentRequest, 3> requests{{
+        EnvironmentRequest{"DB_PASSWORD", std::nullopt, "db-password"},
+        EnvironmentRequest{"APP_MODE", literal_value, std::nullopt},
+        EnvironmentRequest{"API_TOKEN", std::nullopt, "orders-api-token"},
+    }};
+    const std::array<ResolvedSecret, 2> secrets{{
+        {"db-password", "db-value", "file-v1:100:200:7:1800000000"},
+        {"orders-api-token", "api-value", "file-v1:11:22:41:1700000000"},
+    }};
+    const std::array<std::string_view, 3> host_names{
+        "API_*", "APP_*", "DB_*"};
+    SecretSnapshotCompileInput input;
+    input.application_id = "orders";
+    input.host_allows_env_module = true;
+    input.app_requests_env_module = true;
+    input.host_environment_names = host_names;
+    input.requests = requests;
+    input.resolved_secrets = secrets;
+    const SecretSnapshotCompileResult result =
+        compile_secret_snapshot(input);
+    require(result.ok,
+            "multi-secret golden fixture was rejected: " +
+                result.error.message);
+    require(result.snapshot.secret_revision() ==
+                "sha256:0160fc5ac1f7d4628bdf62df2c106a4d4ba89d5e6c88951f2"
+                "05916fdd051e147",
+            "multi-secret revision order or framing drifted from the "
+            "frozen golden");
+    // Cross-check against the independent framing rebuild: sorted order,
+    // literals excluded.
+    const std::array<std::array<std::string_view, 3>, 2> entries{{
+        {"API_TOKEN", "orders-api-token", "file-v1:11:22:41:1700000000"},
+        {"DB_PASSWORD", "db-password", "file-v1:100:200:7:1800000000"},
+    }};
+    require(result.snapshot.secret_revision() ==
+                expected_secret_revision("orders", entries),
+            "multi-secret revision is not the canonical sorted message");
+}
+
 void test_rotation_changes_generation_without_mutating_old_snapshot() {
     Fixture old_fixture;
     Fixture new_fixture;
@@ -553,6 +621,8 @@ int main() {
     test_request_order_does_not_change_snapshot_identity();
     test_policy_and_provider_fail_closed_without_leaking_values();
     test_snapshot_resource_and_text_limits_match_runtime();
+    test_secret_revision_frozen_golden_digest();
+    test_secret_revision_multi_secret_sorted_golden();
     test_rotation_changes_generation_without_mutating_old_snapshot();
     return 0;
 }

@@ -1409,6 +1409,129 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_secret_rotation_generates_new_pool") {
+        // M2 item 3 rows 1-2. A rotated secret file (new content → new
+        // file-v1: dev/ino/size/ctime revision → new aggregate revision →
+        // new generation digest) must drive a NEW worker pool on redeploy;
+        // the pre-rotation worker keeps its env snapshot frozen at spawn
+        // and stays healthy through the redeploy; a redeploy with an
+        // unchanged secret is idempotent and reuses the committed
+        // generation (same digest, no new pool).
+        require(mkdirat(fixtures.secrets_fd, "orders", 0700) == 0,
+                "cannot create secret app dir");
+        const std::string secret_file =
+            fixtures.secret_root + "/orders/api-token";
+        write_file(secret_file, "secret-rotation-v1");
+        const std::string bundle =
+            "import { env } from 'capsid:env';\n"
+            "export default { fetch: () => "
+            "new Response(env.get('APP_TOKEN')) };";
+        write_file(fixtures.vdir + "/capsid.json", kSecretAppConfig);
+        write_file(fixtures.vdir + "/bundle.mjs", bundle);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::OperationStatus status;
+
+        const capsid::host::DeployOutcome first =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(first.ok && first.worker != nullptr,
+                "initial secret deploy failed: " + first.error);
+        require(run_request(first.worker) == "secret-rotation-v1",
+                "initial snapshot missing from the first worker");
+        const std::string generation_before = json_string_field(
+            read_file(fixtures.state_root +
+                      "/apps/orders/active.json"),
+            "generation");
+
+        // No rotation: the same version and secret resolve to the same
+        // generation — idempotent redeploy reuses the committed snapshot.
+        const capsid::host::DeployOutcome reused =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(reused.ok && reused.worker != nullptr,
+                "idempotent redeploy failed: " + reused.error);
+        require(run_request(reused.worker) == "secret-rotation-v1",
+                "idempotent redeploy lost the snapshot");
+        const std::string generation_reused = json_string_field(
+            read_file(fixtures.state_root +
+                      "/apps/orders/active.json"),
+            "generation");
+        require(generation_reused == generation_before,
+                "an unchanged secret produced a new generation");
+
+        // Rotation: rewriting the file in place changes its size and ctime,
+        // so the provider's file-v1: revision (and therefore the aggregate
+        // revision and the generation digest) changes. Same-Version-ID
+        // republish is rejected by the frozen version contract (asserted
+        // by host_managed_version_immutability), so rotation flows through
+        // a new Version ID carrying the same bundle.
+        write_file(secret_file, "secret-rotation-v2-different-length");
+        create_version(fixtures, "v2", kSecretAppConfig, bundle);
+        const capsid::host::DeployOutcome rotated =
+            capsid::host::managed_deploy(&options, "v2", &status);
+        require(rotated.ok && rotated.worker != nullptr,
+                "rotated redeploy failed: " + rotated.error);
+        require(run_request(rotated.worker) ==
+                    "secret-rotation-v2-different-length",
+                "rotated value did not reach the new worker");
+        const std::string generation_after = json_string_field(
+            read_file(fixtures.state_root +
+                      "/apps/orders/active.json"),
+            "generation");
+        require(generation_after != generation_before,
+                "secret rotation did not change the generation digest");
+
+        // The old worker keeps its frozen snapshot and stays healthy.
+        require(run_request(first.worker) == "secret-rotation-v1",
+                "old worker lost its pre-rotation env snapshot");
+
+        // Row 5: the provider's file-v1: revision also changes when the
+        // file is replaced outright — a NEW device/inode, not just a
+        // rewritten ctime/size. That must drive another rotation.
+        require(unlink(secret_file.c_str()) == 0,
+                "cannot remove the secret file for replacement");
+        write_file(secret_file, "secret-rotation-v3-replaced-inode");
+        create_version(fixtures, "v3", kSecretAppConfig, bundle);
+        const capsid::host::DeployOutcome replaced =
+            capsid::host::managed_deploy(&options, "v3", &status);
+        require(replaced.ok && replaced.worker != nullptr,
+                "inode-replaced redeploy failed: " + replaced.error);
+        require(run_request(replaced.worker) ==
+                    "secret-rotation-v3-replaced-inode",
+                "replaced value did not reach the new worker");
+        const std::string generation_third = json_string_field(
+            read_file(fixtures.state_root +
+                      "/apps/orders/active.json"),
+            "generation");
+        require(generation_third != generation_after,
+                "replaced secret file (new device/inode) did not change "
+                "the generation digest");
+
+        // Every prior worker is still healthy with its frozen snapshot.
+        require(run_request(rotated.worker) ==
+                    "secret-rotation-v2-different-length",
+                "v2 worker lost its mid-rotation env snapshot");
+
+        // All three generations stay committed: content-addressed
+        // generations are immutable history, never cleaned up by redeploy.
+        const std::string generations_root =
+            fixtures.state_root + "/apps/orders/generations/";
+        const std::string generation_ids[] = {
+            generation_before, generation_after, generation_third,
+        };
+        for (const std::string& generation_id : generation_ids) {
+            require(access((generations_root + generation_id + "/COMPLETE")
+                               .c_str(),
+                           F_OK) == 0,
+                    "a committed generation was cleaned up by redeploy");
+        }
+
+        capsid_worker_destroy(first.worker);
+        capsid_worker_destroy(reused.worker);
+        capsid_worker_destroy(rotated.worker);
+        capsid_worker_destroy(replaced.worker);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode ==
         "host_managed_recovery_accepts_large_valid_env_metadata") {
         require(mkdirat(fixtures.secrets_fd, "orders", 0700) == 0,

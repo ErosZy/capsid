@@ -661,6 +661,111 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_executable_secret_canary_no_leak") {
+        // M2 item 3 row 4: the plaintext secret never leaves the Host.
+        // Every channel the Host controls is probed for the canary value —
+        // Admin response bodies (deploy, operations poll, apps), the Host's
+        // own stderr diagnostics, and every committed generation document.
+        // The positive control: committed env.json records the secret key
+        // ID and its opaque file-v1: revision, and nothing else.
+        const std::string canary = "SUPERSECRET_CANARY_9f1e2b3c4d";
+        const std::string secret_dir = fixture.secret_root + "/orders";
+        require(mkdir(secret_dir.c_str(), 0700) == 0,
+                "cannot create managed executable secret App dir");
+        write_file(secret_dir + "/api-token", canary);
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"],"env":{"APP_TOKEN":{"valueFrom":"api-token"}}},"pool":{"minReady":1,"maxWorkers":1}})json");
+        replace_file(
+            fixture.applications_root + "/orders/v1/bundle.mjs",
+            "import { env } from 'capsid:env';\n"
+            "export default { fetch: () => "
+            "new Response(env.get('APP_TOKEN')) };");
+
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+
+        const std::string body = "{\"app\":\"orders\",\"version\":\"v1\"}";
+        const std::string deploy_request =
+            "POST /v1/deploy HTTP/1.1\r\nHost: local\r\n"
+            "Content-Type: application/json\r\nContent-Length: " +
+            std::to_string(body.size()) + "\r\n\r\n" + body;
+        const std::string deploy_response =
+            http_request(fixture.socket_path, deploy_request);
+        require(deploy_response.find(canary) == std::string::npos,
+                "canary leaked into the deploy response");
+        json_t* root = parse_response(deploy_response, 202);
+        json_t* id = json_object_get(root, "operationId");
+        require(json_is_string(id),
+                "managed deploy omitted its operation ID");
+        const std::string operation = json_string_value(id);
+        json_decref(root);
+
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(20);
+        for (;;) {
+            const std::string operation_request =
+                "GET /v1/operations/" + operation +
+                " HTTP/1.1\r\nHost: local\r\n\r\n";
+            const std::string operation_response =
+                http_request(fixture.socket_path, operation_request);
+            require(operation_response.find(canary) == std::string::npos,
+                    "canary leaked into an operations response");
+            root = parse_response(operation_response, 200);
+            json_t* state = json_object_get(root, "state");
+            require(json_is_string(state),
+                    "managed operation omitted its state");
+            const std::string value = json_string_value(state);
+            json_decref(root);
+            if (value == "active") {
+                break;
+            }
+            require(value != "failed",
+                    "managed executable canary deploy failed: " +
+                        fixture.diagnostics());
+            require(std::chrono::steady_clock::now() < deadline,
+                    "managed executable canary deploy did not become active");
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+
+        const std::string app_response = http_request(
+            fixture.socket_path,
+            "GET /v1/apps/orders HTTP/1.1\r\nHost: local\r\n\r\n");
+        require(app_response.find(canary) == std::string::npos,
+                "canary leaked into the apps response");
+
+        require(fixture.diagnostics().find(canary) == std::string::npos,
+                "canary leaked into Host diagnostics");
+
+        const std::string generation = active_generation(fixture);
+        const std::string generation_dir =
+            fixture.state_root + "/apps/orders/generations/" + generation;
+        for (const auto& entry :
+             std::filesystem::directory_iterator(generation_dir)) {
+            const std::string contents = read_file(entry.path().string());
+            require(contents.find(canary) == std::string::npos,
+                    "canary leaked into committed generation document: " +
+                        entry.path().filename().string());
+        }
+
+        // Positive control: committed env metadata names the secret key ID
+        // and its opaque file-v1: revision — the plaintext value is absent.
+        const std::string env_metadata =
+            read_file(generation_dir + "/env.json");
+        require(env_metadata.find("\"keyId\":\"api-token\"") !=
+                    std::string::npos,
+                "committed env.json does not record the secret key ID");
+        require(env_metadata.find("\"revision\":\"file-v1:") !=
+                    std::string::npos,
+                "committed env.json does not record the opaque revision");
+        require(env_metadata.find(canary) == std::string::npos,
+                "canary leaked into env.json");
+
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_crash_mid_deploy_keeps_old") {
         // M2 item 2a, boundary #7 (post version-mapping, pre active.json) —
         // a REAL SIGKILL, no clean-shutdown path. The v2 deploy must hang
