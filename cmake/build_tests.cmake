@@ -242,6 +242,35 @@ if(BUILD_TESTING)
                     "${CAPSID_ADMIN_HTTP_TEST_ID}" PROPERTIES TIMEOUT 10)
             endforeach()
 
+            # Poll-timeout saturation boundary: every Host poll call site
+            # clamps timeouts wider than int to INT_MAX so a large-but-valid
+            # deadline can never wrap negative and block forever (unit test,
+            # no sockets or sleeps).
+            add_executable(
+                test-host-poll-limits
+                tests/test_host_poll_limits.cc)
+            target_include_directories(
+                test-host-poll-limits PRIVATE include src)
+            target_link_libraries(test-host-poll-limits PRIVATE
+                capsid_host_core
+                Boost::system
+                Threads::Threads
+                capsid_sanitizers)
+            set_target_properties(test-host-poll-limits PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                target_compile_options(
+                    test-host-poll-limits PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+            add_test(
+                NAME host_poll_limits_saturation
+                COMMAND test-host-poll-limits)
+            set_tests_properties(
+                host_poll_limits_saturation PROPERTIES TIMEOUT 10)
+
             # The one-connection transport above is intentionally not a
             # daemon lifecycle. This suite freezes the owning long-lived
             # service: repeated accepts, bounded stop from idle/slow-client
@@ -270,7 +299,10 @@ if(BUILD_TESTING)
                     host_admin_service_idle_stop
                     host_admin_service_slow_client_stop
                     host_admin_service_preserves_replaced_path
-                    host_admin_service_stop_burst_is_nonblocking)
+                    host_admin_service_stop_burst_is_nonblocking
+                    host_admin_service_double_start_rejected
+                    host_admin_service_stop_before_start_rejected
+                    host_admin_service_start_stop_race)
                 add_test(
                     NAME "${CAPSID_ADMIN_SERVICE_TEST_ID}"
                     COMMAND test-host-admin-service
@@ -352,6 +384,11 @@ if(BUILD_TESTING)
                         host_managed_executable_rejects_embedded_nul_path
                         host_managed_executable_rejects_ambiguous_secret_template
                         host_managed_executable_rejects_unsafe_admin_mode
+                        host_managed_executable_rejects_negative_workers_total
+                        host_managed_executable_rejects_oversized_workers_total
+                        host_managed_executable_rejects_negative_max_inflight
+                        host_managed_executable_rejects_zero_or_negative_pool_bounds
+                        host_managed_executable_active_state_validation_fail_closed
                         host_managed_executable_enforces_global_worker_capacity
                         host_managed_executable_enforces_queue_maximums
                         host_managed_executable_enforces_streaming_maximums
@@ -761,9 +798,19 @@ if(BUILD_TESTING)
                 NAME host_static_pool_server_atomic_start_failure
                 COMMAND test-host-static-pool-server atomic-failure
                     $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_static_pool_server_stop_before_start
+                COMMAND test-host-static-pool-server stop-before-start
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_static_pool_server_start_stop_race
+                COMMAND test-host-static-pool-server start-stop-race
+                    $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
                 host_static_pool_server_shared_port_lifecycle
-                host_static_pool_server_atomic_start_failure PROPERTIES
+                host_static_pool_server_atomic_start_failure
+                host_static_pool_server_stop_before_start
+                host_static_pool_server_start_stop_race PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 
@@ -889,12 +936,24 @@ if(BUILD_TESTING)
                 NAME host_sse_max_inflight_one_boundary
                 COMMAND test-host-sse-permit max-inflight-one-boundary
                     $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_sse_uppercase_content_type_holds_permit
+                COMMAND test-host-sse-permit
+                    uppercase-content-type-holds-permit
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_sse_parameterized_content_type_holds_permit
+                COMMAND test-host-sse-permit
+                    parameterized-content-type-holds-permit
+                    $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
                 host_sse_permit_full_rejects_503
                 host_sse_permit_released_on_completion
                 host_sse_idle_timeout_cancels_and_releases
                 host_sse_plain_chunked_no_permit
-                host_sse_max_inflight_one_boundary PROPERTIES
+                host_sse_max_inflight_one_boundary
+                host_sse_uppercase_content_type_holds_permit
+                host_sse_parameterized_content_type_holds_permit PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 
