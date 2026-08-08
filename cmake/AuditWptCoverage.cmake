@@ -1,5 +1,16 @@
 # WPT coverage manifest audit.
 #
+# Uses IN_LIST (CMP0057). CMake 3.28 defaults the policy to unset, which
+# treats "IN_LIST" as an ordinary argument and breaks the membership test
+# (the coverage audit would then pass vacuously or fail spuriously
+# depending on the argument order); set it NEW explicitly.
+cmake_policy(SET CMP0057 NEW)
+if(POLICY CMP0121)
+    # Range variables used below (RANGE 0 N) need the inclusive upper bound
+    # semantics; keep the modern behavior.
+    cmake_policy(SET CMP0121 NEW)
+endif()
+
 # tests/wpt/manifest.json declares two lists that must agree:
 #
 #   tests[].paths    -- the upstream files each conformance group claims as its
