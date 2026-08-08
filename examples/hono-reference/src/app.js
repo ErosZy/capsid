@@ -186,6 +186,21 @@ app.get('/bench/bytes64k', context => new Response(
     new Uint8Array(65536).fill(0x61),
     { headers: { 'content-type': 'application/octet-stream' } },
 ));
+
+// 12ms sync busy-wait: simulates blocking DB query (sync driver)
+app.get("/bench/db12ms", () => {
+    const end = Date.now() + 12;
+    while (Date.now() < end) {}
+    return new Response(JSON.stringify({ status: "ok", delay_ms: 12 }),
+        { headers: { "content-type": "application/json" } });
+});
+
+// 12ms async: simulates await db.query() (proper async driver)
+app.get("/bench/db12ms-async", async () => {
+    await new Promise(r => setTimeout(r, 12));
+    return new Response(JSON.stringify({ status: "ok", delay_ms: 12 }),
+        { headers: { "content-type": "application/json" } });
+});
 app.get('/bench/bytes65537', context => new Response(
     new Uint8Array(65537).fill(0x61),
     { headers: { 'content-type': 'application/octet-stream' } },
@@ -570,3 +585,27 @@ export const createReferenceJwt = () => sign(
     'HS256',
 );
 export default app;
+
+// Serverless sim: 12ms async I/O + 5KB JSON.parse + pick fields + return small
+const sls5kItems = [];
+for (let i = 0; i < 50; i++) sls5kItems.push({id:i, title:'item-'+i, desc:'x'.repeat(80), price:i*1.5, stock:i*10});
+const sls5kData = JSON.stringify({id:12345, name:'user', email:'user@example.com', items: sls5kItems});
+
+app.get('/bench/sls-sim', async () => {
+    // Simulate 12ms DB I/O (async)
+    await new Promise(r => setTimeout(r, 12));
+    // Parse 5KB JSON response from "DB"
+    const data = JSON.parse(sls5kData);
+    // Extract fields + transform
+    const result = {
+        user_id: data.id,
+        user_name: data.name,
+        item_count: data.items.length,
+        total_value: data.items.reduce((sum, it) => sum + it.price, 0),
+        first_item: data.items[0].title,
+        last_item: data.items[data.items.length - 1].title,
+    };
+    return new Response(JSON.stringify(result), {
+        headers: { 'content-type': 'application/json' }
+    });
+});
