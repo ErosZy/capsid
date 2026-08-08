@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <condition_variable>
 #include <cstring>
 
 namespace capsid::host {
@@ -64,6 +65,22 @@ AdminService::~AdminService() {
 }
 
 bool AdminService::start(std::string* error) {
+    if (start_gate_.exchange(true)) {
+        if (error != nullptr) {
+            *error = "admin service already started";
+        }
+        return false;
+    }
+    struct StartCompletion {
+        AdminService* service;
+        ~StartCompletion() { service->finish_start(); }
+    } completion{this};
+    if (stopping_.load()) {
+        if (error != nullptr) {
+            *error = "admin service stop was requested before start";
+        }
+        return false;
+    }
     // Bind and listen BEFORE start returns (the caller must be able to
     // connect immediately).
     if (!open_admin_listener(options_.socket, &listener_, error)) {
@@ -76,7 +93,8 @@ bool AdminService::start(std::string* error) {
         socket_dev_ = st.st_dev;
         socket_ino_ = st.st_ino;
     }
-    if (!create_stop_pipe(stop_pipe_)) {
+    int created_stop_pipe[2] = {-1, -1};
+    if (!create_stop_pipe(created_stop_pipe)) {
         close(listener_);
         listener_ = -1;
         if (error != nullptr) {
@@ -84,8 +102,67 @@ bool AdminService::start(std::string* error) {
         }
         return false;
     }
-    stopping_.store(false);
-    thread_ = std::thread(&AdminService::accept_loop, this);
+    // A concurrent stop can race the pipe creation. Publish the wake after
+    // the pipe exists so the accept loop cannot sleep forever on a stop that
+    // arrived during startup.
+    {
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+        stop_pipe_[0] = created_stop_pipe[0];
+        stop_pipe_[1] = created_stop_pipe[1];
+        if (stopping_.load() && !stop_written_.exchange(true)) {
+            const ssize_t wake_bytes = write(stop_pipe_[1], "x", 1);
+            (void)wake_bytes;
+        }
+    }
+    if (stopping_.load(std::memory_order_acquire)) {
+        close(listener_);
+        listener_ = -1;
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+        close(stop_pipe_[0]);
+        close(stop_pipe_[1]);
+        stop_pipe_[0] = -1;
+        stop_pipe_[1] = -1;
+        if (error != nullptr) {
+            *error = "admin service stop was requested during start";
+        }
+        return false;
+    }
+    try {
+        thread_ = std::thread(&AdminService::accept_loop, this);
+    } catch (...) {
+        close(listener_);
+        listener_ = -1;
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+        close(stop_pipe_[0]);
+        close(stop_pipe_[1]);
+        stop_pipe_[0] = -1;
+        stop_pipe_[1] = -1;
+        if (error != nullptr) {
+            *error = "cannot start admin service thread";
+        }
+        return false;
+    }
+    if (stopping_.load(std::memory_order_acquire)) {
+        {
+            std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+            if (stop_pipe_[1] >= 0 && !stop_written_.exchange(true)) {
+                const ssize_t wake_bytes = write(stop_pipe_[1], "x", 1);
+                (void)wake_bytes;
+            }
+        }
+        thread_.join();
+        close(listener_);
+        listener_ = -1;
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+        close(stop_pipe_[0]);
+        close(stop_pipe_[1]);
+        stop_pipe_[0] = -1;
+        stop_pipe_[1] = -1;
+        if (error != nullptr) {
+            *error = "admin service stop was requested during start";
+        }
+        return false;
+    }
     if (error != nullptr) {
         error->clear();
     }
@@ -96,11 +173,14 @@ void AdminService::request_stop() {
     stopping_.store(true);
     // Wake the idle accept loop exactly once: the nonblocking pipe and the
     // one-shot gate make repeated stops idempotent and never blocking.
-    if (!stop_written_.exchange(true)) {
-        // GCC's warn_unused_result ignores the (void) cast; assign and
-        // ignore explicitly. The wake byte is best-effort by design.
-        const ssize_t wake_bytes = write(stop_pipe_[1], "x", 1);
-        (void)wake_bytes;
+    {
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+        if (stop_pipe_[1] >= 0 && !stop_written_.exchange(true)) {
+            // GCC's warn_unused_result ignores the (void) cast; assign and
+            // ignore explicitly. The wake byte is best-effort by design.
+            const ssize_t wake_bytes = write(stop_pipe_[1], "x", 1);
+            (void)wake_bytes;
+        }
     }
     // Wake an accepted connection mid-header: shutdown makes its read
     // return promptly instead of waiting out the HTTP deadline. The fd
@@ -170,6 +250,16 @@ void AdminService::accept_loop() {
 }
 
 bool AdminService::wait(std::string* error) {
+    {
+        std::unique_lock<std::mutex> lock(lifecycle_mutex_);
+        if (!start_gate_.load(std::memory_order_acquire)) {
+            if (error != nullptr) {
+                *error = "admin service was not started";
+            }
+            return false;
+        }
+        lifecycle_cv_.wait(lock, [this] { return start_finished_; });
+    }
     if (thread_.joinable()) {
         thread_.join();
     }
@@ -186,11 +276,14 @@ bool AdminService::wait(std::string* error) {
         close(listener_);
         listener_ = -1;
     }
-    if (stop_pipe_[0] >= 0) {
-        close(stop_pipe_[0]);
-        close(stop_pipe_[1]);
-        stop_pipe_[0] = -1;
-        stop_pipe_[1] = -1;
+    {
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+        if (stop_pipe_[0] >= 0) {
+            close(stop_pipe_[0]);
+            close(stop_pipe_[1]);
+            stop_pipe_[0] = -1;
+            stop_pipe_[1] = -1;
+        }
     }
     if (error != nullptr) {
         error->clear();
