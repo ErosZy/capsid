@@ -412,8 +412,14 @@ bool parse_managed_config(const std::string& json, ManagedConfig* out,
             json_t* inflight =
                 json_object_get(request, "maxInflightPerWorker");
             if (json_is_integer(inflight)) {
+                const json_int_t value = json_integer_value(inflight);
+                if (value < 0) {
+                    *error = "invalid maximums.request.maxInflightPerWorker";
+                    json_decref(root);
+                    return false;
+                }
                 out->policy.max_requests_per_worker =
-                    static_cast<std::uint64_t>(json_integer_value(inflight));
+                    static_cast<std::uint64_t>(value);
             }
             // E-2 SSE-permit caps (maximums.request.*, §9.3): the Host
             // ceilings the App stream config is compiled against in
@@ -517,6 +523,11 @@ bool parse_managed_config(const std::string& json, ManagedConfig* out,
                 json_decref(root);
                 return false;
             }
+            if (value > static_cast<json_int_t>(std::numeric_limits<int>::max())) {
+                *error = "capacity.workersTotal exceeds the Host limit";
+                json_decref(root);
+                return false;
+            }
             out->worker_capacity = static_cast<int>(value);
         }
     }
@@ -570,16 +581,45 @@ bool valid_managed_app_id(const std::string& value) {
 // True when the App has a durable active-state document (an active
 // generation or a retired tombstone). Recovery only needs a permit for
 // those; an App with no state cannot consume capacity.
-bool has_durable_active_state(const std::string& state_root,
+bool has_durable_active_state(int state_root_fd,
                               const std::string& application) {
-    const std::string path =
-        state_root + "/apps/" + application + "/active.json";
-    const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-    if (fd < 0) {
+    const int apps_fd = openat(state_root_fd, "apps",
+                               O_RDONLY | O_DIRECTORY | O_CLOEXEC |
+                                   O_NOFOLLOW);
+    if (apps_fd < 0) {
         return false;
     }
-    close(fd);
-    return true;
+    struct stat directory = {};
+    if (fstat(apps_fd, &directory) != 0 || !S_ISDIR(directory.st_mode) ||
+        directory.st_uid != geteuid() || (directory.st_mode & 0077) != 0) {
+        close(apps_fd);
+        return false;
+    }
+    const int app_fd = openat(apps_fd, application.c_str(),
+                              O_RDONLY | O_DIRECTORY | O_CLOEXEC |
+                                  O_NOFOLLOW);
+    close(apps_fd);
+    if (app_fd < 0) {
+        return false;
+    }
+    if (fstat(app_fd, &directory) != 0 || !S_ISDIR(directory.st_mode) ||
+        directory.st_uid != geteuid() || (directory.st_mode & 0077) != 0) {
+        close(app_fd);
+        return false;
+    }
+    const int active_fd = openat(app_fd, "active.json",
+                                 O_RDONLY | O_CLOEXEC | O_NOFOLLOW |
+                                     O_NONBLOCK);
+    close(app_fd);
+    if (active_fd < 0) {
+        return false;
+    }
+    struct stat active = {};
+    const bool durable = fstat(active_fd, &active) == 0 &&
+                         S_ISREG(active.st_mode) &&
+                         active.st_uid == geteuid();
+    close(active_fd);
+    return durable;
 }
 
 // Discovers configured Apps beneath the verified applications root.
@@ -721,6 +761,7 @@ int run_managed(const std::string& host_config_path,
     }
     const int secrets_fd = open_verified_root(secret_parent,
                                               "secret root template");
+    const int state_fd = open_verified_root(config.state_root, "state root");
     const std::vector<std::string> applications =
         discover_applications(apps_fd);
     if (applications.empty()) {
@@ -743,40 +784,57 @@ int run_managed(const std::string& host_config_path,
         app_options.push_back(options.get());
         owned.push_back(std::move(options));
     }
-    // Active workers owned by this process: App -> worker.
-    std::map<std::string, capsid_worker*> active_workers;
+    // Active workers owned by this process: App -> complete worker pool.
+    // A managed fixed pool is an atomic ownership unit; retaining only the
+    // legacy single-worker pointer silently drops every shard beyond the
+    // first one during recovery and replacement.
+    std::map<std::string, std::vector<capsid_worker*>> active_worker_pools;
     std::mutex workers_mutex;
+    const auto activate_pool =
+        [&](const std::string& application,
+            std::vector<capsid_worker*> workers) {
+            std::lock_guard<std::mutex> lock(workers_mutex);
+            const auto existing = active_worker_pools.find(application);
+            if (existing != active_worker_pools.end()) {
+                for (capsid_worker* worker : existing->second) {
+                    if (worker != nullptr) {
+                        capsid_worker_destroy(worker);
+                    }
+                }
+            }
+            active_worker_pools[application] = std::move(workers);
+            return true;
+        };
     const auto activate_worker =
         [&](const std::string& application, capsid_worker* worker) {
-            std::lock_guard<std::mutex> lock(workers_mutex);
-            const std::map<std::string, capsid_worker*>::iterator existing =
-                active_workers.find(application);
-            if (existing != active_workers.end() &&
-                existing->second != nullptr) {
-                // Activation replaces the previous worker.
-                capsid_worker_destroy(existing->second);
+            std::vector<capsid_worker*> workers;
+            if (worker != nullptr) {
+                workers.push_back(worker);
             }
-            active_workers[application] = worker;
-            return true;
+            return activate_pool(application, std::move(workers));
         };
     const auto retire_worker = [&](const std::string& application) {
         std::lock_guard<std::mutex> lock(workers_mutex);
-        const std::map<std::string, capsid_worker*>::iterator existing =
-            active_workers.find(application);
-        if (existing != active_workers.end() &&
-            existing->second != nullptr) {
-            capsid_worker_destroy(existing->second);
-            active_workers.erase(existing);
+        const auto existing = active_worker_pools.find(application);
+        if (existing != active_worker_pools.end()) {
+            for (capsid_worker* worker : existing->second) {
+                if (worker != nullptr) {
+                    capsid_worker_destroy(worker);
+                }
+            }
+            active_worker_pools.erase(existing);
         }
     };
     const auto reclaim_workers = [&]() {
         std::lock_guard<std::mutex> lock(workers_mutex);
-        for (const auto& entry : active_workers) {
-            if (entry.second != nullptr) {
-                capsid_worker_destroy(entry.second);
+        for (const auto& entry : active_worker_pools) {
+            for (capsid_worker* worker : entry.second) {
+                if (worker != nullptr) {
+                    capsid_worker_destroy(worker);
+                }
             }
         }
-        active_workers.clear();
+        active_worker_pools.clear();
     };
     // The process-global worker permit (capacity.workersTotal). The slot
     // is bound to an active App: replacements do not re-acquire, a failed
@@ -792,8 +850,7 @@ int run_managed(const std::string& host_config_path,
         // Only an App with durable state may consume a permit; a fresh
         // App never occupies capacity before its first deploy.
         bool newly_acquired = false;
-        if (has_durable_active_state(options->state_root,
-                                     options->application)) {
+        if (has_durable_active_state(state_fd, options->application)) {
             newly_acquired = capacity.acquire(options->application);
             if (!newly_acquired &&
                 !capacity.holds(options->application)) {
@@ -810,10 +867,24 @@ int run_managed(const std::string& host_config_path,
             }
             fail("cannot recover active application " + options->application);
         }
-        if (recovered.worker != nullptr) {
-            // READY succeeded: the recovered worker holds the slot.
+        if (!recovered.workers.empty()) {
+            // A state-file race can create an active document after the
+            // preflight check. Reconcile the permit before retaining any
+            // recovered workers; never leave a live pool outside capacity.
+            if (!newly_acquired &&
+                !capacity.holds(options->application)) {
+                if (!capacity.acquire(options->application)) {
+                    for (capsid_worker* worker : recovered.workers) {
+                        capsid_worker_destroy(worker);
+                    }
+                    fail("active generation count exceeds "
+                         "capacity.workersTotal");
+                }
+                newly_acquired = true;
+            }
+            // READY succeeded: the complete recovered pool holds the slot.
             capacity.record_success(options->application);
-            activate_worker(options->application, recovered.worker);
+            activate_pool(options->application, std::move(recovered.workers));
         } else if (newly_acquired) {
             // No active/retired generation: no permanent occupancy.
             capacity.release(options->application);
@@ -826,6 +897,7 @@ int run_managed(const std::string& host_config_path,
     async_options.max_pending_operations = 8;
     async_options.external_stop = &g_stop;
     async_options.activate_worker = activate_worker;
+    async_options.activate_pool = activate_pool;
     async_options.retire_worker = retire_worker;
     auto async = std::make_unique<capsid::host::AsyncAdminBackend>(
         &managed, async_options);
@@ -861,6 +933,7 @@ int run_managed(const std::string& host_config_path,
     // shutdown never depends on destructor ordering at function return.
     async.reset();
     reclaim_workers();
+    close(state_fd);
     return 0;
 }
 
@@ -964,12 +1037,13 @@ int main(int argc, char** argv) {
         fail("--strict-sandbox must be on or off");
     }
     options.strict_sandbox = sandbox == "on";
-    options.ready_fd = static_cast<int>(
-        parse_positive_integer(require("ready-fd"), "ready-fd"));
-    if (options.ready_fd <= 0 ||
-        options.ready_fd > static_cast<int>(std::numeric_limits<short>::max())) {
+    const std::uint64_t ready_fd =
+        parse_positive_integer(require("ready-fd"), "ready-fd");
+    if (ready_fd > static_cast<std::uint64_t>(
+                       std::numeric_limits<short>::max())) {
         fail("--ready-fd must be a positive descriptor number");
     }
+    options.ready_fd = static_cast<int>(ready_fd);
     // The READY record must be deliverable; verify the descriptor is open
     // before spawning the worker.
     if (fcntl(options.ready_fd, F_GETFD) == -1) {
@@ -984,8 +1058,12 @@ int main(int argc, char** argv) {
     std::uint32_t workers = 1;
     if (mode == "static-pool") {
         const std::string workers_text = require("workers");
-        workers = static_cast<std::uint32_t>(
-            parse_positive_integer(workers_text, "workers"));
+        const std::uint64_t parsed_workers =
+            parse_positive_integer(workers_text, "workers");
+        if (parsed_workers > std::numeric_limits<std::uint32_t>::max()) {
+            fail("--workers exceeds uint32");
+        }
+        workers = static_cast<std::uint32_t>(parsed_workers);
         // M2 pool sizing scans {1,2,4,6,8}; the benchmark-only entry
         // accepts exactly this set (admission-sized pools come later).
         if (workers != 1 && workers != 2 && workers != 4 &&

@@ -678,10 +678,19 @@ public:
     ActiveStateReadResult read_active_file() override {
         ActiveStateReadResult result;
         const int fd = openat(app_dir_fd_, "active.json",
-                              O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+                              O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
         if (fd < 0) {
             result.status = errno == ENOENT ? ActiveStateIoStatus::kNotFound
                                             : ActiveStateIoStatus::kError;
+            return result;
+        }
+        struct stat before = {};
+        if (fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) ||
+            before.st_uid != geteuid() || before.st_size < 0 ||
+            static_cast<std::uint64_t>(before.st_size) >
+                kMaxActiveStateBytes) {
+            close(fd);
+            result.status = ActiveStateIoStatus::kError;
             return result;
         }
         char buffer[4096];
@@ -701,6 +710,12 @@ public:
             }
             if (count == 0) {
                 break;
+            }
+            if (bytes.size() + static_cast<std::size_t>(count) >
+                kMaxActiveStateBytes) {
+                close(fd);
+                result.status = ActiveStateIoStatus::kError;
+                return result;
             }
             bytes.append(buffer, static_cast<std::size_t>(count));
         }
@@ -732,7 +747,7 @@ public:
         struct stat st = {};
         const int marker_fd =
             openat(generation_fd, kCompleteMarker,
-                   O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+                   O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
         close(generation_fd);
         if (marker_fd < 0) {
             return errno == ENOENT ? GenerationCompleteness::kMissing
@@ -759,8 +774,14 @@ public:
     ActiveStateIoStatus write_active_temp(std::string_view temp_name,
                                           std::string_view bytes) override {
         const int fd = openat(app_dir_fd_, std::string(temp_name).c_str(),
-                              O_WRONLY | O_CLOEXEC | O_NOFOLLOW);
+                              O_WRONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
         if (fd < 0) {
+            return ActiveStateIoStatus::kError;
+        }
+        struct stat st = {};
+        if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) ||
+            st.st_uid != geteuid()) {
+            close(fd);
             return ActiveStateIoStatus::kError;
         }
         // EINTR/short-write loop: every byte reaches the temp file or the
@@ -785,11 +806,13 @@ public:
     }
     ActiveStateIoStatus sync_active_temp(std::string_view temp_name) override {
         const int fd = openat(app_dir_fd_, std::string(temp_name).c_str(),
-                              O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+                              O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
         if (fd < 0) {
             return ActiveStateIoStatus::kError;
         }
-        const bool ok = fsync(fd) == 0;
+        struct stat st = {};
+        const bool ok = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) &&
+                        st.st_uid == geteuid() && fsync(fd) == 0;
         close(fd);
         return ok ? ActiveStateIoStatus::kOk : ActiveStateIoStatus::kError;
     }
@@ -1054,7 +1077,8 @@ bool generation_is_complete(int app_fd, const std::string& generation) {
     }
     struct stat st = {};
     const int marker_fd =
-        openat(gen_fd, kCompleteMarker, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+        openat(gen_fd, kCompleteMarker,
+               O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     close(gen_fd);
     if (marker_fd < 0) {
         return false;
@@ -1659,12 +1683,26 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         json_t* min_ready = json_object_get(pool, "minReady");
         json_t* max_workers = json_object_get(pool, "maxWorkers");
         if (json_is_integer(min_ready)) {
-            app->min_ready =
-                static_cast<std::uint32_t>(json_integer_value(min_ready));
+            const json_int_t value = json_integer_value(min_ready);
+            if (value <= 0 ||
+                value > static_cast<json_int_t>(
+                            std::numeric_limits<std::uint32_t>::max())) {
+                *error = "invalid capsid.json pool.minReady";
+                json_decref(root);
+                return false;
+            }
+            app->min_ready = static_cast<std::uint32_t>(value);
         }
         if (json_is_integer(max_workers)) {
-            app->workers =
-                static_cast<std::uint32_t>(json_integer_value(max_workers));
+            const json_int_t value = json_integer_value(max_workers);
+            if (value <= 0 ||
+                value > static_cast<json_int_t>(
+                            std::numeric_limits<std::uint32_t>::max())) {
+                *error = "invalid capsid.json pool.maxWorkers";
+                json_decref(root);
+                return false;
+            }
+            app->workers = static_cast<std::uint32_t>(value);
         }
         // E-1 admission queue (§10.3): parsed here so the effective config
         // can enforce the Host maximums (compile_policy) and forward the
@@ -2811,23 +2849,9 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     }
     const int app_state_fd = open_verified_app_state_dir(
         state_fd, options->application, /*create=*/true);
-    if (app_state_fd < 0 || !make_dir_at(state_fd, "staging")) {
-        if (app_state_fd >= 0) {
-            close(app_state_fd);
-        }
+    if (app_state_fd < 0) {
         close(state_fd);
         outcome.error = "cannot prepare state directories";
-        status->state = OperationState::kFailed;
-        return outcome;
-    }
-    // The staging directory itself is reopened with O_NOFOLLOW and verified
-    // (a pre-existing symlink at stateRoot/staging is rejected, not
-    // followed), then the per-operation directory is created inside it.
-    const int staging_root_fd = prepare_subdir_at(state_fd, "staging");
-    if (staging_root_fd < 0) {
-        close(app_state_fd);
-        close(state_fd);
-        outcome.error = "staging directory is not a verified directory";
         status->state = OperationState::kFailed;
         return outcome;
     }
@@ -2874,7 +2898,6 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             outcome.error = validated.error;
             return outcome;
         }
-        close(state_fd);
         status->state = OperationState::kWarming;
         const WarmPoolResult warm = warm_worker_pool(
             *options,
@@ -2884,6 +2907,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             validated.source_name, validated.effective, validated.env_values);
         if (!warm.ok) {
             close(app_state_fd);
+            close(state_fd);
             status->state = OperationState::kFailed;
             status->error = warm.error;
             outcome.error = warm.error;
@@ -2900,6 +2924,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             document, outcome.operation_id, filesystem);
         if (!persisted.ok) {
             destroy_pool(warm.workers);
+            close(state_fd);
             status->state = OperationState::kFailed;
             status->error = "cannot persist active state";
             outcome.error = "cannot persist active state";
@@ -2907,10 +2932,29 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         }
         status->state = OperationState::kActive;
         outcome.ok = true;
+        close(state_fd);
         publish_pool(&outcome, warm.workers);
         return outcome;
     }
     // mapping == -1: first publish of this Version ID; stage it.
+    if (!make_dir_at(state_fd, "staging")) {
+        close(app_state_fd);
+        close(state_fd);
+        outcome.error = "cannot prepare state directories";
+        status->state = OperationState::kFailed;
+        return outcome;
+    }
+    // The staging directory itself is reopened with O_NOFOLLOW and verified
+    // (a pre-existing symlink at stateRoot/staging is rejected, not
+    // followed), then the per-operation directory is created inside it.
+    const int staging_root_fd = prepare_subdir_at(state_fd, "staging");
+    if (staging_root_fd < 0) {
+        close(app_state_fd);
+        close(state_fd);
+        outcome.error = "staging directory is not a verified directory";
+        status->state = OperationState::kFailed;
+        return outcome;
+    }
     if (mkdirat(staging_root_fd, outcome.operation_id.c_str(), 0700) != 0) {
         close(staging_root_fd);
         close(app_state_fd);
@@ -3072,6 +3116,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         *options, bundle_bytes, selected == SelectedArtifactKind::kTrustedBytecode,
         source_name, effective, env_values);
     if (!warm.ok) {
+        close(app_state_fd);
         status->state = OperationState::kFailed;
         status->error = warm.error;
         outcome.error = warm.error;

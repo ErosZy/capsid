@@ -122,6 +122,35 @@ std::string ascii_lower(std::string_view text) {
     return lower;
 }
 
+bool is_event_stream_content_type(std::string_view value) {
+    std::size_t begin = 0;
+    while (begin < value.size() &&
+           (value[begin] == ' ' || value[begin] == '\t')) {
+        ++begin;
+    }
+    static constexpr std::string_view kEventStream = "text/event-stream";
+    if (value.size() - begin < kEventStream.size() ||
+        !std::equal(kEventStream.begin(), kEventStream.end(),
+                    value.begin() + static_cast<std::ptrdiff_t>(begin),
+                    [](unsigned char a, unsigned char b) {
+                        if (a >= 'A' && a <= 'Z') {
+                            a = static_cast<unsigned char>(a - 'A' + 'a');
+                        }
+                        if (b >= 'A' && b <= 'Z') {
+                            b = static_cast<unsigned char>(b - 'A' + 'a');
+                        }
+                        return a == b;
+                    })) {
+        return false;
+    }
+    std::size_t end = begin + kEventStream.size();
+    while (end < value.size() &&
+           (value[end] == ' ' || value[end] == '\t')) {
+        ++end;
+    }
+    return end == value.size() || value[end] == ';';
+}
+
 // Parses the comma-separated token list of a Connection header and collects
 // the (lowercased) nominated names. Returns false on an empty or non-token
 // nomination, which fails the response closed (RFC 7230 §6.1).
@@ -209,6 +238,11 @@ struct WorkerEvent {
 
 class Session;
 
+struct QueuedResponseBody {
+    std::vector<std::uint8_t> bytes;
+    bool credit_returned_early = false;
+};
+
 // Request state owned by the io thread only.
 struct PendingRequest {
     // Shared ownership: an in-flight async write on the session stream must
@@ -232,11 +266,12 @@ struct PendingRequest {
     std::shared_ptr<http::response<http::buffer_body>> response;
     std::shared_ptr<http::response_serializer<http::buffer_body>> serializer;
     std::vector<std::uint8_t> outgoing;
-    std::deque<std::vector<std::uint8_t>> body_queue;
+    std::deque<QueuedResponseBody> body_queue;
     // Total bytes currently queued for the HTTP write, so the early
     // credit window (performance loop v1) can stay bounded: a slow
     // client must not make the host buffer unboundedly.
-    size_t body_queue_bytes;
+    size_t body_queue_bytes = 0;
+    bool outgoing_credit_returned_early = false;
     bool head_sent = false;
     bool head_only = false;
     bool writing = false;
@@ -405,7 +440,9 @@ private:
     void pump_events();
     void handle_worker_event(WorkerEvent event);
     void advance_request_body(std::uint64_t request_id);
-    void write_body_block(std::uint64_t request_id, std::vector<std::uint8_t> bytes);
+    void write_body_block(std::uint64_t request_id,
+                          std::vector<std::uint8_t> bytes,
+                          bool credit_returned_early = false);
     void write_end_block(std::uint64_t request_id);
     void io_post(std::function<void()> function);
     bool wait_for_ready();
@@ -444,6 +481,13 @@ private:
     void on_write_timer(std::uint64_t request_id,
                         const beast::error_code ec);
     void shutdown_worker_and_join();
+    void finish_start() {
+        {
+            std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+            start_finished_ = true;
+        }
+        lifecycle_cv_.notify_all();
+    }
 
     // Diagnostic IPC metrics (CAPSID_HOST_IPC_METRICS=1 only; zero overhead
     // in headline runs). Counters are reset after each write so the runner
@@ -541,6 +585,9 @@ private:
     std::atomic<bool> stop_requested_ = false;
     std::atomic<bool> shutdown_sent_ = false;
     std::atomic<bool> io_running_ = false;
+    std::mutex lifecycle_mutex_;
+    std::condition_variable lifecycle_cv_;
+    bool start_finished_ = false;
     std::thread io_thread_;
     // Pool barrier: while defer_accept is pending, the work guard pins the
     // event loop alive (there is no accept work yet); activate_accept()
@@ -794,6 +841,22 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         }
         return false;
     }
+    struct StartCompletion {
+        Impl* impl;
+        ~StartCompletion() { impl->finish_start(); }
+    } completion{this};
+    if (stop_requested_.load(std::memory_order_acquire)) {
+        if (error != nullptr) {
+            *error = "server stop was requested before start";
+        }
+        return false;
+    }
+    if (max_inflight_ > std::numeric_limits<std::uint32_t>::max()) {
+        if (error != nullptr) {
+            *error = "max_inflight_per_worker exceeds the worker limit";
+        }
+        return false;
+    }
     // M2 E-2 §9.3: the streaming permit must stay below the inflight
     // ceiling — except the single documented 1/1 boundary, where both are
     // 1 and the worker explicitly forgoes concurrency for streaming. Both
@@ -879,7 +942,14 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         std::uint64_t val = 0;
         for (const char* p = credit_env; *p != '\0'; ++p) {
             if (*p >= '0' && *p <= '9') {
-                val = val * 10 + static_cast<std::uint64_t>(*p - '0');
+                const std::uint64_t digit =
+                    static_cast<std::uint64_t>(*p - '0');
+                if (val >
+                    (std::numeric_limits<std::uint64_t>::max() - digit) / 10) {
+                    val = 0;
+                    break;
+                }
+                val = val * 10 + digit;
             } else { val = 0; break; }
         }
         if (val > 0 && val <= std::numeric_limits<std::uint32_t>::max()) {
@@ -968,6 +1038,21 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         ioc_.run();
         io_running_ = false;
     });
+    if (stop_requested_.load(std::memory_order_acquire)) {
+        io_post([weak = weak_from_this()] {
+            if (const std::shared_ptr<Impl> alive = weak.lock()) {
+                alive->on_signal(0);
+            }
+        });
+        shutdown_worker_and_join();
+        if (io_thread_.joinable()) {
+            io_thread_.join();
+        }
+        if (error != nullptr) {
+            *error = "server stop was requested during start";
+        }
+        return false;
+    }
     return true;
 }
 
@@ -1076,6 +1161,16 @@ bool Impl::wait(std::string* error) {
     // first caller own the joins while concurrent/later callers BLOCK
     // until they complete, so no caller returns before the server is
     // actually stopped.
+    {
+        std::unique_lock<std::mutex> lock(lifecycle_mutex_);
+        if (!start_gate_.load(std::memory_order_acquire)) {
+            if (error != nullptr) {
+                *error = "server was not started";
+            }
+            return false;
+        }
+        lifecycle_cv_.wait(lock, [this] { return start_finished_; });
+    }
     std::call_once(wait_once_, [this] {
         if (io_thread_.joinable()) {
             io_thread_.join();
@@ -1232,13 +1327,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
                             })) {
                 continue;
             }
-            static constexpr std::string_view kEventStream =
-                "text/event-stream";
-            if (value.size() >= kEventStream.size() &&
-                std::equal(kEventStream.begin(), kEventStream.end(),
-                           value.begin(), [](unsigned char a, unsigned char b) {
-                               return std::tolower(a) == std::tolower(b);
-                           })) {
+            if (is_event_stream_content_type(value)) {
                 is_sse = true;
             }
             break;
@@ -1275,12 +1364,24 @@ void Impl::handle_worker_event(WorkerEvent event) {
                     valid = false;
                     break;
                 }
-                value = value * 10 + static_cast<std::uint64_t>(c - '0');
+                const std::uint64_t digit =
+                    static_cast<std::uint64_t>(c - '0');
+                if (value >
+                    (std::numeric_limits<std::uint64_t>::max() - digit) / 10) {
+                    valid = false;
+                    break;
+                }
+                value = value * 10 + digit;
             }
-            if (valid) {
-                pending.cl_known = true;
-                pending.cl_remaining = static_cast<std::size_t>(value);
+            if (!valid ||
+                value > static_cast<std::uint64_t>(
+                             std::numeric_limits<std::size_t>::max())) {
+                reject_response_head(event.request_id,
+                                     "invalid worker Content-Length");
+                return;
             }
+            pending.cl_known = true;
+            pending.cl_remaining = static_cast<std::size_t>(value);
         }
         pending.serializer = std::make_shared<
             http::response_serializer<http::buffer_body>>(
@@ -1324,10 +1425,13 @@ void Impl::handle_worker_event(WorkerEvent event) {
                 if (!pending.body_queue.empty()) {
                     // Body events that arrived while the head was being
                     // written are queued here and flushed in order.
-                    std::vector<std::uint8_t> queued =
+                    QueuedResponseBody queued =
                         std::move(pending.body_queue.front());
                     pending.body_queue.pop_front();
-                    self->write_body_block(request_id, std::move(queued));
+                    pending.body_queue_bytes -= queued.bytes.size();
+                    self->write_body_block(
+                        request_id, std::move(queued.bytes),
+                        queued.credit_returned_early);
                 } else if (pending.end_seen) {
                     if (pending.head_only) {
                         self->finalize_request(request_id, pending.session);
@@ -1358,7 +1462,9 @@ void Impl::handle_worker_event(WorkerEvent event) {
         // wakeup). Beyond the window the credit falls back to
         // write-completion, so a slow client cannot make the host
         // buffer unboundedly.
-        if (pending.body_queue_bytes < kEarlyCreditWindow) {
+        const bool credit_returned_early =
+            pending.body_queue_bytes < kEarlyCreditWindow;
+        if (credit_returned_early) {
             pending.pending_response_credit +=
                 static_cast<std::uint32_t>(event.body.size());
             flush_pending_credit(event.request_id, pending, false);
@@ -1369,10 +1475,13 @@ void Impl::handle_worker_event(WorkerEvent event) {
         }
         if (pending.writing) {
             pending.body_queue_bytes += event.body.size();
-            pending.body_queue.push_back(std::move(event.body));
+            pending.body_queue.push_back(
+                QueuedResponseBody{std::move(event.body),
+                                   credit_returned_early});
             return;
         }
-        write_body_block(event.request_id, std::move(event.body));
+        write_body_block(event.request_id, std::move(event.body),
+                         credit_returned_early);
         return;
     }
     case WorkerEvent::Type::kResponseEnd: {
@@ -1583,7 +1692,8 @@ void Impl::advance_request_body(std::uint64_t request_id) {
 }
 
 void Impl::write_body_block(std::uint64_t request_id,
-                            std::vector<std::uint8_t> bytes) {
+                            std::vector<std::uint8_t> bytes,
+                            bool credit_returned_early) {
     auto it = requests_.find(request_id);
     if (it == requests_.end()) {
         return;
@@ -1600,6 +1710,7 @@ void Impl::write_body_block(std::uint64_t request_id,
         pending.cl_remaining -= bytes.size();
     }
     pending.outgoing = std::move(bytes);
+    pending.outgoing_credit_returned_early = credit_returned_early;
     pending.writing = true;
     // The serializer and the response share one object; the response body
     // view is updated directly for each block.
@@ -1640,18 +1751,22 @@ void Impl::write_body_block(std::uint64_t request_id,
             // the response already ended, the Runtime erased the request and
             // the credit is moot; submitting the frame would only be
             // rejected, so it is skipped.
-            if (!pending.end_seen) {
+            if (!pending.end_seen &&
+                !pending.outgoing_credit_returned_early) {
                 pending.pending_response_credit +=
                     static_cast<std::uint32_t>(pending.outgoing.size());
                 self->flush_pending_credit(request_id, pending, false);
             }
+            pending.outgoing_credit_returned_early = false;
             pending.outgoing.clear();
             if (!pending.body_queue.empty()) {
-                std::vector<std::uint8_t> queued =
+                QueuedResponseBody queued =
                     std::move(pending.body_queue.front());
                 pending.body_queue.pop_front();
-                pending.body_queue_bytes -= queued.size();
-                self->write_body_block(request_id, std::move(queued));
+                pending.body_queue_bytes -= queued.bytes.size();
+                self->write_body_block(
+                    request_id, std::move(queued.bytes),
+                    queued.credit_returned_early);
             } else if (pending.end_seen) {
                 self->write_end_block(request_id);
             }
@@ -2119,9 +2234,21 @@ bool Impl::write_ready_line() {
         "{\"schema\":\"capsid-host-ready-v1\",\"app\":\"" +
         options_.application + "\",\"address\":\"" + bound_address_ +
         "\",\"port\":" + std::to_string(bound_port_) + "}\n";
-    const ssize_t written =
-        ::write(options_.ready_fd, line.data(), line.size());
-    if (written != static_cast<ssize_t>(line.size())) {
+    std::size_t offset = 0;
+    while (offset < line.size()) {
+        const ssize_t written = ::write(options_.ready_fd,
+                                        line.data() + offset,
+                                        line.size() - offset);
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        if (written <= 0) {
+            write_stderr("capsid-host: failed to write the READY record");
+            return false;
+        }
+        offset += static_cast<std::size_t>(written);
+    }
+    if (offset != line.size()) {
         write_stderr("capsid-host: failed to write the READY record");
         return false;
     }
@@ -2286,11 +2413,6 @@ bool Impl::execute_command(Command command) {
                 worker_, command.request_id, command.method.c_str(),
                 command.url.c_str(), header_ptr, headers.size());
         }
-        if (result != CAPSID_OK) {
-            return report_runtime_failure(command.request_id, result,
-                                          "begin_request");
-        }
-        break;
         if (result != CAPSID_OK) {
             return report_runtime_failure(command.request_id, result,
                                           "begin_request");

@@ -642,6 +642,52 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_executable_active_state_validation_fail_closed") {
+        // Release hardening: the durable active pointer is read through a
+        // verified descriptor (O_NONBLOCK + fstat: regular file, owned by
+        // the Host euid, bounded size). A directory, a foreign-owned file or
+        // an oversized document at active.json must make recovery fail
+        // closed — the Host refuses to start rather than parse unverified
+        // bytes or silently drop a durable active pointer. Run once per
+        // corruption class; each class must reject startup.
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        wait_active(fixture, operation);
+        stop_host(fixture);
+
+        const std::string active_path =
+            fixture.state_root + "/apps/orders/active.json";
+        require(remove(active_path.c_str()) == 0,
+                "cannot detach the active state document");
+
+        // Corruption class 1: a directory at active.json.
+        require(mkdir(active_path.c_str(), 0700) == 0,
+                "cannot plant a directory at active.json");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(5));
+
+        // Corruption class 2: an oversized active document (> 16 KiB).
+        require(rmdir(active_path.c_str()) == 0,
+                "cannot remove the directory active-state fixture");
+        write_file(active_path, std::string(17U * 1024U, 'x'));
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(5));
+
+        // Corruption class 3: a foreign-owned active document. The Host
+        // (running as euid) must reject a file it does not own even when
+        // the contents are parseable.
+        require(remove(active_path.c_str()) == 0,
+                "cannot detach the oversized active-state fixture");
+        write_file(active_path, "{}");
+        require(chown(active_path.c_str(), 65534, 65534) == 0,
+                "cannot chown active.json to a foreign uid");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(5));
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_recovers_on_restart") {
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);
@@ -937,6 +983,83 @@ int main(int argc, char** argv) {
                                   "\"mode\":\"0666\"");
         start_host(fixture, argv[2], argv[3]);
         require_startup_rejected(fixture, std::chrono::seconds(1));
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_rejects_negative_workers_total") {
+        // Release hardening: a negative capacity.workersTotal must fail
+        // startup (the unsigned cast would otherwise turn -1 into
+        // UINT64_MAX and grant absurd capacity).
+        fixture.replace_host_text("\"workersTotal\":1",
+                                  "\"workersTotal\":-1");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(1));
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_rejects_oversized_workers_total") {
+        // Release hardening: capacity.workersTotal beyond INT_MAX must fail
+        // startup (the value is narrowed to int for the capacity permit;
+        // without the ceiling the narrow wraps negative).
+        fixture.replace_host_text("\"workersTotal\":1",
+                                  "\"workersTotal\":2147483648");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(1));
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_rejects_negative_max_inflight") {
+        // Release hardening: a negative maximums.request.maxInflightPerWorker
+        // must fail startup (the unsigned cast would otherwise accept it).
+        fixture.replace_host_text(
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000}}",
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":-5}}");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(1));
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_rejects_zero_or_negative_pool_bounds") {
+        // Release hardening: capsid.json pool bounds below 1 must fail the
+        // deploy, never spin up a zero/negative worker pool or overflow into
+        // the uint32 cast.
+        fixture.create_version("orders", "v2");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":0,"maxWorkers":1}})json");
+        const std::string zero_min = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, zero_min) == "failed",
+                "pool.minReady=0 deployed active");
+
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":-2,"maxWorkers":1}})json");
+        const std::string negative_min = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, negative_min) == "failed",
+                "pool.minReady=-2 deployed active");
+
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":0}})json");
+        const std::string zero_max = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, zero_max) == "failed",
+                "pool.maxWorkers=0 deployed active");
+
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":-3}})json");
+        const std::string negative_max = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, negative_max) == "failed",
+                "pool.maxWorkers=-3 deployed active");
+
+        stop_host(fixture);
         std::cout << "PASS" << std::endl;
         return 0;
     }
