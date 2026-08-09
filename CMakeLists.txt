@@ -207,6 +207,13 @@ endif()
 
 
 # --- Sub-sections ---
+# OpenSSL is the digest/signature provider for the shipped binaries
+# (capsid-bytecode-compile, capsid-host). It must be STATIC: the package
+# smoke (§12.4 step 5) rejects undeclared dynamic dependencies, and a
+# Homebrew/system shared libcrypto would leave the package dependent on a
+# host-specific path at runtime. Set before every find_package(OpenSSL).
+set(OPENSSL_USE_STATIC_LIBS TRUE CACHE BOOL
+    "link OpenSSL statically into shipped binaries" FORCE)
 include(cmake/build_worker.cmake)
 include(cmake/build_host.cmake)
 include(cmake/build_tests.cmake)
@@ -275,3 +282,8 @@ capsid_generate_build_identity(
     COMPILER_ID "${CMAKE_CXX_COMPILER_ID}"
     COMPILER_VERSION "${CMAKE_CXX_COMPILER_VERSION}"
     TARGET_TRIPLE "${CAPSID_BUILD_TARGET_TRIPLE}")
+
+# WP-08, spec §12: install rules, CPack packaging, build-info.txt/SBOM
+# packaging. Included LAST so capsid owns the CPack configuration and the
+# CPACK_PACKAGE_NAME tripwire (§12.1) runs after every third-party include.
+include(cmake/CapsidPackage.cmake)

@@ -8,8 +8,14 @@
 #
 # Usage (script mode):
 #   cmake -DCAPSID_BUILD_DIR=... -DCAPSID_PREFIX=<fresh dir>
-#        [-DCAPSID_BUILD_HOST=ON|OFF]
+#        [-DCAPSID_BUILD_HOST=ON|OFF (option flag only;
+#        capsid-host is expected in the tree iff the build actually has
+#        the target, signalled by CAPSID_HOST_TARGET=ON|OFF)]
 #        -P tests/test_install_tree.cmake
+
+if(NOT DEFINED CAPSID_HOST_TARGET)
+    message(FATAL_ERROR "CAPSID_HOST_TARGET is required")
+endif()
 
 if(NOT CAPSID_BUILD_DIR OR NOT CAPSID_PREFIX)
     message(FATAL_ERROR
@@ -40,7 +46,7 @@ set(CAPSID_MANIFEST
     "share/licenses/capsid/LICENSE"
     "share/capsid/build-info.txt"
     "share/capsid/SBOM.spdx.json")
-if(CAPSID_BUILD_HOST)
+if(CAPSID_HOST_TARGET)
     list(APPEND CAPSID_MANIFEST "bin/capsid-host")
 endif()
 

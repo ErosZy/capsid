@@ -230,6 +230,15 @@ function(capsid_generate_build_identity)
            CGBI_COMMIT_LENGTH EQUAL 40)
             execute_process(
                 COMMAND "${CGBI_GIT}" -C "${CGBI_CAPSID_SOURCE_DIR}"
+                    show -s --format=%cI HEAD
+                OUTPUT_VARIABLE CGBI_CAPSID_COMMIT_DATE
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE CGBI_GIT_DATE_RESULT)
+            if(NOT CGBI_GIT_DATE_RESULT EQUAL 0)
+                set(CGBI_CAPSID_COMMIT_DATE "unknown")
+            endif()
+            execute_process(
+                COMMAND "${CGBI_GIT}" -C "${CGBI_CAPSID_SOURCE_DIR}"
                     status --porcelain
                 OUTPUT_VARIABLE CGBI_TREE_STATUS
                 OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -322,6 +331,38 @@ function(capsid_generate_build_identity)
     file(WRITE "${CGBI_PROV_RECORD_FILE}" "${CGBI_PROV_RECORD}")
     set(CGBI_BUILD_ID "sha256:${CGBI_PROV_DIGEST}")
 
+    # WP-08, spec §12.2: the packaged build-info.txt. One canonical file
+    # shipped in the package (share/capsid/build-info.txt) carrying the
+    # identity in a form consumers can probe: the two records verbatim plus
+    # a stable summary. commitDate is the git author commit date, which is
+    # deterministic per commit — the SBOM 'created' field uses it so two
+    # builds of the same commit produce identical SBOM bytes.
+    set(CGBI_BUILD_INFO_FILE
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/build-info.txt")
+    set(CGBI_BUILD_INFO "capsid-build-info-v1\n")
+    string(APPEND CGBI_BUILD_INFO "version=${CGBI_RUNTIME_VERSION}\n")
+    string(APPEND CGBI_BUILD_INFO "commit=${CGBI_CAPSID_COMMIT}\n")
+    string(APPEND CGBI_BUILD_INFO "commitDate=${CGBI_CAPSID_COMMIT_DATE}\n")
+    string(APPEND CGBI_BUILD_INFO "treeClean=${CGBI_TREE_CLEAN}\n")
+    string(APPEND CGBI_BUILD_INFO
+        "provenanceDirty=${CGBI_PROVENANCE_DIRTY}\n")
+    string(APPEND CGBI_BUILD_INFO "buildId=${CGBI_BUILD_ID}\n")
+    string(APPEND CGBI_BUILD_INFO
+        "compatibilityId=${CGBI_COMPATIBILITY_ID}\n")
+    string(APPEND CGBI_BUILD_INFO "compilerId=${CGBI_COMPILER_ID}\n")
+    string(APPEND CGBI_BUILD_INFO
+        "compilerVersion=${CGBI_COMPILER_VERSION}\n")
+    string(APPEND CGBI_BUILD_INFO "targetTriple=${CGBI_TARGET_TRIPLE}\n")
+    string(APPEND CGBI_BUILD_INFO "cmakeBuildType=${CGBI_BUILD_TYPE}\n")
+    string(APPEND CGBI_BUILD_INFO "featureFlags=${CGBI_FEATURE_FLAGS}\n")
+    string(APPEND CGBI_BUILD_INFO
+        "--- bytecode compatibility record (v2) ---\n")
+    string(APPEND CGBI_BUILD_INFO "${CGBI_RECORD}")
+    string(APPEND CGBI_BUILD_INFO
+        "--- build provenance record (v1) ---\n")
+    string(APPEND CGBI_BUILD_INFO "${CGBI_PROV_RECORD}")
+    file(WRITE "${CGBI_BUILD_INFO_FILE}" "${CGBI_BUILD_INFO}")
+
     set(CAPSID_IDENTITY_RUNTIME_VERSION "${CGBI_RUNTIME_VERSION}")
     set(CAPSID_IDENTITY_ABI_VERSION "${CGBI_ABI_VERSION}")
     set(CAPSID_IDENTITY_FETCHRPC_VERSION "${CGBI_FETCHRPC_VERSION}")
@@ -349,6 +390,8 @@ function(capsid_generate_build_identity)
     set(CAPSID_IDENTITY_BUILD_TYPE "${CGBI_BUILD_TYPE}")
     set(CAPSID_IDENTITY_FEATURE_FLAGS "${CGBI_FEATURE_FLAGS}")
     set(CAPSID_IDENTITY_BUILD_ID "${CGBI_BUILD_ID}")
+    set(CAPSID_IDENTITY_COMMIT_DATE "${CGBI_CAPSID_COMMIT_DATE}")
+    set(CAPSID_IDENTITY_BUILD_INFO "${CGBI_BUILD_INFO}")
     configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_identity.h.in"
         "${CGBI_OUT_HEADER}"
@@ -360,4 +403,17 @@ function(capsid_generate_build_identity)
     set(CAPSID_BUILD_PROVENANCE_DIRTY
         "${CGBI_PROVENANCE_DIRTY}" PARENT_SCOPE)
     set(CAPSID_BUILD_BUILD_ID "${CGBI_BUILD_ID}" PARENT_SCOPE)
+    set(CAPSID_BUILD_COMMIT_DATE "${CGBI_CAPSID_COMMIT_DATE}" PARENT_SCOPE)
+    set(CAPSID_BUILD_BUILD_INFO "${CGBI_BUILD_INFO}" PARENT_SCOPE)
+    # WP-08: the packaging rules (CapsidPackage.cmake) need the same values
+    # the generated header carries; mirror them under the CAPSID_BUILD_*
+    # names the .h.in template uses.
+    set(CAPSID_BUILD_CAPSID_COMMIT
+        "${CGBI_CAPSID_COMMIT}" PARENT_SCOPE)
+    set(CAPSID_BUILD_QUICKJS_COMMIT
+        "${CGBI_QUICKJS_COMMIT}" PARENT_SCOPE)
+    set(CAPSID_BUILD_TXIKI_OVERLAY_KEY
+        "${CGBI_OVERLAY_KEY}" PARENT_SCOPE)
+    set(CAPSID_BUILD_TXIKI_OVERLAY_MANIFEST
+        "${CGBI_OVERLAY_MANIFEST}" PARENT_SCOPE)
 endfunction()
