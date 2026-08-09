@@ -10,6 +10,9 @@
 //      exit restores null
 //   5. capture failure fails enqueue closed (no pending job, runtime usable)
 //   6. hooks not installed -> upstream behavior, zero callbacks
+//   7. promise reactions capture the .then() creation context; a promise
+//      settled from a different job's context still runs its reaction under
+//      the creation context (0014-capsid-async-context-reactions.patch)
 
 #include "quickjs.h"
 
@@ -51,6 +54,13 @@ int capture_hook(JSContext *ctx, void *opaque, void **out_job_context) {
     if (log->fail_captures > 0) {
         --log->fail_captures;
         return -1;
+    }
+    if (log->active != nullptr) {
+        // A capture inside a running job (e.g. a promise reaction created
+        // while another job is active) inherits the enclosing job's context
+        // — the creation-time capture the worker relies on.
+        *out_job_context = log->active;
+        return 0;
     }
     *out_job_context =
         reinterpret_cast<void *>(static_cast<uintptr_t>(++log->next_tag));
@@ -138,6 +148,47 @@ void enqueue_with_state(JSContext *ctx, JSJobFunc *job, JobState *state) {
         ctx, static_cast<int64_t>(reinterpret_cast<intptr_t>(state)));
     require(JS_EnqueueJob(ctx, job, 1, &arg) == 0, "enqueue failed");
     JS_FreeValue(ctx, arg);  // enqueue dups internally; caller owns its ref
+}
+
+// A pending promise with a .then() reaction created inside a job, then
+// settled from a different job. The reaction job must run under the
+// creation context (the .then() caller's), not the settle job's context.
+const char kPromiseSetupScript[] =
+    "globalThis.__p = new Promise((resolve) => {"
+    "  globalThis.__resolveP = resolve;"
+    "});"
+    "globalThis.__r = globalThis.__p.then(() => {"
+    "  globalThis.__observed = true;"
+    "});"
+    "0";
+const char kPromiseSettleScript[] =
+    "globalThis.__resolveP(42);"
+    "0";
+const char kPromiseObservedScript[] =
+    "globalThis.__observed === true ? 1 : 0";
+
+JSValue promise_setup_job(JSContext *ctx, int argc, JSValueConst *argv) {
+    JSValue result = JS_Eval(ctx, kPromiseSetupScript,
+                             sizeof(kPromiseSetupScript) - 1,
+                             "<promise-capture>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(result)) {
+        JS_FreeValue(ctx, JS_GetException(ctx));
+        return JS_EXCEPTION;
+    }
+    JS_FreeValue(ctx, result);
+    return JS_UNDEFINED;
+}
+
+JSValue promise_settle_job(JSContext *ctx, int argc, JSValueConst *argv) {
+    JSValue result = JS_Eval(ctx, kPromiseSettleScript,
+                             sizeof(kPromiseSettleScript) - 1,
+                             "<promise-settle>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(result)) {
+        JS_FreeValue(ctx, JS_GetException(ctx));
+        return JS_EXCEPTION;
+    }
+    JS_FreeValue(ctx, result);
+    return JS_UNDEFINED;
 }
 
 const JSJobContextHooks kHooks = {
@@ -251,6 +302,50 @@ void run_nested_drain() {
     printf("PASS: nested job context enter/leave restore\n");
 }
 
+void run_promise_reaction_capture() {
+    TestRuntime t;
+    JS_SetJobContextHooks(t.rt, &kHooks, &t.log);
+    // Setup job runs with tag 1 and creates the .then() reaction there.
+    require(JS_EnqueueJob(t.ctx, promise_setup_job, 0, nullptr) == 0,
+            "promise setup enqueue failed");
+    JSContext *exec_ctx = nullptr;
+    require(JS_ExecutePendingJob(t.rt, &exec_ctx) == 1,
+            "promise setup execute failed");
+    // Settle job runs with tag 2; the reaction must NOT pick up this
+    // context at settle.
+    require(JS_EnqueueJob(t.ctx, promise_settle_job, 0, nullptr) == 0,
+            "promise settle enqueue failed");
+    require(JS_ExecutePendingJob(t.rt, &exec_ctx) == 1,
+            "promise settle execute failed");
+    require(JS_IsJobPending(t.rt), "reaction job not pending after settle");
+    require(JS_ExecutePendingJob(t.rt, &exec_ctx) == 1,
+            "reaction execute failed");
+    require(!JS_IsJobPending(t.rt), "reaction execute left a pending job");
+    // The reaction job must enter with the creation context (tag 1), not
+    // the settle job's context (tag 2). The reject-side reaction of the
+    // .then() is captured at creation too and released when the promise
+    // fulfills without running.
+    const std::vector<std::string> expected = {
+        "enter:1", "leave:0", "release:1",   // setup job
+        "enter:2", "release:1", "leave:0",
+        "release:2",                         // settle job; the reject-side
+                                             // reaction is freed (released)
+                                             // inside the settle job
+        "enter:1", "leave:0", "release:1",   // reaction job: creation context
+    };
+    require(t.log.sequence == expected,
+            "promise reaction job context mismatch (creation vs settle)");
+    int observed = 0;
+    JSValue result = JS_Eval(t.ctx, kPromiseObservedScript,
+                             sizeof(kPromiseObservedScript) - 1,
+                             "<promise-observed>", JS_EVAL_TYPE_GLOBAL);
+    require(JS_ToInt32(t.ctx, &observed, result) == 0,
+            "cannot read promise observation");
+    JS_FreeValue(t.ctx, result);
+    require(observed == 1, "promise reaction callback did not run");
+    printf("PASS: promise reactions run under the .then() creation context\n");
+}
+
 void run_capture_failure() {
     TestRuntime t;
     JS_SetJobContextHooks(t.rt, &kHooks, &t.log);
@@ -281,6 +376,7 @@ int main() {
     run_execute_lifecycle();
     run_exception_path();
     run_nested_drain();
+    run_promise_reaction_capture();
     run_capture_failure();
     printf("PASS: QuickJS job-context hook semantics\n");
     return 0;
