@@ -222,7 +222,12 @@ function(capsid_generate_build_identity)
         if(NOT CGBI_GIT_COMMIT_RESULT EQUAL 0)
             set(CGBI_CAPSID_COMMIT "unknown")
         endif()
-        if(CGBI_CAPSID_COMMIT MATCHES "^[0-9a-f]{40}$")
+        # CMake regexes have no {n} repetition; a valid rev-parse HEAD
+        # output is exactly 40 lowercase hex, so match the class with + and
+        # verify the length explicitly.
+        string(LENGTH "${CGBI_CAPSID_COMMIT}" CGBI_COMMIT_LENGTH)
+        if(CGBI_CAPSID_COMMIT MATCHES "^[0-9a-f]+$" AND
+           CGBI_COMMIT_LENGTH EQUAL 40)
             execute_process(
                 COMMAND "${CGBI_GIT}" -C "${CGBI_CAPSID_SOURCE_DIR}"
                     status --porcelain
@@ -235,7 +240,8 @@ function(capsid_generate_build_identity)
             endif()
         endif()
     endif()
-    if(CGBI_CAPSID_COMMIT MATCHES "^[0-9a-f]{40}$")
+    if(CGBI_CAPSID_COMMIT MATCHES "^[0-9a-f]+$" AND
+       CGBI_COMMIT_LENGTH EQUAL 40)
         set(CGBI_COMMIT_KNOWN TRUE)
     else()
         set(CGBI_COMMIT_KNOWN FALSE)

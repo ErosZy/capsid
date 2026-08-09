@@ -136,10 +136,12 @@ function(capsid_matrix_record variant build_dir
         message(FATAL_ERROR
             "variant ${variant} record has the wrong schema header")
     endif()
-    # Every bytecode-affecting field, in the fixed order of §11.2.
+    # Every bytecode-affecting field, in the fixed order of §11.2. CMake
+    # regexes have no {n} repetition, so the hex fields match as [0-9a-f]+
+    # and their exact lengths are verified below by extraction.
     if(NOT compat_record MATCHES
-       "^schema=capsid-bytecode-compatibility-v2\nquickjsCommit=[0-9a-f]{40}\n"
-       "txikiOverlayManifest=[0-9a-f]{64}\n"
+       "^schema=capsid-bytecode-compatibility-v2\nquickjsCommit=[0-9a-f]+\n"
+       "txikiOverlayManifest=[0-9a-f]+\n"
        "bytecodeCompileFlags=build_type=[^ ]* lto=(ON|OFF) asan=(ON|OFF) "
        "ubsan=(ON|OFF) mimalloc=(ON|OFF)\n"
        "targetArchitecture=[^\n]+\nendianness=(little|big)\n"
@@ -149,6 +151,28 @@ function(capsid_matrix_record variant build_dir
             "variant ${variant} compatibility record is missing a required "
             "field or the compile flags are incomplete; record:\n"
             "${compat_record}")
+    endif()
+    # Exact hex lengths, verified by extraction (CMake regexes have no {n}
+    # repetition, so the + classes above accept any positive length).
+    string(REGEX MATCH "quickjsCommit=[0-9a-f]+" quickjs_commit_match
+        "${compat_record}")
+    string(REGEX REPLACE "^quickjsCommit=" "" quickjs_commit
+        "${quickjs_commit_match}")
+    string(LENGTH "${quickjs_commit}" quickjs_commit_len)
+    if(NOT quickjs_commit_len EQUAL 40)
+        message(FATAL_ERROR
+            "variant ${variant} quickjsCommit is not 40 hex: "
+            "${quickjs_commit}")
+    endif()
+    string(REGEX MATCH "txikiOverlayManifest=[0-9a-f]+"
+        overlay_manifest_match "${compat_record}")
+    string(REGEX REPLACE "^txikiOverlayManifest=" "" overlay_manifest
+        "${overlay_manifest_match}")
+    string(LENGTH "${overlay_manifest}" overlay_manifest_len)
+    if(NOT overlay_manifest_len EQUAL 64)
+        message(FATAL_ERROR
+            "variant ${variant} txikiOverlayManifest is not 64 hex: "
+            "${overlay_manifest}")
     endif()
 
     set(prov_file "${build_dir}/generated/build-provenance-record.txt")
@@ -161,28 +185,59 @@ function(capsid_matrix_record variant build_dir
     # Release fail-closed in a clean worktree: the provenance is clean.
     if(NOT prov_record MATCHES
        "^schema=capsid-build-provenance-v1\n"
-       "capsidCommit=[0-9a-f]{40}\n"
+       "capsidCommit=[0-9a-f]+\n"
        "capsidTreeClean=true\n"
        "runtimeVersion=[^\n]+\nabiVersion=[0-9]+\nfetchRpcVersion=[0-9]+\n"
-       "compatibilityId=sha256:[0-9a-f]{64}\n"
-       "capabilityManifestSha256=[0-9a-f]{64}\n"
+       "compatibilityId=sha256:[0-9a-f]+\n"
+       "capabilityManifestSha256=[0-9a-f]+\n"
        "compilerId=[^\n]+\ncompilerVersion=[^\n]+\n"
        "targetTriple=[^\n]+\ncmakeBuildType=Release\n"
        "featureFlags=lto=(ON|OFF) asan=(ON|OFF) ubsan=(ON|OFF) "
        "tsan=(ON|OFF) mimalloc=(ON|OFF) host=(ON|OFF) worker=(ON|OFF)\n"
-       "dependencyOverlayKey=[0-9a-f]{64}\n"
-       "buildId=sha256:[0-9a-f]{64}\n$")
+       "dependencyOverlayKey=[0-9a-f]+\n"
+       "buildId=sha256:[0-9a-f]+\n$")
         message(FATAL_ERROR
             "variant ${variant} provenance record is missing a required "
             "field or the feature flags are incomplete; record:\n"
             "${prov_record}")
     endif()
+    # Exact hex lengths, verified by extraction (the + classes above accept
+    # any positive length; a truncated hash must fail here).
+    string(REGEX MATCH "capsidCommit=[0-9a-f]+" capsid_commit_match
+        "${prov_record}")
+    string(REGEX REPLACE "^capsidCommit=" "" capsid_commit
+        "${capsid_commit_match}")
+    string(LENGTH "${capsid_commit}" capsid_commit_len)
+    if(NOT capsid_commit_len EQUAL 40)
+        message(FATAL_ERROR
+            "variant ${variant} capsidCommit is not 40 hex: ${capsid_commit}")
+    endif()
+    string(REGEX MATCH "capabilityManifestSha256=[0-9a-f]+"
+        cap_manifest_match "${prov_record}")
+    string(REGEX REPLACE "^capabilityManifestSha256=" "" cap_manifest
+        "${cap_manifest_match}")
+    string(LENGTH "${cap_manifest}" cap_manifest_len)
+    if(NOT cap_manifest_len EQUAL 64)
+        message(FATAL_ERROR
+            "variant ${variant} capabilityManifestSha256 is not 64 hex: "
+            "${cap_manifest}")
+    endif()
+    string(REGEX MATCH "dependencyOverlayKey=[0-9a-f]+" overlay_key_match
+        "${prov_record}")
+    string(REGEX REPLACE "^dependencyOverlayKey=" "" overlay_key
+        "${overlay_key_match}")
+    string(LENGTH "${overlay_key}" overlay_key_len)
+    if(NOT overlay_key_len EQUAL 64)
+        message(FATAL_ERROR
+            "variant ${variant} dependencyOverlayKey is not 64 hex: "
+            "${overlay_key}")
+    endif()
     # build_id must be the SHA-256 of the record minus its final buildId
     # line, recomputed here (spec §11.4: not just a self-consistent hash).
-    string(REGEX MATCH "buildId=sha256:[0-9a-f]{64}" claimed_id
+    string(REGEX MATCH "buildId=sha256:[0-9a-f]+" claimed_id
         "${prov_record}")
     string(REGEX REPLACE
-        "buildId=sha256:[0-9a-f]{64}\n$" "" prov_without_id
+        "buildId=sha256:[0-9a-f]+\n$" "" prov_without_id
         "${prov_record}")
     string(SHA256 recomputed_id "${prov_without_id}")
     set(expected_id "buildId=sha256:${recomputed_id}")
@@ -193,7 +248,7 @@ function(capsid_matrix_record variant build_dir
     endif()
     # The provenance record must reference the compatibility record of the
     # same configure.
-    string(REGEX MATCH "compatibilityId=sha256:[0-9a-f]{64}"
+    string(REGEX MATCH "compatibilityId=sha256:[0-9a-f]+"
         prov_compat_id "${prov_record}")
     set(expected_compat "compatibilityId=${compat_digest}")
     string(REGEX REPLACE "^compatibilityId=" "" expected_compat
