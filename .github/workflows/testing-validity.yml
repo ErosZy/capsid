@@ -90,6 +90,7 @@ jobs:
         run: |
           cmake -S . -B build-validity -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCAPSID_BUILD_HOST=ON \
             -DCAPSID_ENABLE_LTO=ON \
             -DCAPSID_USE_MIMALLOC=OFF \
             -DCAPSID_BUILD_BENCHMARKS=ON \
@@ -106,6 +107,35 @@ jobs:
             --output-on-failure \
             --output-junit ordinary-host-junit.xml \
             --parallel 2
+        # The worker_package_contents / smoke / reproducibility gates run in
+        # this full matrix (spec §12.3/§12.4): the archive is built, the
+        # package smoke consumes it, and a second fresh build must reproduce
+        # the identity and manifest.
+
+      - name: Record package evidence (build ID, compatibility ID, package and SBOM hashes)
+        run: |
+          set -euo pipefail
+          archive=$(ls -t build-validity/capsid-*.tar.gz | head -1)
+          test -f "${archive}"
+          package_sha256=$(sha256sum "${archive}" | awk '{print $1}')
+          build_info=build-validity/generated/build-info.txt
+          build_id=$(sed -n 's/^buildId=//p' "${build_info}")
+          compatibility_id=$(sed -n 's/^compatibilityId=//p' "${build_info}")
+          test -n "${build_id}"
+          test -n "${compatibility_id}"
+          staging=$(mktemp -d)
+          tar xzf "${archive}" -C "${staging}"
+          sbom=$(find "${staging}" -name SBOM.spdx.json -print -quit)
+          test -n "${sbom}"
+          sbom_sha256=$(sha256sum "${sbom}" | awk '{print $1}')
+          {
+            printf 'build_id=%s\n' "${build_id}"
+            printf 'compatibility_id=%s\n' "${compatibility_id}"
+            printf 'package_archive=%s\n' "$(basename "${archive}")"
+            printf 'package_sha256=%s\n' "${package_sha256}"
+            printf 'sbom_sha256=%s\n' "${sbom_sha256}"
+          } > build-validity/package-evidence.txt
+          cat build-validity/package-evidence.txt
 
       - name: Generate txiki.js upgrade gate report
         run: |
@@ -140,6 +170,9 @@ jobs:
             build-validity/bench/build-metadata.json
             build-validity/txiki-upgrade-report.json
             build-validity/txiki-upgrade-report.md
+            build-validity/package-evidence.txt
+            build-validity/generated/build-info.txt
+            build-validity/capsid-*.tar.gz
 
   sanitizers:
     runs-on: ubuntu-24.04
@@ -147,20 +180,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The packaging gates (worker_package_*) are the Release row's
+        # responsibility (§12.5): under sanitizers the instrumented worker
+        # links a dynamic libasan/libtsan, which the package smoke's
+        # undeclared-dependency scan would reject, and the §12.3 second
+        # fresh build would duplicate a full sanitizer build.
         include:
           - name: asan
             cmake_flag: CAPSID_ENABLE_ASAN
+            build_host: 1
             ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca)$
+              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_package_.*)$
           - name: ubsan
             cmake_flag: CAPSID_ENABLE_UBSAN
-            ctest_exclude: '^wpt_conformance_not_configured$'
+            build_host: 1
+            ctest_exclude: '^(wpt_conformance_not_configured|worker_package_.*)$'
           - name: tsan
             cmake_flag: CAPSID_ENABLE_TSAN
             compiler: clang
             build_host: 1
             ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca)$
+              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_package_.*)$
 
     steps:
       - name: Check out recursively pinned sources
@@ -290,7 +330,7 @@ jobs:
 
   posix-host-library:
     runs-on: macos-14
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Check out recursively pinned sources
@@ -305,13 +345,18 @@ jobs:
       - name: Install macOS Host dependencies
         run: brew install boost openssl@3.5
 
-      - name: Configure macOS host library
+      # §12.5 macOS row: Host units plus the non-strict worker contracts.
+      # Linux-only strict-sandbox and managed-suite tests are not registered
+      # on macOS (they SKIP by absence, never FAIL), and the §12.3 fresh
+      # second build is excluded here to keep the job inside its time budget
+      # (the Release job runs it on Linux).
+      - name: Configure macOS host library and worker contracts
         run: |
           cmake -S . -B build-macos \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3.5);$(brew --prefix boost)" \
             -DCAPSID_BUILD_HOST=ON \
-            -DCAPSID_BUILD_WORKER=OFF \
+            -DCAPSID_BUILD_WORKER=ON \
             -DCAPSID_ENABLE_LTO=ON
 
       - name: Build macOS Host, Admin transport, and unit gates
@@ -330,7 +375,7 @@ jobs:
           ctest --test-dir build-macos \
             --output-on-failure \
             --output-junit macos-junit.xml \
-            -E '^wpt_conformance_not_configured$'
+            -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
 
       - name: Save macOS evidence
         if: always()
@@ -378,6 +423,14 @@ jobs:
             printf 'fuzz=%s\n' "${FUZZ_RESULT}"
             printf 'macos=%s\n' "${MACOS_RESULT}"
           } > hosted-evidence/run.txt
+          # §12.5: the index also records the Release package identity —
+          # build ID, compatibility ID, package hash and SBOM hash — from
+          # the Release job's package-evidence.txt.
+          package_evidence=$(find hosted-evidence/inputs \
+            -name package-evidence.txt -print -quit)
+          if test -n "${package_evidence}"; then
+            cat "${package_evidence}" >> hosted-evidence/run.txt
+          fi
           (
             cd hosted-evidence
             find inputs -type f -print0 |
