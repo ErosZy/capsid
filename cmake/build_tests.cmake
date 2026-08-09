@@ -1307,6 +1307,30 @@ if(BUILD_TESTING)
             NAME runtime_build_identity
             COMMAND test-build-identity)
 
+        # WP-07, spec §11.4: a caller compiled against the build-info v1
+        # headers (frozen fixture) links against the current library and
+        # negotiates with the smaller struct_size. This is RED while the
+        # library demands struct_size >= sizeof(current struct).
+        add_executable(test-build-info-v1-link
+            tests/test_build_info_v1_link.c)
+        target_include_directories(test-build-info-v1-link PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+        target_link_libraries(test-build-info-v1-link PRIVATE
+            capsid_runtime
+            capsid_sanitizers)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-build-info-v1-link PRIVATE
+                    /W4 /WX)
+            else()
+                target_compile_options(test-build-info-v1-link PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME runtime_build_info_v1_negotiation
+            COMMAND test-build-info-v1-link)
+
         if(CAPSID_BUILD_WORKER)
             if(NOT TARGET capsid-bytecode-compile)
                 message(FATAL_ERROR
@@ -3827,18 +3851,18 @@ if(BUILD_TESTING)
         set_tests_properties(
             worker_terminal_continuation PROPERTIES TIMEOUT 30)
 
-        # Build identity matrix (P0-7): every controlled build difference
-        # must change the compatibility record and identical configures
-        # must not. Each variant is a fresh configure. Expected to FAIL
-        # while CAPSID_BUILD_COMPILE_FLAGS truncates at the first CMake
-        # list boundary.
+        # Build identity matrix (P0-7, hardened by WP-07 per spec §11.4):
+        # every controlled build difference must change the build ID, a
+        # real bytecode-ABI difference must change the compatibility ID,
+        # and identical configures must not. Each variant is a fresh
+        # configure; the test requires a clean worktree because the
+        # Release variants fail closed on dirtiness (spec §11.3).
         add_test(
             NAME worker_build_identity_matrix
             COMMAND "${CMAKE_COMMAND}"
                 -DCAPSID_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
                 -DCAPSID_CMAKE_COMMAND="${CMAKE_COMMAND}"
-                -DCAPSID_MATRIX_WORK_DIR=
-                    "${CMAKE_CURRENT_BINARY_DIR}/identity-matrix"
+                "-DCAPSID_MATRIX_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/identity-matrix"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_build_identity_matrix.cmake"
         )
         set_tests_properties(

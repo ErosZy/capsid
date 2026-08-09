@@ -227,19 +227,34 @@ else()
 endif()
 # Compile flags that affect QuickJS bytecode compatibility. Kept canonical
 # and stable for a given configuration; bytecode never crosses builds that
-# differ here (see the Host design review §13.1).
+# differ here (see the Host design review §13.1). WP-07, spec §11.1: the
+# value must be ONE canonical string — a multi-argument set() would form a
+# CMake semicolon list and a one-value argument would silently truncate it.
 set(CAPSID_BUILD_COMPILE_FLAGS
-    "build_type=${CMAKE_BUILD_TYPE} lto=${CAPSID_ENABLE_LTO} "
-    "asan=${CAPSID_ENABLE_ASAN} ubsan=${CAPSID_ENABLE_UBSAN} "
-    "mimalloc=${CAPSID_USE_MIMALLOC}")
+    "build_type=${CMAKE_BUILD_TYPE} lto=${CAPSID_ENABLE_LTO} asan=${CAPSID_ENABLE_ASAN} ubsan=${CAPSID_ENABLE_UBSAN} mimalloc=${CAPSID_USE_MIMALLOC}")
 math(EXPR CAPSID_POINTER_WIDTH_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
+# Provenance target triple. A cross compiler reports its own triple; native
+# builds compose one from the platform the CMake toolchain targets.
+if(CMAKE_CXX_COMPILER_TARGET)
+    set(CAPSID_BUILD_TARGET_TRIPLE "${CMAKE_CXX_COMPILER_TARGET}")
+else()
+    set(CAPSID_BUILD_TARGET_TRIPLE
+        "${CMAKE_SYSTEM_PROCESSOR}-unknown-${CMAKE_SYSTEM_NAME}")
+endif()
+# Override point for the locked identity manifest (docs/txiki-upgrade-
+# baseline.json). The build-identity matrix uses it to prove that a real
+# bytecode-ABI difference changes the compatibility ID.
+set(CAPSID_LOCKED_IDENTITY_MANIFEST
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/txiki-upgrade-baseline.json"
+    CACHE FILEPATH
+    "Locked vendor/QuickJS manifest backing the bytecode-compatibility record")
 # ABI version 7 matches CAPSID_ABI_VERSION in include/capsid/runtime.h;
 # FetchRPC version 3 matches capsid::protocol::kVersion in src/protocol.h.
 # v3 adds kFlagRequestEnd on RequestHead (bodyless requests).
 capsid_generate_build_identity(
     OUT_HEADER "${CAPSID_GENERATED_DIR}/build_identity.h"
-    LOCKED_MANIFEST
-        "${CMAKE_CURRENT_SOURCE_DIR}/docs/txiki-upgrade-baseline.json"
+    LOCKED_MANIFEST "${CAPSID_LOCKED_IDENTITY_MANIFEST}"
+    CAPSID_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
     RUNTIME_VERSION "${PROJECT_VERSION}"
     ABI_VERSION "7"
     FETCHRPC_VERSION "3"
@@ -248,4 +263,15 @@ capsid_generate_build_identity(
     ENDIANNESS "${CAPSID_BUILD_ENDIANNESS}"
     POINTER_WIDTH_BITS "${CAPSID_POINTER_WIDTH_BITS}"
     BYTECODE_FORMAT "quickjs-ng-bytecode-v1"
-    CAPABILITY_MANIFEST_SHA256 "${CAPSID_CAPABILITY_MANIFEST_SHA256}")
+    CAPABILITY_MANIFEST_SHA256 "${CAPSID_CAPABILITY_MANIFEST_SHA256}"
+    BUILD_TYPE "${CMAKE_BUILD_TYPE}"
+    LTO "${CAPSID_ENABLE_LTO}"
+    ASAN "${CAPSID_ENABLE_ASAN}"
+    UBSAN "${CAPSID_ENABLE_UBSAN}"
+    TSAN "${CAPSID_ENABLE_TSAN}"
+    MIMALLOC "${CAPSID_USE_MIMALLOC}"
+    HOST "${CAPSID_BUILD_HOST}"
+    WORKER "${CAPSID_BUILD_WORKER}"
+    COMPILER_ID "${CMAKE_CXX_COMPILER_ID}"
+    COMPILER_VERSION "${CMAKE_CXX_COMPILER_VERSION}"
+    TARGET_TRIPLE "${CAPSID_BUILD_TARGET_TRIPLE}")

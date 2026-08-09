@@ -1,21 +1,28 @@
-# Build identity matrix (WP-00 / PR-01 RED gate for P0-7).
+# Build identity matrix (WP-00 / PR-01 RED gate for P0-7, hardened by
+# WP-07 per spec §11.2/§11.4).
 #
-# The bytecode-compatibility record is generated at configure time into
-# <build>/generated/build-identity-record.txt. Every controlled build
-# difference must change the record (and therefore the compatibility ID),
-# and every repeated identical configure must produce the identical record.
+# Two records are generated at configure time into <build>/generated/:
+#   build-identity-record.txt    bytecode compatibility v2
+#   build-provenance-record.txt  build provenance v1 (build_id)
+#
+# Assertions (spec §11.4):
+#   - every controlled build difference changes the build ID;
+#   - a real bytecode-ABI difference (different QuickJS commit) changes the
+#     compatibility ID;
+#   - identical configure twice produces identical records;
+#   - every required record field is present (the per-line regexes detect
+#     a missing field, not just a self-consistent hash);
+#   - the compile-flags line carries every key (spec §11.1: a CMake list
+#     truncation drops asan/ubsan/mimalloc — that is the pre-WP-07 bug);
+#   - the Release fail-closed path yields clean provenance (known commit,
+#     clean tree) — which requires a clean worktree to run at all.
 #
 # Each matrix entry uses a FRESH configure directory; reusing an old build
 # directory must never be accepted as evidence.
 #
-# Current failure (pre-WP-07): CAPSID_BUILD_COMPILE_FLAGS is assembled as
-# a CMake list and passed to a one-value argument, so the record only
-# keeps "build_type=... lto=..." and drops asan/ubsan/mimalloc; ASAN and
-# UBSAN configures then produce byte-identical records.
-#
 # Usage (script mode):
 #   cmake -DCAPSID_SOURCE_DIR=... -DCAPSID_CMAKE_COMMAND=...
-#        [-DCAPSID_MATRIX_VARIANTS="plain;asan;ubsan;mimalloc;lto-off"]
+#        [-DCAPSID_MATRIX_VARIANTS="plain;asan;ubsan;mimalloc;lto-off;quickjs-diff"]
 #        [-DCAPSID_MATRIX_WORK_DIR=...]
 #        -P tests/test_build_identity_matrix.cmake
 
@@ -25,17 +32,55 @@ if(NOT CAPSID_SOURCE_DIR OR NOT CAPSID_CMAKE_COMMAND)
 endif()
 
 if(NOT CAPSID_MATRIX_VARIANTS)
-    set(CAPSID_MATRIX_VARIANTS "plain;asan;ubsan;mimalloc;lto-off")
+    set(CAPSID_MATRIX_VARIANTS
+        "plain;asan;ubsan;mimalloc;lto-off;quickjs-diff")
 endif()
 
 if(NOT CAPSID_MATRIX_WORK_DIR)
     set(CAPSID_MATRIX_WORK_DIR "${CMAKE_CURRENT_BINARY_DIR}/identity-matrix")
 endif()
 
+# The Release variants configure with CMAKE_BUILD_TYPE=Release, which fails
+# closed on a dirty worktree (spec §11.3). A clear precondition beats six
+# confusing per-variant configure errors.
+find_program(MATRIX_GIT git REQUIRED)
+execute_process(
+    COMMAND "${MATRIX_GIT}" -C "${CAPSID_SOURCE_DIR}" status --porcelain
+    OUTPUT_VARIABLE MATRIX_TREE_STATUS
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE MATRIX_GIT_RESULT)
+if(NOT MATRIX_GIT_RESULT EQUAL 0)
+    message(FATAL_ERROR
+        "build identity matrix cannot check the worktree; the Release "
+        "variants fail closed without one")
+endif()
+if(NOT MATRIX_TREE_STATUS STREQUAL "")
+    message(FATAL_ERROR
+        "build identity matrix requires a clean worktree (git status "
+        "--porcelain must be empty); commit or stash first, then re-run")
+endif()
+
 # Every variant must be a fresh configure. The work root is wiped first so
 # a reused directory can never leak into the comparison.
 file(REMOVE_RECURSE "${CAPSID_MATRIX_WORK_DIR}")
 file(MAKE_DIRECTORY "${CAPSID_MATRIX_WORK_DIR}")
+
+# A second locked manifest whose QuickJS commit differs: a real bytecode
+# ABI difference. Both vendor and quickjs commits are rewritten so the
+# shape validation still passes; the fake file must actually differ.
+set(MATRIX_FAKE_MANIFEST "${CAPSID_MATRIX_WORK_DIR}/locked-quickjs-diff.json")
+file(READ "${CAPSID_SOURCE_DIR}/docs/txiki-upgrade-baseline.json"
+    MATRIX_BASE_JSON)
+string(REGEX REPLACE
+    "\"commit\"[ ]*:[ ]*\"[0-9a-f]{40}\""
+    "\"commit\":\"0123456789abcdef0123456789abcdef01234567\""
+    MATRIX_FAKE_JSON "${MATRIX_BASE_JSON}")
+if(MATRIX_FAKE_JSON STREQUAL MATRIX_BASE_JSON)
+    message(FATAL_ERROR
+        "could not build a different locked manifest for the "
+        "quickjs-diff variant")
+endif()
+file(WRITE "${MATRIX_FAKE_MANIFEST}" "${MATRIX_FAKE_JSON}")
 
 function(capsid_matrix_configure variant build_dir)
     if("${variant}" STREQUAL "plain")
@@ -48,6 +93,9 @@ function(capsid_matrix_configure variant build_dir)
         set(extra_flags "-DCAPSID_USE_MIMALLOC=ON")
     elseif("${variant}" STREQUAL "lto-off")
         set(extra_flags "-DCAPSID_ENABLE_LTO=OFF")
+    elseif("${variant}" STREQUAL "quickjs-diff")
+        set(extra_flags
+            "-DCAPSID_LOCKED_IDENTITY_MANIFEST=${MATRIX_FAKE_MANIFEST}")
     else()
         message(FATAL_ERROR "unknown matrix variant: ${variant}")
     endif()
@@ -69,70 +117,155 @@ function(capsid_matrix_configure variant build_dir)
     endif()
 endfunction()
 
-function(capsid_matrix_record variant build_dir out_record out_digest)
-    set(record_file "${build_dir}/generated/build-identity-record.txt")
-    if(NOT EXISTS "${record_file}")
+# Full per-line validation of both records. Any missing or misordered field
+# fails the regex — a record that merely hashes self-consistently but lost a
+# field is a FAIL here.
+function(capsid_matrix_record variant build_dir
+        out_compat_record out_compat_digest
+        out_prov_record out_prov_digest out_build_id)
+    set(compat_file "${build_dir}/generated/build-identity-record.txt")
+    if(NOT EXISTS "${compat_file}")
         message(FATAL_ERROR
-            "variant ${variant} produced no identity record: ${record_file}")
+            "variant ${variant} produced no compatibility record: "
+            "${compat_file}")
     endif()
-    file(READ "${record_file}" record)
-    file(SHA256 "${record_file}" digest)
-    if(NOT record MATCHES
-       "^schema=capsid-bytecode-compatibility-v1\n")
+    file(READ "${compat_file}" compat_record)
+    file(SHA256 "${compat_file}" compat_digest)
+    if(NOT compat_record MATCHES
+       "^schema=capsid-bytecode-compatibility-v2\n")
         message(FATAL_ERROR
             "variant ${variant} record has the wrong schema header")
     endif()
-    # The compile-flags line must carry every key that changes bytecode
-    # compatibility. The pre-fix implementation truncates at the first
-    # CMake list separator and drops asan/ubsan/mimalloc.
-    if(NOT record MATCHES
-       "bytecodeCompileFlags=build_type=[^ ]* lto=(ON|OFF) asan=(ON|OFF) ubsan=(ON|OFF) mimalloc=(ON|OFF)\n")
+    # Every bytecode-affecting field, in the fixed order of §11.2.
+    if(NOT compat_record MATCHES
+       "^schema=capsid-bytecode-compatibility-v2\nquickjsCommit=[0-9a-f]{40}\n"
+       "txikiOverlayManifest=[0-9a-f]{64}\n"
+       "bytecodeCompileFlags=build_type=[^ ]* lto=(ON|OFF) asan=(ON|OFF) "
+       "ubsan=(ON|OFF) mimalloc=(ON|OFF)\n"
+       "targetArchitecture=[^\n]+\nendianness=(little|big)\n"
+       "pointerWidthBits=[0-9]+\n"
+       "bytecodeFormatIdentity=quickjs-ng-bytecode-v1\n$")
         message(FATAL_ERROR
-            "variant ${variant} compile flags are incomplete; record:\n"
-            "${record}")
+            "variant ${variant} compatibility record is missing a required "
+            "field or the compile flags are incomplete; record:\n"
+            "${compat_record}")
     endif()
-    set(${out_record} "${record}" PARENT_SCOPE)
-    set(${out_digest} "${digest}" PARENT_SCOPE)
+
+    set(prov_file "${build_dir}/generated/build-provenance-record.txt")
+    if(NOT EXISTS "${prov_file}")
+        message(FATAL_ERROR
+            "variant ${variant} produced no provenance record: ${prov_file}")
+    endif()
+    file(READ "${prov_file}" prov_record)
+    file(SHA256 "${prov_file}" prov_digest)
+    # Release fail-closed in a clean worktree: the provenance is clean.
+    if(NOT prov_record MATCHES
+       "^schema=capsid-build-provenance-v1\n"
+       "capsidCommit=[0-9a-f]{40}\n"
+       "capsidTreeClean=true\n"
+       "runtimeVersion=[^\n]+\nabiVersion=[0-9]+\nfetchRpcVersion=[0-9]+\n"
+       "compatibilityId=sha256:[0-9a-f]{64}\n"
+       "capabilityManifestSha256=[0-9a-f]{64}\n"
+       "compilerId=[^\n]+\ncompilerVersion=[^\n]+\n"
+       "targetTriple=[^\n]+\ncmakeBuildType=Release\n"
+       "featureFlags=lto=(ON|OFF) asan=(ON|OFF) ubsan=(ON|OFF) "
+       "tsan=(ON|OFF) mimalloc=(ON|OFF) host=(ON|OFF) worker=(ON|OFF)\n"
+       "dependencyOverlayKey=[0-9a-f]{64}\n"
+       "buildId=sha256:[0-9a-f]{64}\n$")
+        message(FATAL_ERROR
+            "variant ${variant} provenance record is missing a required "
+            "field or the feature flags are incomplete; record:\n"
+            "${prov_record}")
+    endif()
+    # build_id must be the SHA-256 of the record minus its final buildId
+    # line, recomputed here (spec §11.4: not just a self-consistent hash).
+    string(REGEX MATCH "buildId=sha256:[0-9a-f]{64}" claimed_id
+        "${prov_record}")
+    string(REGEX REPLACE
+        "buildId=sha256:[0-9a-f]{64}\n$" "" prov_without_id
+        "${prov_record}")
+    string(SHA256 recomputed_id "${prov_without_id}")
+    set(expected_id "buildId=sha256:${recomputed_id}")
+    if(NOT claimed_id STREQUAL expected_id)
+        message(FATAL_ERROR
+            "variant ${variant} build ID does not cover the provenance "
+            "record minus the buildId line: ${claimed_id} vs ${expected_id}")
+    endif()
+    # The provenance record must reference the compatibility record of the
+    # same configure.
+    string(REGEX MATCH "compatibilityId=sha256:[0-9a-f]{64}"
+        prov_compat_id "${prov_record}")
+    set(expected_compat "compatibilityId=${compat_digest}")
+    string(REGEX REPLACE "^compatibilityId=" "" expected_compat
+        "${expected_compat}")
+    set(expected_compat_line "compatibilityId=sha256:${expected_compat}")
+    if(NOT prov_compat_id STREQUAL expected_compat_line)
+        message(FATAL_ERROR
+            "variant ${variant} provenance references a different "
+            "compatibility record: ${prov_compat_id} vs "
+            "${expected_compat_line}")
+    endif()
+
+    set(${out_compat_record} "${compat_record}" PARENT_SCOPE)
+    set(${out_compat_digest} "${compat_digest}" PARENT_SCOPE)
+    set(${out_prov_record} "${prov_record}" PARENT_SCOPE)
+    set(${out_prov_digest} "${prov_digest}" PARENT_SCOPE)
+    string(REGEX REPLACE "^buildId=sha256:" "" build_id "${claimed_id}")
+    set(${out_build_id} "${build_id}" PARENT_SCOPE)
 endfunction()
 
-set(CAPSID_MATRIX_RECORDS)
-set(CAPSID_MATRIX_DIGESTS)
+set(CAPSID_MATRIX_COMPAT_DIGESTS)
+set(CAPSID_MATRIX_PROV_DIGESTS)
+set(CAPSID_MATRIX_BUILD_IDS)
 set(CAPSID_MATRIX_DIRS)
 foreach(variant IN LISTS CAPSID_MATRIX_VARIANTS)
     set(build_dir
         "${CAPSID_MATRIX_WORK_DIR}/configure-${variant}")
     capsid_matrix_configure("${variant}" "${build_dir}")
     capsid_matrix_record("${variant}" "${build_dir}"
-        record digest)
-    list(APPEND CAPSID_MATRIX_RECORDS "${record}")
-    list(APPEND CAPSID_MATRIX_DIGESTS "${digest}")
+        compat_record compat_digest prov_record prov_digest build_id)
+    list(APPEND CAPSID_MATRIX_COMPAT_DIGESTS "${compat_digest}")
+    list(APPEND CAPSID_MATRIX_PROV_DIGESTS "${prov_digest}")
+    list(APPEND CAPSID_MATRIX_BUILD_IDS "${build_id}")
     list(APPEND CAPSID_MATRIX_DIRS "${build_dir}")
-    string(LENGTH "${record}" record_length)
-    if(record_length EQUAL 0)
+    string(LENGTH "${compat_record}" compat_length)
+    if(compat_length EQUAL 0)
         message(FATAL_ERROR
-            "variant ${variant} record must not be empty")
+            "variant ${variant} compatibility record must not be empty")
     endif()
 endforeach()
 
-# Every controlled difference must change the identity.
-list(LENGTH CAPSID_MATRIX_RECORDS variant_count)
+# Every controlled build difference must change the build ID; every real
+# bytecode-ABI difference must change the compatibility ID. All matrix
+# variants here differ in flags or in the QuickJS commit, so both record
+# sets must be pairwise distinct.
+list(LENGTH CAPSID_MATRIX_VARIANTS variant_count)
 if(variant_count LESS 2)
     message(FATAL_ERROR
         "identity matrix needs at least two variants")
 endif()
 set(CAPSID_MATRIX_INDEX 0)
 while(CAPSID_MATRIX_INDEX LESS variant_count)
-    list(GET CAPSID_MATRIX_DIGESTS ${CAPSID_MATRIX_INDEX} digest)
+    list(GET CAPSID_MATRIX_COMPAT_DIGESTS ${CAPSID_MATRIX_INDEX} compat)
+    list(GET CAPSID_MATRIX_BUILD_IDS ${CAPSID_MATRIX_INDEX} build_id)
     set(CAPSID_MATRIX_OTHER 0)
     while(CAPSID_MATRIX_OTHER LESS variant_count)
         if(NOT CAPSID_MATRIX_OTHER EQUAL CAPSID_MATRIX_INDEX)
-            list(GET CAPSID_MATRIX_DIGESTS ${CAPSID_MATRIX_OTHER} other_digest)
-            if(digest STREQUAL other_digest)
-                list(GET CAPSID_MATRIX_VARIANTS ${CAPSID_MATRIX_INDEX} variant)
-                list(GET CAPSID_MATRIX_VARIANTS ${CAPSID_MATRIX_OTHER} other)
+            list(GET CAPSID_MATRIX_COMPAT_DIGESTS ${CAPSID_MATRIX_OTHER}
+                other_compat)
+            list(GET CAPSID_MATRIX_BUILD_IDS ${CAPSID_MATRIX_OTHER}
+                other_build_id)
+            list(GET CAPSID_MATRIX_VARIANTS ${CAPSID_MATRIX_INDEX} variant)
+            list(GET CAPSID_MATRIX_VARIANTS ${CAPSID_MATRIX_OTHER} other)
+            if(build_id STREQUAL other_build_id)
                 message(FATAL_ERROR
-                    "identity collision: ${variant} and ${other} both "
-                    "produce ${digest}")
+                    "build ID collision: ${variant} and ${other} both "
+                    "produce ${build_id}")
+            endif()
+            if(compat STREQUAL other_compat)
+                message(FATAL_ERROR
+                    "compatibility ID collision: ${variant} and ${other} "
+                    "both produce ${compat}")
             endif()
         endif()
         math(EXPR CAPSID_MATRIX_OTHER "${CAPSID_MATRIX_OTHER} + 1")
@@ -140,7 +273,7 @@ while(CAPSID_MATRIX_INDEX LESS variant_count)
     math(EXPR CAPSID_MATRIX_INDEX "${CAPSID_MATRIX_INDEX} + 1")
 endwhile()
 
-# Identical configure twice must produce the identical record.
+# Identical configure twice must produce identical records.
 set(plain_index -1)
 set(CAPSID_MATRIX_INDEX 0)
 foreach(variant IN LISTS CAPSID_MATRIX_VARIANTS)
@@ -154,14 +287,19 @@ if(plain_index LESS 0)
         "identity matrix must include the plain variant for the "
         "repeatability check")
 endif()
-list(GET CAPSID_MATRIX_DIGESTS ${plain_index} plain_digest)
+list(GET CAPSID_MATRIX_COMPAT_DIGESTS ${plain_index} plain_compat)
+list(GET CAPSID_MATRIX_PROV_DIGESTS ${plain_index} plain_prov)
 set(repeat_dir "${CAPSID_MATRIX_WORK_DIR}/configure-plain-repeat")
 capsid_matrix_configure("plain" "${repeat_dir}")
-capsid_matrix_record("plain" "${repeat_dir}" repeat_record repeat_digest)
-if(NOT repeat_digest STREQUAL plain_digest)
+capsid_matrix_record("plain" "${repeat_dir}"
+    repeat_compat repeat_compat_digest
+    repeat_prov repeat_prov_digest repeat_build_id)
+if(NOT repeat_compat_digest STREQUAL plain_compat OR
+   NOT repeat_prov_digest STREQUAL plain_prov)
     message(FATAL_ERROR
         "identical plain configure produced a different identity: "
-        "${repeat_digest} vs ${plain_digest}")
+        "${repeat_compat_digest}/${repeat_prov_digest} vs "
+        "${plain_compat}/${plain_prov}")
 endif()
 list(APPEND CAPSID_MATRIX_DIRS "${repeat_dir}")
 

@@ -12,7 +12,7 @@ extern "C" {
 #define CAPSID_CAPABILITY_POLICY_VERSION_1 1u
 #define CAPSID_CAPABILITY_POLICY_VERSION 2u
 #define CAPSID_MEMORY_METRICS_VERSION 1u
-#define CAPSID_BUILD_INFO_VERSION 1u
+#define CAPSID_BUILD_INFO_VERSION 2u
 
 #define CAPSID_RESOURCE_UNLIMITED UINT64_MAX
 #define CAPSID_RESOURCE_PIDS_UNLIMITED UINT32_MAX
@@ -75,13 +75,21 @@ typedef enum capsid_result {
 const char *capsid_last_error(void);
 
 /*
- * Immutable identity of the Runtime/QuickJS bytecode toolchain. String
- * pointers returned by capsid_runtime_build_info() have process lifetime and
- * must not be freed. compatibility_id is "sha256:" followed by 64 lowercase
- * hexadecimal digits and covers every field below in the documented order.
+ * Immutable identity of the Runtime/QuickJS bytecode toolchain plus the
+ * provenance of the exact build being linked. String pointers returned by
+ * capsid_runtime_build_info() have process lifetime and must not be freed.
+ * compatibility_id is "sha256:" followed by 64 lowercase hexadecimal
+ * digits and covers the bytecode-compatibility record v2 below in the
+ * documented order. build_id is "sha256:" plus 64 lowercase hexadecimal
+ * digits and covers the build-provenance record v1 minus its buildId line.
  *
- * This structure is additive to ABI v7. Future versions may append fields;
- * callers must initialize it and preserve struct_size for size negotiation.
+ * This structure is additive to ABI v7. Version 2 (CAPSID_BUILD_INFO_VERSION
+ * 2) appended the provenance fields after compatibility_id. Callers
+ * compiled against the version-1 headers pass the smaller v1 struct_size
+ * and still succeed: capsid_runtime_build_info() fills exactly the leading
+ * fields that fit and never touches memory beyond the caller's buffer.
+ * Callers must initialize the envelope first (capsid_build_info_init or
+ * memset + struct_size) and preserve struct_size for size negotiation.
  */
 typedef struct capsid_build_info {
     uint32_t struct_size;
@@ -99,6 +107,23 @@ typedef struct capsid_build_info {
     const char *bytecode_format_identity;
     const char *capability_manifest_sha256;
     const char *compatibility_id;
+    /* Build-info v2 (WP-07, spec §11.3/§11.4): provenance of the exact
+     * linked build. capsid_commit is 40 lowercase hex on a git checkout,
+     * "unknown" when the commit could not be resolved; capsid_tree_clean
+     * is 1 when git status --porcelain was empty at configure time;
+     * provenance_dirty is 1 whenever release packaging must reject this
+     * build (non-Release configure, unresolved commit, or dirty tree).
+     * build_feature_flags is one canonical ASCII string:
+     *   "lto=ON|OFF asan=... ubsan=... tsan=... mimalloc=... host=... worker=..." */
+    const char *build_id;
+    const char *capsid_commit;
+    uint32_t capsid_tree_clean;
+    uint32_t provenance_dirty;
+    const char *compiler_id;
+    const char *compiler_version;
+    const char *target_triple;
+    const char *cmake_build_type;
+    const char *build_feature_flags;
 } capsid_build_info;
 
 /*
@@ -435,31 +460,69 @@ void capsid_env_entry_init(capsid_env_entry *entry);
 void capsid_capability_policy_init(capsid_capability_policy *policy);
 void capsid_audit_record_init(capsid_audit_record *record);
 void capsid_memory_metrics_init(capsid_memory_metrics *metrics);
-void capsid_build_info_init(capsid_build_info *info);
+/*
+ * Initializes the build-info envelope for size negotiation. Stamps the
+ * CALLER's struct size — which only the caller's own header knows — so
+ * this is an inline: callers compiled against the current headers use it
+ * directly. Callers compiled against the build-info v1 headers (which
+ * declare it as a plain function) link the library's legacy symbol of the
+ * same name instead, which stamps a v1-sized envelope and never writes
+ * past a v1 buffer. In both cases the version stamped is the current
+ * CAPSID_BUILD_INFO_VERSION; a caller from an older ABI must treat newer
+ * versions conservatively.
+ */
+#ifndef CAPSID_BUILD_INFO_INIT_IMPLEMENTATION
+static inline void capsid_build_info_init(capsid_build_info *info) {
+    if (info == NULL) {
+        return;
+    }
+    info->struct_size = (uint32_t)sizeof(*info);
+    info->version = CAPSID_BUILD_INFO_VERSION;
+}
+#endif
 void capsid_worker_config_init(capsid_worker_config *config);
 const char *capsid_result_string(capsid_result result);
 
 /*
- * Returns the library-side build identity. The compatibility ID is computed
- * from this exact canonical UTF-8 record, including the final newline:
+ * Returns the library-side build identity and provenance. struct_size is a
+ * size negotiation: the caller announces its buffer size and only the
+ * leading fields that fit are written. Callers compiled against the
+ * build-info v1 headers pass the v1 size and receive the v1 fields;
+ * anything below the v1 size is CAPSID_INVALID_ARGUMENT.
  *
- * schema=capsid-bytecode-compatibility-v1
- * runtimeVersion=<runtime_version>
- * abiVersion=<abi_version decimal>
- * fetchRpcVersion=<fetchrpc_version decimal>
+ * The compatibility ID is computed from this exact canonical UTF-8 record
+ * (compatibility record v2, spec §11.2), including the final newline:
+ *
+ * schema=capsid-bytecode-compatibility-v2
  * quickjsCommit=<quickjs_commit>
- * txikiOverlayKey=<txiki_overlay_key>
  * txikiOverlayManifest=<txiki_overlay_manifest>
  * bytecodeCompileFlags=<bytecode_compile_flags>
  * targetArchitecture=<target_architecture>
  * endianness=<endianness>
  * pointerWidthBits=<pointer_width_bits decimal>
  * bytecodeFormatIdentity=<bytecode_format_identity>
- * capabilityManifestSha256=<capability_manifest_sha256>
  *
  * Hash the record with SHA-256 and prefix its lowercase hexadecimal digest
  * with "sha256:". No locale-dependent formatting or JSON canonicalization is
  * involved.
+ *
+ * The build ID (build_id) is computed from the provenance record v1
+ * (spec §11.3) minus its final buildId line, in this order:
+ *
+ * schema=capsid-build-provenance-v1
+ * capsidCommit=<capsid_commit>
+ * capsidTreeClean=<true|false>
+ * runtimeVersion=<runtime_version>
+ * abiVersion=<abi_version decimal>
+ * fetchRpcVersion=<fetchrpc_version decimal>
+ * compatibilityId=<compatibility_id>
+ * capabilityManifestSha256=<capability_manifest_sha256>
+ * compilerId=<compiler_id>
+ * compilerVersion=<compiler_version>
+ * targetTriple=<target_triple>
+ * cmakeBuildType=<cmake_build_type>
+ * featureFlags=<build_feature_flags>
+ * dependencyOverlayKey=<txiki_overlay_key>
  */
 capsid_result capsid_runtime_build_info(capsid_build_info *out_info);
 
