@@ -72,7 +72,7 @@ set(MATRIX_FAKE_MANIFEST "${CAPSID_MATRIX_WORK_DIR}/locked-quickjs-diff.json")
 file(READ "${CAPSID_SOURCE_DIR}/docs/txiki-upgrade-baseline.json"
     MATRIX_BASE_JSON)
 string(REGEX REPLACE
-    "\"commit\"[ ]*:[ ]*\"[0-9a-f]{40}\""
+    "\"commit\"[ ]*:[ ]*\"[0-9a-f]+\""
     "\"commit\":\"0123456789abcdef0123456789abcdef01234567\""
     MATRIX_FAKE_JSON "${MATRIX_BASE_JSON}")
 if(MATRIX_FAKE_JSON STREQUAL MATRIX_BASE_JSON)
