@@ -37,6 +37,7 @@ if(CAPSID_BUILD_HOST)
         src/host/managed_admin_backend.cc
         src/host/managed_host.cc
         src/host/policy_compiler.cc
+        src/host/routing_snapshot.cc
         src/host/request_normalization.cc
         src/host/secret_file_provider.cc
         src/host/secret_snapshot.cc

@@ -181,6 +181,101 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
     return pool;
 }
 
+std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
+    GenerationPoolOptions options, std::vector<capsid_worker*> warmed,
+    std::string* error) {
+    if (options.workers == 0 || warmed.size() != options.workers) {
+        if (error != nullptr) {
+            *error = "adopted generation pool requires exactly "
+                     "options.workers pre-warmed workers";
+        }
+        // Mismatched input: destroy every worker handed in — the caller
+        // transferred ownership by calling create_adopted.
+        for (capsid_worker* worker : warmed) {
+            capsid_worker_destroy(worker);
+        }
+        return nullptr;
+    }
+    if (options.application_id.empty() || options.generation_digest.empty() ||
+        options.version.empty()) {
+        if (error != nullptr) {
+            *error = "generation pool identity is incomplete";
+        }
+        for (capsid_worker* worker : warmed) {
+            capsid_worker_destroy(worker);
+        }
+        return nullptr;
+    }
+    // Same recovery-policy gate as create() (worker_recovery.cc valid_policy).
+    if (options.recovery.max_events == 0U ||
+        options.recovery.window_ms == 0U ||
+        options.recovery.backoff_initial_ms == 0U ||
+        options.recovery.backoff_maximum_ms <
+            options.recovery.backoff_initial_ms ||
+        options.recovery.jitter_basis_points > 10000U ||
+        options.recovery.stable_reset_ms == 0U ||
+        options.recovery.replacements_concurrent_per_app == 0U) {
+        if (error != nullptr) {
+            *error = "invalid recovery policy (mirrors the controller's "
+                     "contract: max_events/window_ms/backoff_initial_ms/"
+                     "stable_reset_ms/replacements_concurrent_per_app "
+                     "non-zero, backoff_maximum_ms >= backoff_initial_ms, "
+                     "jitter_basis_points <= 10000)";
+        }
+        for (capsid_worker* worker : warmed) {
+            capsid_worker_destroy(worker);
+        }
+        return nullptr;
+    }
+    if (!options.factory) {
+        if (error != nullptr) {
+            *error = "generation pool requires a worker factory "
+                     "(for replacements)";
+        }
+        for (capsid_worker* worker : warmed) {
+            capsid_worker_destroy(worker);
+        }
+        return nullptr;
+    }
+
+    std::shared_ptr<GenerationPool> pool(new GenerationPool(std::move(options)));
+
+    // No READY barrier: the adopter consumed it. Every slot starts READY.
+    pool->slots_.reserve(pool->options_.workers);
+    for (std::uint32_t index = 0; index < pool->options_.workers; ++index) {
+        std::shared_ptr<WorkerExecutor> executor(new WorkerExecutor());
+        executor->set_event_notifier([weak = pool->weak_from_this()] {
+            if (std::shared_ptr<GenerationPool> p = weak.lock()) {
+                {
+                    std::lock_guard<std::mutex> lock(p->mutex_);
+                    p->events_pending_ = true;
+                }
+                p->cv_.notify_all();
+            }
+        });
+        if (!executor->adopt(warmed[index], error)) {
+            // warmeds[index] was NOT adopted (adopt takes ownership only
+            // on success): destroy it here. Already-adopted executors own
+            // their workers; stop_and_join reaps them.
+            capsid_worker_destroy(warmed[index]);
+            for (const Slot& slot : pool->slots_) {
+                slot.executor->stop_and_join();
+            }
+            pool->state_ = State::kDead;  // the pump never started
+            return nullptr;
+        }
+        Slot slot;
+        slot.executor = std::move(executor);
+        slot.ready = true;
+        pool->slots_.push_back(std::move(slot));
+    }
+    pool->replacement_due_ms_.assign(pool->slots_.size(), kNoDue);
+    pool->state_ = State::kActive;
+    pool->stable_since_ms_ = steady_ms();
+    pool->pump_thread_ = std::thread([pool] { pool->pump_loop(); });
+    return pool;
+}
+
 void GenerationPool::request_drain() {
     {
         std::unique_lock<std::mutex> lock(mutex_);

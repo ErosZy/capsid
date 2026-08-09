@@ -105,6 +105,19 @@ public:
     static std::shared_ptr<GenerationPool> create(GenerationPoolOptions options,
                                                   std::string* error);
 
+    // WP-05 §9.2: pool over an ALREADY-WARMED fleet. `warmed` is exactly
+    // options.workers pre-warmed workers whose READY handshake (including
+    // the compatibility check) was consumed by the adopter — the Managed
+    // coordinator's warm-up. Each is wrapped via WorkerExecutor::adopt();
+    // nothing is respawned. The factory stays REQUIRED for §8.3
+    // replacements (same artifact, same effective config). On failure every
+    // warmed worker is destroyed (adopted ones through their executors)
+    // and nullptr is returned — no worker ever escapes.
+    static std::shared_ptr<GenerationPool> create_adopted(
+        GenerationPoolOptions options,
+        std::vector<capsid_worker*> warmed,
+        std::string* error);
+
     ~GenerationPool();  // request_drain() + wait()
 
     GenerationPool(const GenerationPool&) = delete;

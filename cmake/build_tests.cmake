@@ -3336,6 +3336,43 @@ if(BUILD_TESTING)
         set_tests_properties(host_generation_pool_contract PROPERTIES
             TIMEOUT 90)
 
+        # WP-05 PR-09 §9.2: RoutingSnapshot / RoutingTable + the adopt-create
+        # pool entry (pre-warmed fleet, no respawn). RED gate: the snapshot
+        # and create_adopted do not exist on the PR-08 tree.
+        add_executable(
+            test-host-routing-snapshot
+            tests/test_host_routing_snapshot.cc)
+        target_include_directories(
+            test-host-routing-snapshot PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-routing-snapshot PRIVATE
+            capsid_runtime
+            capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-routing-snapshot PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-routing-snapshot PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-routing-snapshot PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-routing-snapshot capsid-worker)
+        add_test(
+            NAME host_routing_snapshot_contract
+            COMMAND test-host-routing-snapshot $<TARGET_FILE:capsid-worker>)
+        set_tests_properties(host_routing_snapshot_contract PROPERTIES
+            TIMEOUT 90)
+
+
         add_executable(
             test-hono-worker-driver
             tests/test_framework_worker_driver.cc
