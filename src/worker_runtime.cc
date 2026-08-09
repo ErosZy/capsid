@@ -685,7 +685,7 @@ private:
                                     int argc,
                                     JSValueConst *argv) {
         uint64_t id = 0;
-        if (!g_worker || argc < 1 || JS_ToIndex(ctx, &id, argv[0]) ||
+        if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &id, argv[0]) ||
             id == 0 ||
             g_worker->responses_.find(id) ==
                 g_worker->responses_.end()) {
@@ -705,7 +705,7 @@ private:
                                     int argc,
                                     JSValueConst *argv) {
         uint64_t id = 0;
-        if (!g_worker || argc < 1 || JS_ToIndex(ctx, &id, argv[0]) ||
+        if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &id, argv[0]) ||
             id == 0 || g_worker->executing_request_id_ != id) {
             return JS_ThrowInternalError(
                 ctx, "cannot leave inactive request");
@@ -744,7 +744,7 @@ private:
                                      JSValueConst *argv) {
         uint64_t id = 0;
         uint32_t credit = 0;
-        if (!g_worker || argc < 2 || JS_ToIndex(ctx, &id, argv[0]) ||
+        if (!g_worker || argc < 2 || JS_ToBigUint64(ctx, &id, argv[0]) ||
             JS_ToUint32(ctx, &credit, argv[1]) || id == 0 || credit == 0) {
             return JS_EXCEPTION;
         }
@@ -846,7 +846,7 @@ private:
                                     JSValueConst *argv) {
         uint64_t id = 0;
         uint32_t status = 0;
-        if (!g_worker || argc < 4 || JS_ToIndex(ctx, &id, argv[0]) ||
+        if (!g_worker || argc < 4 || JS_ToBigUint64(ctx, &id, argv[0]) ||
             JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
             return JS_EXCEPTION;
         }
@@ -876,7 +876,7 @@ private:
                                      JSValueConst *argv) {
         uint64_t id = 0;
         uint32_t status = 0;
-        if (!g_worker || argc < 5 || JS_ToIndex(ctx, &id, argv[0]) ||
+        if (!g_worker || argc < 5 || JS_ToBigUint64(ctx, &id, argv[0]) ||
             JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
             return JS_EXCEPTION;
         }
@@ -952,7 +952,7 @@ private:
                                      JSValueConst *argv) {
         uint64_t id = 0;
         size_t size = 0;
-        if (!g_worker || argc < 2 || JS_ToIndex(ctx, &id, argv[0]) || id == 0) {
+        if (!g_worker || argc < 2 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -1021,7 +1021,7 @@ private:
                                    int argc,
                                    JSValueConst *argv) {
         uint64_t id = 0;
-        if (!g_worker || argc < 1 || JS_ToIndex(ctx, &id, argv[0]) || id == 0) {
+        if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -1045,7 +1045,7 @@ private:
                                      int argc,
                                      JSValueConst *argv) {
         uint64_t id = 0;
-        if (!g_worker || argc < 2 || JS_ToIndex(ctx, &id, argv[0]) || id == 0) {
+        if (!g_worker || argc < 2 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -3206,7 +3206,7 @@ private:
         JSValue arguments[6] = {
             JS_DupValue(ctx_, application_handler_),
             JS_DupValue(ctx_, application_handler_this_),
-            JS_NewInt64(ctx_, static_cast<int64_t>(frame.request_id)),
+            JS_NewBigUint64(ctx_, frame.request_id),
             JS_NewStringLen(
                 ctx_, decoded.method.data(), decoded.method.size()),
             JS_NewStringLen(
@@ -3271,7 +3271,7 @@ private:
         }
         state->second.request_credit -= frame.payload.size();
         JSValue arguments[2] = {
-            JS_NewInt64(ctx_, static_cast<int64_t>(frame.request_id)),
+            JS_NewBigUint64(ctx_, frame.request_id),
             JS_NewUint8ArrayCopy(ctx_,
                                  frame.payload.empty() ? NULL : &frame.payload[0],
                                  frame.payload.size()),
@@ -3378,7 +3378,7 @@ private:
         if (id == 0) {
             return false;
         }
-        JSValue argument = JS_NewInt64(ctx_, static_cast<int64_t>(id));
+        JSValue argument = JS_NewBigUint64(ctx_, id);
         const bool result = call_bridge(function, 1, &argument);
         JS_FreeValue(ctx_, argument);
         return result;
