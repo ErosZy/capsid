@@ -427,10 +427,14 @@ endif()
 # The static worker must depend only on the platform libc family. A NEEDED
 # entry outside the allowlist (or an @rpath that does not resolve inside the
 # package) is an undeclared dynamic dependency.
+# Entries are regex prefixes (matched as "^${allowed}"), so regex
+# metacharacters are escaped with char classes: "libstdc++.so" would
+# otherwise fail to compile ("c+" followed by "+") and the dots would
+# match any character.
 set(CAPSID_SMOKE_DYNAMIC_ALLOWLIST_LINUX
-    "libc.so" "libm.so" "libpthread.so" "libdl.so" "librt.so"
-    "libgcc_s.so" "libstdc++.so" "ld-linux" "libresolv.so"
-    "libutil.so" "libmbedtls.so" "libmbedcrypto.so" "libmbedx509.so")
+    "libc[.]so" "libm[.]so" "libpthread[.]so" "libdl[.]so" "librt[.]so"
+    "libgcc_s[.]so" "libstdc[+][+][.]so" "ld-linux" "libresolv[.]so"
+    "libutil[.]so" "libmbedtls[.]so" "libmbedcrypto[.]so" "libmbedx509[.]so")
 file(GLOB CAPSID_SMOKE_BINARIES "${CAPSID_PACKAGE_ROOT}/bin/*")
 foreach(binary IN LISTS CAPSID_SMOKE_BINARIES)
     get_filename_component(binary_name "${binary}" NAME)
