@@ -274,21 +274,29 @@ set(CAPSID_REPRO_RECORDS
 foreach(record IN LISTS CAPSID_REPRO_RECORDS)
     set(baseline_value)
     set(repro_value)
+    # cmakeBuildType may legitimately be empty; the other records never are.
+    if(record STREQUAL "cmakeBuildType")
+        set(record_regex "^${record}=(.*)$")
+    else()
+        set(record_regex "^${record}=(.+)$")
+    endif()
     file(STRINGS "${CAPSID_REPRO_BASELINE_ROOT}/share/capsid/build-info.txt"
         CAPSID_REPRO_BASELINE_INFO_LINES)
     foreach(line IN LISTS CAPSID_REPRO_BASELINE_INFO_LINES)
-        if(line MATCHES "^${record}=(.+)$")
+        if(line MATCHES "${record_regex}")
             set(baseline_value "${CMAKE_MATCH_1}")
         endif()
     endforeach()
     file(STRINGS "${CAPSID_REPRO_ROOT}/share/capsid/build-info.txt"
         CAPSID_REPRO_INFO_LINES)
     foreach(line IN LISTS CAPSID_REPRO_INFO_LINES)
-        if(line MATCHES "^${record}=(.+)$")
+        if(line MATCHES "${record_regex}")
             set(repro_value "${CMAKE_MATCH_1}")
         endif()
     endforeach()
-    if(NOT baseline_value STREQUAL repro_value)
+    # Quoted comparison: an unquoted empty value would collapse the STREQUAL
+    # expression into a truthy variable-name check.
+    if(NOT "${baseline_value}" STREQUAL "${repro_value}")
         message(FATAL_ERROR "identity record ${record} differs: baseline "
             "[${baseline_value}] vs repro [${repro_value}]")
     endif()
