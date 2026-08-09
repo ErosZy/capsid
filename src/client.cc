@@ -1548,7 +1548,25 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     // well-defined out_worker value.
     *out_worker = NULL;
 
-    capsid_worker *worker = new (std::nothrow) capsid_worker();
+    // WP-06, spec §10.4: std::nothrow only protects the operator new
+    // call itself. The capsid_worker members (vector/map/set/deque/Parser)
+    // allocate in the constructor, and a bad_alloc from those propagates
+    // past the nothrow guard — the child would leak alive if this were not
+    // caught and reaped. The new expression itself runs the matching
+    // operator delete when the constructor throws, so only the child and
+    // the IPC descriptor need cleanup here.
+    capsid_worker *worker = NULL;
+    try {
+        worker = new (std::nothrow) capsid_worker();
+    } catch (const std::bad_alloc &) {
+        close(sockets[0]);
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+        // Uniform OOM contract: same code and detail the ABI guard would
+        // have produced.
+        capsid::abi::set_error("capsid_worker_spawn: out of memory");
+        return CAPSID_OUT_OF_MEMORY;
+    }
     if (!worker) {
         close(sockets[0]);
         kill(pid, SIGKILL);

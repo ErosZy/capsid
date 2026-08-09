@@ -59,6 +59,17 @@ void *operator new[](std::size_t size) {
     return ::operator new(size);
 }
 
+void *operator new(std::size_t size, const std::nothrow_t &) noexcept {
+    // Own the nothrow variants too: without these definitions the sanitizer
+    // runtime provides them, and the later delete → std::free would trip
+    // ASan's alloc-dealloc-mismatch (nothrow-new memory freed as malloc).
+    return std::malloc(size ? size : 1);
+}
+
+void *operator new[](std::size_t size, const std::nothrow_t &) noexcept {
+    return std::malloc(size ? size : 1);
+}
+
 void operator delete(void *memory) noexcept {
     std::free(memory);
 }
@@ -72,6 +83,24 @@ void operator delete(void *memory, std::size_t) noexcept {
 }
 
 void operator delete[](void *memory, std::size_t) noexcept {
+    std::free(memory);
+}
+
+void operator delete(void *memory, const std::nothrow_t &) noexcept {
+    std::free(memory);
+}
+
+void operator delete[](void *memory, const std::nothrow_t &) noexcept {
+    std::free(memory);
+}
+
+void operator delete(void *memory, std::size_t,
+                     const std::nothrow_t &) noexcept {
+    std::free(memory);
+}
+
+void operator delete[](void *memory, std::size_t,
+                       const std::nothrow_t &) noexcept {
     std::free(memory);
 }
 
