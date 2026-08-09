@@ -1276,6 +1276,13 @@ int main(int argc, char** argv) {
     }
 
     if (mode == "host_managed_executable_redeploys_with_capacity_one") {
+        // §9.4: workersTotal=1 is the steady budget; a zero-downtime
+        // replacement overlaps the old and new pools, so the fixture
+        // grants one surge slot.
+        fixture.replace_host_text(
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}",
+            "\"capacity\":{\"workersTotal\":1,\"activationSurgeWorkers\":1,"
+            "\"startupsConcurrent\":1}");
         fixture.create_version("orders", "v2");
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);
@@ -1320,9 +1327,13 @@ int main(int argc, char** argv) {
         const int port = pick_port();
         add_public_listener(fixture, port);
         // Two Apps each hold a 1-worker pool; the fixture's default
-        // workersTotal of 1 must grow to fit both (§9.6-7).
-        fixture.replace_host_text("\"workersTotal\":1",
-                                  "\"workersTotal\":4");
+        // workersTotal of 1 must grow to fit both (§9.6-7). §9.4: the
+        // in-place replacement below overlaps the old and new generations,
+        // so one surge slot is granted.
+        fixture.replace_host_text(
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}",
+            "\"capacity\":{\"workersTotal\":4,\"activationSurgeWorkers\":1,"
+            "\"startupsConcurrent\":1}");
         fixture.create_application("payments", "payments-executable-ok");
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);

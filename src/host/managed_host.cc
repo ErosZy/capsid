@@ -909,6 +909,119 @@ private:
     int app_dir_fd_;
 };
 
+// §9.3 activation transaction tail, shared by every successful warm path
+// (deploy and idempotent redeploy): prepare (before the persist, may
+// fail) → persist (may fail) → commit (after the persist, noexcept).
+//
+// Caller contract:
+//   - a failed prepare has already destroyed the warmed workers it was
+//     handed (create_adopted's failure contract); the coordinator never
+//     destroys them again,
+//   - on the transactional path the plan owns the pool after prepare, so
+//     the outcome's worker fields are cleared on every exit here,
+//   - the §9.4 ledger reserve is settled here: commit on success, abort
+//     on a failed persist (a failed warm never reaches this point and
+//     must roll its own reserve back).
+// Returns true when the activation was committed.
+bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
+                       const std::vector<capsid_worker*>& warm,
+                       const std::string& version,
+                       const std::string& generation_digest,
+                       int app_state_fd, bool replacement,
+                       OperationStatus* status) {
+    status->state = OperationState::kActivating;
+    std::unique_ptr<ActivationPlan> plan;
+    if (options->prepare_activation != nullptr) {
+        // The warmed workers travel on the outcome (const view) so the
+        // prepare callback can adopt the fleet into its own pool; the plan
+        // owns the workers from prepare onward, so the outcome's fields are
+        // cleared on every exit below.
+        outcome->workers = warm;
+        // The transaction callbacks are an all-or-nothing group; a broken
+        // configuration fails the deploy instead of half-publishing.
+        if (options->commit_activation == nullptr ||
+            options->abort_activation == nullptr) {
+            destroy_pool(warm);
+            status->state = OperationState::kFailed;
+            status->error = "activation transaction misconfigured";
+            outcome->error = status->error;
+            outcome->workers.clear();
+            outcome->worker = nullptr;
+            return false;
+        }
+        std::string plan_error;
+        plan = options->prepare_activation(options->application, *outcome,
+                                           &plan_error);
+        if (plan == nullptr) {
+            // The failed prepare destroyed the warmed workers.
+            status->state = OperationState::kFailed;
+            status->error =
+                plan_error.empty() ? "cannot activate the new generation"
+                                   : plan_error;
+            outcome->error = status->error;
+            outcome->workers.clear();
+            outcome->worker = nullptr;
+            return false;
+        }
+    }
+    // ---- persist (may fail) ----
+    ActiveStateDocument document;
+    document.state = ActiveServiceState::kActive;
+    document.application = options->application;
+    document.version = version;
+    document.generation = generation_digest;
+    PosixActiveStateFilesystem filesystem(app_state_fd);
+    const ActiveStatePersistResult persisted = persist_active_state(
+        document, outcome->operation_id, filesystem);
+    if (!persisted.ok) {
+        // Atomic: the failed deploy recycles its own new pool (the plan's
+        // abort, or destroy_pool on the legacy path); the old active.json
+        // and the old active pool stay untouched.
+        if (plan != nullptr) {
+            options->abort_activation(plan.get());
+        } else {
+            destroy_pool(warm);
+        }
+        if (options->ledger != nullptr) {
+            options->ledger->abort_reserve(
+                options->application, static_cast<std::uint64_t>(warm.size()),
+                replacement);
+        }
+        status->state = OperationState::kFailed;
+        status->error = "cannot persist active state";
+        outcome->error = status->error;
+        outcome->workers.clear();
+        outcome->worker = nullptr;
+        return false;
+    }
+    // ---- commit (noexcept; see activation_transaction.h) ----
+    if (plan != nullptr) {
+        options->commit_activation(plan.get());
+        // Ownership moved to the plan: the warmed pointers are stale.
+        outcome->workers.clear();
+        outcome->worker = nullptr;
+    } else {
+        // Legacy caller path: the coordinator hands the owning pool back.
+        publish_pool(outcome, warm);
+    }
+    // §9.4 settle the reserve: the new pool holds its count. (Commit
+    // callback and ledger settle are both after the persist; the ledger
+    // switch is part of the transactional settle.)
+    if (options->ledger != nullptr) {
+        if (replacement) {
+            options->ledger->commit_replace(
+                options->application,
+                static_cast<std::uint64_t>(warm.size()),
+                options->ledger->steady_of(options->application));
+        } else {
+            options->ledger->commit_fresh(options->application);
+        }
+    }
+    status->state = OperationState::kActive;
+    outcome->ok = true;
+    return true;
+}
+
 // Opens stateRoot exactly once per operation with O_NOFOLLOW and verifies
 // it (directory, Host-owned, mode 0700). Every subdirectory descent anchors
 // to the returned fd, so stateRoot cannot be swapped between a path-based
@@ -2975,11 +3088,41 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         status->state = OperationState::kWarming;
         const std::vector<std::uint8_t> bundle(
             validated.bundle_bin.begin(), validated.bundle_bin.end());
+        // §9.4: reserve the ENTIRE target pool count before any spawn. A
+        // denied reserve (steady budget exhausted, or a zero-downtime
+        // replace without surge/headroom) fails the deploy before a
+        // single process starts. `replacement` is captured BEFORE the
+        // reserve: a fresh reserve turns the App into a holder, which
+        // must not flip the category of a later rollback.
+        bool replacement = false;
+        if (options->ledger != nullptr) {
+            replacement = options->ledger->holds(options->application);
+            const bool reserved =
+                replacement
+                    ? options->ledger->reserve_replace(
+                          options->application, validated.effective.workers)
+                    : options->ledger->reserve_fresh(
+                          options->application, validated.effective.workers);
+            if (!reserved) {
+                close(app_state_fd);
+                close(state_fd);
+                status->state = OperationState::kFailed;
+                status->error = "worker capacity exceeded";
+                outcome.error = status->error;
+                return outcome;
+            }
+        }
         const WarmPoolResult warm = warm_worker_pool(
             *options, bundle,
             validated.selected == SelectedArtifactKind::kTrustedBytecode,
             validated.source_name, validated.effective, validated.env_values);
         if (!warm.ok) {
+            // The failed warm rolls its own reserve back.
+            if (options->ledger != nullptr) {
+                options->ledger->abort_reserve(
+                    options->application, validated.effective.workers,
+                    replacement);
+            }
             close(app_state_fd);
             close(state_fd);
             status->state = OperationState::kFailed;
@@ -2987,25 +3130,6 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             outcome.error = warm.error;
             return outcome;
         }
-        status->state = OperationState::kActivating;
-        ActiveStateDocument document;
-        document.state = ActiveServiceState::kActive;
-        document.application = options->application;
-        document.version = version;
-        document.generation = generation_digest;
-        PosixActiveStateFilesystem filesystem(app_state_fd);
-        const ActiveStatePersistResult persisted = persist_active_state(
-            document, outcome.operation_id, filesystem);
-        if (!persisted.ok) {
-            destroy_pool(warm.workers);
-            close(state_fd);
-            status->state = OperationState::kFailed;
-            status->error = "cannot persist active state";
-            outcome.error = "cannot persist active state";
-            return outcome;
-        }
-        status->state = OperationState::kActive;
-        outcome.ok = true;
         close(state_fd);
         // PR-09c: the generation identity + replacement factory travel with
         // the outcome so the data plane can adopt a pool in place.
@@ -3015,7 +3139,10 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             *options, bundle,
             validated.selected == SelectedArtifactKind::kTrustedBytecode,
             validated.source_name, validated.effective, validated.env_values);
-        publish_pool(&outcome, warm.workers);
+        finish_activation(options, &outcome, warm.workers, version,
+                          generation_digest, app_state_fd, replacement,
+                          status);
+        close(app_state_fd);
         return outcome;
     }
     // mapping == -1: first publish of this Version ID; stage it.
@@ -3193,44 +3320,45 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
 
     // ---- 10-12. worker warm-up: the whole fixed pool must be READY.
     // NO Active is reported before the ENTIRE pool succeeds.
+    // §9.4: reserve the ENTIRE target pool count before any spawn. A
+    // denied reserve (steady budget exhausted, or a zero-downtime replace
+    // without surge/headroom) fails the deploy before a single process
+    // starts. `replacement` is captured BEFORE the reserve (a fresh
+    // reserve turns the App into a holder — the rollback must not flip
+    // its category).
+    bool replacement = false;
+    if (options->ledger != nullptr) {
+        replacement = options->ledger->holds(options->application);
+        const bool reserved =
+            replacement
+                ? options->ledger->reserve_replace(
+                      options->application, effective.workers)
+                : options->ledger->reserve_fresh(options->application,
+                                                 effective.workers);
+        if (!reserved) {
+            close(app_state_fd);
+            status->state = OperationState::kFailed;
+            status->error = "worker capacity exceeded";
+            outcome.error = status->error;
+            return outcome;
+        }
+    }
     status->state = OperationState::kWarming;
     const WarmPoolResult warm = warm_worker_pool(
         *options, bundle_bytes, selected == SelectedArtifactKind::kTrustedBytecode,
         source_name, effective, env_values);
     if (!warm.ok) {
+        // The failed warm rolls its own reserve back.
+        if (options->ledger != nullptr) {
+            options->ledger->abort_reserve(options->application,
+                                           effective.workers, replacement);
+        }
         close(app_state_fd);
         status->state = OperationState::kFailed;
         status->error = warm.error;
         outcome.error = warm.error;
         return outcome;
     }
-    status->state = OperationState::kActivating;
-
-    // ---- 12. persist active.json through the active-state API ----
-    ActiveStateDocument document;
-    document.state = ActiveServiceState::kActive;
-    document.application = options->application;
-    document.version = version;
-    document.generation = generation_digest;
-    // The verified App dir fd hands ownership to the filesystem adapter.
-    PosixActiveStateFilesystem filesystem(app_state_fd);
-    const ActiveStatePersistResult persisted = persist_active_state(
-        document, outcome.operation_id, filesystem);
-    if (!persisted.ok) {
-        // Atomic: the failed deploy recycles its own new pool; the old
-        // active.json and the old active pool stay untouched.
-        destroy_pool(warm.workers);
-        status->state = OperationState::kFailed;
-        status->error = "cannot persist active state";
-        outcome.error = "cannot persist active state";
-        return outcome;
-    }
-
-    // The pool is warm; the caller publishes the data-plane routing and
-    // drains the old pool (single active App: routing publication is the
-    // caller's step).
-    status->state = OperationState::kActive;
-    outcome.ok = true;
     // PR-09c: the generation identity + replacement factory travel with
     // the outcome so the data plane can adopt a pool in place.
     outcome.version = version;
@@ -3239,7 +3367,10 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         *options, bundle_bytes,
         selected == SelectedArtifactKind::kTrustedBytecode, source_name,
         effective, env_values);
-    publish_pool(&outcome, warm.workers);
+    finish_activation(options, &outcome, warm.workers, version,
+                      generation_digest, app_state_fd, replacement,
+                      status);
+    close(app_state_fd);
     return outcome;
 }
 
@@ -3309,12 +3440,45 @@ DeployOutcome run_retire_operation(ManagedHostOptions* options,
             }
         }
     }
+    // §9.3 retire transaction: prepare_retire before the tombstone
+    // persist (may fail), commit_retire after it (noexcept — drain
+    // signal + ledger category switch), abort_retire when it failed.
+    std::unique_ptr<RetirePlan> plan;
+    if (options->prepare_retire != nullptr) {
+        if (options->commit_retire == nullptr ||
+            options->abort_retire == nullptr) {
+            outcome.error = "retire transaction misconfigured";
+            status->state = OperationState::kFailed;
+            return outcome;
+        }
+        std::string plan_error;
+        plan = options->prepare_retire(options->application, &plan_error);
+        if (plan == nullptr) {
+            outcome.error =
+                plan_error.empty() ? "cannot prepare the retire" : plan_error;
+            status->state = OperationState::kFailed;
+            return outcome;
+        }
+    }
     const ActiveStatePersistResult persisted = persist_active_state(
         document, outcome.operation_id, filesystem);
     if (!persisted.ok) {
+        if (plan != nullptr) {
+            options->abort_retire(plan.get());
+        }
         outcome.error = "cannot persist retire tombstone";
         status->state = OperationState::kFailed;
         return outcome;
+    }
+    if (plan != nullptr) {
+        options->commit_retire(plan.get());
+    }
+    // §9.4: the serving pool leaves steady for surge (draining); its
+    // count is released when the reaper finished (the pool's
+    // on_drain_complete hook).
+    if (options->ledger != nullptr) {
+        options->ledger->begin_retire(
+            options->application, options->ledger->steady_of(options->application));
     }
     status->state = OperationState::kActive;
     outcome.ok = true;
@@ -3437,11 +3601,28 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
     status->state = OperationState::kWarming;
     const std::vector<std::uint8_t> bundle(
         validated.bundle_bin.begin(), validated.bundle_bin.end());
+    // §9.4: reserve the recovered fleet's count BEFORE any spawn. At
+    // startup nothing holds, so this is always a fresh reserve; a denied
+    // reserve fails the Host closed before a single process starts
+    // (an active-generation count beyond capacity never overspawns).
+    if (options->ledger != nullptr &&
+        !options->ledger->reserve_fresh(options->application,
+                                        validated.effective.workers)) {
+        status->state = OperationState::kFailed;
+        status->error = "worker capacity exceeded";
+        outcome.error = status->error;
+        return outcome;
+    }
     const WarmPoolResult warm = warm_worker_pool(
         *options, bundle,
         validated.selected == SelectedArtifactKind::kTrustedBytecode,
         validated.source_name, validated.effective, validated.env_values);
     if (!warm.ok) {
+        if (options->ledger != nullptr) {
+            options->ledger->abort_reserve(
+                options->application, validated.effective.workers,
+                /*replacement=*/false);
+        }
         status->state = OperationState::kFailed;
         status->error = warm.error;
         outcome.error = warm.error;

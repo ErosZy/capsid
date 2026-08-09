@@ -390,7 +390,6 @@ if(BUILD_TESTING)
             endif()
             foreach(CAPSID_MANAGED_ADMIN_TEST_ID
                     host_admin_async_deploy_progress
-                    host_admin_async_generation_handoff
                     host_admin_async_failure_and_capacity
                     host_managed_admin_routes_real_coordinator
                     host_admin_managed_status_dispatch_round_trip
@@ -509,6 +508,7 @@ if(BUILD_TESTING)
                     host_managed_fixed_pool_warm_failure_is_atomic
                     host_managed_admin_fixed_pool_handoff
                     host_managed_admin_worker_lifecycle
+                    host_managed_admin_legacy_unclaimed_pool
                     host_managed_trusted_bytecode
                     host_managed_compatibility_fallback
                     host_managed_fallback_identity_retains_attestation

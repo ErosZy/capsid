@@ -48,12 +48,13 @@ bool RoutingSnapshot::retired(std::string_view application) const {
 }
 
 void RoutingTable::publish(std::shared_ptr<const RoutingSnapshot> snapshot) {
-    snapshot_.store(std::move(snapshot), std::memory_order_release);
+    std::atomic_store_explicit(&snapshot_, std::move(snapshot),
+                               std::memory_order_release);
     generation_.fetch_add(1, std::memory_order_relaxed);
 }
 
 std::shared_ptr<const RoutingSnapshot> RoutingTable::load() const {
-    return snapshot_.load(std::memory_order_acquire);
+    return std::atomic_load_explicit(&snapshot_, std::memory_order_acquire);
 }
 
 }  // namespace capsid::host

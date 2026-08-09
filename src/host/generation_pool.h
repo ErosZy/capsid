@@ -105,6 +105,13 @@ struct GenerationPoolOptions {
     // Ordering: single producer (the pump), FIFO per executor, and kExit is
     // always the last event of its executor.
     std::function<void(const WorkerExecutor*, WorkerEvent)> event_sink;
+    // §9.4 reaper-finished notification: called exactly once, on the pump
+    // thread, after the pool entered kDead and its workers were reaped
+    // (finalize_drain) — the "reaper completed" instant after which the
+    // old pool's capacity count may be released. Must be cheap and
+    // non-blocking (the ledger release runs here); never take the pool
+    // mutex from the callback.
+    std::function<void()> on_drain_complete;
 };
 
 // See the file comment for the full contract.
@@ -185,6 +192,10 @@ public:
     std::uint64_t max_inflight_per_worker() const {
         return options_.max_inflight_per_worker;
     }
+    // The configured fleet size (the count the ledger reserved for this
+    // pool; distinct from ready_workers(), which can drop below it while
+    // the generation is reaping). PR-10 §9.4.
+    std::uint32_t configured_workers() const { return options_.workers; }
     State state() const;
     std::string_view application_id() const;
     std::string_view version() const;

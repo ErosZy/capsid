@@ -841,6 +841,13 @@ void GenerationPool::finalize_drain() {
     }
     // Wake permit waiters: they see the pool inactive and abandon.
     startup_semaphore().cv.notify_all();
+    // §9.4: the reaper finished — the drained generation's capacity count
+    // releases now. Outside the pool mutex (the callback must be able to
+    // take its own locks), before the executor destructors join their
+    // worker threads.
+    if (options_.on_drain_complete) {
+        options_.on_drain_complete();
+    }
     // Executor destructors run here, outside the mutex: each joins its
     // worker thread, which may be blocked on the pool mutex in the event
     // notifier.

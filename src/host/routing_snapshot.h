@@ -71,9 +71,10 @@ private:
     std::set<std::string> tombstones_;
 };
 
-// The published-route cell. publish()/load() are lock-free atomic
-// shared_ptr operations (C++20); generation() counts publications for
-// diagnostics.
+// The published-route cell. publish()/load() are atomic shared_ptr
+// operations (C++11 free functions — the C++20 std::atomic<shared_ptr>
+// form is not available on every libc++ the Host ships on); generation()
+// counts publications for diagnostics.
 class RoutingTable {
 public:
     void publish(std::shared_ptr<const RoutingSnapshot> snapshot);
@@ -81,7 +82,11 @@ public:
     std::uint64_t generation() const { return generation_.load(std::memory_order_relaxed); }
 
 private:
-    std::atomic<std::shared_ptr<const RoutingSnapshot>> snapshot_{nullptr};
+    // Not std::atomic<shared_ptr>: older Apple libc++ rejects the
+    // non-trivially-copyable specialization. The free-function forms below
+    // give the same release/acquire publication semantics on both libc++ and
+    // libstdc++.
+    std::shared_ptr<const RoutingSnapshot> snapshot_;
     std::atomic<std::uint64_t> generation_{0};
 };
 

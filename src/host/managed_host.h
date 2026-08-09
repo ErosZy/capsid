@@ -3,13 +3,17 @@
 
 struct capsid_worker;
 
+#include "host/activation_transaction.h"
 #include "host/bytecode_attestation.h"
 #include "host/policy_compiler.h"
+#include "host/worker_capacity_ledger.h"
 #include "host/worker_executor.h"
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,43 +27,10 @@ namespace capsid::host {
 // write the immutable version mapping, spawn the worker, load, wait for
 // READY, persist active.json, fsync, publish routing, drain the old worker.
 
-struct ManagedHostOptions {
-    // Pre-opened directory descriptors (safe-read boundary).
-    int applications_root_fd = -1;
-    // Pre-opened secret root dirfd; the App subdirectory is opened and
-    // owner/mode verified by the coordinator before any secret read.
-    int secret_root_template_fd = -1;
-    std::string state_root;  // absolute path, created by the Host
-    std::string application; // the single active App
-    std::string worker_path; // absolute capsid-worker path
-    HostPolicy host_policy;
-    // Trusted Ed25519 keys for bytecode attestation verification.
-    std::vector<capsid::host::TrustedBytecodeKey> trusted_keys;
-    // The runtime compatibility ID the worker must report at READY.
-    std::string runtime_compatibility_id;
-    // Optional process-level stop signal. When set and fired, the worker
-    // READY handshake aborts promptly (spawned worker destroyed, operation
-    // fails) instead of waiting out its 15-second deadline, so a SIGTERM
-    // shutdown can cancel a genuinely running deploy.
-    const std::atomic<bool>* stop_requested = nullptr;
-};
-
-enum class OperationState {
-    kValidating,
-    kStaging,
-    kWarming,
-    kActivating,
-    kActive,
-    kFailed,
-};
-
-struct OperationStatus {
-    std::string operation_id;
-    OperationState state = OperationState::kValidating;
-    std::string version;
-    std::string error;  // static text; never secret values or paths
-};
-
+// Declared BEFORE ManagedHostOptions: the §9.3 transaction callback fields
+// use it in their std::function signatures, and std::function instantiated
+// with an incomplete parameter type cannot be called once the type is
+// completed (GCC 13).
 struct DeployOutcome {
     bool ok = false;
     std::string operation_id;
@@ -83,6 +54,70 @@ struct DeployOutcome {
     WorkerExecutor::WorkerFactory generation_factory;
     std::string version;
     std::string generation_digest;
+};
+
+struct ManagedHostOptions {
+    // Pre-opened directory descriptors (safe-read boundary).
+    int applications_root_fd = -1;
+    // Pre-opened secret root dirfd; the App subdirectory is opened and
+    // owner/mode verified by the coordinator before any secret read.
+    int secret_root_template_fd = -1;
+    std::string state_root;  // absolute path, created by the Host
+    std::string application; // the single active App
+    std::string worker_path; // absolute capsid-worker path
+    HostPolicy host_policy;
+    // Trusted Ed25519 keys for bytecode attestation verification.
+    std::vector<capsid::host::TrustedBytecodeKey> trusted_keys;
+    // The runtime compatibility ID the worker must report at READY.
+    std::string runtime_compatibility_id;
+    // Optional process-level stop signal. When set and fired, the worker
+    // READY handshake aborts promptly (spawned worker destroyed, operation
+    // fails) instead of waiting out its 15-second deadline, so a SIGTERM
+    // shutdown can cancel a genuinely running deploy.
+    const std::atomic<bool>* stop_requested = nullptr;
+    // §9.3 activation transaction (PR-10). The three activation callbacks
+    // must be configured together (or none): the coordinator runs prepare
+    // BEFORE the active-state persist (may fail — a failed prepare must
+    // already have destroyed the warmed workers it was handed), commit
+    // after a successful persist (must never fail: atomic publication +
+    // drain signal only, see activation_transaction.h), and abort when
+    // the persist failed. On the transactional path the coordinator owns
+    // no workers after prepare: the plan does.
+    std::function<std::unique_ptr<ActivationPlan>(
+        const std::string& application, const DeployOutcome& prepared,
+        std::string* error)>
+        prepare_activation;
+    std::function<void(ActivationPlan* plan)> commit_activation;  // noexcept
+    std::function<void(ActivationPlan* plan)> abort_activation;   // noexcept
+    // §9.3 retire transaction: prepare_retire before the tombstone
+    // persist (may fail), commit_retire after it (noexcept — drain
+    // signal + ledger category switch), abort_retire when it failed.
+    std::function<std::unique_ptr<RetirePlan>(
+        const std::string& application, std::string* error)>
+        prepare_retire;
+    std::function<void(RetirePlan* plan)> commit_retire;  // noexcept
+    std::function<void(RetirePlan* plan)> abort_retire;   // noexcept
+    // §9.4 process-global weighted capacity ledger (one object shared by
+    // every App's options). The coordinator reserves the target pool
+    // count before ANY spawn and settles the reserve on the transaction
+    // commit; null disables the gate.
+    WorkerCapacityLedger* ledger = nullptr;
+};
+
+enum class OperationState {
+    kValidating,
+    kStaging,
+    kWarming,
+    kActivating,
+    kActive,
+    kFailed,
+};
+
+struct OperationStatus {
+    std::string operation_id;
+    OperationState state = OperationState::kValidating;
+    std::string version;
+    std::string error;  // static text; never secret values or paths
 };
 
 enum class DeployErrorCode {
