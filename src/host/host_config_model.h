@@ -91,6 +91,11 @@ struct TierConfig {
 // is the startup-permit limit, NOT the Admin pending-queue ceiling.
 struct CapacityConfig {
     std::uint64_t workers_total = 1;
+    // §9.4: the extra budget for the new-warming + old-draining overlap
+    // of a replacement deploy. v1 default 0 — a zero-downtime replace of
+    // a serving pool is refused without surge/headroom (never silently
+    // over-spawned); a fresh deploy never needs it.
+    std::uint64_t activation_surge_workers = 0;
     std::uint64_t startups_concurrent = 0;   // 0 = Host default
     std::uint64_t queued_requests_total = 0;
     std::uint64_t queued_header_bytes_total = 0;

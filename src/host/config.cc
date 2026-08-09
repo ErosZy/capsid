@@ -233,6 +233,9 @@ constexpr Schema kTierSchema{
 
 constexpr std::array kCapacityMembers{
     Member{"workersTotal", &kPositiveIntegerSchema, false},
+    // §9.4: non-negative (0 = default); the surge budget is optional and
+    // absence means zero-downtime replaces are refused.
+    Member{"activationSurgeWorkers", &kIntegerSchema, false},
     Member{"startupsConcurrent", &kIntegerSchema, false},
     Member{"queuedRequestsTotal", &kIntegerSchema, false},
     Member{"queuedHeaderBytesTotal", &kStringSchema, false},

@@ -90,6 +90,7 @@ constexpr std::string_view kFullDocument = R"json({
   },
   "capacity": {
     "workersTotal": 4,
+    "activationSurgeWorkers": 2,
     "startupsConcurrent": 2,
     "queuedRequestsTotal": 128,
     "queuedHeaderBytesTotal": "128KiB",
@@ -253,6 +254,8 @@ void test_full_document_maps_every_field() {
             "capacity.workersTotal did not map");
     require(config.policy.max_workers == 4,
             "capacity.workersTotal did not reach the policy");
+    require(config.capacity.activation_surge_workers == 2,
+            "capacity.activationSurgeWorkers did not map");
     require(config.capacity.startups_concurrent == 2,
             "capacity.startupsConcurrent did not map");
     require(config.capacity.queued_requests_total == 128,
@@ -305,6 +308,8 @@ void test_minimal_document_parses() {
             "absent capacity.workersTotal must keep the default");
     require(config.policy.max_workers == 1,
             "absent capacity must keep max_workers 1");
+    require(config.capacity.activation_surge_workers == 0,
+            "absent capacity.activationSurgeWorkers must default to 0");
 }
 
 void test_semantic_gates() {
@@ -343,6 +348,21 @@ void test_semantic_gates() {
           "capacity": {"workersTotal": 4294967296}
         })json";
     require_parse_error(giant_workers, "capacity.workersTotal over int max");
+
+    // §9.4: activationSurgeWorkers is non-negative — a negative surge
+    // budget is a capacity misconfiguration, not a reasonable request.
+    std::string negative_surge =
+        R"json({
+          "apiVersion": "capsid/host-v1",
+          "applicationsRoot": "/srv/apps",
+          "stateRoot": "/var/lib/capsid",
+          "secretRootTemplate": "/secrets/{application}",
+          "admin": {"unix": "/run/capsid/admin.sock"},
+          "capacity": {"workersTotal": 4,
+                       "activationSurgeWorkers": -1}
+        })json";
+    require_parse_error(negative_surge,
+                        "negative capacity.activationSurgeWorkers");
 
     std::string missing_root =
         R"json({

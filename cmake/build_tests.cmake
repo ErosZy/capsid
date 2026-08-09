@@ -690,6 +690,42 @@ if(BUILD_TESTING)
             COMMAND test-host-active-state)
 
         add_executable(
+            test-host-worker-capacity-ledger
+            tests/test_worker_capacity_ledger.cc)
+        target_include_directories(
+            test-host-worker-capacity-ledger PRIVATE src)
+        target_link_libraries(test-host-worker-capacity-ledger PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-worker-capacity-ledger PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-worker-capacity-ledger PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-worker-capacity-ledger PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        foreach(CAPSID_LEDGER_TEST_ID
+                ledger_fresh_budget
+                ledger_replace_surge_gate
+                ledger_retire_drain_release
+                ledger_no_surge_refuses)
+            add_test(
+                NAME "host_worker_capacity_ledger_${CAPSID_LEDGER_TEST_ID}"
+                COMMAND test-host-worker-capacity-ledger
+                    "${CAPSID_LEDGER_TEST_ID}")
+            set_tests_properties(
+                "host_worker_capacity_ledger_${CAPSID_LEDGER_TEST_ID}"
+                PROPERTIES TIMEOUT 10)
+        endforeach()
+
+        add_executable(
             test-host-request-normalization
             tests/test_host_request_normalization.cc)
         target_include_directories(

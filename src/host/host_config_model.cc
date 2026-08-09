@@ -466,7 +466,11 @@ bool parse_capacity(json_t* root, CapacityConfig* out) {
         }
         out->workers_total = static_cast<std::uint64_t>(value);
     }
-    return parse_uint_field(capacity, "startupsConcurrent",
+    // §9.4: activationSurgeWorkers is non-negative and defaults to 0
+    // (absent = no zero-downtime replaces, see the schema member).
+    return parse_uint_field(capacity, "activationSurgeWorkers",
+                            &out->activation_surge_workers) &&
+           parse_uint_field(capacity, "startupsConcurrent",
                             &out->startups_concurrent) &&
            parse_uint_field(capacity, "queuedRequestsTotal",
                             &out->queued_requests_total) &&
