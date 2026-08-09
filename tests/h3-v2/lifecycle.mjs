@@ -255,6 +255,20 @@ try {
         'after-await LOG must carry the request id',
     );
 
+    // WP-03 fixed semantics: a canceled never-resolving continuation is a
+    // detached resource and poisons the worker (the driver reports the
+    // EXIT below). The cancel phase is therefore terminal and must run
+    // after every phase that needs a live worker. This is the rework the
+    // original NOTE deferred to WP-03: the pre-fix ordering (cpu-timeout
+    // after cancel) only worked because the continuation survived.
+    phase = 'synchronous CPU timeout';
+    const cpuTimeout = await request('/runtime/cpu-timeout');
+    assert.match(
+        cpuTimeout.error,
+        /^(TimeoutError|RuntimeError): /,
+        'synchronous CPU timeout classification',
+    );
+
     phase = 'cancel must end the realm';
     const cancelEvents = await worker.cancelContinuation({
         id: ++nextId,
@@ -266,19 +280,6 @@ try {
             event.kind === 'LOG' &&
             decoder.decode(unhex(event.text)) === 'capsid-owner:after-cancel'),
         'after-cancel continuation must never run',
-    );
-
-    // NOTE: this phase runs last. On the fixed implementation the cancel
-    // above poisons the worker, so any request after it (the old
-    // cpu-timeout phase) must be reworked in WP-03; keeping it here
-    // preserves the pre-fix ordering where the continuation survived the
-    // cancel.
-    phase = 'synchronous CPU timeout';
-    const cpuTimeout = await request('/runtime/cpu-timeout');
-    assert.match(
-        cpuTimeout.error,
-        /^(TimeoutError|RuntimeError): /,
-        'synchronous CPU timeout classification',
     );
 
     await worker.stop();

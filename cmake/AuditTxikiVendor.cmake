@@ -142,9 +142,9 @@ file(GLOB CAPSID_TXIKI_PATCHES "${CAPSID_TXIKI_PATCH_DIR}/*.patch")
 list(SORT CAPSID_TXIKI_PATCHES)
 list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 
-if(NOT CAPSID_PATCH_COUNT EQUAL 15)
+if(NOT CAPSID_PATCH_COUNT EQUAL 16)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 15 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 16 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 if(CAPSID_PATCH_COUNT GREATER 0)
@@ -257,4 +257,4 @@ if(CAPSID_AUDIT_FAILURES)
 endif()
 
 message(STATUS
-    "txiki.js vendor clean, 11 patches apply, overlay key and manifest verified")
+    "txiki.js vendor clean, 16 patches apply, overlay key and manifest verified")
