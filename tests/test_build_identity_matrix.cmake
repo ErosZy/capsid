@@ -138,15 +138,18 @@ function(capsid_matrix_record variant build_dir
     endif()
     # Every bytecode-affecting field, in the fixed order of §11.2. CMake
     # regexes have no {n} repetition, so the hex fields match as [0-9a-f]+
-    # and their exact lengths are verified below by extraction.
-    if(NOT compat_record MATCHES
-       "^schema=capsid-bytecode-compatibility-v2\nquickjsCommit=[0-9a-f]+\n"
-       "txikiOverlayManifest=[0-9a-f]+\n"
-       "bytecodeCompileFlags=build_type=[^ ]* lto=(ON|OFF) asan=(ON|OFF) "
-       "ubsan=(ON|OFF) mimalloc=(ON|OFF)\n"
-       "targetArchitecture=[^\n]+\nendianness=(little|big)\n"
-       "pointerWidthBits=[0-9]+\n"
-       "bytecodeFormatIdentity=quickjs-ng-bytecode-v1\n$")
+    # and their exact lengths are verified below by extraction. The regex
+    # is assembled with string(CONCAT): if() takes exactly one argument
+    # after MATCHES and does not concatenate adjacent quoted strings.
+    string(CONCAT compat_regex
+        "^schema=capsid-bytecode-compatibility-v2\nquickjsCommit=[0-9a-f]+\n"
+        "txikiOverlayManifest=[0-9a-f]+\n"
+        "bytecodeCompileFlags=build_type=[^ ]* lto=(ON|OFF) asan=(ON|OFF) "
+        "ubsan=(ON|OFF) mimalloc=(ON|OFF)\n"
+        "targetArchitecture=[^\n]+\nendianness=(little|big)\n"
+        "pointerWidthBits=[0-9]+\n"
+        "bytecodeFormatIdentity=quickjs-ng-bytecode-v1\n$")
+    if(NOT compat_record MATCHES "${compat_regex}")
         message(FATAL_ERROR
             "variant ${variant} compatibility record is missing a required "
             "field or the compile flags are incomplete; record:\n"
@@ -183,19 +186,20 @@ function(capsid_matrix_record variant build_dir
     file(READ "${prov_file}" prov_record)
     file(SHA256 "${prov_file}" prov_digest)
     # Release fail-closed in a clean worktree: the provenance is clean.
-    if(NOT prov_record MATCHES
-       "^schema=capsid-build-provenance-v1\n"
-       "capsidCommit=[0-9a-f]+\n"
-       "capsidTreeClean=true\n"
-       "runtimeVersion=[^\n]+\nabiVersion=[0-9]+\nfetchRpcVersion=[0-9]+\n"
-       "compatibilityId=sha256:[0-9a-f]+\n"
-       "capabilityManifestSha256=[0-9a-f]+\n"
-       "compilerId=[^\n]+\ncompilerVersion=[^\n]+\n"
-       "targetTriple=[^\n]+\ncmakeBuildType=Release\n"
-       "featureFlags=lto=(ON|OFF) asan=(ON|OFF) ubsan=(ON|OFF) "
-       "tsan=(ON|OFF) mimalloc=(ON|OFF) host=(ON|OFF) worker=(ON|OFF)\n"
-       "dependencyOverlayKey=[0-9a-f]+\n"
-       "buildId=sha256:[0-9a-f]+\n$")
+    string(CONCAT prov_regex
+        "^schema=capsid-build-provenance-v1\n"
+        "capsidCommit=[0-9a-f]+\n"
+        "capsidTreeClean=true\n"
+        "runtimeVersion=[^\n]+\nabiVersion=[0-9]+\nfetchRpcVersion=[0-9]+\n"
+        "compatibilityId=sha256:[0-9a-f]+\n"
+        "capabilityManifestSha256=[0-9a-f]+\n"
+        "compilerId=[^\n]+\ncompilerVersion=[^\n]+\n"
+        "targetTriple=[^\n]+\ncmakeBuildType=Release\n"
+        "featureFlags=lto=(ON|OFF) asan=(ON|OFF) ubsan=(ON|OFF) "
+        "tsan=(ON|OFF) mimalloc=(ON|OFF) host=(ON|OFF) worker=(ON|OFF)\n"
+        "dependencyOverlayKey=[0-9a-f]+\n"
+        "buildId=sha256:[0-9a-f]+\n$")
+    if(NOT prov_record MATCHES "${prov_regex}")
         message(FATAL_ERROR
             "variant ${variant} provenance record is missing a required "
             "field or the feature flags are incomplete; record:\n"
