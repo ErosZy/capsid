@@ -32,6 +32,7 @@ if(CAPSID_BUILD_HOST)
         src/host/bytecode_attestation.cc
         src/host/config.cc
         src/host/generation_identity.cc
+        src/host/generation_pool.cc
         src/host/managed_admin_backend.cc
         src/host/managed_host.cc
         src/host/policy_compiler.cc

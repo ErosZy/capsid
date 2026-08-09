@@ -3247,6 +3247,46 @@ if(BUILD_TESTING)
         set_tests_properties(host_worker_executor_contract PROPERTIES
             TIMEOUT 40)
 
+        # WP-04 PR-07 (spec §8.2/§8.4): the GenerationPool fleet +
+        # replacement contract — N→READY barrier, least-loaded pick,
+        # N→N-1→N replacement, 0-ready 503 point, crash-budget quarantine
+        # and the host-shutdown vs replacement race. Kill injection scans
+        # /proc for the pool's worker children (Linux only; the kill tests
+        # skip elsewhere). RED gate: generation_pool.h does not exist on
+        # the PR-06 tree.
+        add_executable(
+            test-host-generation-pool
+            tests/test_host_generation_pool.cc)
+        target_include_directories(
+            test-host-generation-pool PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-generation-pool PRIVATE
+            capsid_runtime
+            capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-generation-pool PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-generation-pool PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-generation-pool PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-generation-pool capsid-worker)
+        add_test(
+            NAME host_generation_pool_contract
+            COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker>)
+        set_tests_properties(host_generation_pool_contract PROPERTIES
+            TIMEOUT 90)
+
         add_executable(
             test-hono-worker-driver
             tests/test_framework_worker_driver.cc

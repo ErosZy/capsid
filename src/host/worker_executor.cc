@@ -303,6 +303,15 @@ worker_exit:
     }
     inflight_.store(0, std::memory_order_relaxed);
     cv_.notify_all();
+    // The exit event (and its notifier) fired before the blocking destroy
+    // above; this second notify carries the exited_ flip. An owner whose
+    // wait predicate reads exited() state — the generation pool's
+    // drain-completion check — would otherwise miss the flip: it woke on
+    // the exit event, saw exited_ still false, went back to sleep, and no
+    // later event ever woke it.
+    if (notifier_) {
+        notifier_();
+    }
 }
 
 // A Runtime call failed for a reason other than a full queue: the owner and
