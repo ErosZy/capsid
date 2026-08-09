@@ -369,7 +369,7 @@ endif()
 # build-tree path in any of them breaks the relocatable-package contract.
 set(CAPSID_SMOKE_TEXT_SCAN)
 foreach(manifest_rel IN LISTS CAPSID_SMOKE_MANIFEST_ENTRIES)
-    if(manifest_rel MATCHES "\.(txt|json|cmake|md|h|hpp)$" OR
+    if(manifest_rel MATCHES "[.](txt|json|cmake|md|h|hpp)$" OR
        manifest_rel MATCHES "licenses/")
         list(APPEND CAPSID_SMOKE_TEXT_SCAN
             "${CAPSID_PACKAGE_ROOT}/${manifest_rel}")
@@ -389,10 +389,18 @@ foreach(text_file IN LISTS CAPSID_SMOKE_TEXT_SCAN)
             "${CAPSID_BUILD_DIR}"
             "${CAPSID_SOURCE_DIR}"
             "${CAPSID_PACKAGE_ROOT}")
-        string(FIND "${text_content}" "${needle}" needle_at)
-        if(NOT needle_at EQUAL -1)
+        # Match the needle as a path component, not an arbitrary substring:
+        # a build root that is a short prefix (e.g. "/capsid" vs a consumer
+        # path like "/bin/capsid-worker" or "include/capsid/runtime.h")
+        # would otherwise false-positive on package-internal tokens. A real
+        # leak is the root used as a directory or value boundary.
+        string(REPLACE "." "[.]" needle_re "${needle}")
+        string(REGEX MATCH
+            "(^|[^a-zA-Z0-9_.-/])${needle_re}(/|[^a-zA-Z0-9_-]|$)"
+            leaked_hit "${text_content}")
+        if(leaked_hit)
             message(FATAL_ERROR "build/packaging path leaked into "
-                "${text_rel}: ${needle}")
+                "${text_rel}: ${needle} (context: ${leaked_hit})")
         endif()
     endforeach()
     # Secret canaries inside text content.
