@@ -48,7 +48,15 @@ file(GLOB CAPSID_LWS_ENTRIES
     RELATIVE "${CAPSID_LWS_SOURCE}"
     "${CAPSID_LWS_SOURCE}/*")
 foreach(CAPSID_LWS_ENTRY IN LISTS CAPSID_LWS_ENTRIES)
-    if(CAPSID_LWS_ENTRY STREQUAL "include" OR CAPSID_LWS_ENTRY STREQUAL "lib")
+    # CMakeLists.txt is also copied: 0011-lws-cpack-top-level.patch gates
+    # libwebsockets' include(CPack) on top-level-ness, and a subproject
+    # CPack would silently take over the parent `package` target (remediation
+    # spec §12.1). Patching through a symlink would dirty the vendor
+    # submodule, so the build file must be copy-on-write like include/ and
+    # lib/.
+    if(CAPSID_LWS_ENTRY STREQUAL "include" OR
+       CAPSID_LWS_ENTRY STREQUAL "lib" OR
+       CAPSID_LWS_ENTRY STREQUAL "CMakeLists.txt")
         file(COPY
             "${CAPSID_LWS_SOURCE}/${CAPSID_LWS_ENTRY}"
             DESTINATION "${CAPSID_LWS_OVERLAY}"
