@@ -233,6 +233,12 @@ struct RequestToken {
     // momentarily stable). A refs count that stops falling is a detached
     // continuation.
     int last_reclaim_refs_;
+    // The cancel path sets this for one round: the cancel's own drain
+    // runs the chain to completion, but the completed chain's captured
+    // refs release only when a later GC round collects it (promise
+    // finalizers are two-phase). The first reclaim after a cancel defers
+    // unconditionally; poison decisions resume on the next round.
+    bool reclaim_grace;
 
     RequestToken(uint64_t gen, uint64_t id, uint64_t deadline)
         : generation(gen),
@@ -240,7 +246,8 @@ struct RequestToken {
           deadline_ns(deadline),
           terminal(false),
           refs(1),
-          last_reclaim_refs_(0) {}
+          last_reclaim_refs_(0),
+          reclaim_grace(false) {}
 };
 
 struct ResponseState {
@@ -826,7 +833,24 @@ private:
                 reclaimable.push_back(it->first);
             } else if (!token->terminal &&
                        (defer_reclaim_while_live() ||
-                        token->refs < prev_reclaim_refs)) {
+                        token->refs < prev_reclaim_refs ||
+                        token->reclaim_grace)) {
+                if (token->reclaim_grace) {
+                    // §7.4: the first reclaim after a cancel defers
+                    // unconditionally — the cancel's drain already ran the
+                    // chain to completion, and the completed chain's
+                    // captured refs fall only once a later GC collects the
+                    // dead promise subgraph. Poisoning on this round
+                    // false-positives a healthy cancellation.
+                    token->reclaim_grace = false;
+                    if (diag_enabled_) {
+                        std::fprintf(
+                            stderr,
+                            "RECLAIM GRACE id=%llu refs=%llu\n",
+                            static_cast<unsigned long long>(token->request_id),
+                            static_cast<unsigned long long>(token->refs));
+                    }
+                }
                 // The response is gone and the chain has not settled (no
                 // capsidRequestSettled: cancel/timeout deleted the state
                 // before .finally). Refs are held by a live JS chain that
@@ -938,18 +962,17 @@ private:
             // §7.4: the tick performs the post-settle reclaim. Drain any
             // pending jobs (a fired timer enqueues the settle chain), then
             // run a full GC — a settled chain is invisible garbage that
-            // only drops its captured token refs once collected. A retry
-            // tick (a previous round deferred while the chain was still
-            // live) skips the GC when no job ran, so a chain parked on a
-            // long timer does not pay a full GC per tick.
-            const bool retry = self->reclaim_retry_;
-            const bool had_jobs =
-                JS_IsJobPending(JS_GetRuntime(self->ctx_)) != 0;
+            // only drops its captured token refs once collected. Retry
+            // ticks GC unconditionally: a chain whose jobs drained to
+            // completion inside the cancel path holds refs only through
+            // two-phase promise finalizers, and the first retry round is
+            // exactly when those refs fall. A chain parked on a long
+            // timer stays reachable through the timer, so the GC cannot
+            // extend its life — the poison deadline still lands before
+            // the timer fires.
             self->reclaim_pending_ = false;
             self->drain_jobs();
-            if (!retry || had_jobs) {
-                JS_RunGC(JS_GetRuntime(self->ctx_));
-            }
+            JS_RunGC(JS_GetRuntime(self->ctx_));
             self->reclaim_settled_tokens();
         }
         self->check_poison();
@@ -3939,6 +3962,13 @@ private:
             // detached continuation.
             cancelled_token->last_reclaim_refs_ =
                 cancelled_token->refs;
+            // §7.4: the first reclaim round after a cancel defers
+            // unconditionally (see reclaim_settled_tokens): the cancel's
+            // drain completed the chain, but the dead chain's captured
+            // refs release only once the next GC round collects it.
+            // Poisoning on the cancel's own first round false-positives
+            // a healthy cancellation whose chain drained cleanly.
+            cancelled_token->reclaim_grace = true;
         }
         // §7.4: reclaim deferred to the next deadline tick so winding-down
         // 0ms timers (setTimeout(reject, 0) in the abort path) release
