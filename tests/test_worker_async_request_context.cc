@@ -4,11 +4,18 @@
 // so their LOG frames, audit events and decoded audit records all fall
 // back to request_id 0 while the transport RESPONSE_END keeps the real ID.
 //
-// Expected to FAIL on the pre-RequestToken implementation (RED gate for
-// PR-01): every continuation-owned event here must carry the exact
-// transport ID, asserted at three layers (LOG frame, audit event, decoded
-// audit record), with two requests interleaved so events cannot be
-// attributed by arrival order alone.
+// WP-02 gate (spec §6.2): the token is captured at job ENQUEUE time inside
+// the request scope. Microtask and nested-promise continuations are enqueued
+// inside the request chain, so they keep the exact transport ID — asserted
+// at three layers (LOG frame, audit event, decoded audit record). Two
+// requests interleave so events cannot be attributed by arrival order alone.
+//
+// WP-02 boundary (spec §7.1): a timer callback fires outside any QuickJS
+// job, so the post-timer continuation captures no token and runs in worker
+// scope. WP-02 asserts the fail-closed invariant — its events carry id 0,
+// never a borrowed request id, and the strict response bridges reject the
+// continuation so the request terminates as a transport timeout error. WP-03
+// wires timer resource ownership and flips these cases back to exact ids.
 
 #include "capsid/runtime.h"
 
@@ -115,7 +122,8 @@ struct Observations {
 
 void observe(capsid_worker *worker,
              const std::set<uint64_t> &wanted,
-             Observations *observations) {
+             Observations *observations,
+             bool allow_timeout_terminal) {
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::seconds(15);
     for (;;) {
@@ -146,6 +154,15 @@ void observe(capsid_worker *worker,
                            "grant response credit");
         } else if (event.type == CAPSID_EVENT_RESPONSE_END &&
                    wanted.count(event.request_id) != 0) {
+            observations->ended.insert(event.request_id);
+        } else if (event.type == CAPSID_EVENT_REQUEST_TIMEOUT &&
+                   allow_timeout_terminal &&
+                   wanted.count(event.request_id) != 0) {
+            // WP-02 boundary (spec §7.1): the timer continuation runs
+            // outside any QuickJS job, captures no token, and the strict
+            // response bridges reject it — the request fails closed at
+            // the transport level with a timeout error. WP-03 wires the
+            // resource context and turns this into a normal response.
             observations->ended.insert(event.request_id);
         } else if (event.type == CAPSID_EVENT_ERROR ||
                    event.type == CAPSID_EVENT_REQUEST_TIMEOUT ||
@@ -203,7 +220,10 @@ int main(int argc, char **argv) {
     capsid_worker_config_init(&config);
     config.worker_path = argv[1];
     config.strict_sandbox = 0;
-    config.request_timeout_ms = 5000;
+    // 1500ms: the timer-based requests fail closed at the transport level
+    // (the strict response bridges reject the token-less continuation), and
+    // the timeout error must land well inside the 15s observe window.
+    config.request_timeout_ms = 1500;
     config.capability_policy = &capability;
 
     capsid_worker *worker = nullptr;
@@ -237,26 +257,34 @@ int main(int argc, char **argv) {
     wait_ready(worker);
 
     // Sequential: microtask continuation, then a nested Promise chain.
+    // Strict phase: any error/timeout event fails the test.
     Observations observations;
     begin(worker, 41, "micro");
-    observe(worker, { 41 }, &observations);
+    observe(worker, { 41 }, &observations, false);
     begin(worker, 42, "nested");
-    observe(worker, { 42 }, &observations);
+    observe(worker, { 42 }, &observations, false);
 
     // Interleaved: 20ms timer and 0ms timer overlap, so events cannot be
-    // attributed by order of arrival.
+    // attributed by order of arrival. WP-02 boundary (spec §7.1): the
+    // timer continuations fail closed — terminal via transport timeout.
     begin(worker, 43, "slow");
     begin(worker, 44, "fast");
-    observe(worker, { 43, 44 }, &observations);
+    observe(worker, { 43, 44 }, &observations, true);
 
-    // LOG frame ownership.
+    // LOG frame ownership. Microtask and nested-promise continuations are
+    // enqueued inside the request scope, so the captured token pins the
+    // exact transport ID.
     require_log(observations, "micro", 41);
     require_log(observations, "nested", 42);
-    require_log(observations, "slow", 43);
-    require_log(observations, "fast", 44);
+    // Timer continuations capture no token and run in worker scope: their
+    // events must carry id 0 — never a borrowed request id. WP-03 flips
+    // these back to 43/44 when timer resource ownership lands.
+    require_log(observations, "slow", 0);
+    require_log(observations, "fast", 0);
 
-    // Audit event and decoded audit record ownership: the sequential
-    // requests pin exact IDs; the interleaved pair must split 43/44.
+    // Audit event and decoded audit record ownership: 41/42 pin exact IDs.
+    // The timer continuations bucket their audits at worker-scope id 0; the
+    // fail-closed invariant is that nothing is attributed to 43/44.
     const size_t expected_audits = 4;
     size_t audits = 0;
     std::map<uint64_t, size_t> per_request;
@@ -276,18 +304,20 @@ int main(int argc, char **argv) {
              " audit records, saw " + std::to_string(audits));
     }
     if (per_request[41] != 1 || per_request[42] != 1 ||
-        per_request[43] != 1 || per_request[44] != 1) {
-        fail("audit records did not split one per request: 41=" +
-             std::to_string(per_request[41]) + " 42=" +
-             std::to_string(per_request[42]) + " 43=" +
-             std::to_string(per_request[43]) + " 44=" +
-             std::to_string(per_request[44]));
+        per_request[0] != 2 ||
+        per_request[43] != 0 || per_request[44] != 0) {
+        fail("audit attribution: 41=" + std::to_string(per_request[41]) +
+             " 42=" + std::to_string(per_request[42]) +
+             " 0=" + std::to_string(per_request[0]) +
+             " 43=" + std::to_string(per_request[43]) +
+             " 44=" + std::to_string(per_request[44]));
     }
 
     require_result(capsid_worker_shutdown(worker), "shutdown");
     capsid_worker_destroy(worker);
-    std::cout << "PASS: microtask, nested and timer continuations keep "
-                 "their request identity"
+    std::cout << "PASS: microtask and nested continuations keep their "
+                 "request identity; timer continuations fail closed "
+                 "worker-scope (WP-02 boundary)"
               << std::endl;
     return 0;
 }

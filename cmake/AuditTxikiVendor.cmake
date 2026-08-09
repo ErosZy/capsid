@@ -3,7 +3,7 @@
 # This audit verifies:
 #   1. Vendor checkout is clean (no untracked or modified files).
 #   2. Vendor HEAD matches the expected tag (if configured).
-#   3. All 11 patches apply cleanly.
+#   3. All 12 patches apply cleanly.
 #   4. The overlay stamp matches the key computed from the shared function.
 #
 # CAPSID_TXIKI_PREPARE_SCRIPT and CAPSID_TXIKI_OVERLAY_STAMP are mandatory —
@@ -142,9 +142,9 @@ file(GLOB CAPSID_TXIKI_PATCHES "${CAPSID_TXIKI_PATCH_DIR}/*.patch")
 list(SORT CAPSID_TXIKI_PATCHES)
 list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 
-if(NOT CAPSID_PATCH_COUNT EQUAL 11)
+if(NOT CAPSID_PATCH_COUNT EQUAL 12)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 11 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 12 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 if(CAPSID_PATCH_COUNT GREATER 0)

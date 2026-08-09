@@ -106,8 +106,8 @@ def vendor_evidence(root: Path, build: Path) -> dict[str, Any]:
             f"vendor submodules are not pinned: {bad_submodules}"
         )
     patches = sorted((root / "patches/txiki").glob("*.patch"))
-    if len(patches) != 11:
-        raise RuntimeError(f"expected 11 patches, found {len(patches)}")
+    if len(patches) != 12:
+        raise RuntimeError(f"expected 12 patches, found {len(patches)}")
     run(["git", "apply", "--check", *map(str, patches)], cwd=vendor)
 
     stamp_path = build / "vendor-overlay/txiki.js/.capsid-overlay-key"

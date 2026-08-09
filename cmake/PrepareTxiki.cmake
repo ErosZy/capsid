@@ -11,17 +11,18 @@ file(COPY
 )
 file(COPY "${CAPSID_VENDOR_SOURCE}/src" DESTINATION "${CAPSID_VENDOR_OVERLAY}")
 file(COPY "${CAPSID_VENDOR_SOURCE}/tests/fixtures" DESTINATION "${CAPSID_VENDOR_OVERLAY}/tests")
-# Dependencies are mostly immutable and can stay symlinked. libwebsockets and
-# WAMR are patched by the restricted runtime overlay, however, so they need
-# copy-on-write storage. Patching through a symlink would silently dirty the
-# vendor submodule.
+# Dependencies are mostly immutable and can stay symlinked. libwebsockets,
+# WAMR and quickjs are patched by the restricted runtime overlay, however,
+# so they need copy-on-write storage. Patching through a symlink would
+# silently dirty the vendor submodule.
 file(MAKE_DIRECTORY "${CAPSID_VENDOR_OVERLAY}/deps")
 file(GLOB CAPSID_VENDOR_DEPS
     RELATIVE "${CAPSID_VENDOR_SOURCE}/deps"
     "${CAPSID_VENDOR_SOURCE}/deps/*")
 foreach(CAPSID_VENDOR_DEP IN LISTS CAPSID_VENDOR_DEPS)
     if(NOT CAPSID_VENDOR_DEP STREQUAL "libwebsockets"
-       AND NOT CAPSID_VENDOR_DEP STREQUAL "wamr")
+       AND NOT CAPSID_VENDOR_DEP STREQUAL "wamr"
+       AND NOT CAPSID_VENDOR_DEP STREQUAL "quickjs")
         file(CREATE_LINK
             "${CAPSID_VENDOR_SOURCE}/deps/${CAPSID_VENDOR_DEP}"
             "${CAPSID_VENDOR_OVERLAY}/deps/${CAPSID_VENDOR_DEP}"
@@ -30,11 +31,13 @@ foreach(CAPSID_VENDOR_DEP IN LISTS CAPSID_VENDOR_DEPS)
     endif()
 endforeach()
 
-# WAMR is small enough to copy as a unit and patches may span its loader,
-# runtime, and public headers over time. Keeping the whole dependency private
-# to the overlay also makes vendor-clean checks unambiguous.
+# WAMR and quickjs are small enough to copy as a unit and patches may span
+# their loaders, runtimes, and public headers over time. Keeping the whole
+# dependency private to the overlay also makes vendor-clean checks
+# unambiguous.
 file(COPY
     "${CAPSID_VENDOR_SOURCE}/deps/wamr"
+    "${CAPSID_VENDOR_SOURCE}/deps/quickjs"
     DESTINATION "${CAPSID_VENDOR_OVERLAY}/deps"
 )
 

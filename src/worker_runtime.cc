@@ -199,6 +199,26 @@ enum class ResponsePhase {
     kFailurePending,  // error/timeout terminal deferred; deadline disarmed
 };
 
+// WP-02 §6.2: request identity token, captured by the QuickJS job-context
+// hooks so every Promise reaction of a request carries that request's
+// identity. refs: 1 from the registry owner, 1 while a ResponseState owns
+// it, +1 per captured job. Freed only when the bootstrap chain settles and
+// the post-drain reclaim drops the last (registry) ref.
+struct RequestToken {
+    uint64_t generation;
+    uint64_t request_id;
+    uint64_t deadline_ns;
+    bool terminal;
+    int refs;
+
+    RequestToken(uint64_t gen, uint64_t id, uint64_t deadline)
+        : generation(gen),
+          request_id(id),
+          deadline_ns(deadline),
+          terminal(false),
+          refs(1) {}
+};
+
 struct ResponseState {
     uint64_t credit;
     uint64_t request_credit;
@@ -210,6 +230,10 @@ struct ResponseState {
     TerminalPending terminal;
     bool terminal_pending;
     ResponsePhase phase;
+    // WP-02 §6.2: owner ref on the request token. The token outlives the
+    // response (the JS chain settles after the response ends), so the
+    // ref is released when this entry is erased, never earlier.
+    RequestToken *token;
     // Diagnostic timestamps (performance loop; zero cost when idle).
     uint64_t t_begin_ns;
     uint64_t t_head_ns;
@@ -223,6 +247,7 @@ struct ResponseState {
           request_ended(false),
           terminal_pending(false),
           phase(ResponsePhase::kOpen),
+          token(NULL),
           t_begin_ns(0),
           t_head_ns(0),
           t_write_done_ns(0) {}
@@ -274,7 +299,9 @@ public:
           request_chunk_(JS_UNDEFINED),
           request_end_(JS_UNDEFINED),
           cancel_request_(JS_UNDEFINED),
-          executing_request_id_(0),
+          next_token_generation_(0),
+          current_token_(NULL),
+          poisoned_(false),
           interrupted_request_id_(0),
           audit_window_started_ns_(0),
           audit_window_count_(0),
@@ -373,6 +400,13 @@ public:
         }
         JS_SetInterruptHandler(
             JS_GetRuntime(ctx_), interrupt_handler, this);
+        JSJobContextHooks job_hooks;
+        job_hooks.capture = job_capture_hook;
+        job_hooks.enter = job_enter_hook;
+        job_hooks.leave = job_leave_hook;
+        job_hooks.release = job_release_hook;
+        JS_SetJobContextHooks(
+            JS_GetRuntime(ctx_), &job_hooks, this);
         std::string bridge_error;
         if (!load_bridge_functions(&bridge_error)) {
             send_error(0, bridge_error);
@@ -423,24 +457,194 @@ private:
     static WorkerRuntime *g_worker;
 
     static int interrupt_handler(JSRuntime *, void *opaque) {
+        // §6.2: identity comes from the token of the job actually running,
+        // never from a bare global id + responses_ lookup.
         WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
-        if (!self || self->executing_request_id_ == 0 ||
-            self->interrupted_request_id_ != 0) {
+        if (!self || self->interrupted_request_id_ != 0) {
             return 0;
         }
-        std::map<uint64_t, ResponseState>::const_iterator state =
-            self->responses_.find(self->executing_request_id_);
-        if (state == self->responses_.end() ||
-            state->second.deadline_ns == 0) {
+        RequestToken *token = self->current_token_;
+        if (!token || token->terminal || token->deadline_ns == 0) {
             return 0;
         }
         const uint64_t now = uv_hrtime();
-        if (now >= state->second.deadline_ns) {
-            self->interrupted_request_id_ =
-                self->executing_request_id_;
+        if (now >= token->deadline_ns) {
+            self->interrupted_request_id_ = token->request_id;
             return 1;
         }
         return 0;
+    }
+
+    // WP-02 §6.2 job-context hooks. capture retains the active token (or
+    // yields a null context when no request is active — module-loading and
+    // worker-scope jobs are legal); enter/leave restore nesting; release
+    // drops the retained ref. Hooks never throw across the C boundary.
+    static int job_capture_hook(JSContext *,
+                                void *opaque,
+                                void **out_job_context) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        *out_job_context = NULL;
+        if (self && self->current_token_ != NULL) {
+            self->retain_token(self->current_token_);
+            *out_job_context = self->current_token_;
+        }
+        return 0;
+    }
+
+    static void *job_enter_hook(JSContext *,
+                                void *job_context,
+                                void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        void *previous = self ? self->current_token_ : NULL;
+        if (self) {
+            self->current_token_ =
+                static_cast<RequestToken *>(job_context);
+        }
+        return previous;
+    }
+
+    static void job_leave_hook(JSContext *,
+                               void *previous_context,
+                               void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        if (self) {
+            self->current_token_ =
+                static_cast<RequestToken *>(previous_context);
+        }
+    }
+
+    static void job_release_hook(void *job_context, void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        if (self) {
+            self->release_token(
+                static_cast<RequestToken *>(job_context));
+        }
+    }
+
+    void retain_token(RequestToken *token) {
+        if (token) {
+            ++token->refs;
+        }
+    }
+
+    void release_token(RequestToken *token) {
+        if (!token || token->refs <= 0) {
+            return;
+        }
+        if (--token->refs == 0) {
+            token_registry_.erase(token->generation);
+            delete token;
+        }
+    }
+
+    uint64_t active_request_id() const {
+        return current_token_ ? current_token_->request_id : 0;
+    }
+
+    // §6.3: unified gate for request-level native APIs. Returns the active
+    // token, or NULL when the caller is allowed worker scope (audit paths
+    // with explicit id 0). Any violation throws and identity tampering
+    // poisons the worker (full poison mechanics land in WP-03).
+    RequestToken *require_active_request(JSContext *ctx,
+                                         uint64_t explicit_id,
+                                         bool has_explicit,
+                                         bool allow_worker_scope) {
+        if (poisoned_) {
+            JS_ThrowInternalError(ctx, "worker poisoned");
+            return NULL;
+        }
+        RequestToken *token = current_token_;
+        if (!token) {
+            // Worker scope is legal only where explicitly authorized; an
+            // active request job always carries a token (capture is
+            // fail-closed), so a missing token here means module-loading
+            // or worker-scope execution.
+            if (allow_worker_scope) {
+                return NULL;
+            }
+            JS_ThrowInternalError(ctx, "no active request");
+            return NULL;
+        }
+        if (has_explicit && explicit_id != token->request_id) {
+            poisoned_ = true;
+            JS_ThrowInternalError(ctx, "request identity mismatch");
+            return NULL;
+        }
+        if (token->terminal) {
+            JS_ThrowInternalError(ctx, "request already settled");
+            return NULL;
+        }
+        std::map<uint64_t, RequestToken *>::iterator found =
+            token_registry_.find(token->generation);
+        if (found == token_registry_.end() || found->second != token) {
+            poisoned_ = true;
+            JS_ThrowInternalError(ctx, "stale request token");
+            return NULL;
+        }
+        return token;
+    }
+
+    bool settle_request(uint64_t id) {
+        for (std::map<uint64_t, RequestToken *>::iterator it =
+                 token_registry_.begin();
+             it != token_registry_.end();
+             ++it) {
+            RequestToken *token = it->second;
+            if (token->request_id == id) {
+                if (token->terminal) {
+                    return false;  // double settle
+                }
+                // §6.4: settle ends the ResponseState owner ref. The
+                // post-drain reclaim then sees only the registry owner
+                // (refs==1 -> free) plus any surviving job/resource refs
+                // (poison). The response entry itself survives until the
+                // transport drains the terminal, so it must tolerate a
+                // NULL token (erase_response and the bridges do).
+                std::map<uint64_t, ResponseState>::iterator found =
+                    responses_.find(id);
+                if (found != responses_.end()) {
+                    release_token(found->second.token);
+                    found->second.token = NULL;
+                }
+                token->terminal = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // §6.4.3-5: after a job drain, a settled token must be held by nothing
+    // but the registry; any surviving ref is a terminal-continuation leak
+    // and poisons the worker.
+    void reclaim_settled_tokens() {
+        std::vector<uint64_t> reclaimable;
+        for (std::map<uint64_t, RequestToken *>::iterator it =
+                 token_registry_.begin();
+             it != token_registry_.end();
+             ++it) {
+            RequestToken *token = it->second;
+            if (!token->terminal) {
+                continue;
+            }
+            if (token->refs == 1) {
+                reclaimable.push_back(it->first);
+            } else {
+                poisoned_ = true;
+            }
+        }
+        for (size_t i = 0; i < reclaimable.size(); ++i) {
+            release_token(token_registry_[reclaimable[i]]);
+        }
+    }
+
+    void erase_response(
+        std::map<uint64_t, ResponseState>::iterator it) {
+        if (it == responses_.end()) {
+            return;
+        }
+        release_token(it->second.token);
+        it->second.token = NULL;
+        responses_.erase(it);
     }
 
     static void deadline_timer_callback(uv_timer_t *timer) {
@@ -490,8 +694,7 @@ private:
             !self->define_native(core, "capsidResponseEnd", js_response_end, 1) ||
             !self->define_native(core, "capsidResponseError", js_response_error, 2) ||
             !self->define_native(core, "capsidResponseFinal", js_response_final, 5) ||
-            !self->define_native(core, "capsidEnterRequest", js_enter_request, 1) ||
-            !self->define_native(core, "capsidLeaveRequest", js_leave_request, 1) ||
+            !self->define_native(core, "capsidRequestSettled", js_request_settled, 1) ||
             !self->define_native(
                 core,
                 "capsidFetchRequestBodyLimit",
@@ -539,7 +742,7 @@ private:
             self->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                self->executing_request_id_,
+                self->active_request_id(),
                 decision.rule_id,
                 std::string(),
                 "net",
@@ -556,7 +759,7 @@ private:
                 self->emit_audit(
                     CAPSID_AUDIT_STAGE_OPERATION,
                     CAPSID_AUDIT_DENY,
-                    self->executing_request_id_,
+                    self->active_request_id(),
                     legacy.rule_id,
                     std::string(),
                     "net",
@@ -581,7 +784,7 @@ private:
                 self->emit_audit(
                     CAPSID_AUDIT_STAGE_OPERATION,
                     CAPSID_AUDIT_DENY,
-                    self->executing_request_id_,
+                    self->active_request_id(),
                     decision.rule_id,
                     std::string(),
                     "net",
@@ -599,7 +802,7 @@ private:
                     self->emit_audit(
                         CAPSID_AUDIT_STAGE_OPERATION,
                         CAPSID_AUDIT_DENY,
-                        self->executing_request_id_,
+                        self->active_request_id(),
                         legacy.rule_id,
                         std::string(),
                         "net",
@@ -612,7 +815,7 @@ private:
             self->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_ALLOW,
-                self->executing_request_id_,
+                self->active_request_id(),
                 decision.rule_id,
                 std::string(),
                 "net",
@@ -642,12 +845,19 @@ private:
         if (!g_worker || argc < 2) {
             return JS_UNDEFINED;
         }
+        // §6.3: LOG is worker-scope legal (module load phase, id 0) but
+        // must carry the active token's id during request execution.
+        RequestToken *token =
+            g_worker->require_active_request(ctx, 0, false, true);
+        if (!token && JS_HasException(ctx)) {
+            return JS_EXCEPTION;  // poisoned / settled
+        }
         const std::string level = to_string(ctx, argv[0]);
         const std::string message = to_string(ctx, argv[1]);
         capsid::protocol::Frame frame;
         frame.type = capsid::protocol::kLog;
         frame.flags = 0;
-        frame.request_id = 0;
+        frame.request_id = token ? token->request_id : 0;
         append_string16(&frame.payload,
                         reinterpret_cast<const uint8_t *>(level.data()),
                         level.size());
@@ -680,38 +890,25 @@ private:
                     : 0));
     }
 
-    static JSValue js_enter_request(JSContext *ctx,
-                                    JSValueConst,
-                                    int argc,
-                                    JSValueConst *argv) {
+    // §6.4: the only lifecycle entry a terminal token may still call. The
+    // bootstrap calls it after requests.delete(id) and the final cleanup;
+    // native validates the token and marks it terminal. The post-drain
+    // reclaim then drops the token (or poisons the worker) by refcount.
+    static JSValue js_request_settled(JSContext *ctx,
+                                      JSValueConst,
+                                      int argc,
+                                      JSValueConst *argv) {
         uint64_t id = 0;
-        if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &id, argv[0]) ||
-            id == 0 ||
-            g_worker->responses_.find(id) ==
-                g_worker->responses_.end()) {
+        if (!g_worker || argc < 1 ||
+            JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_ThrowInternalError(
-                ctx, "cannot enter unknown request");
+                ctx, "invalid settled request id");
         }
-        if (g_worker->executing_request_id_ != 0) {
-            return JS_ThrowInternalError(
-                ctx, "request execution is already active");
+        if (g_worker->settle_request(id)) {
+            return JS_UNDEFINED;
         }
-        g_worker->executing_request_id_ = id;
-        return JS_UNDEFINED;
-    }
-
-    static JSValue js_leave_request(JSContext *ctx,
-                                    JSValueConst,
-                                    int argc,
-                                    JSValueConst *argv) {
-        uint64_t id = 0;
-        if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &id, argv[0]) ||
-            id == 0 || g_worker->executing_request_id_ != id) {
-            return JS_ThrowInternalError(
-                ctx, "cannot leave inactive request");
-        }
-        g_worker->executing_request_id_ = 0;
-        return JS_UNDEFINED;
+        return JS_ThrowInternalError(
+            ctx, "cannot settle unknown request");
     }
 
     static JSValue js_install_bridge(JSContext *ctx,
@@ -746,6 +943,9 @@ private:
         uint32_t credit = 0;
         if (!g_worker || argc < 2 || JS_ToBigUint64(ctx, &id, argv[0]) ||
             JS_ToUint32(ctx, &credit, argv[1]) || id == 0 || credit == 0) {
+            return JS_EXCEPTION;
+        }
+        if (!g_worker->require_active_request(ctx, id, true, false)) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -850,6 +1050,9 @@ private:
             JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
             return JS_EXCEPTION;
         }
+        if (!g_worker->require_active_request(ctx, id, true, false)) {
+            return JS_EXCEPTION;
+        }
         std::map<uint64_t, ResponseState>::iterator head_state =
             g_worker->responses_.find(id);
         if (head_state == g_worker->responses_.end()) {
@@ -878,6 +1081,9 @@ private:
         uint32_t status = 0;
         if (!g_worker || argc < 5 || JS_ToBigUint64(ctx, &id, argv[0]) ||
             JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
+            return JS_EXCEPTION;
+        }
+        if (!g_worker->require_active_request(ctx, id, true, false)) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -955,6 +1161,9 @@ private:
         if (!g_worker || argc < 2 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_EXCEPTION;
         }
+        if (!g_worker->require_active_request(ctx, id, true, false)) {
+            return JS_EXCEPTION;
+        }
         std::map<uint64_t, ResponseState>::iterator state =
             g_worker->responses_.find(id);
         if (state == g_worker->responses_.end()) {
@@ -1024,6 +1233,9 @@ private:
         if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_EXCEPTION;
         }
+        if (!g_worker->require_active_request(ctx, id, true, false)) {
+            return JS_EXCEPTION;
+        }
         std::map<uint64_t, ResponseState>::iterator state =
             g_worker->responses_.find(id);
         if (state == g_worker->responses_.end()) {
@@ -1046,6 +1258,9 @@ private:
                                      JSValueConst *argv) {
         uint64_t id = 0;
         if (!g_worker || argc < 2 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
+            return JS_EXCEPTION;
+        }
+        if (!g_worker->require_active_request(ctx, id, true, false)) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -1149,7 +1364,11 @@ private:
             audit_repeat_count_ = 0;
         }
         if (decision != CAPSID_AUDIT_ALLOW) {
+            // §6.3: the dedup key must carry request identity, otherwise
+            // one repeated deny across two requests collapses into one
+            // audit. Worker-scope audits (id 0) still dedup per rule.
             std::string repeat_key =
+                std::to_string(request_id) + ":" +
                 std::to_string(static_cast<uint32_t>(stage)) +
                 ":" +
                 std::to_string(static_cast<uint32_t>(decision)) +
@@ -1398,12 +1617,19 @@ private:
         const std::string name = to_string(ctx, name_value);
         JS_FreeValue(ctx, name_value);
 
+        // §6.3: permission queries are worker-scope legal (module load)
+        // but must be rejected from terminal requests.
+        if (!g_worker->require_active_request(ctx, 0, false, true) &&
+            JS_HasException(ctx)) {
+            return JS_EXCEPTION;
+        }
+
         capsid_permission_name permission = CAPSID_PERMISSION_NONE;
         if (!permission_from_name(name, &permission)) {
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_QUERY,
                 CAPSID_AUDIT_UNAVAILABLE,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 0,
                 "capsid:permissions",
                 name,
@@ -1510,7 +1736,7 @@ private:
         g_worker->emit_audit(
             CAPSID_AUDIT_STAGE_QUERY,
             audit_decision(decision.state),
-            g_worker->executing_request_id_,
+            g_worker->active_request_id(),
             decision.rule_id,
             "capsid:permissions",
             capsid::permission_name(permission),
@@ -1577,7 +1803,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:env",
                 "env",
@@ -1596,7 +1822,7 @@ private:
         g_worker->emit_audit(
             CAPSID_AUDIT_STAGE_OPERATION,
             CAPSID_AUDIT_ALLOW,
-            g_worker->executing_request_id_,
+            g_worker->active_request_id(),
             decision.rule_id,
             "capsid:env",
             "env",
@@ -1660,7 +1886,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_UNAVAILABLE,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 0,
                 "capsid:system",
                 "sys",
@@ -1684,7 +1910,7 @@ private:
                         CAPSID_PERMISSION_STATE_UNAVAILABLE
                     ? CAPSID_AUDIT_UNAVAILABLE
                     : CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:system",
                 "sys",
@@ -1698,7 +1924,7 @@ private:
         g_worker->emit_audit(
             CAPSID_AUDIT_STAGE_OPERATION,
             CAPSID_AUDIT_ALLOW,
-            g_worker->executing_request_id_,
+            g_worker->active_request_id(),
             decision.rule_id,
             "capsid:system",
             "sys",
@@ -1808,7 +2034,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 0,
                 "capsid:storage",
                 "storage",
@@ -1823,7 +2049,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:storage",
                 "storage",
@@ -1845,7 +2071,7 @@ private:
                 g_worker->emit_audit(
                     CAPSID_AUDIT_STAGE_OPERATION,
                     CAPSID_AUDIT_DENY,
-                    g_worker->executing_request_id_,
+                    g_worker->active_request_id(),
                     decision.rule_id,
                     "capsid:storage",
                     "storage",
@@ -1864,7 +2090,7 @@ private:
                 g_worker->emit_audit(
                     CAPSID_AUDIT_STAGE_OPERATION,
                     CAPSID_AUDIT_DENY,
-                    g_worker->executing_request_id_,
+                    g_worker->active_request_id(),
                     decision.rule_id,
                     "capsid:storage",
                     "storage",
@@ -1880,7 +2106,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_ALLOW,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:storage",
                 "storage",
@@ -1953,7 +2179,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:storage",
                 "storage",
@@ -2137,7 +2363,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 0,
                 "capsid:stdio",
                 "stdio",
@@ -2151,7 +2377,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_UNAVAILABLE,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 0,
                 "capsid:stdio",
                 "stdio",
@@ -2167,7 +2393,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:stdio",
                 "stdio",
@@ -2182,7 +2408,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:stdio",
                 "stdio",
@@ -2196,7 +2422,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_ALLOW,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:stdio",
                 "stdio",
@@ -2207,7 +2433,7 @@ private:
         frame.type = capsid::protocol::kLog;
         frame.flags = 0;
         frame.request_id =
-            g_worker->executing_request_id_;
+            g_worker->active_request_id();
         append_string16(
             &frame.payload,
             reinterpret_cast<const uint8_t *>(
@@ -2296,7 +2522,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 0,
                 "capsid:fs",
                 "read",
@@ -2311,7 +2537,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision->rule_id,
                 "capsid:fs",
                 "read",
@@ -2328,7 +2554,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_ALLOW,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision->rule_id,
                 "capsid:fs",
                 "read",
@@ -2346,7 +2572,7 @@ private:
         g_worker->emit_audit(
             CAPSID_AUDIT_STAGE_OPERATION,
             CAPSID_AUDIT_DENY,
-            g_worker->executing_request_id_,
+            g_worker->active_request_id(),
             decision.rule_id,
             "capsid:fs",
             "read",
@@ -2397,7 +2623,7 @@ private:
             g_worker->emit_audit(
                 CAPSID_AUDIT_STAGE_OPERATION,
                 CAPSID_AUDIT_DENY,
-                g_worker->executing_request_id_,
+                g_worker->active_request_id(),
                 decision.rule_id,
                 "capsid:fs",
                 "read",
@@ -2536,7 +2762,7 @@ private:
                 g_worker->emit_audit(
                     CAPSID_AUDIT_STAGE_OPERATION,
                     CAPSID_AUDIT_DENY,
-                    g_worker->executing_request_id_,
+                    g_worker->active_request_id(),
                     decision.rule_id,
                     "capsid:fs",
                     "read",
@@ -2990,6 +3216,9 @@ private:
                 break;
             }
         }
+        // §6.4.3: a settled request is checked only after its drain
+        // completes; surviving token refs then poison the worker.
+        reclaim_settled_tokens();
     }
 
     std::string exception_string() {
@@ -3201,6 +3430,21 @@ private:
             timeout_ns > std::numeric_limits<uint64_t>::max() - now
                 ? std::numeric_limits<uint64_t>::max()
                 : now + timeout_ns;
+        // WP-02 §6.2: the token is created here, before the bridge runs,
+        // and the bridge executes inside the token scope — the handler's
+        // first Promise reaction is enqueued by the bridge call itself and
+        // must capture the token. Never defer this to a JS-side enter.
+        RequestToken *token = new RequestToken(
+            next_token_generation_++, frame.request_id,
+            response.deadline_ns);
+        token_registry_[token->generation] = token;
+        response.token = token;
+        // §6.2: the ResponseState holds an owner reference. Without this
+        // retain, the post-drain reclaim sees refs==1 (registry only) once
+        // the chain jobs release, frees the token while the response entry
+        // still points at it, and the next transport touch (e.g. the
+        // deadline tick) is a use-after-free.
+        retain_token(token);
         responses_[frame.request_id] = response;
         pump_order_.push_back(frame.request_id);
         JSValue arguments[6] = {
@@ -3213,7 +3457,10 @@ private:
                 ctx_, decoded.url.data(), decoded.url.size()),
             headers,
         };
+        RequestToken *saved_token = current_token_;
+        current_token_ = token;
         const bool called = call_bridge(begin_request_, 6, arguments);
+        current_token_ = saved_token;
         for (size_t i = 0; i < 6; ++i) {
             JS_FreeValue(ctx_, arguments[i]);
         }
@@ -3276,7 +3523,12 @@ private:
                                  frame.payload.empty() ? NULL : &frame.payload[0],
                                  frame.payload.size()),
         };
+        // Request-direction bridges run in the token scope too: their
+        // promise reactions are request identity.
+        RequestToken *saved_token = current_token_;
+        current_token_ = state->second.token;
         const bool called = call_bridge(request_chunk_, 2, arguments);
+        current_token_ = saved_token;
         JS_FreeValue(ctx_, arguments[1]);
         JS_FreeValue(ctx_, arguments[0]);
         return called;
@@ -3298,7 +3550,11 @@ private:
             return false;
         }
         state->second.request_ended = true;
-        return call_id_bridge(request_end_, id);
+        RequestToken *saved_token = current_token_;
+        current_token_ = state->second.token;
+        const bool called = call_id_bridge(request_end_, id);
+        current_token_ = saved_token;
+        return called;
     }
 
     // A request whose response has ended keeps a bounded terminal tombstone:
@@ -3328,8 +3584,11 @@ private:
             return true;
         }
         reject_pending(state->second, "request canceled");
+        RequestToken *saved_token = current_token_;
+        current_token_ = state->second.token;
         const bool called = call_id_bridge(cancel_request_, id);
-        responses_.erase(state);
+        current_token_ = saved_token;
+        erase_response(state);
         remember_terminal(id);
         pump_response_output();
         if (interrupted_request_id_ == id) {
@@ -3455,10 +3714,22 @@ private:
 
     // Resolves and frees the front pending write (fully accepted by the
     // wire queue). Single release point for the JS values.
+    //
+    // WP-02 §6.2: the credit-driven pump runs in the native read/poll
+    // callback, outside any QuickJS job, so a bare resolve here would
+    // enqueue the awaiting continuation with no captured token and the
+    // strict response gates would throw "no active request" inside it —
+    // the chain dies and the terminal is never queued. Resume inside the
+    // request's token scope (the same wrapping the bridges use) so the
+    // continuation captures the token at enqueue time. A NULL token
+    // (post-settle) resumes worker-scope, which is the fail-closed case.
     void resolve_pending(ResponseState &state) {
         state.t_write_done_ns = uv_hrtime();
         PendingWrite &pending = state.pending.front();
+        RequestToken *saved_token = current_token_;
+        current_token_ = state.token;
         JSValue result = JS_Call(ctx_, pending.resolve, JS_UNDEFINED, 0, NULL);
+        current_token_ = saved_token;
         if (JS_IsException(result)) {
             JS_FreeValue(ctx_, JS_GetException(ctx_));
         }
@@ -3472,8 +3743,14 @@ private:
         while (!state.pending.empty()) {
             PendingWrite &pending = state.pending.front();
             JSValue argument = JS_NewString(ctx_, message);
+            // WP-02 §6.2: same scope wrapping as resolve_pending — the
+            // rejection is delivered from a native callback and its
+            // continuation must capture the request token.
+            RequestToken *saved_token = current_token_;
+            current_token_ = state.token;
             JSValue result =
                 JS_Call(ctx_, pending.reject, JS_UNDEFINED, 1, &argument);
+            current_token_ = saved_token;
             JS_FreeValue(ctx_, result);
             JS_FreeValue(ctx_, argument);
             JS_FreeValue(ctx_, pending.resolve);
@@ -3621,7 +3898,7 @@ private:
             if (terminal.kind == TerminalPending::Kind::kResponseEnd) {
                 g_worker->diag_sample(id, state);
             }
-            responses_.erase(state_it);
+            erase_response(state_it);
             remember_terminal(id);
         } else {
             enqueue_pump(id);
@@ -3656,7 +3933,7 @@ private:
             TerminalPending terminal = state.terminal;
             state.terminal_pending = false;
             if (try_send_terminal(id, state, terminal)) {
-                responses_.erase(it);
+                erase_response(it);
                 remember_terminal(id);
                 return;
             }
@@ -3726,7 +4003,7 @@ private:
             std::map<uint64_t, ResponseState>::iterator it =
                 responses_.find(*id);
             if (it != responses_.end()) {
-                responses_.erase(it);
+                erase_response(it);
                 remember_terminal(*id);
             }
         }
@@ -4076,7 +4353,10 @@ private:
     JSValue request_chunk_;
     JSValue request_end_;
     JSValue cancel_request_;
-    uint64_t executing_request_id_;
+    uint64_t next_token_generation_;
+    std::map<uint64_t, RequestToken *> token_registry_;
+    RequestToken *current_token_;
+    bool poisoned_;
     uint64_t interrupted_request_id_;
     uint64_t audit_window_started_ns_;
     uint32_t audit_window_count_;

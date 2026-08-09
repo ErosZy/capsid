@@ -173,9 +173,9 @@ function(capsid_compute_txiki_overlay_key)
     file(GLOB CTOK_PATCH_LIST "${CTOK_PATCH_DIR}/*.patch")
     list(SORT CTOK_PATCH_LIST)
     list(LENGTH CTOK_PATCH_LIST CTOK_PATCH_COUNT)
-    if(NOT CTOK_PATCH_COUNT EQUAL 11)
+    if(NOT CTOK_PATCH_COUNT EQUAL 12)
         message(FATAL_ERROR
-            "expected 11 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 12 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

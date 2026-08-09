@@ -3467,6 +3467,21 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_p0_boundaries PROPERTIES TIMEOUT 20)
 
+        # WP-02 §6.5 QuickJS job-context hook unit gate. RED until
+        # 0012-capsid-async-context.patch exists (compile error: missing
+        # JSJobContextHooks / JS_SetJobContextHooks); GREEN after.
+        add_executable(
+            test-quickjs-job-context
+            tests/test_quickjs_job_context.cc
+        )
+        target_link_libraries(test-quickjs-job-context PRIVATE tjs)
+        add_test(
+            NAME quickjs_job_context_hooks
+            COMMAND test-quickjs-job-context
+        )
+        set_tests_properties(quickjs_job_context_hooks
+            PROPERTIES TIMEOUT 20)
+
         # WP-00/PR-01 RED gates. All three worker tests are expected to
         # FAIL on the pre-fix bridge (identity collapse P0-1, request
         # context loss P0-2, terminal continuation survival P0-3); the
