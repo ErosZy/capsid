@@ -142,14 +142,21 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
         // The notifier wakes the pump; weak capture so the notifier never
         // keeps a stopped pool alive (the executor would otherwise hold a
         // shared_ptr cycle back into the pool).
-        executor->set_event_notifier([weak = pool->weak_from_this()] {
-            if (std::shared_ptr<GenerationPool> p = weak.lock()) {
-                {
-                    std::lock_guard<std::mutex> lock(p->mutex_);
-                    p->events_pending_ = true;
-                }
-                p->cv_.notify_all();
-            }
+        executor->set_event_notifier([weak = pool->weak_from_this(),
+                                      owner = pool.get()] {
+            // weak.lock() fails once the last shared_ptr is dropped — the
+            // pool's destructor is running. That window is exactly when a
+            // drain must still complete: the destructor blocks in wait()
+            // until the pump finalizes kDead, so the pool object and its
+            // pump thread are guaranteed alive here (wait() joins the pump
+            // only after kDead, and kDead requires every slot's exited_,
+            // which is set before this notifier fires). Wake the pump
+            // through the raw owner on the failure path.
+            std::shared_ptr<GenerationPool> p = weak.lock();
+            GenerationPool* target = p ? p.get() : owner;
+            std::lock_guard<std::mutex> lock(target->mutex_);
+            target->events_pending_ = true;
+            target->cv_.notify_all();
         });
         if (!executor->start(pool->options_.factory, &spawn_error)) {
             if (error != nullptr) {
@@ -177,7 +184,15 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
     pool->replacement_due_ms_.assign(pool->slots_.size(), kNoDue);
     pool->state_ = State::kActive;
     pool->stable_since_ms_ = steady_ms();
-    pool->pump_thread_ = std::thread([pool] { pool->pump_loop(); });
+    // The pump thread captures the BARE pointer, never a shared_ptr: a
+    // self-held reference would keep the pool alive forever, so an
+    // abandoned pool (e.g. an aborted §9.3 activation) could never be
+    // destroyed — its drain would never run and every worker would leak.
+    // Lifetime is safe: wait() joins the pump before the pool is freed,
+    // and every pump exit runs inside finalize_drain.
+    pool->pump_thread_ = std::thread([target = pool.get()] {
+        target->pump_loop();
+    });
     return pool;
 }
 
@@ -244,14 +259,21 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
     pool->slots_.reserve(pool->options_.workers);
     for (std::uint32_t index = 0; index < pool->options_.workers; ++index) {
         std::shared_ptr<WorkerExecutor> executor(new WorkerExecutor());
-        executor->set_event_notifier([weak = pool->weak_from_this()] {
-            if (std::shared_ptr<GenerationPool> p = weak.lock()) {
-                {
-                    std::lock_guard<std::mutex> lock(p->mutex_);
-                    p->events_pending_ = true;
-                }
-                p->cv_.notify_all();
-            }
+        executor->set_event_notifier([weak = pool->weak_from_this(),
+                                      owner = pool.get()] {
+            // weak.lock() fails once the last shared_ptr is dropped — the
+            // pool's destructor is running. That window is exactly when a
+            // drain must still complete: the destructor blocks in wait()
+            // until the pump finalizes kDead, so the pool object and its
+            // pump thread are guaranteed alive here (wait() joins the pump
+            // only after kDead, and kDead requires every slot's exited_,
+            // which is set before this notifier fires). Wake the pump
+            // through the raw owner on the failure path.
+            std::shared_ptr<GenerationPool> p = weak.lock();
+            GenerationPool* target = p ? p.get() : owner;
+            std::lock_guard<std::mutex> lock(target->mutex_);
+            target->events_pending_ = true;
+            target->cv_.notify_all();
         });
         if (!executor->adopt(warmed[index], error)) {
             // warmeds[index] was NOT adopted (adopt takes ownership only
@@ -272,7 +294,11 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
     pool->replacement_due_ms_.assign(pool->slots_.size(), kNoDue);
     pool->state_ = State::kActive;
     pool->stable_since_ms_ = steady_ms();
-    pool->pump_thread_ = std::thread([pool] { pool->pump_loop(); });
+    // Bare pointer, same lifetime contract as create() (see above): never
+    // self-hold the pool, or an aborted §9.3 activation leaks every worker.
+    pool->pump_thread_ = std::thread([target = pool.get()] {
+        target->pump_loop();
+    });
     return pool;
 }
 

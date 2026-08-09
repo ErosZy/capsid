@@ -338,7 +338,8 @@ void wire_admin_transactions(capsid::host::ManagedHostOptions* options,
             harness->condition.notify_all();
         };
     options->abort_activation = [](capsid::host::ActivationPlan* plan) {
-        (void) plan;  // the never-published pool dies with the plan
+        // the never-published pool dies with the plan
+        (void) plan;
     };
     options->prepare_retire =
         [harness](const std::string& application, std::string* error)
@@ -1529,6 +1530,99 @@ int main(int argc, char** argv) {
             fixtures.state_root + "/apps/orders/active.json");
         require(active_after == active_before,
                 "failed deploy changed the old active");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_deploy_persist_failure_aborts") {
+        // §9.6-2 through the §9.3 transaction: the new generation reaches
+        // READY, the persist fails — abort recycles the new pool and the
+        // old generation keeps serving with its active.json untouched.
+        create_version(fixtures, "v2", kMinimalAppConfig, kSourceBundle);
+        const std::string pid_log = fixtures.vdir + "/abort-pids.log";
+        std::ostringstream wrapper;
+        wrapper << "#!/bin/sh\n"
+                << "printf '%s\\n' \"$$\" >> '" << pid_log << "'\n"
+                << "exec '" << fixtures.worker_path << "' \"$@\"\n";
+        const std::string wrapper_path = fixtures.vdir + "/abort-worker";
+        write_file(wrapper_path, wrapper.str());
+        require(chmod(wrapper_path.c_str(), 0700) == 0,
+                "cannot make abort worker wrapper executable");
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        options.worker_path = wrapper_path;
+        TransactionHarness harness;
+        wire_admin_transactions(&options, &harness);
+        capsid::host::OperationStatus first_status;
+        const capsid::host::DeployOutcome first =
+            capsid::host::managed_deploy(&options, "v1", &first_status);
+        require(first.ok, "initial v1 deploy failed");
+        std::shared_ptr<capsid::host::GenerationPool> v1_pool;
+        {
+            std::unique_lock<std::mutex> lock(harness.mutex);
+            require(harness.condition.wait_for(
+                        lock, std::chrono::seconds(2),
+                        [&]() { return harness.activated; }),
+                    "v1 deploy did not commit its pool");
+            v1_pool = harness.active_pool;
+        }
+        generation_round_trip(*v1_pool, 7001);
+        // The persist's renameat(tmp, active.json) cannot overwrite a
+        // directory: the write path stays exactly as far as a real storage
+        // failure would take it (temp written, rename denied).
+        require(remove((fixtures.state_root +
+                        "/apps/orders/active.json").c_str()) == 0,
+                "cannot remove active.json for the failure injection");
+        require(mkdir((fixtures.state_root +
+                       "/apps/orders/active.json").c_str(), 0700) == 0,
+                "cannot replace active.json with a directory");
+        capsid::host::OperationStatus fail_status;
+        const capsid::host::DeployOutcome failed =
+            capsid::host::managed_deploy(&options, "v2", &fail_status);
+        require(!failed.ok, "deploy with a failing persist was accepted");
+        require(failed.worker == nullptr && failed.workers.empty(),
+                "aborted deploy returned a worker");
+        require(fail_status.error.find("persist") != std::string::npos,
+                "aborted deploy lost its persist diagnostic");
+        // The v1 fleet survives the failed v2, exactly as §9.6-2 requires.
+        generation_round_trip(*v1_pool, 7002);
+        // The v2 worker warmed up (second spawn) but the abort must have
+        // recycled it: every worker of the aborted pool is destroyed.
+        std::vector<std::int64_t> pids;
+        std::istringstream first_pids(read_file(pid_log));
+        std::int64_t pid = 0;
+        while (first_pids >> pid) {
+            pids.push_back(pid);
+        }
+        require(pids.size() == 2, "aborted deploy did not spawn its own pool");
+        errno = 0;
+        require(kill(static_cast<pid_t>(pids[0]), 0) == 0,
+                "v1 worker died with the aborted v2 deploy");
+        // The pool's drain is a signal; give the worker a bounded moment
+        // to exit, then require it is GONE (a live process after the drain
+        // is a leak). A zombie (kill 0 succeeds on a reaped-pending pid)
+        // counts as not-gone: it is still a process table entry.
+        bool v2_gone = false;
+        for (int attempt = 0; attempt < 100 && !v2_gone; ++attempt) {
+            errno = 0;
+            if (kill(static_cast<pid_t>(pids[1]), 0) == -1 && errno == ESRCH) {
+                v2_gone = true;
+            }
+            if (!v2_gone) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+        }
+        require(v2_gone, "aborted v2 pool leaked a worker process");
+        // Restore the state directory and prove the old active survives:
+        // an idempotent v1 redeploy revalidates and re-persists it.
+        require(rmdir((fixtures.state_root +
+                       "/apps/orders/active.json").c_str()) == 0,
+                "cannot restore the active state directory");
+        capsid::host::OperationStatus replay_status;
+        const capsid::host::DeployOutcome replay =
+            capsid::host::managed_deploy(&options, "v1", &replay_status);
+        require(replay.ok,
+                "idempotent v1 redeploy failed after the aborted v2: " +
+                    replay.error);
         std::cout << "PASS" << std::endl;
         return 0;
     }

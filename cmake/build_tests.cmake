@@ -518,6 +518,7 @@ if(BUILD_TESTING)
                     host_managed_secret_value_not_persisted
                     host_managed_recovery_accepts_large_valid_env_metadata
                     host_managed_deploy_fail_closed
+                    host_managed_deploy_persist_failure_aborts
                     host_managed_retire_and_recovery
                     host_managed_retire_is_idempotent
                     host_managed_recovery_warms_worker
