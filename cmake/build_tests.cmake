@@ -448,7 +448,10 @@ if(BUILD_TESTING)
                         host_managed_executable_crash_mid_deploy_keeps_old
                         host_managed_executable_crash_staging_remnants
                         host_managed_executable_crash_orphan_generation
-                        host_managed_executable_crash_quarantined_not_resurrected)
+                        host_managed_executable_crash_quarantined_not_resurrected
+                        host_managed_http_e2e_multi_app
+                        host_managed_http_restart_recovers_route
+                        host_managed_http_rejects_multiple_listeners)
                     add_test(
                         NAME "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
                         COMMAND test-host-managed-executable
@@ -462,6 +465,12 @@ if(BUILD_TESTING)
             endif()
 
             # M1D managed host frozen suite: one binary, one mode per test.
+            # Every mode spawns a real worker, and worker spawn requires the
+            # Linux-only strict sandbox (src/sandbox.cc); on other platforms
+            # the suite cannot run, so it is registered on Linux only
+            # (spec §9.6-10: macOS runs portable Host units only, and
+            # §9.6-14: unsupported platforms SKIP, never FAIL).
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_executable(
                 test-host-managed
                 tests/test_host_managed.cc)
@@ -569,6 +578,7 @@ if(BUILD_TESTING)
                 set_tests_properties(
                     "${CAPSID_MANAGED_TEST_ID}" PROPERTIES TIMEOUT 120)
             endforeach()
+            endif()  # CMAKE_SYSTEM_NAME STREQUAL "Linux" — worker-spawn suite
         endif()
 
         add_executable(
@@ -3340,7 +3350,12 @@ if(BUILD_TESTING)
 
         # WP-05 PR-09 §9.2: RoutingSnapshot / RoutingTable + the adopt-create
         # pool entry (pre-warmed fleet, no respawn). RED gate: the snapshot
-        # and create_adopted do not exist on the PR-08 tree.
+        # and create_adopted do not exist on the PR-08 tree. RoutingTable
+        # stores an atomic shared_ptr; Apple libc++ cannot compile it, so
+        # the contract joins the same Boost gate as the data plane itself
+        # (build_host.cmake) and is not registered on Boost-less platforms
+        # (spec §9.6-14: unsupported platforms SKIP, never FAIL).
+        if(UNIX AND Boost_FOUND)
         add_executable(
             test-host-routing-snapshot
             tests/test_host_routing_snapshot.cc)
@@ -3379,6 +3394,8 @@ if(BUILD_TESTING)
         # routing, the event-sink bridge (kExit forwarded to fail pinned
         # requests), connection-ceiling RST, trusted-header gate. RED gate:
         # the listener and its test do not exist on the PR-09a tree.
+        # Same Boost gate as RoutingTable above: the listener routes through
+        # the atomic-shared_ptr snapshot, which Apple libc++ rejects.
         add_executable(
             test-host-managed-listener
             tests/test_host_managed_listener.cc)
@@ -3411,6 +3428,7 @@ if(BUILD_TESTING)
             COMMAND test-host-managed-listener $<TARGET_FILE:capsid-worker>)
         set_tests_properties(host_managed_listener_contract PROPERTIES
             TIMEOUT 90)
+        endif()  # UNIX AND Boost_FOUND — RoutingTable contract tests
 
         add_executable(
             test-hono-worker-driver

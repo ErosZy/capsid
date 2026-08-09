@@ -36,10 +36,8 @@ if(CAPSID_BUILD_HOST)
         src/host/host_config_model.cc
         src/host/managed_admin_backend.cc
         src/host/managed_host.cc
-        src/host/managed_listener.cc
         src/host/policy_compiler.cc
         src/host/request_normalization.cc
-        src/host/routing_snapshot.cc
         src/host/secret_file_provider.cc
         src/host/secret_snapshot.cc
         src/host/service_lifecycle.cc
@@ -170,6 +168,16 @@ if(CAPSID_BUILD_HOST)
         target_sources(capsid_host_core PRIVATE
             src/host/admin_http.cc
             src/host/admin_service.cc)
+        # The WP-05 data plane joins the same gate: the Managed listener
+        # is Boost.Asio, and RoutingTable's lock-free atomic shared_ptr
+        # needs libc++/libstdc++ C++20 atomic-shared_ptr support that the
+        # Apple toolchain does not provide. A Boost-less platform (e.g.
+        # the macOS portable-unit gate, spec §9.6-10) builds the pure
+        # coordinator surface and skips the data plane; the data-plane
+        # tests are already registered under UNIX AND Boost_FOUND.
+        target_sources(capsid_host_core PRIVATE
+            src/host/managed_listener.cc
+            src/host/routing_snapshot.cc)
         target_link_libraries(capsid_host_core PRIVATE Boost::system)
     else()
         message(STATUS "capsid-host skipped: system Boost not found")

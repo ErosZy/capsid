@@ -38,6 +38,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -520,6 +521,11 @@ int run_managed(const std::string& host_config_path,
     // pool destructor drains and joins, and holding the shared_ptr keeps
     // that off the Admin worker thread.
     std::vector<std::shared_ptr<capsid::host::GenerationPool>> draining_pools;
+    // §9.6-6 retired Apps: the name keeps a route-level tombstone (no
+    // pool) so the router answers 404 after retire — the durable retire
+    // tombstone of the coordinator is mirrored here, and a redeploy
+    // revives the route. Never-deployed Apps stay unrouted (503).
+    std::set<std::string> retired_apps;
     std::mutex pools_mutex;
     // The listener is created AFTER startup recovery (see below); pools
     // activated during recovery are wired by its start(), which wires every
@@ -532,9 +538,13 @@ int run_managed(const std::string& host_config_path,
     const auto publish_snapshot = [&]() {
         std::vector<std::pair<
             std::string, std::shared_ptr<capsid::host::GenerationPool>>> routes;
-        routes.reserve(active_pools.size());
+        routes.reserve(active_pools.size() + retired_apps.size());
         for (const auto& entry : active_pools) {
             routes.emplace_back(entry.first, entry.second);
+        }
+        for (const std::string& application : retired_apps) {
+            // Tombstone: routed name, no pool — the router's 404.
+            routes.emplace_back(application, nullptr);
         }
         routing->publish(
             capsid::host::RoutingSnapshot::build(std::move(routes)));
@@ -589,6 +599,9 @@ int run_managed(const std::string& host_config_path,
                 data_plane->wire_pool(pool);
             }
             active_pools[application] = pool;
+            // A redeploy revives a retired App: the live route wins over
+            // the tombstone, so the publish must not emit both.
+            retired_apps.erase(application);
             publish_snapshot();
             return true;
         };
@@ -597,11 +610,14 @@ int run_managed(const std::string& host_config_path,
         const auto existing = active_pools.find(application);
         if (existing != active_pools.end()) {
             // The retire tombstone is durable (the coordinator persisted it
-            // before this callback); the route disappears NOW and the old
-            // generation drains in the background.
+            // before this callback); the route becomes a TOMBSTONE NOW —
+            // the name stays routed with no pool, so new requests get 404
+            // (§9.6-6) while old in-flight requests finish on their pinned
+            // pool and the generation drains in the background.
             existing->second->request_drain();
             draining_pools.push_back(existing->second);
             active_pools.erase(existing);
+            retired_apps.insert(application);
             publish_snapshot();
         }
     };
@@ -678,8 +694,17 @@ int run_managed(const std::string& host_config_path,
                      options->application);
             }
         } else if (newly_acquired) {
-            // No active/retired generation: no permanent occupancy.
+            // Durable state but no recovered workers: the App is retired
+            // (or quarantined). Mirror the coordinator's durable tombstone
+            // in the route — the name stays routed with no pool, so the
+            // router keeps answering 404 after restart, exactly as it did
+            // before the restart (§9.6-6). No permanent occupancy.
             capacity.release(options->application);
+            {
+                std::lock_guard<std::mutex> lock(pools_mutex);
+                retired_apps.insert(options->application);
+                publish_snapshot();
+            }
         }
     }
     // §9.2 data plane: 0..1 public listeners, bound all-or-fail BEFORE

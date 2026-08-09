@@ -429,7 +429,12 @@ void test_404_503_504(const std::string& worker_path) {
         make_pool(worker_path, "app-hang", kBundleHang, 400);
     std::shared_ptr<RoutingTable> routing = std::make_shared<RoutingTable>();
     routing->publish(RoutingSnapshot::build({{"app-a", pool_a},
-                                             {"app-hang", pool_hang}}));
+                                             {"app-hang", pool_hang},
+                                             // A null pool is a retired
+                                             // tombstone (§9.6-6): the App
+                                             // name stays routed but no
+                                             // pool serves it.
+                                             {"app-gone", nullptr}}));
 
     ManagedListenerOptions options;
     options.config = path_listener("public");
@@ -459,6 +464,18 @@ void test_404_503_504(const std::string& worker_path) {
             "unrouted App did not map to 503 (" +
                 std::to_string(no_route.status) + ")");
     close(no_route_fd);
+
+    // A retired App keeps its route as a tombstone: 404, never the 503
+    // reserved for Apps that were never routed (§9.6-6).
+    const int retired_fd = connect_listener(listener.bound_port());
+    const HttpResponse retired = http_exchange(
+        retired_fd, "GET /@capsid/app-gone/ HTTP/1.1\r\n"
+                    "Host: localhost\r\n"
+                    "Connection: close\r\n\r\n");
+    require(retired.status == 404,
+            "retired App tombstone did not map to 404 (" +
+                std::to_string(retired.status) + ")");
+    close(retired_fd);
 
     // A worker that never answers: the Runtime request timeout → 504.
     const int timeout_fd = connect_listener(listener.bound_port());

@@ -17,13 +17,28 @@ namespace capsid::host {
 
 namespace {
 
+// Cross-platform stat timestamp accessors: Apple spells the fields
+// st_mtimespec/st_ctimespec; other POSIX systems use st_mtim/st_ctim
+// (same pattern as main.cc).
+#if defined(__APPLE__)
+#define CAPSID_KT_MTIME_SEC(st) ((st).st_mtimespec.tv_sec)
+#define CAPSID_KT_MTIME_NSEC(st) ((st).st_mtimespec.tv_nsec)
+#define CAPSID_KT_CTIME_SEC(st) ((st).st_ctimespec.tv_sec)
+#define CAPSID_KT_CTIME_NSEC(st) ((st).st_ctimespec.tv_nsec)
+#else
+#define CAPSID_KT_MTIME_SEC(st) ((st).st_mtim.tv_sec)
+#define CAPSID_KT_MTIME_NSEC(st) ((st).st_mtim.tv_nsec)
+#define CAPSID_KT_CTIME_SEC(st) ((st).st_ctim.tv_sec)
+#define CAPSID_KT_CTIME_NSEC(st) ((st).st_ctim.tv_nsec)
+#endif
+
 bool stat_identical(const struct stat& before, const struct stat& after) {
     return before.st_dev == after.st_dev && before.st_ino == after.st_ino &&
            before.st_size == after.st_size &&
-           before.st_mtim.tv_sec == after.st_mtim.tv_sec &&
-           before.st_mtim.tv_nsec == after.st_mtim.tv_nsec &&
-           before.st_ctim.tv_sec == after.st_ctim.tv_sec &&
-           before.st_ctim.tv_nsec == after.st_ctim.tv_nsec;
+           CAPSID_KT_MTIME_SEC(before) == CAPSID_KT_MTIME_SEC(after) &&
+           CAPSID_KT_MTIME_NSEC(before) == CAPSID_KT_MTIME_NSEC(after) &&
+           CAPSID_KT_CTIME_SEC(before) == CAPSID_KT_CTIME_SEC(after) &&
+           CAPSID_KT_CTIME_NSEC(before) == CAPSID_KT_CTIME_NSEC(after);
 }
 
 // Stable operator-facing failure: never includes the path, the key id or

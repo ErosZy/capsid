@@ -482,11 +482,21 @@ void ListenerSession::handle_request(
         return;
     }
     // One atomic snapshot load; the pool found in it is pinned for the
-    // whole request (§9.2). A missing route is the router's 503.
+    // whole request (§9.2). A retired App keeps its route as a tombstone
+    // (routed name, no pool): it is permanently gone, so the router
+    // answers 404 (§9.6-6), distinct from the 503 reserved for Apps that
+    // were never routed.
     const std::shared_ptr<const RoutingSnapshot> snapshot =
         impl_->options_.routing->load();
+    const bool retired = snapshot != nullptr &&
+                         snapshot->retired(normalized.request.application);
     std::shared_ptr<GenerationPool> pool =
         snapshot ? snapshot->find(normalized.request.application) : nullptr;
+    if (retired) {
+        send_simple(http::status::not_found, "app retired",
+                    request.keep_alive(), request.version());
+        return;
+    }
     if (!pool) {
         send_simple(http::status::service_unavailable, "app not found",
                     request.keep_alive(), request.version());
