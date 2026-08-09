@@ -347,13 +347,13 @@ WorkerExecutor* GenerationPool::pick_worker() {
         if (!candidate->available()) {
             continue;
         }
-        // §8.2 load: inflight + pending client bytes (session-layer hook;
-        // 0 when unset) + unhealthy penalty (reserved for the session
-        // layer's notion of unhealthy — an exited worker is excluded
-        // above, not penalized).
+        // §8.2 load: inflight + pending client bytes (session-layer hook,
+        // keyed by the executor identity; 0 when unset) + unhealthy penalty
+        // (reserved for the session layer's notion of unhealthy — an exited
+        // worker is excluded above, not penalized).
         std::uint64_t load = candidate->inflight();
         if (options_.client_bytes_loader) {
-            load += options_.client_bytes_loader(index);
+            load += options_.client_bytes_loader(candidate);
         }
         if (load < best_load) {
             best_load = load;
@@ -361,6 +361,14 @@ WorkerExecutor* GenerationPool::pick_worker() {
         }
     }
     return best;
+}
+
+void GenerationPool::set_event_sink(
+    std::function<void(const WorkerExecutor*, WorkerEvent)> sink) {
+    // The pump reads options_.event_sink under the same mutex, so the swap
+    // is atomic with respect to every drain sweep.
+    std::lock_guard<std::mutex> lock(mutex_);
+    options_.event_sink = std::move(sink);
 }
 
 std::uint64_t GenerationPool::inflight() const {
@@ -492,7 +500,11 @@ void GenerationPool::pump_loop() {
         }
         events_pending_ = false;
         // Drain every slot's event queue (this is the owner thread for all
-        // of them) and handle exits.
+        // of them) and handle exits. Non-kExit events are forwarded to the
+        // §9.2 event sink (the listener's sessions); kExit stays pool-owned
+        // for the replacement machinery but is forwarded too, so the
+        // listener can fail the requests pinned to a dead worker (the
+        // executor emits no per-request failure for a worker exit).
         std::vector<std::size_t> exited;
         for (std::size_t index = 0; index < slots_.size(); ++index) {
             std::deque<WorkerEvent> batch =
@@ -500,6 +512,22 @@ void GenerationPool::pump_loop() {
             for (const WorkerEvent& event : batch) {
                 if (event.type == WorkerEvent::Type::kExit) {
                     exited.push_back(index);
+                }
+                if (options_.event_sink) {
+                    options_.event_sink(slots_[index].executor.get(), event);
+                }
+            }
+        }
+        // WP-05 §9.2: retired executors (replaced slots with pinned
+        // requests) are drained here too — a pinned request's response
+        // events must reach the session layer even after its slot was
+        // replaced, or the request hangs forever. Nothing to bookkeep: a
+        // retired executor is never replaced again.
+        for (const std::shared_ptr<WorkerExecutor>& retired : retired_) {
+            std::deque<WorkerEvent> batch = retired->drain_events();
+            for (const WorkerEvent& event : batch) {
+                if (options_.event_sink) {
+                    options_.event_sink(retired.get(), event);
                 }
             }
         }

@@ -88,9 +88,23 @@ struct GenerationPoolOptions {
     // bound. Per-request cancellation is the executor's shutdown grace.
     std::chrono::milliseconds drain_deadline = std::chrono::seconds(10);
     // §8.2 load term "bytes awaiting client consumption": the pool owns no
-    // client sockets, so the session layer supplies this per slot (0 when
-    // unset).
-    std::function<std::uint64_t(std::size_t slot)> client_bytes_loader;
+    // client sockets, so the session layer supplies this per executor
+    // (0 when unset). Keyed by the executor identity, NOT the slot index:
+    // a replacement installs a different executor into the same slot, and
+    // the session layer accounts per executor. Called under the pool mutex
+    // (pick_worker), so the loader must never block on the pool.
+    std::function<std::uint64_t(const WorkerExecutor*)> client_bytes_loader;
+    // WP-05 §9.2: the pool is the sole drainer of every slot executor's
+    // event queue, so events other consumers care about (the listener's
+    // sessions) are forwarded here. Called on the pump thread, under the
+    // pool mutex: the sink must be cheap and must never take a lock that
+    // the pool could also take while the io thread holds it. kExit events
+    // are forwarded too — the listener uses them to fail the requests
+    // pinned to a dead worker (the executor emits no per-request failure
+    // for a worker exit); the pool still handles the replacement.
+    // Ordering: single producer (the pump), FIFO per executor, and kExit is
+    // always the last event of its executor.
+    std::function<void(const WorkerExecutor*, WorkerEvent)> event_sink;
 };
 
 // See the file comment for the full contract.
@@ -144,6 +158,20 @@ public:
     // executor stays alive (pool pinning) even if its slot is replaced.
     WorkerExecutor* pick_worker();
 
+    // ---- §9.2 event bridge ----------------------------------------------
+
+    // Installs the listener's event sink on this pool: a mutex-guarded
+    // swap, and the pump reads options_.event_sink under the same mutex,
+    // so the sink never changes mid-drain. Exactly one consumer owns a
+    // pool's fan-out at a time — the ManagedListener wires every pool in
+    // its snapshot at start(), and the Managed coordinator wires pools it
+    // activates after the listener is already running.
+    // Precondition: the pool has NO in-flight requests (a request pinned
+    // before wiring would lose its response events and hang) — wire before
+    // the pool starts serving traffic.
+    void set_event_sink(
+        std::function<void(const WorkerExecutor*, WorkerEvent)> sink);
+
     // ---- diagnostics / load signal -------------------------------------
 
     // Total requests owned by the fleet (active slots + retired executors
@@ -152,6 +180,11 @@ public:
     // Live READY capacity: N after a full fleet, N-1 while a replacement
     // is in flight, 0 when the fleet is exhausted.
     std::uint32_t ready_workers() const;
+    // The generation's immutable per-worker inflight ceiling (0 = the
+    // session layer imposes no cap beyond the worker's own limit).
+    std::uint64_t max_inflight_per_worker() const {
+        return options_.max_inflight_per_worker;
+    }
     State state() const;
     std::string_view application_id() const;
     std::string_view version() const;

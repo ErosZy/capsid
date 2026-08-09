@@ -42,6 +42,11 @@ struct ListenerConfig {
     std::string tcp;             // "host" or "host:port"
     std::string public_scheme;   // "https" for trusted listeners
     std::string public_authority;
+    // §9.2 trust boundary: header routing requires trusted == true. The
+    // field is an explicit declaration, never inferred from the transport
+    // (design review §3.7/§8.1); the listener adapter fails the bind when a
+    // header-mode listener is not trusted.
+    bool trusted = false;
     ListenerRoutingConfig routing;
     ListenerLimitsConfig limits;
 };

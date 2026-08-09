@@ -3372,6 +3372,43 @@ if(BUILD_TESTING)
         set_tests_properties(host_routing_snapshot_contract PROPERTIES
             TIMEOUT 90)
 
+        # WP-05 PR-09 §9.2: ManagedListener — the Managed data-plane
+        # listener over RoutingSnapshot-pinned GenerationPools: HTTP App
+        # routing, the event-sink bridge (kExit forwarded to fail pinned
+        # requests), connection-ceiling RST, trusted-header gate. RED gate:
+        # the listener and its test do not exist on the PR-09a tree.
+        add_executable(
+            test-host-managed-listener
+            tests/test_host_managed_listener.cc)
+        target_include_directories(
+            test-host-managed-listener PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-managed-listener PRIVATE
+            capsid_runtime
+            capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-managed-listener PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-managed-listener PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-managed-listener PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-managed-listener capsid-worker)
+        add_test(
+            NAME host_managed_listener_contract
+            COMMAND test-host-managed-listener $<TARGET_FILE:capsid-worker>)
+        set_tests_properties(host_managed_listener_contract PROPERTIES
+            TIMEOUT 90)
 
         add_executable(
             test-hono-worker-driver

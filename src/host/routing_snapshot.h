@@ -39,6 +39,14 @@ public:
     // nullptr when the App has no route in THIS snapshot.
     std::shared_ptr<GenerationPool> find(std::string_view application) const;
 
+    // Full map view for the listener's start-time wiring (every pool in
+    // the snapshot gets the event sink installed) and diagnostics. The
+    // snapshot is immutable, so the reference is stable for its lifetime.
+    const std::map<std::string, std::shared_ptr<GenerationPool>>& routes()
+        const {
+        return routes_;
+    }
+
     std::size_t size() const { return routes_.size(); }
 
 private:

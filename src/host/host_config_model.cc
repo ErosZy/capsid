@@ -250,6 +250,8 @@ bool parse_listeners(json_t* root, std::vector<ListenerConfig>* out) {
         config.tcp = json_string_field(listener, "tcp");
         config.public_scheme = json_string_field(listener, "publicScheme");
         config.public_authority = json_string_field(listener, "publicAuthority");
+        const json_t* trusted = json_object_get(listener, "trusted");
+        config.trusted = json_is_true(trusted);  // absent == false
         json_t* routing = json_object_get(listener, "routing");
         if (json_is_object(routing)) {
             config.routing.mode = json_string_field(routing, "mode");
