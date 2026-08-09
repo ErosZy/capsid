@@ -241,21 +241,49 @@ endif()
 #
 # The build applies patches sequentially with patch(1) into a prepared
 # overlay copy (PrepareTxiki.cmake). Verify that same sequence applies
-# cleanly to a pristine vendor copy. git apply --check is NOT used: it
+# cleanly to a pristine vendor tree. git apply --check is NOT used: it
 # checks each patch against the pristine tree and does not accumulate,
 # while the real build applies in order and later patches legitimately
-# build on earlier ones. A throwaway copy is used so the audit never
-# mutates the real vendor. Runs after stamp verification so tampered-stamp
-# negative controls fail without paying for a full vendor copy.
+# build on earlier ones.
+#
+# Sparse probe: patch(1) only ever reads the files named in its own
+# +++ b/ headers, so the probe copies exactly those pristine files
+# (derived from the patches themselves) and applies all 16 in order —
+# the same result as probing the full 402MB vendor tree in under a
+# second. Every touched path is a real file (never a symlink), so
+# patch writes stay inside the probe. Runs after stamp verification so
+# tampered-stamp negative controls never build a probe.
 
 if(CAPSID_PATCH_COUNT GREATER 0)
     file(REMOVE_RECURSE "${CAPSID_TXIKI_PROBE_DIR}")
-    file(COPY "${CAPSID_TXIKI_VENDOR}"
-        DESTINATION "${CAPSID_TXIKI_PROBE_DIR}")
     get_filename_component(
         CAPSID_TXIKI_BASENAME "${CAPSID_TXIKI_VENDOR}" NAME)
     set(CAPSID_APPLY_PROBE
         "${CAPSID_TXIKI_PROBE_DIR}/${CAPSID_TXIKI_BASENAME}")
+    set(CAPSID_PATCHED_PATHS "")
+    foreach(CAPSID_PATCH IN LISTS CAPSID_TXIKI_PATCHES)
+        file(STRINGS "${CAPSID_PATCH}" CAPSID_PATCH_HEADERS
+            REGEX "^\\+\\+\\+ b/")
+        foreach(CAPSID_PATCH_HEADER IN LISTS CAPSID_PATCH_HEADERS)
+            string(REGEX REPLACE "^\\+\\+\\+ b/([^ \t]+).*$" "\\1"
+                CAPSID_PATCHED_PATH "${CAPSID_PATCH_HEADER}")
+            list(APPEND CAPSID_PATCHED_PATHS "${CAPSID_PATCHED_PATH}")
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES CAPSID_PATCHED_PATHS)
+    list(SORT CAPSID_PATCHED_PATHS)
+    foreach(CAPSID_PATCHED_PATH IN LISTS CAPSID_PATCHED_PATHS)
+        get_filename_component(
+            CAPSID_PATCHED_PARENT "${CAPSID_PATCHED_PATH}" DIRECTORY)
+        file(MAKE_DIRECTORY
+            "${CAPSID_APPLY_PROBE}/${CAPSID_PATCHED_PARENT}")
+        if(EXISTS "${CAPSID_TXIKI_VENDOR}/${CAPSID_PATCHED_PATH}")
+            file(COPY
+                "${CAPSID_TXIKI_VENDOR}/${CAPSID_PATCHED_PATH}"
+                DESTINATION
+                "${CAPSID_APPLY_PROBE}/${CAPSID_PATCHED_PARENT}")
+        endif()
+    endforeach()
     set(CAPSID_PROBE_OK 1)
     foreach(CAPSID_PATCH IN LISTS CAPSID_TXIKI_PATCHES)
         execute_process(
@@ -269,9 +297,9 @@ if(CAPSID_PATCH_COUNT GREATER 0)
             get_filename_component(
                 CAPSID_PATCH_BASENAME "${CAPSID_PATCH}" NAME)
             string(APPEND CAPSID_AUDIT_FAILURES
-                "\n  ${CAPSID_PATCH_BASENAME} does not apply to a pristine "
-                "vendor copy with patch -p1 --forward --batch (the build's "
-                "own sequence):\n"
+                "\n  ${CAPSID_PATCH_BASENAME} does not apply to pristine "
+                "vendor files with patch -p1 --forward --batch (the "
+                "build's own sequence):\n"
                 "${CAPSID_APPLY_OUTPUT}${CAPSID_APPLY_ERROR}")
             set(CAPSID_PROBE_OK 0)
             break()

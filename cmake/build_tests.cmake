@@ -2772,7 +2772,7 @@ if(BUILD_TESTING)
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AuditTxikiVendor.cmake"
         )
         set_tests_properties(
-            txiki_vendor_patch_integrity PROPERTIES TIMEOUT 120
+            txiki_vendor_patch_integrity PROPERTIES TIMEOUT 60
         )
         add_test(
             NAME txiki_overlay_audit_negative_controls
