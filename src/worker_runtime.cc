@@ -334,7 +334,6 @@ public:
           reclaim_pending_(false),
           reclaim_retry_(false),
           reclaim_retry_start_ns_(0),
-          reclaim_hard_(false),
           retained_refs_(0),
           interrupted_request_id_(0),
           audit_window_started_ns_(0),
@@ -731,7 +730,7 @@ private:
                 token->terminal = true;
                 // §7.4: the normal completion path runs no drain; the
                 // deadline tick performs the post-settle reclaim.
-                request_reclaim(false);
+                request_reclaim();
                 return true;
             }
         }
@@ -826,17 +825,20 @@ private:
             if (token->refs == 1) {
                 reclaimable.push_back(it->first);
             } else if (!token->terminal &&
-                       (defer_reclaim_while_live(reclaim_hard_) ||
+                       (defer_reclaim_while_live() ||
                         token->refs < prev_reclaim_refs)) {
                 // The response is gone and the chain has not settled (no
                 // capsidRequestSettled: cancel/timeout deleted the state
                 // before .finally). Refs are held by a live JS chain that
-                // is either parked on pending work (a uv-loop timer that
-                // will fire and settle it inertly) or still unwinding
-                // (refs falling against the previous round's baseline).
-                // Defer the poison decision to the next tick — the tick's
-                // drain+GC will reclaim once the chain settles. Bounded
-                // by kReclaimSettleWindowNs (see defer_reclaim_while_live).
+                // is actively unwinding — pending jobs, or refs falling
+                // against the previous round's baseline. Defer the poison
+                // decision to the next tick — the tick's drain+GC will
+                // reclaim once the chain settles. A chain parked on an
+                // unfired timer defers nothing: the poison lands before
+                // the timer can run its continuation (the timeout-path
+                // regression: the 80ms timer's continuation emitted a
+                // native LOG inside the poison grace). Bounded by
+                // kReclaimSettleWindowNs (see defer_reclaim_while_live).
                 if (diag_enabled_) {
                     std::fprintf(
                         stderr,
@@ -870,7 +872,6 @@ private:
             // full cycle (see the deadline tick).
             reclaim_retry_ = false;
             reclaim_retry_start_ns_ = 0;
-            reclaim_hard_ = false;
         }
         for (size_t i = 0; i < reclaimable.size(); ++i) {
             release_token(token_registry_[reclaimable[i]]);
@@ -882,67 +883,36 @@ private:
     // chain was still live) ends, so the next deadline tick runs the
     // unconditional drain+GC before the reclaim decision.
     //
-    // hard=true for a driver cancel: the detached continuation must never
-    // run, so a live non-terminal token poisons on the next tick with no
-    // deferral. hard=false for timeout/settle: the chain's own pending
-    // work may still settle it inertly (deferral allowed).
-    void request_reclaim(bool hard) {
+    // Cancel, timeout and settle share one semantics: a live non-terminal
+    // token whose response is gone defers only while jobs are pending
+    // (the chain is actively winding down); a chain parked on an unfired
+    // timer is a detached continuation and poisons on the next tick.
+    void request_reclaim() {
         reclaim_pending_ = true;
         reclaim_retry_ = false;
         reclaim_retry_start_ns_ = 0;
-        reclaim_hard_ = hard;
     }
 
-    // §7.4: true while the JS side still has work that could settle a
-    // non-terminal chain: pending jobs, or a live app timer. Bounded: past
+    // §7.4: true while the JS side still has pending jobs that could
+    // settle a non-terminal chain (the cancel continuation's promise
+    // reactions, the reject timers of an abort path). Bounded: past
     // kReclaimSettleWindowNs from the first deferral the chain is treated
-    // as a detached continuation even if work remains (e.g. a perpetual
-    // interval), and the worker poisons instead of deferring forever.
+    // as a detached continuation even if jobs remain, and the worker
+    // poisons instead of deferring forever.
     //
-    // A hard reclaim (driver cancel) passes jobs_only=true: pending jobs
-    // mean the chain is actively winding down (e.g. the stream-cancel
-    // reader loop) and must be allowed to settle; a chain with no pending
-    // jobs but a live timer is a detached continuation — the cancel is a
-    // kill order and the timer must never be allowed to fire.
-    bool defer_reclaim_while_live(bool jobs_only) {
+    // A chain parked on a uv timer that has not fired is NOT a deferral
+    // reason: letting it fire later would run the continuation — exactly
+    // the timeout-path hazard where the 80ms timer's continuation emitted
+    // a native LOG after the request timed out. Timer deferral was removed
+    // for both hard and soft reclaims; the poison then lands before the
+    // timer fires and the terminalized token makes the continuation's
+    // capability call throw (require_active_request).
+    bool defer_reclaim_while_live() {
         if (reclaim_retry_ &&
             uv_hrtime() - reclaim_retry_start_ns_ >= kReclaimSettleWindowNs) {
             return false;
         }
-        if (JS_IsJobPending(JS_GetRuntime(ctx_))) {
-            return true;
-        }
-        if (jobs_only) {
-            return false;
-        }
-        return count_loop_timers() > 0;
-    }
-
-    // Counts uv timers in the worker loop other than the worker's own
-    // 10ms deadline timer. txiki registers every setTimeout/setInterval
-    // as a uv_timer handle in this loop and uv_close()s the handle when
-    // the timer fires or is cleared, so the walk count is exactly the
-    // live app-timer set.
-    size_t count_loop_timers() {
-        struct TimerCount {
-            size_t count;
-            uv_handle_t *self_deadline;
-        };
-        TimerCount state;
-        state.count = 0;
-        state.self_deadline = reinterpret_cast<uv_handle_t *>(
-            const_cast<uv_timer_t *>(&deadline_timer_));
-        uv_walk(
-            TJS_GetLoop(runtime_),
-            [](uv_handle_t *handle, void *arg) {
-                TimerCount *walk_state = static_cast<TimerCount *>(arg);
-                if (handle->type == UV_TIMER &&
-                    handle != walk_state->self_deadline) {
-                    walk_state->count += 1;
-                }
-            },
-            &state);
-        return state.count;
+        return JS_IsJobPending(JS_GetRuntime(ctx_)) != 0;
     }
 
     void erase_response(
@@ -3972,10 +3942,10 @@ private:
         }
         // §7.4: reclaim deferred to the next deadline tick so winding-down
         // 0ms timers (setTimeout(reject, 0) in the abort path) release
-        // their captured ctx_data first. Hard reclaim: a driver cancel is
-        // a kill order — a live non-terminal continuation must poison on
-        // the next tick instead of being deferred until it runs.
-        request_reclaim(true);
+        // their captured ctx_data first. A driver cancel is a kill order:
+        // a live non-terminal continuation must poison on the next tick
+        // instead of being deferred until it runs.
+        request_reclaim();
         return called;
     }
 
@@ -4090,9 +4060,11 @@ private:
             drain_jobs();
             // §7.4: same deferral as cancel_request — the timeout path's
             // reject-timer releases its captured ctx_data on the next loop
-            // tick, so reclaim must not run before then. Soft reclaim: the
-            // chain's parked work may still settle it inertly.
-            request_reclaim(false);
+            // tick, so reclaim must not run before then. No timer
+            // deferral: a chain parked on an unfired timer is a detached
+            // continuation and poisons on the next tick (the 80ms-timer
+            // continuation regression this unifies with the cancel path).
+            request_reclaim();
         }
     }
 
@@ -4758,11 +4730,6 @@ private:
     bool reclaim_pending_;
     bool reclaim_retry_;
     uint64_t reclaim_retry_start_ns_;
-    // §7.4: a hard reclaim (driver cancel) poisons a live non-terminal
-    // token immediately — the detached continuation must never run. A
-    // soft reclaim (timeout/settle) may defer while the chain's own
-    // pending work settles it inertly.
-    bool reclaim_hard_;
     // Sum of refs over live tokens (registry owner + captured jobs and
     // native resources). Must reach zero before exit; printed in diag.
     uint64_t retained_refs_;

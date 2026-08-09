@@ -3,7 +3,9 @@
 # This audit verifies:
 #   1. Vendor checkout is clean (no untracked or modified files).
 #   2. Vendor HEAD matches the expected tag (if configured).
-#   3. All 12 patches apply cleanly.
+#   3. All 16 patches apply in sequence to a fresh vendor copy, using the
+#      same tool and flags as the build (patch -p1 --forward --batch —
+#      PrepareTxiki.cmake).
 #   4. The overlay stamp matches the key computed from the shared function.
 #
 # CAPSID_TXIKI_PREPARE_SCRIPT and CAPSID_TXIKI_OVERLAY_STAMP are mandatory —
@@ -13,7 +15,8 @@ foreach(CAPSID_REQUIRED_VAR
         CAPSID_TXIKI_VENDOR
         CAPSID_TXIKI_PATCH_DIR
         CAPSID_TXIKI_PREPARE_SCRIPT
-        CAPSID_TXIKI_OVERLAY_STAMP)
+        CAPSID_TXIKI_OVERLAY_STAMP
+        CAPSID_TXIKI_PROBE_DIR)
     if(NOT DEFINED ${CAPSID_REQUIRED_VAR})
         message(FATAL_ERROR "${CAPSID_REQUIRED_VAR} is required")
     endif()
@@ -30,6 +33,7 @@ foreach(CAPSID_REQUIRED_FILE
 endforeach()
 
 find_program(CAPSID_GIT_EXECUTABLE git REQUIRED)
+find_program(CAPSID_PATCH_EXECUTABLE patch REQUIRED)
 set(CAPSID_AUDIT_FAILURES "")
 
 # --- vendor revision ---------------------------------------------------------
@@ -136,7 +140,7 @@ if(CAPSID_VENDOR_STATUS)
         "Do not use .gitignore to mask pollution.")
 endif()
 
-# --- patch integrity ---------------------------------------------------------
+# --- patch inventory ---------------------------------------------------------
 
 file(GLOB CAPSID_TXIKI_PATCHES "${CAPSID_TXIKI_PATCH_DIR}/*.patch")
 list(SORT CAPSID_TXIKI_PATCHES)
@@ -145,21 +149,6 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 if(NOT CAPSID_PATCH_COUNT EQUAL 16)
     string(APPEND CAPSID_AUDIT_FAILURES
         "\n  expected 16 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
-endif()
-
-if(CAPSID_PATCH_COUNT GREATER 0)
-    execute_process(
-        COMMAND "${CAPSID_GIT_EXECUTABLE}" -C "${CAPSID_TXIKI_VENDOR}"
-            apply --check ${CAPSID_TXIKI_PATCHES}
-        RESULT_VARIABLE CAPSID_APPLY_RESULT
-        OUTPUT_VARIABLE CAPSID_APPLY_OUTPUT
-        ERROR_VARIABLE CAPSID_APPLY_ERROR
-    )
-    if(NOT CAPSID_APPLY_RESULT EQUAL 0)
-        string(APPEND CAPSID_AUDIT_FAILURES
-            "\n  combined git apply --check failed:\n"
-            "${CAPSID_APPLY_OUTPUT}${CAPSID_APPLY_ERROR}")
-    endif()
 endif()
 
 # --- overlay key via shared function -----------------------------------------
@@ -248,6 +237,54 @@ if(NOT CAPSID_STAMPED_MANIFEST STREQUAL
         "the overlay it describes. Re-run cmake configure.")
 endif()
 
+# --- patch apply verification ------------------------------------------------
+#
+# The build applies patches sequentially with patch(1) into a prepared
+# overlay copy (PrepareTxiki.cmake). Verify that same sequence applies
+# cleanly to a pristine vendor copy. git apply --check is NOT used: it
+# checks each patch against the pristine tree and does not accumulate,
+# while the real build applies in order and later patches legitimately
+# build on earlier ones. A throwaway copy is used so the audit never
+# mutates the real vendor. Runs after stamp verification so tampered-stamp
+# negative controls fail without paying for a full vendor copy.
+
+if(CAPSID_PATCH_COUNT GREATER 0)
+    file(REMOVE_RECURSE "${CAPSID_TXIKI_PROBE_DIR}")
+    file(COPY "${CAPSID_TXIKI_VENDOR}"
+        DESTINATION "${CAPSID_TXIKI_PROBE_DIR}")
+    get_filename_component(
+        CAPSID_TXIKI_BASENAME "${CAPSID_TXIKI_VENDOR}" NAME)
+    set(CAPSID_APPLY_PROBE
+        "${CAPSID_TXIKI_PROBE_DIR}/${CAPSID_TXIKI_BASENAME}")
+    set(CAPSID_PROBE_OK 1)
+    foreach(CAPSID_PATCH IN LISTS CAPSID_TXIKI_PATCHES)
+        execute_process(
+            COMMAND "${CAPSID_PATCH_EXECUTABLE}" -p1 --forward --batch
+                -d "${CAPSID_APPLY_PROBE}" -i "${CAPSID_PATCH}"
+            RESULT_VARIABLE CAPSID_APPLY_RESULT
+            OUTPUT_VARIABLE CAPSID_APPLY_OUTPUT
+            ERROR_VARIABLE CAPSID_APPLY_ERROR
+        )
+        if(NOT CAPSID_APPLY_RESULT EQUAL 0)
+            get_filename_component(
+                CAPSID_PATCH_BASENAME "${CAPSID_PATCH}" NAME)
+            string(APPEND CAPSID_AUDIT_FAILURES
+                "\n  ${CAPSID_PATCH_BASENAME} does not apply to a pristine "
+                "vendor copy with patch -p1 --forward --batch (the build's "
+                "own sequence):\n"
+                "${CAPSID_APPLY_OUTPUT}${CAPSID_APPLY_ERROR}")
+            set(CAPSID_PROBE_OK 0)
+            break()
+        endif()
+    endforeach()
+    if(CAPSID_PROBE_OK)
+        file(REMOVE_RECURSE "${CAPSID_TXIKI_PROBE_DIR}")
+    else()
+        string(APPEND CAPSID_AUDIT_FAILURES
+            "\n  failed probe kept for inspection: ${CAPSID_TXIKI_PROBE_DIR}")
+    endif()
+endif()
+
 # --- final report ------------------------------------------------------------
 
 if(CAPSID_AUDIT_FAILURES)
@@ -257,4 +294,5 @@ if(CAPSID_AUDIT_FAILURES)
 endif()
 
 message(STATUS
-    "txiki.js vendor clean, 16 patches apply, overlay key and manifest verified")
+    "txiki.js vendor clean, ${CAPSID_PATCH_COUNT} patches apply in "
+    "sequence, overlay key and manifest verified")

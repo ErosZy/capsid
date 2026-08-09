@@ -2768,10 +2768,11 @@ if(BUILD_TESTING)
                 "-DCAPSID_TXIKI_EXPECTED_TAG=v26.6.0"
                 "-DCAPSID_TXIKI_OVERLAY_STAMP=${CAPSID_OVERLAY_STAMP}"
                 "-DCAPSID_TXIKI_PREPARE_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrepareTxiki.cmake"
+                "-DCAPSID_TXIKI_PROBE_DIR=${CMAKE_CURRENT_BINARY_DIR}/Testing/txiki-patch-probe"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AuditTxikiVendor.cmake"
         )
         set_tests_properties(
-            txiki_vendor_patch_integrity PROPERTIES TIMEOUT 60
+            txiki_vendor_patch_integrity PROPERTIES TIMEOUT 120
         )
         add_test(
             NAME txiki_overlay_audit_negative_controls

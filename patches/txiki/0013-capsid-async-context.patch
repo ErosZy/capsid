@@ -102,8 +102,8 @@ index 994db781..c0d8415a 100644
          maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
 +        tjs_httpclient_done(h);
  
-         /* Kill the WSI synchronously. The teardown callback chain
-          * will handle cleanup — do not access h afterwards. */
+         /* Mark the wsi to be killed at the next timeout check.  abort()
+          * is reachable from inside a lws callback for this very wsi (JS
 diff --git a/src/private.h b/src/private.h
 index e27ecf5a..bd0d8845 100644
 --- a/src/private.h
