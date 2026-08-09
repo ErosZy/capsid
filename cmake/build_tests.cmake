@@ -1412,6 +1412,26 @@ if(BUILD_TESTING)
     add_executable(test-cpp-header tests/test_cpp_header.cc)
     target_link_libraries(test-cpp-header PRIVATE capsid_runtime)
     add_test(NAME cpp_header COMMAND test-cpp-header)
+
+    add_executable(test-abi-guard tests/test_abi_guard.cc)
+    target_link_libraries(test-abi-guard PRIVATE capsid_runtime)
+    if(TARGET capsid-worker)
+        add_test(
+            NAME abi_guard_oom_countdown
+            COMMAND test-abi-guard $<TARGET_FILE:capsid-worker>)
+    else()
+        add_test(NAME abi_guard_oom_countdown COMMAND test-abi-guard)
+    endif()
+
+    add_executable(test-abi-guard-c tests/test_abi_guard_c.c)
+    target_link_libraries(test-abi-guard-c PRIVATE capsid_runtime)
+    if(TARGET capsid-worker)
+        add_test(
+            NAME abi_guard_c_caller
+            COMMAND test-abi-guard-c $<TARGET_FILE:capsid-worker>)
+    else()
+        add_test(NAME abi_guard_c_caller COMMAND test-abi-guard-c)
+    endif()
     if(CAPSID_BUILD_WORKER)
         add_test(
             NAME capsid_product_artifact_names

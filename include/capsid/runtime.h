@@ -57,8 +57,22 @@ typedef enum capsid_result {
     CAPSID_INVALID_ARGUMENT = 3,
     CAPSID_PROTOCOL_ERROR = 4,
     CAPSID_SYSTEM_ERROR = 5,
-    CAPSID_CHILD_ERROR = 6
+    CAPSID_CHILD_ERROR = 6,
+    /* WP-06 additions to ABI v7: no exception may cross an extern "C"
+     * boundary. CAPSID_OUT_OF_MEMORY is a std::bad_alloc caught by the
+     * ABI guard; CAPSID_INTERNAL_ERROR is any other C++ exception. */
+    CAPSID_OUT_OF_MEMORY = 7,
+    CAPSID_INTERNAL_ERROR = 8
 } capsid_result;
+
+/*
+ * Thread-local error detail for the last Capsid API call on this thread.
+ * Points into a fixed-size buffer owned by the Runtime: never free it, and
+ * treat it as valid only until the next Capsid API call on the same
+ * thread. Returns NULL when the last call succeeded (or never ran), and
+ * on OOM paths only static text is stored — the mechanism never allocates.
+ */
+const char *capsid_last_error(void);
 
 /*
  * Immutable identity of the Runtime/QuickJS bytecode toolchain. String
@@ -459,6 +473,12 @@ int64_t capsid_worker_pid(const capsid_worker *worker);
  * process CPU affinity and, on Linux cgroup v2, cpu.max. Available CPU
  * indices reflect the calling process affinity. Affinity is host-only and
  * never observable by application JavaScript.
+ *
+ * Frozen conservative fallbacks (WP-06, spec §10.2): if querying the host
+ * topology raises an internal error, capsid_recommended_worker_count()
+ * and capsid_available_cpu_count() return 1 and capsid_available_cpu_at()
+ * returns CAPSID_INTERNAL_ERROR; in all three cases capsid_last_error()
+ * is set on the calling thread.
  */
 uint32_t capsid_recommended_worker_count(void);
 uint32_t capsid_available_cpu_count(void);
