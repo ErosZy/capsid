@@ -14,12 +14,17 @@
 # the runtime library (static), the public headers, support docs, the
 # license and the identity/SBOM data. Test fixtures, build directories,
 # private headers, keys and vendored sources never leave the build tree.
-set(CAPSID_INSTALL_BINARIES capsid-worker capsid-bytecode-compile)
-# The host target is skipped entirely when Boost is missing (build_host.cmake),
-# so existence — not just the option flag — decides what may be installed.
-if(TARGET capsid-host)
-    list(APPEND CAPSID_INSTALL_BINARIES capsid-host)
-endif()
+# Target existence — not just an option flag — decides what may be
+# installed: the host is skipped when Boost is missing, and the worker
+# pair (worker + its bytecode compiler) is absent in CAPSID_BUILD_WORKER=OFF
+# matrices, where a host-only package is still a valid artifact.
+set(CAPSID_INSTALL_BINARIES)
+foreach(CAPSID_INSTALL_CANDIDATE IN ITEMS
+        capsid-worker capsid-bytecode-compile capsid-host)
+    if(TARGET ${CAPSID_INSTALL_CANDIDATE})
+        list(APPEND CAPSID_INSTALL_BINARIES ${CAPSID_INSTALL_CANDIDATE})
+    endif()
+endforeach()
 
 # capsid_sanitizers is an INTERFACE library capsid_runtime links PUBLIC;
 # it must be exported alongside so a consumer's find_package works without
@@ -64,12 +69,10 @@ install(FILES
 # beyond the libc family. INSTALL_RPATH is set explicitly so a future
 # switch to a shared capsid_runtime keeps $ORIGIN/../lib working, and the
 # package smoke scans the dynamic sections to prove the policy holds.
-set_target_properties(capsid-worker capsid-bytecode-compile PROPERTIES
-    INSTALL_RPATH "$ORIGIN/../lib")
-if(TARGET capsid-host)
-    set_target_properties(capsid-host PROPERTIES
+foreach(CAPSID_RPATH_TARGET IN LISTS CAPSID_INSTALL_BINARIES)
+    set_target_properties(${CAPSID_RPATH_TARGET} PROPERTIES
         INSTALL_RPATH "$ORIGIN/../lib")
-endif()
+endforeach()
 
 # ---- §12.3 package naming ---------------------------------------------------
 # capsid-<version>-<system>-<arch>.tar.gz. Names are lowercased so the

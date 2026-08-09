@@ -3874,6 +3874,9 @@ if(BUILD_TESTING)
         # a third-party CPack configuration.
         # capsid-host is skipped when system Boost is missing, so the
         # manifest expectation follows target existence, not the option.
+        # The packaging gates themselves require the worker pair: in a
+        # CAPSID_BUILD_WORKER=OFF matrix (host-only) they are not registered.
+        if(TARGET capsid-worker)
         if(TARGET capsid-host)
             set(CAPSID_HOST_TARGET_PRESENT ON)
         else()
@@ -3960,6 +3963,7 @@ if(BUILD_TESTING)
         set_tests_properties(worker_package_reproducibility PROPERTIES
             TIMEOUT 1800
             DEPENDS worker_package_smoke)
+        endif()
 
         add_executable(
             test-sandbox
