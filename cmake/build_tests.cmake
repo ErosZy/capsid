@@ -3208,6 +3208,45 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_p0_contract PROPERTIES TIMEOUT 20)
 
+        # WP-04 PR-06 (spec §8.1/§8.4): the WorkerExecutor ownership
+        # contract — startup failure, factory/adopted lifecycle and
+        # exactly-once reap. RED gate for the extraction: the header does
+        # not exist until the executor is extracted from
+        # single_worker_server.cc, so this target fails to compile on the
+        # pre-extraction tree.
+        add_executable(
+            test-host-worker-executor
+            tests/test_host_worker_executor.cc)
+        target_include_directories(
+            test-host-worker-executor PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-worker-executor PRIVATE
+            capsid_runtime
+            capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-worker-executor PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-worker-executor PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-worker-executor PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-worker-executor capsid-worker)
+        add_test(
+            NAME host_worker_executor_contract
+            COMMAND test-host-worker-executor $<TARGET_FILE:capsid-worker>)
+        set_tests_properties(host_worker_executor_contract PROPERTIES
+            TIMEOUT 40)
+
         add_executable(
             test-hono-worker-driver
             tests/test_framework_worker_driver.cc
