@@ -5,6 +5,7 @@ struct capsid_worker;
 
 #include "host/bytecode_attestation.h"
 #include "host/policy_compiler.h"
+#include "host/worker_executor.h"
 
 #include <atomic>
 #include <cstdint>
@@ -72,6 +73,16 @@ struct DeployOutcome {
     // where it aliases workers[0]; null for any other pool size, so an
     // old consumer can never be handed just one worker of a bigger pool.
     capsid_worker* worker = nullptr;
+    // PR-09c (§8.3/§9.3) generation handoff: the §8.3 replacement factory
+    // plus the generation identity. A data-plane pool adopted over
+    // `workers` spawns replacements through this factory — same artifact,
+    // same effective config, no re-read of the upload directory — and the
+    // pool's application/version/digest identity comes from these fields.
+    // Set on every successful warm (deploy, idempotent redeploy, recovery);
+    // always null on failure.
+    WorkerExecutor::WorkerFactory generation_factory;
+    std::string version;
+    std::string generation_digest;
 };
 
 enum class DeployErrorCode {

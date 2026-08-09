@@ -36,6 +36,7 @@ AsyncAdminBackend::AsyncAdminBackend(
                        : options.max_pending_operations),
       activate_worker_(options.activate_worker),
       activate_pool_(options.activate_pool),
+      activate_generation_(options.activate_generation),
       retire_worker_(options.retire_worker),
       external_stop_(options.external_stop) {
     worker_ = std::thread(&AsyncAdminBackend::worker_loop, this);
@@ -160,17 +161,27 @@ void AsyncAdminBackend::worker_loop() {
                 succeeded = outcome.ok;
                 if (succeeded && !outcome.workers.empty()) {
                     // Ownership handoff: the whole pool moves to exactly
-                    // one callback. A multi-worker pool MUST go through
-                    // the atomic activate_pool — the legacy activate_worker
-                    // would claim just one process of a bigger pool — while
-                    // the single-worker pool keeps the legacy path. A true
+                    // one callback. When configured, the GENERATION hook
+                    // (PR-09c §9.3) is used for EVERY pool size — the
+                    // fleet plus the §8.3 replacement factory and the
+                    // generation identity, so the data plane wires a pool
+                    // even for a single-worker App. Otherwise a
+                    // multi-worker pool MUST go through the atomic
+                    // activate_pool — the legacy activate_worker would
+                    // claim just one process of a bigger pool — while the
+                    // single-worker pool keeps the legacy path. A true
                     // return transfers ownership of every worker; anything
                     // else (missing callback, false return, exception)
                     // leaves the pool unclaimed for the tail cleanup to
                     // recycle and marks the public operation as a redacted
                     // Failed.
                     bool activated = false;
-                    if (outcome.workers.size() > 1) {
+                    if (activate_generation_) {
+                        activated = activate_generation_(
+                            pending.application, outcome.workers,
+                            outcome.generation_factory, outcome.version,
+                            outcome.generation_digest);
+                    } else if (outcome.workers.size() > 1) {
                         if (activate_pool_) {
                             activated = activate_pool_(
                                 pending.application, outcome.workers);

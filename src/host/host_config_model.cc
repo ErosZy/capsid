@@ -636,4 +636,60 @@ bool parse_host_config(std::string_view json, ParsedHostConfig* out,
     return true;
 }
 
+ResolvedRecoveryPolicy resolve_recovery_policy(const RecoveryConfig& config) {
+    // Host defaults: a zero (absent) field maps to the value the strict
+    // GenerationPool::create_adopted validation expects for a running Host.
+    // The jitter text is decimal basis points; the schema validated the
+    // grammar, so an unparseable value here is a startup error.
+    ResolvedRecoveryPolicy out;
+    out.policy.max_events =
+        config.crash_budget.max_events > 0
+            ? config.crash_budget.max_events
+            : 5;
+    if (out.policy.max_events > kMaxTrackedInstabilityEvents) {
+        out.error = "crash budget exceeds the tracked-event window";
+        return out;
+    }
+    out.policy.window_ms =
+        config.crash_budget.window_ms > 0 ? config.crash_budget.window_ms
+                                          : 60000;
+    out.policy.backoff_initial_ms =
+        config.restart_backoff.initial_ms > 0
+            ? config.restart_backoff.initial_ms
+            : 100;
+    out.policy.backoff_maximum_ms =
+        config.restart_backoff.maximum_ms > 0
+            ? config.restart_backoff.maximum_ms
+            : 10000;
+    if (out.policy.backoff_maximum_ms < out.policy.backoff_initial_ms) {
+        out.error = "restart backoff maximum precedes its initial delay";
+        return out;
+    }
+    // "1000" basis points = 10%; absent/empty text takes the Host default.
+    const std::string& jitter_text = config.restart_backoff.jitter;
+    if (jitter_text.empty()) {
+        out.policy.jitter_basis_points = 1000;
+    } else {
+        char* end = nullptr;
+        const unsigned long parsed = std::strtoul(jitter_text.c_str(), &end, 10);
+        if (end == jitter_text.c_str() || *end != '\0' ||
+            parsed > std::numeric_limits<std::uint32_t>::max() ||
+            parsed > 10000) {
+            out.error = "invalid restart backoff jitter";
+            return out;
+        }
+        out.policy.jitter_basis_points = static_cast<std::uint32_t>(parsed);
+    }
+    // host.json has no stability-window field (health interval is the
+    // PROBE cadence, not the backoff reset); the Host default always
+    // applies.
+    out.policy.stable_reset_ms = 60000;
+    out.policy.replacements_concurrent_per_app =
+        config.replacements_concurrent_per_app > 0
+            ? config.replacements_concurrent_per_app
+            : 1;
+    out.ok = true;
+    return out;
+}
+
 }  // namespace capsid::host

@@ -14,6 +14,7 @@
 
 #include "host/policy_compiler.h"
 #include "host/trusted_key_store.h"
+#include "host/worker_recovery.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -147,6 +148,23 @@ struct ParsedHostConfig {
 // (admin.mode, isolation.mode, capacity bounds, size/duration grammars).
 bool parse_host_config(std::string_view json, ParsedHostConfig* out,
                        std::string* error);
+
+struct ResolvedRecoveryPolicy {
+    bool ok = false;
+    WorkerRecoveryPolicy policy;
+    std::string error;  // static text
+};
+
+// PR-09c: the coordinator's recovery-policy projection from the §9.5
+// recovery block. A zero value means "Host default" — the strict
+// GenerationPool::create_adopted validation rejects a zero field, so every
+// field resolves to a non-zero value here (max_events=5, window_ms=60000,
+// backoff_initial_ms=100, backoff_maximum_ms=10000, jitter=10%,
+// stable_reset_ms=60000, replacements=1). The jitter text is decimal
+// basis points ("1000" = 10%); the schema already validated the grammar,
+// so an unparseable value at this layer is an error (never a silent
+// default).
+ResolvedRecoveryPolicy resolve_recovery_policy(const RecoveryConfig& config);
 
 }  // namespace capsid::host
 

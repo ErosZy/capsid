@@ -48,6 +48,23 @@ struct AsyncAdminBackendOptions {
     // callback would claim just one process of a bigger pool.
     std::function<bool(const std::string&,
                        std::vector<capsid_worker*>)> activate_pool;
+    // PR-09c (§9.3) GENERATION ownership handoff: invoked when the
+    // coordinator returns a warmed generation — the whole fleet, the §8.3
+    // replacement factory, and the version + digest identity — so the data
+    // plane can adopt a pool in place (spawn replacements through the same
+    // artifact/config, label the pool with the generation identity). When
+    // set it is preferred over activate_pool_/activate_worker_ for EVERY
+    // pool size: a single-worker App is a one-worker pool, not a bare
+    // worker. A true return transfers ownership of every worker (the Async
+    // backend must neither destroy nor leak any of them); a missing
+    // callback, a false return or an exception destroys the whole pool and
+    // marks the public operation as a redacted Failed.
+    std::function<bool(const std::string& application,
+                       std::vector<capsid_worker*> workers,
+                       const WorkerExecutor::WorkerFactory& factory,
+                       const std::string& version,
+                       const std::string& generation_digest)>
+        activate_generation;
     std::function<void(const std::string&)> retire_worker;
 };
 
@@ -94,6 +111,10 @@ private:
     std::function<bool(const std::string&, capsid_worker*)> activate_worker_;
     std::function<bool(const std::string&,
                        std::vector<capsid_worker*>)> activate_pool_;
+    std::function<bool(const std::string&, std::vector<capsid_worker*>,
+                       const WorkerExecutor::WorkerFactory&,
+                       const std::string&, const std::string&)>
+        activate_generation_;
     std::function<void(const std::string&)> retire_worker_;
     const std::atomic<bool>* external_stop_;
     std::mutex mutex_;

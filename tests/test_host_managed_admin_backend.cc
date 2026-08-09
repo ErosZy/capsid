@@ -17,6 +17,7 @@
 
 #include "host/admin_api.h"
 #include "host/managed_host.h"
+#include "host/worker_executor.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -93,8 +94,37 @@ public:
         } else {
             outcome.ok = true;
             status->state = capsid::host::OperationState::kActive;
+            if (emit_pool_size_ > 0) {
+                // PR-09c: the coordinator hands back a whole warmed
+                // generation — opaque worker fleet (never dereferenced by
+                // the fake), the §8.3 replacement factory, and the
+                // generation identity.
+                for (std::size_t index = 0; index < emit_pool_size_;
+                     ++index) {
+                    outcome.workers.push_back(
+                        reinterpret_cast<capsid_worker*>(
+                            static_cast<std::uintptr_t>(0x1000 + index)));
+                }
+                outcome.generation_factory =
+                    [](capsid_worker** out, std::string* factory_error) {
+                        if (factory_error != nullptr) {
+                            *factory_error = "fake generation factory";
+                        }
+                        *out = nullptr;
+                        return false;
+                    };
+                outcome.version = "gen-v1";
+                outcome.generation_digest = "sha256:" + std::string(64, 'f');
+            }
         }
         return outcome;
+    }
+
+    // The next successful operation reports a `size`-worker generation
+    // (fake opaque fleet + replacement factory + identity).
+    void emit_generation_pool(std::size_t size) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        emit_pool_size_ = size;
     }
 
     capsid::host::DeployOutcome retire(
@@ -144,6 +174,7 @@ private:
     bool started_ = false;
     bool released_ = false;
     bool fail_ = false;
+    std::size_t emit_pool_size_ = 0;
     int calls_ = 0;
     std::string sensitive_error_ =
         "secret-canary-from-inner-managed-operation";
@@ -270,6 +301,69 @@ int main(int argc, char** argv) {
                     terminal.version == "v1" &&
                     terminal.state == capsid::host::OperationState::kActive,
                 "async Admin success lost its public operation identity");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    // PR-09c (§9.3): when the coordinator hands back a whole warmed
+    // generation, the async registry prefers the activate_generation hook
+    // (workers + §8.3 replacement factory + version + digest) over the
+    // legacy single-worker/pool callbacks — the data plane must wire the
+    // generation identity, not a bare fleet. RED gate: the field does not
+    // exist on the PR-09b tree.
+    if (mode == "host_admin_async_generation_handoff") {
+        BlockingAdminBackend inner;
+        inner.emit_generation_pool(2);
+        capsid::host::AsyncAdminBackendOptions options;
+        options.max_pending_operations = 2;
+        bool generation_called = false;
+        bool legacy_called = false;
+        std::string handoff_app;
+        std::size_t handoff_workers = 0;
+        bool handoff_factory_set = false;
+        std::string handoff_version;
+        std::string handoff_digest;
+        options.activate_generation =
+            [&](const std::string& application,
+                std::vector<capsid_worker*> workers,
+                const capsid::host::WorkerExecutor::WorkerFactory& factory,
+                const std::string& version,
+                const std::string& generation_digest) {
+                generation_called = true;
+                handoff_app = application;
+                handoff_workers = workers.size();
+                handoff_factory_set = static_cast<bool>(factory);
+                handoff_version = version;
+                handoff_digest = generation_digest;
+                return true;
+            };
+        options.activate_pool =
+            [&](const std::string&, std::vector<capsid_worker*>) {
+                legacy_called = true;
+                return true;
+            };
+        options.activate_worker = [&](const std::string&, capsid_worker*) {
+            legacy_called = true;
+            return true;
+        };
+        capsid::host::AsyncAdminBackend backend(&inner, options);
+        capsid::host::OperationStatus submitted;
+        const capsid::host::DeployOutcome outcome =
+            backend.deploy("orders", "v1", &submitted);
+        require(outcome.ok, "generation-handoff deploy was not accepted");
+        inner.wait_started();
+        inner.release();
+        const capsid::host::OperationStatus terminal =
+            wait_terminal(&backend, outcome.operation_id);
+        require(terminal.state == capsid::host::OperationState::kActive,
+                "generation handoff did not reach Active");
+        require(generation_called && !legacy_called,
+                "activate_generation was not preferred over the legacy "
+                "callbacks");
+        require(handoff_app == "orders" && handoff_workers == 2 &&
+                    handoff_factory_set && handoff_version == "gen-v1" &&
+                    handoff_digest == "sha256:" + std::string(64, 'f'),
+                "generation handoff lost the generation context");
         std::cout << "PASS" << std::endl;
         return 0;
     }

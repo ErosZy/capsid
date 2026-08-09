@@ -6,7 +6,9 @@
 #include "host/managed_host.h"
 #include "host/managed_admin_backend.h"
 #include "host/bytecode_attestation.h"
+#include "host/generation_pool.h"
 #include "host/secret_snapshot.h"
+#include "host/worker_executor.h"
 
 #include "capsid/runtime.h"
 
@@ -29,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <poll.h>
@@ -474,6 +477,98 @@ void destroy_workers(const std::vector<capsid_worker*>& workers) {
     }
 }
 
+// Polls `predicate` until it holds or the deadline expires; returns whether
+// it held. Never sleeps longer than 10ms per poll (same idiom as the
+// generation pool suite).
+bool wait_for(const std::function<bool()>& predicate,
+              std::chrono::milliseconds timeout) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (predicate()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return predicate();
+}
+
+// Fast, deterministic recovery: 20ms initial backoff, no jitter, budget of
+// two unexpected exits before quarantine, no stability reset during a test.
+capsid::host::WorkerRecoveryPolicy generation_recovery_policy() {
+    capsid::host::WorkerRecoveryPolicy policy;
+    policy.max_events = 2;
+    policy.window_ms = 60000;
+    policy.backoff_initial_ms = 20;
+    policy.backoff_maximum_ms = 1000;
+    policy.jitter_basis_points = 0;
+    policy.stable_reset_ms = 60000;
+    policy.replacements_concurrent_per_app = 1;
+    return policy;
+}
+
+// Submits a bodyless begin plus an upfront credit grant and waits until the
+// pool's inflight returns to 0 — the response completed end-to-end. The
+// pump owns the event drain, so the inflight counter is the only observable
+// completion signal at this layer.
+void generation_round_trip(capsid::host::GenerationPool& pool,
+                           std::uint64_t request_id) {
+    capsid::host::WorkerExecutor* worker = pool.pick_worker();
+    require(worker != nullptr,
+            "generation round trip: no READY worker to serve the request");
+    capsid::host::Command begin;
+    begin.type = capsid::host::CommandType::kBeginRequest;
+    begin.request_id = request_id;
+    begin.method = "GET";
+    begin.url = "https://pool.invalid/generation";
+    begin.end_request = true;  // bodyless fusion: begin + end in one frame
+    worker->submit(std::move(begin));
+    capsid::host::Command grant;
+    grant.type = capsid::host::CommandType::kGrantResponseCredit;
+    grant.request_id = request_id;
+    grant.credit = 4096;  // covers the whole response body upfront
+    worker->submit(std::move(grant));
+    require(wait_for([&] { return pool.inflight() == 0; },
+                     std::chrono::seconds(15)),
+            "generation round trip did not complete within 15s");
+}
+
+#if defined(__linux__)
+// The pool spawns the workers as OUR direct children; scan /proc for the
+// children of this test process (same idiom as the generation pool suite).
+void generation_kill_worker_child() {
+    const pid_t self = getpid();
+    DIR* directory = opendir("/proc");
+    require(directory != nullptr, "cannot open /proc to find the worker");
+    pid_t found = -1;
+    struct dirent* entry = nullptr;
+    while ((entry = readdir(directory)) != nullptr) {
+        if (entry->d_name[0] < '0' || entry->d_name[0] > '9') {
+            continue;
+        }
+        char path[320];  // NAME_MAX (255) + "/proc/" + "/stat" + NUL
+        std::snprintf(path, sizeof(path), "/proc/%s/stat", entry->d_name);
+        FILE* file = std::fopen(path, "r");
+        if (file == nullptr) {
+            continue;
+        }
+        char comm[256];
+        long ppid = -1;
+        // Format: pid (comm) state ppid ... — see the generation pool suite
+        // for the scan-format notes.
+        const int scanned =
+            std::fscanf(file, "%*d %255[^)]%*c %*c %ld", comm, &ppid);
+        std::fclose(file);
+        if (scanned == 2 && ppid == static_cast<long>(self)) {
+            found = static_cast<pid_t>(std::strtol(entry->d_name, nullptr, 10));
+            break;
+        }
+    }
+    closedir(directory);
+    require(found > 0, "cannot find the pool's worker child process");
+    require(kill(found, SIGKILL) == 0, "cannot SIGKILL the pool worker");
+}
+#endif  // __linux__
+
 std::uint64_t percentile_us(std::vector<std::uint64_t> values,
                             std::size_t percentile) {
     require(!values.empty(), "cannot compute a percentile without samples");
@@ -775,6 +870,71 @@ int main(int argc, char** argv) {
                     "recovery reused a worker process inside the pool");
         }
         destroy_workers(recovered_workers);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    // PR-09c (§9.3): the deploy outcome carries the generation's §8.3
+    // replacement factory + identity; a data-plane pool adopted over the
+    // warmed fleet respawns a SIGKILLed worker through that factory (same
+    // artifact, same effective config) and serves again. RED gate: the
+    // outcome fields do not exist on the PR-09b tree.
+    if (mode == "host_managed_generation_factory_replacement") {
+        write_file(fixtures.vdir + "/capsid.json", kThreeWorkerAppConfig);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        options.host_policy.max_workers = 3;
+
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome deployed =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(deployed.ok, "fixed 3/3 deploy failed: " + deployed.error);
+        require(status.state == capsid::host::OperationState::kActive,
+                "fixed pool deploy did not become Active");
+        const std::vector<capsid_worker*> deployed_workers =
+            outcome_workers(deployed);
+        require(deployed_workers.size() == 3,
+                "fixed 3/3 deploy did not return three READY workers");
+        // PR-09c additive contract: the generation identity travels with
+        // the outcome so a data-plane pool can be adopted in place.
+        require(static_cast<bool>(deployed.generation_factory),
+                "deploy outcome lost the generation replacement factory");
+        require(deployed.version == "v1",
+                "deploy outcome lost the generation version");
+        require(deployed.generation_digest.rfind("sha256:", 0) == 0 &&
+                    deployed.generation_digest.size() == 71,
+                "deploy outcome lost the generation digest");
+
+        capsid::host::GenerationPoolOptions pool_options;
+        pool_options.application_id = "orders";
+        pool_options.version = deployed.version;
+        pool_options.generation_digest = deployed.generation_digest;
+        pool_options.workers =
+            static_cast<std::uint32_t>(deployed_workers.size());
+        pool_options.factory = deployed.generation_factory;
+        pool_options.recovery = generation_recovery_policy();
+        std::string pool_error;
+        std::shared_ptr<capsid::host::GenerationPool> pool =
+            capsid::host::GenerationPool::create_adopted(
+                std::move(pool_options), deployed_workers, &pool_error);
+        require(pool != nullptr, "cannot adopt the warmed pool: " + pool_error);
+        require(pool->ready_workers() == 3,
+                "adopted pool is not fully READY");
+
+        generation_round_trip(*pool, 1001);
+
+#if defined(__linux__)
+        // Kill one worker child: the pool must respawn it through the
+        // GENERATION factory (the deploy's own artifact/config) and return
+        // to full READY capacity.
+        generation_kill_worker_child();
+        require(wait_for([&] { return pool->ready_workers() == 3; },
+                         std::chrono::seconds(20)),
+                "replacement through the generation factory did not restore "
+                "full READY capacity");
+        generation_round_trip(*pool, 1002);  // the replacement serves
+#endif  // __linux__
+
+        pool->stop_and_join();
         std::cout << "PASS" << std::endl;
         return 0;
     }

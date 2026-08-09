@@ -35,7 +35,7 @@ namespace capsid::host {
 
 // Forward declaration: the ManagedListener implementation (the M1A server
 // pattern — a namespace-scope class, defined in managed_listener.cc).
-class Impl;
+class ManagedListenerImpl;
 
 struct ManagedListenerOptions {
     // The configured listener. config.tcp is "host" or "host:port"; the
@@ -80,7 +80,7 @@ public:
     bool running() const;
 
 private:
-    std::shared_ptr<Impl> impl_;
+    std::shared_ptr<ManagedListenerImpl> impl_;
 };
 
 }  // namespace capsid::host

@@ -14,8 +14,11 @@
 #include "capsid/runtime.h"
 #include "host/admin_service.h"
 #include "host/config.h"
+#include "host/generation_pool.h"
 #include "host/host_config_model.h"
 #include "host/managed_admin_backend.h"
+#include "host/managed_listener.h"
+#include "host/routing_snapshot.h"
 #include "host/trusted_key_store.h"
 
 #include <boost/asio/ip/address.hpp>
@@ -496,57 +499,127 @@ int run_managed(const std::string& host_config_path,
         app_options.push_back(options.get());
         owned.push_back(std::move(options));
     }
-    // Active workers owned by this process: App -> complete worker pool.
-    // A managed fixed pool is an atomic ownership unit; retaining only the
-    // legacy single-worker pointer silently drops every shard beyond the
-    // first one during recovery and replacement.
-    std::map<std::string, std::vector<capsid_worker*>> active_worker_pools;
-    std::mutex workers_mutex;
-    const auto activate_pool =
+    // ---- PR-09c §9.3: the Managed data plane ----
+    // The routing snapshot maps each App to its ACTIVE GenerationPool; the
+    // listener routes every request through one atomic snapshot load and
+    // pins the pool it found. Pools are ADOPTED from the warmed fleet — the
+    // §8.3 replacement factory and the generation identity travel with the
+    // deploy/recover outcome — so replacements respawn the same artifact
+    // and effective config, and the route identity survives replacement.
+    const capsid::host::ResolvedRecoveryPolicy recovery_resolved =
+        capsid::host::resolve_recovery_policy(config.recovery);
+    if (!recovery_resolved.ok) {
+        fail("invalid host.json recovery policy: " +
+             recovery_resolved.error);
+    }
+    auto routing = std::make_shared<capsid::host::RoutingTable>();
+    // App -> ACTIVE pool (the only pool a new request may route to).
+    std::map<std::string,
+             std::shared_ptr<capsid::host::GenerationPool>> active_pools;
+    // Drained (retired or replaced) pools stay alive until shutdown: the
+    // pool destructor drains and joins, and holding the shared_ptr keeps
+    // that off the Admin worker thread.
+    std::vector<std::shared_ptr<capsid::host::GenerationPool>> draining_pools;
+    std::mutex pools_mutex;
+    // The listener is created AFTER startup recovery (see below); pools
+    // activated during recovery are wired by its start(), which wires every
+    // pool in the current snapshot. Pools activated later are wired
+    // explicitly by activate_generation.
+    std::unique_ptr<capsid::host::ManagedListener> data_plane;
+    // Publishes a fresh snapshot over active_pools. Caller holds pools_mutex
+    // (the routing table itself is lock-free; the lock makes the
+    // active_pools view atomic for its writers).
+    const auto publish_snapshot = [&]() {
+        std::vector<std::pair<
+            std::string, std::shared_ptr<capsid::host::GenerationPool>>> routes;
+        routes.reserve(active_pools.size());
+        for (const auto& entry : active_pools) {
+            routes.emplace_back(entry.first, entry.second);
+        }
+        routing->publish(
+            capsid::host::RoutingSnapshot::build(std::move(routes)));
+    };
+    // Ownership handoff for a warmed generation: adopt the fleet into a
+    // GenerationPool (create_adopted destroys everything on failure — no
+    // worker escapes), wire the event sink, publish the route, and drain
+    // the replaced generation. A generation without its replacement factory
+    // is rejected (factory null) — §8.3 replacement is not optional.
+    const auto activate_generation =
         [&](const std::string& application,
-            std::vector<capsid_worker*> workers) {
-            std::lock_guard<std::mutex> lock(workers_mutex);
-            const auto existing = active_worker_pools.find(application);
-            if (existing != active_worker_pools.end()) {
-                for (capsid_worker* worker : existing->second) {
-                    if (worker != nullptr) {
-                        capsid_worker_destroy(worker);
-                    }
-                }
-            }
-            active_worker_pools[application] = std::move(workers);
-            return true;
-        };
-    const auto activate_worker =
-        [&](const std::string& application, capsid_worker* worker) {
-            std::vector<capsid_worker*> workers;
-            if (worker != nullptr) {
-                workers.push_back(worker);
-            }
-            return activate_pool(application, std::move(workers));
-        };
-    const auto retire_worker = [&](const std::string& application) {
-        std::lock_guard<std::mutex> lock(workers_mutex);
-        const auto existing = active_worker_pools.find(application);
-        if (existing != active_worker_pools.end()) {
-            for (capsid_worker* worker : existing->second) {
-                if (worker != nullptr) {
+            std::vector<capsid_worker*> workers,
+            const capsid::host::WorkerExecutor::WorkerFactory& factory,
+            const std::string& version,
+            const std::string& generation_digest) -> bool {
+            std::lock_guard<std::mutex> lock(pools_mutex);
+            if (!factory) {
+                for (capsid_worker* worker : workers) {
                     capsid_worker_destroy(worker);
                 }
+                return false;
             }
-            active_worker_pools.erase(existing);
+            capsid::host::GenerationPoolOptions pool_options;
+            pool_options.application_id = application;
+            pool_options.version = version;
+            pool_options.generation_digest = generation_digest;
+            pool_options.workers =
+                static_cast<std::uint32_t>(workers.size());
+            pool_options.factory = factory;
+            pool_options.recovery = recovery_resolved.policy;
+            std::string pool_error;
+            std::shared_ptr<capsid::host::GenerationPool> pool =
+                capsid::host::GenerationPool::create_adopted(
+                    std::move(pool_options), std::move(workers),
+                    &pool_error);
+            if (pool == nullptr) {
+                return false;
+            }
+            // The previous generation stops serving NOW: new requests
+            // route to the new pool, in-flight requests finish on the old
+            // one, and a drained generation never starts a replacement.
+            const auto existing = active_pools.find(application);
+            if (existing != active_pools.end()) {
+                existing->second->request_drain();
+                draining_pools.push_back(existing->second);
+                active_pools.erase(existing);
+            }
+            // The sink must be installed before the pool starts serving:
+            // a request pinned before wiring would lose its response
+            // events (wire_pool precondition: no in-flight requests).
+            if (data_plane != nullptr) {
+                data_plane->wire_pool(pool);
+            }
+            active_pools[application] = pool;
+            publish_snapshot();
+            return true;
+        };
+    const auto retire_worker = [&](const std::string& application) {
+        std::lock_guard<std::mutex> lock(pools_mutex);
+        const auto existing = active_pools.find(application);
+        if (existing != active_pools.end()) {
+            // The retire tombstone is durable (the coordinator persisted it
+            // before this callback); the route disappears NOW and the old
+            // generation drains in the background.
+            existing->second->request_drain();
+            draining_pools.push_back(existing->second);
+            active_pools.erase(existing);
+            publish_snapshot();
         }
     };
     const auto reclaim_workers = [&]() {
-        std::lock_guard<std::mutex> lock(workers_mutex);
-        for (const auto& entry : active_worker_pools) {
-            for (capsid_worker* worker : entry.second) {
-                if (worker != nullptr) {
-                    capsid_worker_destroy(worker);
-                }
+        std::vector<std::shared_ptr<capsid::host::GenerationPool>> all;
+        {
+            std::lock_guard<std::mutex> lock(pools_mutex);
+            for (const auto& entry : active_pools) {
+                all.push_back(entry.second);
             }
+            active_pools.clear();
+            all.insert(all.end(), draining_pools.begin(),
+                       draining_pools.end());
+            draining_pools.clear();
         }
-        active_worker_pools.clear();
+        for (const auto& pool : all) {
+            pool->stop_and_join();
+        }
     };
     // The process-global worker permit (capacity.workersTotal). The slot
     // is bound to an active App: replacements do not re-acquire, a failed
@@ -597,10 +670,37 @@ int run_managed(const std::string& host_config_path,
             }
             // READY succeeded: the complete recovered pool holds the slot.
             capacity.record_success(options->application);
-            activate_pool(options->application, std::move(recovered.workers));
+            if (!activate_generation(
+                    options->application, std::move(recovered.workers),
+                    recovered.generation_factory, recovered.version,
+                    recovered.generation_digest)) {
+                fail("cannot activate the recovered pool for application " +
+                     options->application);
+            }
         } else if (newly_acquired) {
             // No active/retired generation: no permanent occupancy.
             capacity.release(options->application);
+        }
+    }
+    // §9.2 data plane: 0..1 public listeners, bound all-or-fail BEFORE
+    // Admin readiness is published (a configured listener that cannot bind
+    // must fail the Host, never serve a degraded control plane). The v1
+    // event sink is single-consumer — exactly one listener may own the
+    // pools' fan-out — so more than one configured listener fails closed at
+    // startup instead of serving with a broken response fan-out.
+    if (config.listeners.size() > 1) {
+        fail("host.json configures multiple listeners; the v1 data plane "
+             "supports exactly one");
+    }
+    if (config.listeners.size() == 1) {
+        capsid::host::ManagedListenerOptions listener_options;
+        listener_options.config = config.listeners[0];
+        listener_options.routing = routing;
+        data_plane = std::make_unique<capsid::host::ManagedListener>(
+            std::move(listener_options));
+        std::string listener_error;
+        if (!data_plane->start(&listener_error)) {
+            fail("cannot bind the data plane listener: " + listener_error);
         }
     }
     capsid::host::ManagedAdminBackend managed(app_options);
@@ -609,8 +709,7 @@ int run_managed(const std::string& host_config_path,
     // Fixed bounded queue; startupsConcurrent is not the Admin ceiling.
     async_options.max_pending_operations = 8;
     async_options.external_stop = &g_stop;
-    async_options.activate_worker = activate_worker;
-    async_options.activate_pool = activate_pool;
+    async_options.activate_generation = activate_generation;
     async_options.retire_worker = retire_worker;
     auto async = std::make_unique<capsid::host::AsyncAdminBackend>(
         &managed, async_options);
@@ -645,6 +744,15 @@ int run_managed(const std::string& host_config_path,
     // cancelled, running deploys interrupted) BEFORE reclaiming workers;
     // shutdown never depends on destructor ordering at function return.
     async.reset();
+    // The data plane stops accepting and closes its sessions BEFORE the
+    // pools drain: no new request can pin a dying pool, and the mailbox
+    // (owned by the listener) outlives every pool's sink.
+    if (data_plane != nullptr) {
+        data_plane->request_stop();
+        if (!data_plane->wait(&service_error)) {
+            fail("data plane failed: " + service_error);
+        }
+    }
     reclaim_workers();
     close(state_fd);
     return 0;

@@ -137,7 +137,7 @@ bool collect_connection_nominations(std::string_view value,
 // listener io thread drains them and dispatches into the session layer.
 //
 // The mailbox OWNS the io_context and lives as long as BOTH the listener
-// (its Impl holds a shared_ptr) and the pool (the event sink and the
+// (its ManagedListenerImpl holds a shared_ptr) and the pool (the event sink and the
 // client-bytes loader hold shared_ptrs). The io_context is therefore
 // destroyed only when the pump thread is joined and the io thread is
 // joined — a post can never race its destruction.
@@ -279,12 +279,12 @@ struct PendingRequest {
 }  // namespace
 
 // One client connection. Owns the socket, the parser and the read
-// deadline; the request state lives in Impl::requests_.
+// deadline; the request state lives in ManagedListenerImpl::requests_.
 class ListenerSession : public std::enable_shared_from_this<ListenerSession> {
-    friend class Impl;
+    friend class ManagedListenerImpl;
 
 public:
-    ListenerSession(std::shared_ptr<Impl> impl, tcp::socket socket);
+    ListenerSession(std::shared_ptr<ManagedListenerImpl> impl, tcp::socket socket);
 
     void start();
     void close();
@@ -307,7 +307,7 @@ private:
     void on_read_timeout();
     void start_disconnect_probe();
 
-    std::shared_ptr<Impl> impl_;
+    std::shared_ptr<ManagedListenerImpl> impl_;
     beast::tcp_stream stream_;
     beast::flat_buffer buffer_;
     std::shared_ptr<http::request_parser<http::string_body>> parser_;
@@ -320,18 +320,18 @@ private:
 };
 
 // The request/response state machine and the io thread.
-class Impl : public std::enable_shared_from_this<Impl> {
+class ManagedListenerImpl : public std::enable_shared_from_this<ManagedListenerImpl> {
     friend class ListenerSession;
     // The facade needs mailbox_ (wire_pool) and stop_requested_ (running).
     friend class ManagedListener;
 
 public:
-    explicit Impl(ManagedListenerOptions options)
+    explicit ManagedListenerImpl(ManagedListenerOptions options)
         : options_(std::move(options)),
           mailbox_(std::make_shared<WorkerEventMailbox>()),
           max_request_body_bytes_(options_.max_request_body_bytes) {}
 
-    ~Impl() {
+    ~ManagedListenerImpl() {
         request_stop();
         if (io_thread_.joinable()) {
             io_thread_.join();
@@ -395,7 +395,7 @@ private:
     std::once_flag wait_once_;
 };
 
-ListenerSession::ListenerSession(std::shared_ptr<Impl> impl, tcp::socket socket)
+ListenerSession::ListenerSession(std::shared_ptr<ManagedListenerImpl> impl, tcp::socket socket)
     : impl_(std::move(impl)),
       stream_(std::move(socket)),
       read_timer_(impl_->mailbox_->ioc) {
@@ -621,10 +621,10 @@ void ListenerSession::send_simple(http::status status,
 }
 
 // --------------------------------------------------------------------------
-// Impl
+// ManagedListenerImpl
 // --------------------------------------------------------------------------
 
-bool Impl::start(std::string* error) {
+bool ManagedListenerImpl::start(std::string* error) {
     if (started_.exchange(true)) {
         if (error != nullptr) {
             *error = "listener already started";
@@ -784,7 +784,7 @@ bool Impl::start(std::string* error) {
     mailbox_->set_dispatcher(
         [weak = weak_from_this()](const WorkerExecutor* executor,
                                   WorkerEvent event) {
-            if (std::shared_ptr<Impl> self = weak.lock()) {
+            if (std::shared_ptr<ManagedListenerImpl> self = weak.lock()) {
                 self->handle_worker_event(executor, std::move(event));
             }
         });
@@ -793,12 +793,12 @@ bool Impl::start(std::string* error) {
     return true;
 }
 
-void Impl::io_loop() {
+void ManagedListenerImpl::io_loop() {
     do_accept();
     mailbox_->ioc.run();
 }
 
-void Impl::do_accept() {
+void ManagedListenerImpl::do_accept() {
     if (!acceptor_) {
         return;
     }
@@ -830,7 +830,7 @@ void Impl::do_accept() {
         });
 }
 
-void Impl::request_stop() {
+void ManagedListenerImpl::request_stop() {
     if (stop_requested_.exchange(true)) {
         return;
     }
@@ -838,15 +838,15 @@ void Impl::request_stop() {
     mailbox_->close();
     // Wake the io thread; it closes the acceptor + every session, and run()
     // drains naturally. The post goes through the mailbox, which outlives
-    // this Impl (the pool's sink holds it), so the wake is always safe.
+    // this ManagedListenerImpl (the pool's sink holds it), so the wake is always safe.
     asio::post(mailbox_->ioc, [weak = weak_from_this()] {
-        if (std::shared_ptr<Impl> self = weak.lock()) {
+        if (std::shared_ptr<ManagedListenerImpl> self = weak.lock()) {
             self->stop_from_io();
         }
     });
 }
 
-void Impl::stop_from_io() {
+void ManagedListenerImpl::stop_from_io() {
     acceptor_.reset();  // cancels the pending async_accept
     const std::vector<std::uint64_t> session_ids = [this] {
         std::vector<std::uint64_t> ids;
@@ -864,7 +864,7 @@ void Impl::stop_from_io() {
     }
 }
 
-bool Impl::wait(std::string* error) {
+bool ManagedListenerImpl::wait(std::string* error) {
     request_stop();  // wait() implies the stop request (idempotent)
     std::call_once(wait_once_, [this] {
         if (io_thread_.joinable()) {
@@ -877,7 +877,7 @@ bool Impl::wait(std::string* error) {
     return true;
 }
 
-void Impl::drop_session(
+void ManagedListenerImpl::drop_session(
     const std::shared_ptr<ListenerSession>& session) {
     for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
         if (it->second == session) {
@@ -890,7 +890,7 @@ void Impl::drop_session(
     }
 }
 
-void Impl::begin_request(
+void ManagedListenerImpl::begin_request(
     const WorkerExecutor* executor, std::uint64_t request_id,
     const std::shared_ptr<ListenerSession>& session,
     const http::request<http::string_body>& request,
@@ -923,7 +923,7 @@ void Impl::begin_request(
     }
 }
 
-void Impl::handle_worker_event(const WorkerExecutor* executor,
+void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
                                                 WorkerEvent event) {
     switch (event.type) {
     case WorkerEvent::Type::kRequestCredit: {
@@ -1183,7 +1183,7 @@ void Impl::handle_worker_event(const WorkerExecutor* executor,
     }
 }
 
-void Impl::advance_request_body(const WorkerExecutor* executor,
+void ManagedListenerImpl::advance_request_body(const WorkerExecutor* executor,
                                                  std::uint64_t request_id) {
     auto it = requests_.find({executor, request_id});
     if (it == requests_.end()) {
@@ -1222,7 +1222,7 @@ void Impl::advance_request_body(const WorkerExecutor* executor,
     }
 }
 
-void Impl::write_body_block(
+void ManagedListenerImpl::write_body_block(
     const WorkerExecutor* executor, std::uint64_t request_id,
     std::vector<std::uint8_t> bytes) {
     auto it = requests_.find({executor, request_id});
@@ -1285,7 +1285,7 @@ void Impl::write_body_block(
         });
 }
 
-void Impl::write_end_block(const WorkerExecutor* executor,
+void ManagedListenerImpl::write_end_block(const WorkerExecutor* executor,
                                             std::uint64_t request_id) {
     auto it = requests_.find({executor, request_id});
     if (it == requests_.end()) {
@@ -1335,7 +1335,7 @@ void Impl::write_end_block(const WorkerExecutor* executor,
         });
 }
 
-void Impl::finalize_request(
+void ManagedListenerImpl::finalize_request(
     const WorkerExecutor* executor, std::uint64_t request_id,
     std::shared_ptr<ListenerSession> session) {
     auto it = requests_.find({executor, request_id});
@@ -1353,7 +1353,7 @@ void Impl::finalize_request(
     }
 }
 
-void Impl::cancel_request(const WorkerExecutor* executor,
+void ManagedListenerImpl::cancel_request(const WorkerExecutor* executor,
                                            std::uint64_t request_id) {
     auto it = requests_.find({executor, request_id});
     if (it == requests_.end()) {
@@ -1372,7 +1372,7 @@ void Impl::cancel_request(const WorkerExecutor* executor,
     const_cast<WorkerExecutor*>(executor)->submit(std::move(cancel));
 }
 
-void Impl::fail_request(const WorkerExecutor* executor,
+void ManagedListenerImpl::fail_request(const WorkerExecutor* executor,
                                          std::uint64_t request_id,
                                          std::shared_ptr<ListenerSession> session) {
     cancel_request(executor, request_id);
@@ -1381,7 +1381,7 @@ void Impl::fail_request(const WorkerExecutor* executor,
     }
 }
 
-void Impl::reject_response_head(
+void ManagedListenerImpl::reject_response_head(
     const WorkerExecutor* executor, std::uint64_t request_id,
     const std::string& reason) {
     auto it = requests_.find({executor, request_id});
@@ -1399,7 +1399,7 @@ void Impl::reject_response_head(
     }
 }
 
-bool Impl::sanitize_response_headers(
+bool ManagedListenerImpl::sanitize_response_headers(
     std::vector<std::pair<std::string, std::string>>* headers) {
     std::set<std::string> nominated;
     unsigned content_length_count = 0;
@@ -1452,7 +1452,7 @@ bool Impl::sanitize_response_headers(
     return true;
 }
 
-void Impl::arm_write_timer(std::uint64_t request_id,
+void ManagedListenerImpl::arm_write_timer(std::uint64_t request_id,
                                             PendingRequest& pending) {
     const std::uint64_t ms =
         options_.config.limits.stream_idle_timeout_ms;
@@ -1485,7 +1485,7 @@ void Impl::arm_write_timer(std::uint64_t request_id,
         });
 }
 
-void Impl::disarm_write_timer(PendingRequest& pending) {
+void ManagedListenerImpl::disarm_write_timer(PendingRequest& pending) {
     if (pending.write_timer) {
         pending.write_timer->cancel();
     }
@@ -1496,7 +1496,7 @@ void Impl::disarm_write_timer(PendingRequest& pending) {
 // --------------------------------------------------------------------------
 
 ManagedListener::ManagedListener(ManagedListenerOptions options)
-    : impl_(std::make_shared<Impl>(std::move(options))) {}
+    : impl_(std::make_shared<ManagedListenerImpl>(std::move(options))) {}
 
 ManagedListener::~ManagedListener() {
     impl_->request_stop();
