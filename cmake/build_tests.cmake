@@ -3903,7 +3903,11 @@ if(BUILD_TESTING)
                 -DCAPSID_HOST_TARGET=${CAPSID_HOST_TARGET_PRESENT}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_contents.cmake"
         )
-        set_tests_properties(worker_package_contents PROPERTIES TIMEOUT 300)
+        # The package target rebuilds the whole tree when build products are
+        # stale (e.g. a cold container run right after a reconfigure), so
+        # budget like the reproducibility gate — not a tight incremental
+        # estimate.
+        set_tests_properties(worker_package_contents PROPERTIES TIMEOUT 1800)
 
         # §12.4: consume the archive as a customer would — extract into an
         # empty directory, compile C/C++ samples against the packaged

@@ -8,6 +8,12 @@
 //
 // It never touches the build tree: worker path and bundle path are argv
 // inputs pointing into the extracted package and the smoke work directory.
+//
+// Compiled with a strict -std=c11, where glibc hides poll()/clock_gettime()
+// unless the POSIX feature macro is requested (macOS exposes them
+// unconditionally). The macro must precede every include.
+
+#define _POSIX_C_SOURCE 200112L
 
 #include "capsid/runtime.h"
 

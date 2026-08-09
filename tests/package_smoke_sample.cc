@@ -7,6 +7,12 @@
 // the same worker round trip through the C API with the built policy wired
 // into the config — proving a consumer can build a policy and hand it to
 // capsid_worker_spawn() without the build tree.
+//
+// Compiled with a strict -std=c++17, where glibc hides poll()/clock_gettime()
+// unless the POSIX feature macro is requested (macOS exposes them
+// unconditionally). The macro must precede every include.
+
+#define _POSIX_C_SOURCE 200112L
 
 #include "capsid/runtime.hpp"
 
