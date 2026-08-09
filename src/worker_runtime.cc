@@ -610,7 +610,8 @@ private:
     RequestToken *require_active_request(JSContext *ctx,
                                          uint64_t explicit_id,
                                          bool has_explicit,
-                                         bool allow_worker_scope) {
+                                         bool allow_worker_scope,
+                                         const char *site = "") {
         if (poisoned_) {
             JS_ThrowInternalError(ctx, "worker poisoned");
             return NULL;
@@ -628,6 +629,14 @@ private:
             return NULL;
         }
         if (has_explicit && explicit_id != token->request_id) {
+            if (diag_enabled_) {
+                std::fprintf(
+                    stderr,
+                    "POISON SITE identity-mismatch explicit=%llu active=%llu native=%s\n",
+                    static_cast<unsigned long long>(explicit_id),
+                    static_cast<unsigned long long>(token->request_id),
+                    site);
+            }
             poisoned_ = true;
             JS_ThrowInternalError(ctx, "request identity mismatch");
             return NULL;
@@ -639,6 +648,12 @@ private:
         std::map<uint64_t, RequestToken *>::iterator found =
             token_registry_.find(token->generation);
         if (found == token_registry_.end() || found->second != token) {
+            if (diag_enabled_) {
+                std::fprintf(
+                    stderr,
+                    "POISON SITE stale-token active=%llu\n",
+                    static_cast<unsigned long long>(token->request_id));
+            }
             poisoned_ = true;
             JS_ThrowInternalError(ctx, "stale request token");
             return NULL;
@@ -756,6 +771,14 @@ private:
             if (token->refs == 1) {
                 reclaimable.push_back(it->first);
             } else {
+                if (diag_enabled_) {
+                    std::fprintf(
+                        stderr,
+                        "POISON TRIGGER request_id=%llu refs=%llu terminal=%d\n",
+                        static_cast<unsigned long long>(token->request_id),
+                        static_cast<unsigned long long>(token->refs),
+                        token->terminal ? 1 : 0);
+                }
                 enter_poison(token->terminal
                                  ? "terminal continuation leak"
                                  : "detached resource after response end");
@@ -1085,7 +1108,7 @@ private:
             JS_ToUint32(ctx, &credit, argv[1]) || id == 0 || credit == 0) {
             return JS_EXCEPTION;
         }
-        if (!g_worker->require_active_request(ctx, id, true, false)) {
+        if (!g_worker->require_active_request(ctx, id, true, false, "js_request_credit")) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -1190,7 +1213,7 @@ private:
             JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
             return JS_EXCEPTION;
         }
-        if (!g_worker->require_active_request(ctx, id, true, false)) {
+        if (!g_worker->require_active_request(ctx, id, true, false, "js_response_head")) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator head_state =
@@ -1223,7 +1246,7 @@ private:
             JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
             return JS_EXCEPTION;
         }
-        if (!g_worker->require_active_request(ctx, id, true, false)) {
+        if (!g_worker->require_active_request(ctx, id, true, false, "js_response_final")) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -1301,7 +1324,7 @@ private:
         if (!g_worker || argc < 2 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_EXCEPTION;
         }
-        if (!g_worker->require_active_request(ctx, id, true, false)) {
+        if (!g_worker->require_active_request(ctx, id, true, false, "js_response_write")) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -1373,7 +1396,7 @@ private:
         if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_EXCEPTION;
         }
-        if (!g_worker->require_active_request(ctx, id, true, false)) {
+        if (!g_worker->require_active_request(ctx, id, true, false, "js_response_end")) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =
@@ -1400,7 +1423,7 @@ private:
         if (!g_worker || argc < 2 || JS_ToBigUint64(ctx, &id, argv[0]) || id == 0) {
             return JS_EXCEPTION;
         }
-        if (!g_worker->require_active_request(ctx, id, true, false)) {
+        if (!g_worker->require_active_request(ctx, id, true, false, "js_response_error")) {
             return JS_EXCEPTION;
         }
         std::map<uint64_t, ResponseState>::iterator state =

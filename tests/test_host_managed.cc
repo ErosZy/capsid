@@ -2457,11 +2457,12 @@ int main(int argc, char** argv) {
     }
 
     if (mode == "host_managed_recovery_rejects_oversized_snapshot") {
-#if defined(__SANITIZE_ADDRESS__)
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
         // The deterministic Release probe constrains its child with
         // RLIMIT_AS so an unbounded reader cannot consume host memory.
         // ASan reserves a huge shadow range and is fundamentally
-        // incompatible with that limit; the same production read helper is
+        // incompatible with that limit; TSan likewise fails its internal
+        // allocator under the ceiling. The same production read helper is
         // exercised by the FIFO/type test in this build.
         std::cout << "PASS" << std::endl;
         return 0;

@@ -23,6 +23,10 @@ App/pool、多 worker 与安全部署闭环（M1D）继续实现中。里程碑�
 - [架构与产品边界](architecture.md)：进程模型、平台契约、JavaScript 表面和 vendor 策略
 - [Host v1 详细设计](host-technical-design-review.md)：第一方 Host 的唯一权威设计、
   已冻结契约、实施顺序和验收门
+- [安全修复执行说明](capsid-remediation-execution-spec-2026-08-09.md)：P0/P1 修复的
+  工作包、RED 证据与验收门（PR-01…PR-14 的当前执行依据）
+- [安全审计交接](capsid-audit-handoff-2026-08-09.md)：审计输入、已确认发现和
+  修复完成后的复核要求
 
 ## Runtime 嵌入与安全
 
