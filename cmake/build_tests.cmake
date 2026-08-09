@@ -3860,8 +3860,8 @@ if(BUILD_TESTING)
         add_test(
             NAME worker_build_identity_matrix
             COMMAND "${CMAKE_COMMAND}"
-                -DCAPSID_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-                -DCAPSID_CMAKE_COMMAND="${CMAKE_COMMAND}"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_CMAKE_COMMAND=${CMAKE_COMMAND}"
                 "-DCAPSID_MATRIX_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/identity-matrix"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_build_identity_matrix.cmake"
         )
@@ -3872,13 +3872,21 @@ if(BUILD_TESTING)
         # manifest must exist in a fresh install prefix and inside the
         # package archive, and the package target must not be taken over by
         # a third-party CPack configuration.
+        # capsid-host is skipped when system Boost is missing, so the
+        # manifest expectation follows target existence, not the option.
+        if(TARGET capsid-host)
+            set(CAPSID_HOST_TARGET_PRESENT ON)
+        else()
+            set(CAPSID_HOST_TARGET_PRESENT OFF)
+        endif()
+
         add_test(
             NAME worker_install_tree
             COMMAND "${CMAKE_COMMAND}"
-                -DCAPSID_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}"
-                -DCAPSID_PREFIX=
-                    "${CMAKE_CURRENT_BINARY_DIR}/install-tree-prefix"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/install-tree-prefix"
                 -DCAPSID_BUILD_HOST=${CAPSID_BUILD_HOST}
+                -DCAPSID_HOST_TARGET=${CAPSID_HOST_TARGET_PRESENT}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_install_tree.cmake"
         )
         set_tests_properties(worker_install_tree PROPERTIES TIMEOUT 300)
@@ -3886,13 +3894,72 @@ if(BUILD_TESTING)
         add_test(
             NAME worker_package_contents
             COMMAND "${CMAKE_COMMAND}"
-                -DCAPSID_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}"
-                -DCAPSID_WORK_DIR=
-                    "${CMAKE_CURRENT_BINARY_DIR}/package-contents-work"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-contents-work"
                 -DCAPSID_BUILD_HOST=${CAPSID_BUILD_HOST}
+                -DCAPSID_HOST_TARGET=${CAPSID_HOST_TARGET_PRESENT}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_contents.cmake"
         )
         set_tests_properties(worker_package_contents PROPERTIES TIMEOUT 300)
+
+        # §12.4: consume the archive as a customer would — extract into an
+        # empty directory, compile C/C++ samples against the packaged
+        # headers+library, run worker round trips, drive the packaged Host
+        # through the node driver, and scan for build-root paths, secrets
+        # and undeclared dynamic dependencies.
+        add_test(
+            NAME worker_package_smoke
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-smoke-work"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_C_COMPILER=${CMAKE_C_COMPILER}"
+                "-DCAPSID_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                "-DCAPSID_SMOKE_SAMPLE_C=${CMAKE_CURRENT_SOURCE_DIR}/tests/package_smoke_sample.c"
+                "-DCAPSID_SMOKE_SAMPLE_CC=${CMAKE_CURRENT_SOURCE_DIR}/tests/package_smoke_sample.cc"
+                -DCAPSID_SMOKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
+                -DCAPSID_HOST_TARGET=${CAPSID_HOST_TARGET_PRESENT}
+                "-DCAPSID_NODE_EXECUTABLE=${CAPSID_NODE_EXECUTABLE}"
+                "-DCAPSID_HOST_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/host-single-worker.js"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/package_smoke.cmake"
+        )
+        set_tests_properties(worker_package_smoke PROPERTIES
+            TIMEOUT 600
+            DEPENDS worker_package_contents)
+
+        # §12.3: reproducibility gate. Two fresh builds from the same inputs
+        # must agree on the file name list, the identity records, the SBOM
+        # identity fields and every deterministic text file; binary hash
+        # differences (toolchain not yet bit-reproducible) are recorded in
+        # repro-differences.txt. The gate mirrors this build's feature flags
+        # by parsing them from the baseline build-info.txt, and reuses this
+        # build's generator, parallelism and toolchain prefix (CI: the
+        # pinned OpenSSL 3.5 install).
+        if(DEFINED CMAKE_BUILD_PARALLEL_LEVEL AND
+           NOT CMAKE_BUILD_PARALLEL_LEVEL STREQUAL "")
+            set(CAPSID_REPRO_PARALLEL "${CMAKE_BUILD_PARALLEL_LEVEL}")
+        else()
+            set(CAPSID_REPRO_PARALLEL 2)
+        endif()
+        add_test(
+            NAME worker_package_reproducibility
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-repro-work"
+                "-DCAPSID_CMAKE_COMMAND=${CMAKE_COMMAND}"
+                "-DCAPSID_REPRO_GENERATOR=${CMAKE_GENERATOR}"
+                "-DCAPSID_REPRO_PARALLEL=${CAPSID_REPRO_PARALLEL}"
+                "-DCAPSID_REPRO_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+                "-DCAPSID_REPRO_OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
+                -DCAPSID_STRICT_WARNINGS=${CAPSID_STRICT_WARNINGS}
+                -DCAPSID_ENABLE_FFI_CAPABILITY=${CAPSID_ENABLE_FFI_CAPABILITY}
+                -DCAPSID_ENABLE_RAW_SOCKET_CAPABILITY=${CAPSID_ENABLE_RAW_SOCKET_CAPABILITY}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_reproducibility.cmake"
+        )
+        set_tests_properties(worker_package_reproducibility PROPERTIES
+            TIMEOUT 1800
+            DEPENDS worker_package_smoke)
 
         add_executable(
             test-sandbox
