@@ -33,6 +33,7 @@ if(CAPSID_BUILD_HOST)
         src/host/config.cc
         src/host/generation_identity.cc
         src/host/generation_pool.cc
+        src/host/host_config_model.cc
         src/host/managed_admin_backend.cc
         src/host/managed_host.cc
         src/host/policy_compiler.cc
@@ -42,6 +43,7 @@ if(CAPSID_BUILD_HOST)
         src/host/service_lifecycle.cc
         src/host/static_pool.cc
         src/host/static_pool_server.cc
+        src/host/trusted_key_store.cc
         src/host/worker_event_source.cc
         src/host/worker_executor.cc
         src/host/worker_recovery.cc

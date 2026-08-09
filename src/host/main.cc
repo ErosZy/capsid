@@ -14,9 +14,9 @@
 #include "capsid/runtime.h"
 #include "host/admin_service.h"
 #include "host/config.h"
+#include "host/host_config_model.h"
 #include "host/managed_admin_backend.h"
-
-#include <jansson.h>
+#include "host/trusted_key_store.h"
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/system/error_code.hpp>
@@ -205,68 +205,6 @@ std::vector<std::uint8_t> read_bundle(const std::string& path) {
 // inside a signal handler.
 std::atomic<bool> g_stop{false};
 
-// Parsed host.json fields that drive the managed mode. The authoritative
-// schema validation runs first (validate_config_json); this extraction maps
-// the validated document onto the coordinator options and fails closed on
-// anything it cannot map.
-struct ManagedConfig {
-    std::string applications_root;
-    std::string state_root;
-    std::string secret_root_template;  // contains "{application}"
-    std::string admin_unix_path;
-    mode_t admin_mode = 0600;
-    capsid::host::HostPolicy policy;
-    // capacity.workersTotal: the process-global worker permit. It is
-    // consumed before any spawn/durable activation and returned when the
-    // operation settles. startupsConcurrent is NOT reinterpreted as the
-    // Admin pending-queue ceiling.
-    int worker_capacity = 1;
-};
-
-std::string json_string_field(json_t* object, const char* key) {
-    json_t* value = json_object_get(object, key);
-    return json_is_string(value) ? json_string_value(value) : std::string();
-}
-
-// "host:port" / "host" (any port); decimal ports only.
-bool parse_fetch_target_text(const std::string& text,
-                             capsid::host::FetchTarget* out) {
-    const std::size_t colon = text.find(':');
-    if (colon == std::string::npos) {
-        if (text.empty()) {
-            return false;
-        }
-        out->host = text;
-        return true;
-    }
-    out->host = text.substr(0, colon);
-    if (out->host.empty()) {
-        return false;
-    }
-    const std::string ports = text.substr(colon + 1);
-    std::size_t begin = 0;
-    while (begin <= ports.size()) {
-        const std::size_t comma = ports.find(',', begin);
-        const std::string part = ports.substr(
-            begin, comma == std::string::npos ? std::string::npos
-                                              : comma - begin);
-        if (part.empty()) {
-            return false;
-        }
-        char* end = nullptr;
-        const long port = std::strtol(part.c_str(), &end, 10);
-        if (end == nullptr || *end != '\0' || port <= 0 || port > 65535) {
-            return false;
-        }
-        out->ports.push_back(static_cast<std::uint16_t>(port));
-        if (comma == std::string::npos) {
-            break;
-        }
-        begin = comma + 1;
-    }
-    return !out->ports.empty();
-}
-
 // "256MiB" style size with explicit suffix (same grammar as the managed
 // coordinator's worker.memoryMax).
 bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
@@ -300,246 +238,6 @@ bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
         return false;
     }
     *out = static_cast<std::uint64_t>(base) * multiplier;
-    return true;
-}
-
-bool parse_string_array(json_t* parent, const char* key,
-                        std::vector<std::string>* out) {
-    json_t* value = json_object_get(parent, key);
-    if (value == nullptr) {
-        return true;
-    }
-    if (!json_is_array(value)) {
-        return false;
-    }
-    std::size_t index = 0;
-    json_t* item = nullptr;
-    json_array_foreach(value, index, item) {
-        if (!json_is_string(item)) {
-            return false;
-        }
-        out->push_back(json_string_value(item));
-    }
-    return true;
-}
-
-bool parse_managed_config(const std::string& json, ManagedConfig* out,
-                          std::string* error) {
-    json_error_t parse_error;
-    json_t* root = json_loadb(json.data(), json.size(),
-                              JSON_REJECT_DUPLICATES, &parse_error);
-    if (root == nullptr || !json_is_object(root)) {
-        *error = "invalid host.json";
-        if (root) {
-            json_decref(root);
-        }
-        return false;
-    }
-    out->applications_root = json_string_field(root, "applicationsRoot");
-    out->state_root = json_string_field(root, "stateRoot");
-    out->secret_root_template = json_string_field(root, "secretRootTemplate");
-    json_t* admin = json_object_get(root, "admin");
-    if (json_is_object(admin)) {
-        out->admin_unix_path = json_string_field(admin, "unix");
-        const std::string mode_text = json_string_field(admin, "mode");
-        if (!mode_text.empty()) {
-            char* end = nullptr;
-            const unsigned long parsed =
-                std::strtoul(mode_text.c_str(), &end, 8);
-            if (end == nullptr || *end != '\0' || parsed > 07777) {
-                *error = "invalid admin.mode";
-                json_decref(root);
-                return false;
-            }
-            // host-v1 has no management-group field, so a
-            // group/world-accessible pathname cannot be authorized
-            // coherently; managed mode keeps the socket at exact 0600.
-            if (static_cast<mode_t>(parsed) != 0600) {
-                *error = "admin.mode must be 0600";
-                json_decref(root);
-                return false;
-            }
-            out->admin_mode = static_cast<mode_t>(parsed);
-        }
-    }
-    json_t* permissions = json_object_get(root, "permissions");
-    if (json_is_object(permissions)) {
-        if (!parse_string_array(permissions, "modules",
-                                &out->policy.module_allowlist) ||
-            !parse_string_array(permissions, "environmentNames",
-                                &out->policy.env_patterns) ||
-            !parse_string_array(permissions, "fsReadRoots",
-                                &out->policy.fs_read_roots) ||
-            !parse_string_array(permissions, "storageNamespaces",
-                                &out->policy.storage_namespaces) ||
-            !parse_string_array(permissions, "stdioStreams",
-                                &out->policy.stdio_streams)) {
-            *error = "invalid host.json permissions";
-            json_decref(root);
-            return false;
-        }
-        out->policy.storage_allowed = !out->policy.storage_namespaces.empty();
-        out->policy.stdio_allowed = !out->policy.stdio_streams.empty();
-        std::vector<std::string> targets;
-        if (!parse_string_array(permissions, "fetchTargets", &targets)) {
-            *error = "invalid host.json fetchTargets";
-            json_decref(root);
-            return false;
-        }
-        for (const std::string& target : targets) {
-            capsid::host::FetchTarget parsed;
-            if (!parse_fetch_target_text(target, &parsed)) {
-                *error = "invalid host.json fetchTargets entry";
-                json_decref(root);
-                return false;
-            }
-            out->policy.fetch_targets.push_back(std::move(parsed));
-        }
-    }
-    json_t* isolation = json_object_get(root, "isolation");
-    if (json_is_object(isolation)) {
-        const std::string mode = json_string_field(isolation, "mode");
-        if (!mode.empty() && mode != "strict") {
-            *error = "isolation.mode must be strict";
-            json_decref(root);
-            return false;
-        }
-    }
-    json_t* maximums = json_object_get(root, "maximums");
-    if (json_is_object(maximums)) {
-        json_t* request = json_object_get(maximums, "request");
-        if (json_is_object(request)) {
-            json_t* inflight =
-                json_object_get(request, "maxInflightPerWorker");
-            if (json_is_integer(inflight)) {
-                const json_int_t value = json_integer_value(inflight);
-                if (value < 0) {
-                    *error = "invalid maximums.request.maxInflightPerWorker";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_requests_per_worker =
-                    static_cast<std::uint64_t>(value);
-            }
-            // E-2 SSE-permit caps (maximums.request.*, §9.3): the Host
-            // ceilings the App stream config is compiled against in
-            // compile_policy. Each cap is optional; 0 = no ceiling.
-            json_t* max_streaming = json_object_get(
-                request, "maxStreamingInflightPerWorker");
-            if (json_is_integer(max_streaming)) {
-                const json_int_t value = json_integer_value(max_streaming);
-                if (value < 0) {
-                    *error = "invalid maximums.request."
-                             "maxStreamingInflightPerWorker";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_streaming_inflight_per_worker =
-                    static_cast<std::uint64_t>(value);
-            }
-            json_t* stream_idle =
-                json_object_get(request, "streamIdleTimeoutMs");
-            if (json_is_integer(stream_idle)) {
-                const json_int_t value = json_integer_value(stream_idle);
-                if (value < 0) {
-                    *error = "invalid maximums.request.streamIdleTimeoutMs";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_stream_idle_timeout_ms =
-                    static_cast<std::uint64_t>(value);
-            }
-            // E-3 slow-client write deadline cap (§9.2): 0 = no ceiling.
-            json_t* write_timeout =
-                json_object_get(request, "writeTimeoutMs");
-            if (json_is_integer(write_timeout)) {
-                const json_int_t value = json_integer_value(write_timeout);
-                if (value < 0) {
-                    *error = "invalid maximums.request.writeTimeoutMs";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_write_timeout_ms =
-                    static_cast<std::uint64_t>(value);
-            }
-        }
-        json_t* worker = json_object_get(maximums, "worker");
-        if (json_is_object(worker)) {
-            json_t* memory = json_object_get(worker, "memoryMax");
-            if (json_is_string(memory)) {
-                std::uint64_t bytes = 0;
-                if (!parse_size_bytes_text(json_string_value(memory),
-                                           &bytes)) {
-                    *error = "invalid maximums.worker.memoryMax";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_worker_memory_bytes = bytes;
-            }
-        }
-        // E-1 admission-queue caps (maximums.pool.*, §10.3): the Host
-        // ceilings the App queue is compiled against in compile_policy.
-        // Each cap is optional; an absent cap leaves the App free to set
-        // its own queue values.
-        json_t* pool = json_object_get(maximums, "pool");
-        if (json_is_object(pool)) {
-            json_t* queue_requests = json_object_get(pool, "queueRequests");
-            if (json_is_integer(queue_requests)) {
-                const json_int_t value = json_integer_value(queue_requests);
-                if (value < 0) {
-                    *error = "invalid maximums.pool.queueRequests";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_queue_requests =
-                    static_cast<std::uint64_t>(value);
-            }
-            json_t* queue_header_bytes =
-                json_object_get(pool, "queueHeaderBytes");
-            if (json_is_string(queue_header_bytes)) {
-                std::uint64_t bytes = 0;
-                if (!parse_size_bytes_text(json_string_value(queue_header_bytes),
-                                           &bytes)) {
-                    *error = "invalid maximums.pool.queueHeaderBytes";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_queue_header_bytes = bytes;
-            }
-            json_t* queue_timeout = json_object_get(pool, "queueTimeout");
-            if (json_is_string(queue_timeout)) {
-                out->policy.max_queue_timeout_ms = parse_duration_ms(
-                    json_string_value(queue_timeout), "maximums.pool.queueTimeout");
-            }
-        }
-    }
-    json_t* capacity = json_object_get(root, "capacity");
-    if (json_is_object(capacity)) {
-        json_t* workers = json_object_get(capacity, "workersTotal");
-        if (json_is_integer(workers)) {
-            const json_int_t value = json_integer_value(workers);
-            if (value <= 0) {
-                *error = "capacity.workersTotal must be positive";
-                json_decref(root);
-                return false;
-            }
-            if (value > static_cast<json_int_t>(std::numeric_limits<int>::max())) {
-                *error = "capacity.workersTotal exceeds the Host limit";
-                json_decref(root);
-                return false;
-            }
-            out->worker_capacity = static_cast<int>(value);
-        }
-    }
-    if (out->applications_root.empty() || out->state_root.empty() ||
-        out->admin_unix_path.empty() ||
-        out->secret_root_template.find("{application}") ==
-            std::string::npos) {
-        *error = "host.json is missing a required root or admin path";
-        json_decref(root);
-        return false;
-    }
-    json_decref(root);
     return true;
 }
 
@@ -737,11 +435,24 @@ int run_managed(const std::string& host_config_path,
         fail("host.json rejected at " + validated.error.path + ": " +
              validated.error.message);
     }
-    ManagedConfig config;
+    capsid::host::ParsedHostConfig config;
     std::string config_error;
-    if (!parse_managed_config(host_json, &config, &config_error)) {
+    if (!parse_host_config(host_json, &config, &config_error)) {
         fail(config_error);
     }
+    // Load the trusted bytecode keys BEFORE any worker spawns: attestation
+    // verification is fail-closed, and an empty key set means every
+    // trusted-bytecode deployment is rejected (never silently accepted).
+    // The store owns the key bytes; the options below hold views into it,
+    // so the store must outlive every ManagedHostOptions.
+    capsid::host::TrustedKeyStore trusted_keys =
+        capsid::host::TrustedKeyStore::load(config.trusted_keys,
+                                            &config_error);
+    if (trusted_keys.size() != config.trusted_keys.size()) {
+        fail(config_error);
+    }
+    const std::vector<capsid::host::TrustedBytecodeKey> trusted_key_views(
+        trusted_keys.keys().begin(), trusted_keys.keys().end());
     // Safe-open the roots; the secret template's parent is the dirfd the
     // coordinator opens App subdirectories from.
     const int apps_fd = open_verified_root(config.applications_root,
@@ -779,6 +490,7 @@ int run_managed(const std::string& host_config_path,
         options->application = application;
         options->worker_path = worker_path;
         options->host_policy = config.policy;
+        options->trusted_keys = trusted_key_views;
         options->runtime_compatibility_id = CAPSID_BUILD_COMPATIBILITY_ID;
         options->stop_requested = &g_stop;
         app_options.push_back(options.get());
@@ -840,7 +552,8 @@ int run_managed(const std::string& host_config_path,
     // is bound to an active App: replacements do not re-acquire, a failed
     // replacement keeps the old slot, and only a newly acquired permit is
     // returned when the operation settles without a live worker.
-    capsid::host::WorkerCapacityPermit capacity(config.worker_capacity);
+    capsid::host::WorkerCapacityPermit capacity(
+        static_cast<int>(config.capacity.workers_total));
     // Startup recovery: a durable active App is revalidated and its
     // replacement worker reaches READY before Admin readiness is
     // published. The global permit is acquired BEFORE any spawn; an

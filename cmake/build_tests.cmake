@@ -22,6 +22,55 @@ if(BUILD_TESTING)
         add_test(NAME host_config COMMAND test-host-config)
 
         add_executable(
+            test-host-config-model
+            tests/test_host_config_model.cc)
+        target_include_directories(
+            test-host-config-model PRIVATE include src)
+        target_link_libraries(test-host-config-model PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-config-model PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-config-model PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-config-model PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME host_config_model COMMAND test-host-config-model)
+
+        add_executable(
+            test-host-trusted-key-store
+            tests/test_host_trusted_key_store.cc)
+        target_include_directories(
+            test-host-trusted-key-store PRIVATE include src)
+        target_link_libraries(test-host-trusted-key-store PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-trusted-key-store PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-trusted-key-store PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-trusted-key-store PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME host_trusted_key_store
+            COMMAND test-host-trusted-key-store)
+
+        add_executable(
             test-host-bytecode-attestation
             tests/test_host_bytecode_attestation.cc)
         target_include_directories(
