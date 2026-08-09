@@ -225,4 +225,15 @@ export const installRuntimeRoutes = (app, state) => {
             // Exercised under the host's synchronous CPU deadline.
         }
     });
+    app.get('/runtime/ownership', async () => {
+        console.log('capsid-owner:before');
+        await Promise.resolve();
+        console.log('capsid-owner:after');
+        return 'ownership-ok';
+    });
+    app.get('/runtime/ownership-cancel', event => {
+        console.log('capsid-owner:start');
+        setTimeout(() => console.log('capsid-owner:after-cancel'), 80);
+        return new Promise(() => {});
+    });
 };

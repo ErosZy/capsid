@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
     FrameworkWorker,
     decoder,
+    unhex,
 } from './protocol.mjs';
 
 const args = new Map();
@@ -21,6 +22,7 @@ const worker = new FrameworkWorker({
     workerPath,
     bundlePath,
     flags: [ '--timeout-ms', '500' ],
+    collectEvents: true,
 });
 
 const url = path => `https://compat.example${path}`;
@@ -228,6 +230,49 @@ try {
     );
     await assertCleanContext('after-async-timeout');
 
+    phase = 'native event ownership';
+    const ownership = await request('/runtime/ownership');
+    assertResponse(ownership, 200, 'ownership route');
+    assert.equal(text(ownership), 'ownership-ok');
+    const ownershipLogs = ownership.events.filter(
+        event => event.kind === 'LOG',
+    );
+    const beforeLog = ownershipLogs.find(event =>
+        decoder.decode(unhex(event.text)) === 'capsid-owner:before');
+    const afterLog = ownershipLogs.find(event =>
+        decoder.decode(unhex(event.text)) === 'capsid-owner:after');
+    assert.ok(beforeLog, 'before-await LOG must be emitted');
+    assert.ok(afterLog, 'after-await LOG must be emitted');
+    const ownershipId = nextId;
+    assert.equal(
+        Number(beforeLog.requestId),
+        ownershipId,
+        'before-await LOG must carry the request id',
+    );
+    assert.equal(
+        Number(afterLog.requestId),
+        ownershipId,
+        'after-await LOG must carry the request id',
+    );
+
+    phase = 'cancel must end the realm';
+    const cancelEvents = await worker.cancelContinuation({
+        id: ++nextId,
+        url: url('/runtime/ownership-cancel'),
+        marker: 'capsid-owner:after-cancel',
+    });
+    assert.ok(
+        !cancelEvents.some(event =>
+            event.kind === 'LOG' &&
+            decoder.decode(unhex(event.text)) === 'capsid-owner:after-cancel'),
+        'after-cancel continuation must never run',
+    );
+
+    // NOTE: this phase runs last. On the fixed implementation the cancel
+    // above poisons the worker, so any request after it (the old
+    // cpu-timeout phase) must be reworked in WP-03; keeping it here
+    // preserves the pre-fix ordering where the continuation survived the
+    // cancel.
     phase = 'synchronous CPU timeout';
     const cpuTimeout = await request('/runtime/cpu-timeout');
     assert.match(

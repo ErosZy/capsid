@@ -568,6 +568,19 @@ app.get('/runtime/cpu-timeout', () => {
     }
 });
 
+app.get('/runtime/ownership', async context => {
+    console.log('capsid-owner:before');
+    await Promise.resolve();
+    console.log('capsid-owner:after');
+    return context.text('ownership-ok');
+});
+
+app.get('/runtime/ownership-cancel', () => {
+    console.log('capsid-owner:start');
+    setTimeout(() => console.log('capsid-owner:after-cancel'), 80);
+    return new Promise(() => {});
+});
+
 app.get('/runtime/fetch', async context => {
     const target = context.req.query('url');
     const response = await fetch(target);

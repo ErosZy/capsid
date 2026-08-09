@@ -640,6 +640,17 @@ const registerRoutes = (router, variant, state) => {
             // Deliberately exercise the runtime interrupt deadline.
         }
     });
+    router.get('/runtime/ownership', async () => {
+        console.log('capsid-owner:before');
+        await Promise.resolve();
+        console.log('capsid-owner:after');
+        return { ownership: 'ok' };
+    });
+    router.get('/runtime/ownership-cancel', () => {
+        console.log('capsid-owner:start');
+        setTimeout(() => console.log('capsid-owner:after-cancel'), 80);
+        return new Promise(() => {});
+    });
     router.get('/runtime/fetch', async request => {
         const response = await fetch(request.query.url);
         return {

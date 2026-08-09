@@ -3467,6 +3467,100 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_p0_boundaries PROPERTIES TIMEOUT 20)
 
+        # WP-00/PR-01 RED gates. All three worker tests are expected to
+        # FAIL on the pre-fix bridge (identity collapse P0-1, request
+        # context loss P0-2, terminal continuation survival P0-3); the
+        # script tests fail on the pre-fix distribution (P0-6) and identity
+        # truncation (P0-7). See docs/capsid-remediation-execution-spec.
+
+        add_executable(
+            test-worker-request-id-boundaries
+            tests/test_worker_request_id_boundaries.cc
+        )
+        target_link_libraries(
+            test-worker-request-id-boundaries PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_request_id_boundaries
+            COMMAND test-worker-request-id-boundaries
+                $<TARGET_FILE:capsid-worker>
+        )
+        set_tests_properties(
+            worker_request_id_boundaries PROPERTIES TIMEOUT 20)
+
+        add_executable(
+            test-worker-async-request-context
+            tests/test_worker_async_request_context.cc
+        )
+        target_link_libraries(
+            test-worker-async-request-context PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_async_request_context
+            COMMAND test-worker-async-request-context
+                $<TARGET_FILE:capsid-worker>
+        )
+        set_tests_properties(
+            worker_async_request_context PROPERTIES TIMEOUT 20)
+
+        add_executable(
+            test-worker-terminal-continuation
+            tests/test_worker_terminal_continuation.cc
+        )
+        target_link_libraries(
+            test-worker-terminal-continuation PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_terminal_continuation
+            COMMAND test-worker-terminal-continuation
+                $<TARGET_FILE:capsid-worker>
+        )
+        set_tests_properties(
+            worker_terminal_continuation PROPERTIES TIMEOUT 30)
+
+        # Build identity matrix (P0-7): every controlled build difference
+        # must change the compatibility record and identical configures
+        # must not. Each variant is a fresh configure. Expected to FAIL
+        # while CAPSID_BUILD_COMPILE_FLAGS truncates at the first CMake
+        # list boundary.
+        add_test(
+            NAME worker_build_identity_matrix
+            COMMAND "${CMAKE_COMMAND}"
+                -DCAPSID_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+                -DCAPSID_CMAKE_COMMAND="${CMAKE_COMMAND}"
+                -DCAPSID_MATRIX_WORK_DIR=
+                    "${CMAKE_CURRENT_BINARY_DIR}/identity-matrix"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_build_identity_matrix.cmake"
+        )
+        set_tests_properties(
+            worker_build_identity_matrix PROPERTIES TIMEOUT 300)
+
+        # Install tree and package contents (P0-6): the frozen runtime
+        # manifest must exist in a fresh install prefix and inside the
+        # package archive, and the package target must not be taken over by
+        # a third-party CPack configuration.
+        add_test(
+            NAME worker_install_tree
+            COMMAND "${CMAKE_COMMAND}"
+                -DCAPSID_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+                -DCAPSID_PREFIX=
+                    "${CMAKE_CURRENT_BINARY_DIR}/install-tree-prefix"
+                -DCAPSID_BUILD_HOST=${CAPSID_BUILD_HOST}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_install_tree.cmake"
+        )
+        set_tests_properties(worker_install_tree PROPERTIES TIMEOUT 300)
+
+        add_test(
+            NAME worker_package_contents
+            COMMAND "${CMAKE_COMMAND}"
+                -DCAPSID_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+                -DCAPSID_WORK_DIR=
+                    "${CMAKE_CURRENT_BINARY_DIR}/package-contents-work"
+                -DCAPSID_BUILD_HOST=${CAPSID_BUILD_HOST}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_contents.cmake"
+        )
+        set_tests_properties(worker_package_contents PROPERTIES TIMEOUT 300)
+
         add_executable(
             test-sandbox
             tests/test_sandbox.cc
