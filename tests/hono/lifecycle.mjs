@@ -236,6 +236,22 @@ assert.equal(
     'after-await LOG must carry the request id',
 );
 
+// The synchronous CPU deadline is interrupt-based and must leave the
+// worker reusable, so it runs before the cancel segment below poisons
+// the realm (a poisoned worker exits; nothing can run after it).
+const cpuTimeout = await request(1018, '/runtime/cpu-timeout');
+assert.match(
+    cpuTimeout.error,
+    /^(TimeoutError|RuntimeError): /,
+    'synchronous CPU deadline must surface as a runtime timeout/error',
+);
+assert.equal((await request(1019, '/entry')).status, 200);
+assert.equal(
+    (await request(1020, '/runtime/abort-count')).status,
+    200,
+    'cpu-timeout must not corrupt the realm',
+);
+
 // Cancellation must end the realm: the detached continuation may never
 // run, and the worker must poison itself.
 send([
@@ -258,17 +274,6 @@ assert.ok(
         event.kind === 'LOG' &&
         decoder.decode(unhex(event.text)) === 'capsid-owner:after-cancel'),
     'after-cancel continuation must never run',
-);
-
-// NOTE: this segment runs last. On the fixed implementation the cancel
-// above poisons the worker, so any request after it (the old cpu-timeout
-// segment) must be reworked in WP-03; keeping it here preserves the
-// pre-fix ordering where the continuation survived the cancel.
-const cpuTimeout = await request(1018, '/runtime/cpu-timeout');
-assert.match(
-    cpuTimeout.error,
-    /^(TimeoutError|RuntimeError): /,
-    'synchronous CPU deadline must surface as a runtime timeout/error',
 );
 
 child.stdin.end('STOP\n');

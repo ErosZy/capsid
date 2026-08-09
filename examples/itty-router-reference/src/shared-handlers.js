@@ -568,11 +568,25 @@ const registerRoutes = (router, variant, state) => {
             tjs: stateOf('tjs'),
         };
     });
-    router.get('/runtime/delay', async request => {
+    // Abort-aware (same contract as the h3 fixture's delay): on hard
+    // timeout the worker fires the request abort, so the timer must be
+    // cleared and the route promise settled from the abort listener —
+    // otherwise the timer continuation leaks and the reclaim poisons
+    // the worker.
+    router.get('/runtime/delay', request => new Promise((resolve, reject) => {
         const milliseconds = Number(request.query.ms ?? '0');
-        await delay(milliseconds);
-        return { delay: milliseconds };
-    });
+        const timer = setTimeout(() => {
+            request.signal.removeEventListener('abort', onAbort);
+            resolve({ delay: milliseconds });
+        }, milliseconds);
+        const onAbort = () => {
+            clearTimeout(timer);
+            request.signal.removeEventListener('abort', onAbort);
+            reject(request.signal.reason ?? new Error('request aborted'));
+        };
+        if (request.signal.aborted) onAbort();
+        else request.signal.addEventListener('abort', onAbort, { once: true });
+    }));
     router.get('/runtime/wait-for-abort', request => new Promise(resolve => {
         request.signal.addEventListener('abort', () => {
             state.abortedHandlers += 1;
