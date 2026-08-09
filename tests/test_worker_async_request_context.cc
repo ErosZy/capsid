@@ -10,12 +10,12 @@
 // at three layers (LOG frame, audit event, decoded audit record). Two
 // requests interleave so events cannot be attributed by arrival order alone.
 //
-// WP-02 boundary (spec §7.1): a timer callback fires outside any QuickJS
-// job, so the post-timer continuation captures no token and runs in worker
-// scope. WP-02 asserts the fail-closed invariant — its events carry id 0,
-// never a borrowed request id, and the strict response bridges reject the
-// continuation so the request terminates as a transport timeout error. WP-03
-// wires timer resource ownership and flips these cases back to exact ids.
+// WP-03 (spec §7.2): TJSAsyncContextHooks wire timers, HTTP clients and
+// webcrypto ops to the request context. A timer callback fires outside any
+// QuickJS job, so without the hooks it would run in worker scope; the hooks
+// capture the creating request's context at resource creation and resume
+// the callback inside it — the 0ms/20ms timer and digest continuations now
+// keep exact ids, asserted at the same three layers.
 
 #include "capsid/runtime.h"
 
@@ -239,7 +239,10 @@ int main(int argc, char **argv) {
         "async function run(name) {\n"
         "  if (name === 'micro') await Promise.resolve();\n"
         "  else if (name === 'nested') await nested();\n"
-        "  else await new Promise(resolve => setTimeout(resolve, "
+        "  else if (name === 'digest') {\n"
+        "    await crypto.subtle.digest('SHA-256',\n"
+        "        new TextEncoder().encode(name));\n"
+        "  } else await new Promise(resolve => setTimeout(resolve, "
         "name === 'slow' ? 20 : 0));\n"
         "  permissions.query({ name: 'stdio', stream: 'stdout' });\n"
         "  stdio.write('stdout', name);\n"
@@ -256,36 +259,38 @@ int main(int argc, char **argv) {
                    "load bundle");
     wait_ready(worker);
 
-    // Sequential: microtask continuation, then a nested Promise chain.
-    // Strict phase: any error/timeout event fails the test.
+    // Sequential: microtask continuation, then a nested Promise chain, then
+    // a webcrypto digest continuation (its callback fires from the uv work
+    // queue, outside any QuickJS job). Strict phase: any error/timeout
+    // event fails the test.
     Observations observations;
     begin(worker, 41, "micro");
     observe(worker, { 41 }, &observations, false);
     begin(worker, 42, "nested");
     observe(worker, { 42 }, &observations, false);
+    begin(worker, 45, "digest");
+    observe(worker, { 45 }, &observations, false);
 
     // Interleaved: 20ms timer and 0ms timer overlap, so events cannot be
-    // attributed by order of arrival. WP-02 boundary (spec §7.1): the
-    // timer continuations fail closed — terminal via transport timeout.
+    // attributed by order of arrival. WP-03 (spec §7.2): timer callbacks
+    // fire outside any QuickJS job but resume in the captured request
+    // context, so both complete normally with their exact IDs.
     begin(worker, 43, "slow");
     begin(worker, 44, "fast");
     observe(worker, { 43, 44 }, &observations, true);
 
-    // LOG frame ownership. Microtask and nested-promise continuations are
-    // enqueued inside the request scope, so the captured token pins the
-    // exact transport ID.
+    // LOG frame ownership. Microtask, nested-promise, digest and timer
+    // continuations are all created inside the request scope, so the
+    // captured token pins the exact transport ID at every layer.
     require_log(observations, "micro", 41);
     require_log(observations, "nested", 42);
-    // Timer continuations capture no token and run in worker scope: their
-    // events must carry id 0 — never a borrowed request id. WP-03 flips
-    // these back to 43/44 when timer resource ownership lands.
-    require_log(observations, "slow", 0);
-    require_log(observations, "fast", 0);
+    require_log(observations, "digest", 45);
+    require_log(observations, "slow", 43);
+    require_log(observations, "fast", 44);
 
-    // Audit event and decoded audit record ownership: 41/42 pin exact IDs.
-    // The timer continuations bucket their audits at worker-scope id 0; the
-    // fail-closed invariant is that nothing is attributed to 43/44.
-    const size_t expected_audits = 4;
+    // Audit event and decoded audit record ownership: every continuation
+    // keeps its exact ID — nothing may fall back to worker-scope id 0.
+    const size_t expected_audits = 5;
     size_t audits = 0;
     std::map<uint64_t, size_t> per_request;
     for (size_t index = 0; index < observations.query_audits.size(); ++index) {
@@ -304,10 +309,12 @@ int main(int argc, char **argv) {
              " audit records, saw " + std::to_string(audits));
     }
     if (per_request[41] != 1 || per_request[42] != 1 ||
-        per_request[0] != 2 ||
-        per_request[43] != 0 || per_request[44] != 0) {
+        per_request[45] != 1 ||
+        per_request[0] != 0 ||
+        per_request[43] != 1 || per_request[44] != 1) {
         fail("audit attribution: 41=" + std::to_string(per_request[41]) +
              " 42=" + std::to_string(per_request[42]) +
+             " 45=" + std::to_string(per_request[45]) +
              " 0=" + std::to_string(per_request[0]) +
              " 43=" + std::to_string(per_request[43]) +
              " 44=" + std::to_string(per_request[44]));
@@ -315,9 +322,8 @@ int main(int argc, char **argv) {
 
     require_result(capsid_worker_shutdown(worker), "shutdown");
     capsid_worker_destroy(worker);
-    std::cout << "PASS: microtask and nested continuations keep their "
-                 "request identity; timer continuations fail closed "
-                 "worker-scope (WP-02 boundary)"
+    std::cout << "PASS: microtask, nested-promise, digest and timer "
+                 "continuations keep their request identity (WP-03)"
               << std::endl;
     return 0;
 }

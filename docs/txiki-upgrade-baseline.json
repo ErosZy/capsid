@@ -8,8 +8,8 @@
     "commit": "bf8988fc401e737f9946cd10a3463b48aab0fd7e"
   },
   "overlay": {
-    "key": "6cc5a0d60c6926f6051ef77b015254ac432bd89c3fa745571140ef0b801a9ad0",
-    "manifest": "cebdb18534460ceea53efe6bae8bab50bd1288995479be6aa570761e362c0bf3"
+    "key": "42961e8705105f9d98e54a24cb00170e079f5cbb570bfadb395a4e2b5c3d2b30",
+    "manifest": "50d245b39ee96a7e641bbe650d587b92c1f72d3d9e495d29ed8f86420c3afc7e"
   },
   "conformance_deviations": {
     "CAPSID-D001": "接受的 profile 排除",

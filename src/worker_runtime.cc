@@ -13,6 +13,7 @@
 
 extern "C" {
 #include "tjs.h"
+#include "utils.h"
 #include "uv.h"
 
 int capsid_tjs_set_ca_bundle_path(TJSRuntime *runtime, const char *path);
@@ -72,6 +73,11 @@ namespace {
 // oldest tombstone is always for a request whose late frames have long
 // since drained.
 static const size_t kMaxTerminalTombstones = 2048;
+
+// §7.4: a poisoned worker gets a strictly bounded cleanup window. At the
+// poison deadline the worker exits unconditionally (flush + stop), so a
+// detached resource or leaked continuation cannot hold capacity forever.
+static const uint64_t kPoisonGraceNs = 100 * 1000000ull;  // 100ms
 
 // Sent-prefix compaction threshold for the output vector: below this
 // the prefix is cheap to carry, at/above it the vector is compacted so
@@ -302,6 +308,13 @@ public:
           next_token_generation_(0),
           current_token_(NULL),
           poisoned_(false),
+          poison_reason_(NULL),
+          poison_started_ns_(0),
+          poison_deadline_ns_(0),
+          poison_triggers_(0),
+          poison_exit_started_(false),
+          reclaim_pending_(false),
+          retained_refs_(0),
           interrupted_request_id_(0),
           audit_window_started_ns_(0),
           audit_window_count_(0),
@@ -407,6 +420,16 @@ public:
         job_hooks.release = job_release_hook;
         JS_SetJobContextHooks(
             JS_GetRuntime(ctx_), &job_hooks, this);
+        // §7.2: the same four hooks drive the txiki-layer async context so
+        // native resources (timers, httpclient, webcrypto ops) capture the
+        // owning token across libuv callbacks and re-enter it when their
+        // callbacks fire.
+        TJSAsyncContextHooks async_ctx_hooks;
+        async_ctx_hooks.capture = job_capture_hook;
+        async_ctx_hooks.enter = job_enter_hook;
+        async_ctx_hooks.leave = job_leave_hook;
+        async_ctx_hooks.release = job_release_hook;
+        tjs_set_async_context_hooks(ctx_, &async_ctx_hooks, this);
         std::string bridge_error;
         if (!load_bridge_functions(&bridge_error)) {
             send_error(0, bridge_error);
@@ -450,7 +473,38 @@ public:
                      sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1);
         flush_output();
 
-        return TJS_Run(runtime_);
+        const int run_result = TJS_Run(runtime_);
+        // §7.5: a clean exit — not poisoned and with no response state
+        // left (a host EOF with inflight requests legitimately still
+        // holds token refs) — must not retain a live continuation on any
+        // token. The same discriminator as reclaim_settled_tokens: a
+        // token awaiting its tick reclaim (terminal or response already
+        // gone, refs == 1, nothing left to resume it) is fine; anything
+        // with refs > 1 is a leak. The poison exit path reports its own
+        // retained count on POISON EXIT.
+        bool token_leak = false;
+        if (!poisoned_ && responses_.empty()) {
+            for (std::map<uint64_t, RequestToken *>::const_iterator it =
+                     token_registry_.begin();
+                 it != token_registry_.end();
+                 ++it) {
+                const RequestToken *token = it->second;
+                const bool response_gone =
+                    responses_.find(token->request_id) == responses_.end();
+                const bool reclaimable = (token->terminal || response_gone) &&
+                                         token->refs == 1;
+                if (!reclaimable) {
+                    token_leak = true;
+                }
+            }
+        }
+        if (token_leak) {
+            std::fprintf(stderr,
+                         "TOKEN LEAK on clean exit: retained=%llu\n",
+                         static_cast<unsigned long long>(retained_refs_));
+            return 1;
+        }
+        return run_result;
     }
 
 private:
@@ -468,6 +522,12 @@ private:
             return 0;
         }
         const uint64_t now = uv_hrtime();
+        // §7.4: a poisoned worker may run a bounded drain, but terminal
+        // jobs are capped by the independent poison deadline as well —
+        // no post-poison continuation runs unbounded.
+        if (self->poisoned_) {
+            return now >= self->poison_deadline_ns_ ? 1 : 0;
+        }
         if (now >= token->deadline_ns) {
             self->interrupted_request_id_ = token->request_id;
             return 1;
@@ -524,6 +584,7 @@ private:
     void retain_token(RequestToken *token) {
         if (token) {
             ++token->refs;
+            retained_refs_ += 1;
         }
     }
 
@@ -531,6 +592,7 @@ private:
         if (!token || token->refs <= 0) {
             return;
         }
+        retained_refs_ -= 1;
         if (--token->refs == 0) {
             token_registry_.erase(token->generation);
             delete token;
@@ -607,15 +669,78 @@ private:
                     found->second.token = NULL;
                 }
                 token->terminal = true;
+                // §7.4: the normal completion path runs no drain; the
+                // deadline tick performs the post-settle reclaim.
+                reclaim_pending_ = true;
                 return true;
             }
         }
         return false;
     }
 
-    // §6.4.3-5: after a job drain, a settled token must be held by nothing
-    // but the registry; any surviving ref is a terminal-continuation leak
-    // and poisons the worker.
+    // §6.4.3-5 + §7.4 poison state machine. Idempotent: the first reason
+    // wins, later triggers only increment the diagnostic counter. On entry
+    // every inflight token is terminalized once and its response rejected,
+    // so no capability can produce a side effect afterwards; the worker
+    // then drains on a strict poison deadline and exits (§7.4/§7.5).
+    void enter_poison(const char *reason) {
+        if (poisoned_) {
+            if (reason != NULL) {
+                poison_triggers_ += 1;
+            }
+            return;
+        }
+        poisoned_ = true;
+        poison_reason_ = reason;
+        poison_started_ns_ = uv_hrtime();
+        poison_deadline_ns_ = poison_started_ns_ + kPoisonGraceNs;
+        std::fprintf(stderr, "WORKER POISONED: %s\n",
+                     reason != NULL ? reason : "unspecified");
+        for (std::map<uint64_t, ResponseState>::iterator it =
+                 responses_.begin();
+             it != responses_.end();
+             ++it) {
+            if (it->second.token != NULL && !it->second.token->terminal) {
+                it->second.token->terminal = true;
+            }
+            reject_pending(it->second, "worker poisoned");
+        }
+    }
+
+    // §7.4: the bounded drain window ends at the poison deadline; the
+    // worker then flushes and exits unconditionally (EOF -> host EXIT).
+    void check_poison() {
+        if (!poisoned_ || poison_exit_started_) {
+            return;
+        }
+        if (uv_hrtime() >= poison_deadline_ns_) {
+            initiate_poison_exit();
+        }
+    }
+
+    void initiate_poison_exit() {
+        if (poison_exit_started_) {
+            return;
+        }
+        poison_exit_started_ = true;
+        if (diag_enabled_) {
+            std::fprintf(stderr,
+                         "POISON EXIT reason=%s retained=%llu triggers=%llu\n",
+                         poison_reason_ != NULL ? poison_reason_ : "unspecified",
+                         static_cast<unsigned long long>(retained_refs_),
+                         static_cast<unsigned long long>(poison_triggers_));
+        }
+        flush_blocking();
+        shutdown();
+    }
+
+    // §6.4.3-5 + §7.4: after a drain (or the settle tick), a token must be
+    // held by nothing but the registry. A terminal token with surviving
+    // refs — or a token whose response already ended yet is still held by
+    // a job or native resource — is a detached-continuation leak and
+    // poisons the worker. refs==1 with the response gone means nothing can
+    // ever resume the chain (any live continuation holds a captured ref),
+    // so the token is reclaimed.
     void reclaim_settled_tokens() {
         std::vector<uint64_t> reclaimable;
         for (std::map<uint64_t, RequestToken *>::iterator it =
@@ -623,13 +748,17 @@ private:
              it != token_registry_.end();
              ++it) {
             RequestToken *token = it->second;
-            if (!token->terminal) {
-                continue;
+            const bool response_gone =
+                responses_.find(token->request_id) == responses_.end();
+            if (!token->terminal && !response_gone) {
+                continue;  // in flight and healthy
             }
             if (token->refs == 1) {
                 reclaimable.push_back(it->first);
             } else {
-                poisoned_ = true;
+                enter_poison(token->terminal
+                                 ? "terminal continuation leak"
+                                 : "detached resource after response end");
             }
         }
         for (size_t i = 0; i < reclaimable.size(); ++i) {
@@ -653,6 +782,14 @@ private:
         if (!self) {
             return;
         }
+        // §7.4: settle leaves no drain on the normal path, so the tick
+        // performs the post-settle reclaim (may poison), then checks the
+        // poison deadline before expiring requests.
+        if (self->reclaim_pending_) {
+            self->reclaim_pending_ = false;
+            self->reclaim_settled_tokens();
+        }
+        self->check_poison();
         if (!self->diag_enabled_) {
             self->expire_requests();
             return;
@@ -670,6 +807,9 @@ private:
                          static_cast<unsigned long long>(self->phase_counts_[2]),
                          static_cast<unsigned long long>(self->phase_counts_[3]),
                          static_cast<unsigned long long>(self->phase_counts_[4]));
+            std::fprintf(stderr,
+                         "TOKENS retained=%llu\n",
+                         static_cast<unsigned long long>(self->retained_refs_));
         }
         self->expire_requests();
     }
@@ -3216,9 +3356,11 @@ private:
                 break;
             }
         }
-        // §6.4.3: a settled request is checked only after its drain
-        // completes; surviving token refs then poison the worker.
-        reclaim_settled_tokens();
+        // §7.4: the post-drain reclaim is deferred to the deadline tick
+        // (callers set reclaim_pending_). Draining synchronously here
+        // would reclaim while uv-loop timers that captured ctx_data at
+        // creation (e.g. the abort path's setTimeout(reject, 0)) have
+        // not fired yet, false-poisoning a clean cancellation.
     }
 
     std::string exception_string() {
@@ -3374,6 +3516,13 @@ private:
     }
 
     bool begin_request(const capsid::protocol::Frame &frame) {
+        if (poisoned_) {
+            // §7.4: reject new RequestHead frames. The error terminal plus
+            // the pending EXIT makes the host treat the worker as a
+            // capacity drop and replace it.
+            send_error(frame.request_id, "worker poisoned");
+            return true;
+        }
         if (responses_.find(frame.request_id) != responses_.end() ||
             responses_.size() >= config_.max_inflight) {
             return false;
@@ -3438,6 +3587,10 @@ private:
             next_token_generation_++, frame.request_id,
             response.deadline_ns);
         token_registry_[token->generation] = token;
+        // Registry owner ref, balanced by the final release_token; keeps
+        // retained_refs_ == sum(refs) over live tokens (reaches zero on
+        // a clean worker exit).
+        retained_refs_ += 1;
         response.token = token;
         // §6.2: the ResponseState holds an owner reference. Without this
         // retain, the post-drain reclaim sees refs==1 (registry only) once
@@ -3601,6 +3754,10 @@ private:
          * libuv handle, outside txiki's normal JS-callback job drain.
          */
         drain_jobs();
+        // §7.4: reclaim deferred to the next deadline tick so winding-down
+        // 0ms timers (setTimeout(reject, 0) in the abort path) release
+        // their captured ctx_data first.
+        reclaim_pending_ = true;
         return called;
     }
 
@@ -3657,7 +3814,11 @@ private:
             }
         }
         if (JS_IsException(result)) {
-            send_error(0, exception_string());
+            // §7.5: a poisoned worker must not emit identity-0 events; the
+            // poison exit path owns all diagnostics.
+            if (!poisoned_) {
+                send_error(0, exception_string());
+            }
             return false;
         }
         JS_FreeValue(ctx_, result);
@@ -3709,6 +3870,10 @@ private:
              * request-local framework state.
              */
             drain_jobs();
+            // §7.4: same deferral as cancel_request — the timeout path's
+            // reject-timer releases its captured ctx_data on the next loop
+            // tick, so reclaim must not run before then.
+            reclaim_pending_ = true;
         }
     }
 
@@ -4356,7 +4521,22 @@ private:
     uint64_t next_token_generation_;
     std::map<uint64_t, RequestToken *> token_registry_;
     RequestToken *current_token_;
+    // §7.4 poison state machine. Idempotent: the first reason wins
+    // (poison_reason_), later triggers only increment poison_triggers_;
+    // poison_deadline_ns_ is an independent monotonic deadline checked by
+    // the interrupt handler and the deadline tick.
     bool poisoned_;
+    const char *poison_reason_;
+    uint64_t poison_started_ns_;
+    uint64_t poison_deadline_ns_;
+    uint64_t poison_triggers_;
+    bool poison_exit_started_;
+    // Set by settle_request (the normal completion path runs no drain);
+    // the deadline tick performs the post-settle reclaim.
+    bool reclaim_pending_;
+    // Sum of refs over live tokens (registry owner + captured jobs and
+    // native resources). Must reach zero before exit; printed in diag.
+    uint64_t retained_refs_;
     uint64_t interrupted_request_id_;
     uint64_t audit_window_started_ns_;
     uint32_t audit_window_count_;

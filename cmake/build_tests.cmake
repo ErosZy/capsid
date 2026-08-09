@@ -1626,6 +1626,21 @@ if(BUILD_TESTING)
             current_documentation_audit
             PROPERTIES TIMEOUT 20 LABELS "documentation;audit"
         )
+        # WP-03 §7.3: every async entry point into JS from the txiki
+        # overlay must be classified (context-wired / profile-unreachable /
+        # synchronous-reentry / value-only) in
+        # tools/audit-txiki-async-context.py; an unclassified site fails.
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
+        add_test(
+            NAME txiki_async_context_inventory_audit
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit-txiki-async-context.py"
+                "${CAPSID_TXIKI_OVERLAY}/src"
+        )
+        set_tests_properties(
+            txiki_async_context_inventory_audit
+            PROPERTIES TIMEOUT 20 LABELS "security;ci;audit"
+        )
         file(GLOB_RECURSE CAPSID_HONO_BUNDLE_DEPS CONFIGURE_DEPENDS
             "${CAPSID_HONO_REFERENCE_ROOT}/src/*.js"
             "${CAPSID_HONO_REFERENCE_ROOT}/node_modules/hono/dist/*.js"
