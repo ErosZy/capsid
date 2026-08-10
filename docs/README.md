@@ -25,6 +25,8 @@ App/pool、多 worker 与安全部署闭环（M1D）继续实现中。里程碑�
   已冻结契约、实施顺序和验收门
 - [安全修复执行说明](capsid-remediation-execution-spec-2026-08-09.md)：P0/P1 修复的
   工作包、RED 证据与验收门（PR-01…PR-14 的当前执行依据）
+- [WP-08 完成报告（PR-13）](capsid-wp08-completion-2026-08-10.md)：安装、CPack
+  与 Release CI 的验收证据、不变量与 RED/GREEN 记录
 - [安全审计交接](capsid-audit-handoff-2026-08-09.md)：审计输入、已确认发现和
   修复完成后的复核要求
 
