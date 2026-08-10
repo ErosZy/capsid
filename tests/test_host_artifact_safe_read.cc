@@ -347,8 +347,10 @@ int main() {
         std::atomic<bool> reader_done{false};
         std::thread truncator([&]() {
             for (int i = 0; i < 100000 && !reader_done.load(); ++i) {
-                truncate(path.c_str(), 1024);
-                truncate(path.c_str(), big.size());
+                if (truncate(path.c_str(), 1024) != 0 ||
+                    truncate(path.c_str(), big.size()) != 0) {
+                    break;  // fixture error: the identity stays stable
+                }
             }
         });
         const capsid::host::SafeReadResult result =
