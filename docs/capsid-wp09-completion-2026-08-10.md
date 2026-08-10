@@ -102,10 +102,11 @@ kWaveBatch=64 分波 + quiescence drain；soak-app /slow race request.signal
 | §13.4 GREEN | host_managed 家族 | 通过 | — |
 | §13.6 RED/GREEN | test_host_managed_listener（large response credit） | RED 262144 → GREEN 6/6 | — |
 | §13.6 smoke | run_managed_soak.py --minutes 1 | 2× 10/10 cycles SOAK PASS（converged:true） | 60s each |
-| TSan scope | `ctest -j 2 -E '^(wpt_conformance_not_configured\|worker_strict_sandbox_direct_fetch\|worker_strict_sandbox_https_ca\|worker_package_.*)$'`（build-tsan） | 待 §2.1 | — |
-| ASAN scope | 同款排除（build-asan） | 待 §2.1 | — |
+| TSan scope | `ctest -j 2 -E '^(wpt_conformance_not_configured\|worker_strict_sandbox_direct_fetch\|worker_strict_sandbox_https_ca\|worker_package_.*)$'`（build-tsan，TSan halt_on_error=1） | 396/396 PASS（含 worker_build_identity_matrix、host_artifact_safe_read、registry 5 模式） | 201.6s |
+| ASAN scope | 同款排除（build-asan，ASan detect_leaks=1） | 待 §2.1 | — |
 | managed-listener TSan | test-host-managed-listener（TSan halt_on_error=1） | 6/6 通过 | — |
 | managed-listener ASan | test-host-managed-listener（ASan detect_leaks=1） | 6/6 通过 | — |
+| registry/artifact 回归 | 修复后单独验证 | TSan 15/15 + registry 5 模式 rc=0；Release 5/5；ASan 5/5 + registry rc=0 | — |
 
 ### 2.1 环境说明：TSan 在 VM 重启后的 ASLR 恢复
 
@@ -139,6 +140,24 @@ kWaveBatch=64 分波 + quiescence drain；soak-app /slow race request.signal
   方法见 §2.1。
 - §13.5 truncate `warn_unused_result`：macOS 分支在 -Werror 下的编译失败，
   96a5670 修复。
+- **TSan scope gate 3 项测试缺陷（aee6b42 修复，产品代码零改动）**：
+  - `host_managed_registry` slots_pinned_survive：TSan deadlock detector 每
+    线程最多跟踪 64 把 held locks，64 个 extras 锁集中在一个线程会触发
+    `CHECK n_all_locks_ == 64`（无真实死锁）。修复：每个 extra 锁由其
+    自己的线程持有。slots_serialize_same_app：256 个 TSan-instrumented
+    纯 spin 线程饿死 main（loadavg 250）导致 30s 超时。修复：spin 循环
+    全部加 `std::this_thread::yield()`。断言不变。
+  - `host_artifact_safe_read` test 10：shrink-1024 / restore-12MiB 的
+    toggle 构造**按构造必败**——virtiofs 上 restore 要清零分配 12MiB
+    （~3ms），而读窗口（fstat#1 → resize → pread → fstat#2）只有
+    ~1ms，toggle 周期 > 窗口，mutation 永远落不进窗口，连续 3/3 FAIL。
+    时间戳诊断证实：truncator 与 reader 同时唤醒（无饥饿），但一对
+    truncate 花 3.1ms 而整个读只有 1.06ms。修复：改为 12MiB ↔
+    12MiB+4KiB 确定性扰动——文件恒 ≥12MiB（窗口恒 ≥1ms）、每次
+    truncate 只动 4KiB 尾（周期 ~100-400µs ≪ 窗口）、shrink 方向走
+    短读分支（offset != size）、grow 方向走 identity 比较分支，两条
+    路径都必然返回 kIdentityChanged。修复后 TSan 15/15、Release 5/5、
+    full gate 396/396。
 
 ## 5. UNCOVERED / follow-up
 
