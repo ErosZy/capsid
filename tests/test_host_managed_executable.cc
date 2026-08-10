@@ -259,9 +259,26 @@ void wait_for_socket(const Fixture& fixture) {
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::seconds(5);
     for (;;) {
-        struct stat metadata = {};
-        if (lstat(fixture.socket_path.c_str(), &metadata) == 0 &&
-            S_ISSOCK(metadata.st_mode)) {
+        // Readiness means "the Admin listener accepts connections", not "a
+        // socket pathname exists". Crash-injection phases SIGKILL the host
+        // and leave its socket file behind; the next start_host() phase
+        // removes the stale pathname under the evidence rule and rebinds,
+        // so waiting on the bare pathname would connect to a dead listener
+        // (ECONNREFUSED) in the window before the new host's bind+listen.
+        // Probe with connect(): only a live listener returns success.
+        require(fixture.socket_path.size() < sizeof(sockaddr_un{}.sun_path),
+                "managed Admin socket path is too long");
+        const int probe = socket(AF_UNIX, SOCK_STREAM, 0);
+        require(probe >= 0, "cannot create managed Admin readiness probe");
+        struct sockaddr_un address = {};
+        address.sun_family = AF_UNIX;
+        std::memcpy(address.sun_path, fixture.socket_path.c_str(),
+                    fixture.socket_path.size() + 1);
+        const int probe_result =
+            connect(probe, reinterpret_cast<const struct sockaddr*>(&address),
+                    sizeof(address));
+        close(probe);
+        if (probe_result == 0) {
             return;
         }
         int status = 0;
