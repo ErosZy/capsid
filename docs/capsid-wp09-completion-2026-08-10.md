@@ -103,7 +103,7 @@ kWaveBatch=64 分波 + quiescence drain；soak-app /slow race request.signal
 | §13.6 RED/GREEN | test_host_managed_listener（large response credit） | RED 262144 → GREEN 6/6 | — |
 | §13.6 smoke | run_managed_soak.py --minutes 1 | 2× 10/10 cycles SOAK PASS（converged:true） | 60s each |
 | TSan scope | `ctest -j 2 -E '^(wpt_conformance_not_configured\|worker_strict_sandbox_direct_fetch\|worker_strict_sandbox_https_ca\|worker_package_.*)$'`（build-tsan，TSan halt_on_error=1） | 396/396 PASS（含 worker_build_identity_matrix、host_artifact_safe_read、registry 5 模式） | 201.6s |
-| ASAN scope | 同款排除（build-asan，ASan detect_leaks=1） | 待 §2.1 | — |
+| ASAN scope | 同款排除（build-asan 重配置 315 注册，ASan detect_leaks=1） | 309/309 PASS（含 soak_memory_waves_smoke、worker_exit_fields、worker_timeout_drain） | 197.1s |
 | managed-listener TSan | test-host-managed-listener（TSan halt_on_error=1） | 6/6 通过 | — |
 | managed-listener ASan | test-host-managed-listener（ASan detect_leaks=1） | 6/6 通过 | — |
 | registry/artifact 回归 | 修复后单独验证 | TSan 15/15 + registry 5 模式 rc=0；Release 5/5；ASan 5/5 + registry rc=0 | — |
@@ -158,6 +158,11 @@ kWaveBatch=64 分波 + quiescence drain；soak-app /slow race request.signal
     短读分支（offset != size）、grow 方向走 identity 比较分支，两条
     路径都必然返回 kIdentityChanged。修复后 TSan 15/15、Release 5/5、
     full gate 396/396。
+- ASan gate 首轮 `worker_build_identity_matrix` FAIL：fail-closed 门检测到
+  报告文档尚未提交（git status 非空）——预期行为，证明门在生效；提交后
+  单独复验 PASS（50.8s）。同轮 3 个 Not Run（soak_memory_waves_smoke、
+  worker_exit_fields、worker_timeout_drain）为 build-asan 配置陈旧（注册
+  集早于这些测试加入）；`cmake .` 重配置后 315 注册、309 运行全 PASS。
 
 ## 5. UNCOVERED / follow-up
 
