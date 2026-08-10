@@ -156,6 +156,10 @@ AppOperationLock::AppOperationLock(const std::string& application)
         slot->users += 1;
         slot->last_used = std::chrono::steady_clock::now();
         slot_ = slot.get();
+        // Prune here as well as on release: creation is what pushes the
+        // table over the cap, and the just-pinned slot is never the
+        // eviction candidate. Table size stays at max(cap, slots held).
+        prune_app_operation_table_locked();
     }
     // Lock outside the table mutex: waiting on another App's transition
     // must not block table bookkeeping.

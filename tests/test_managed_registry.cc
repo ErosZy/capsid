@@ -32,6 +32,7 @@
 namespace {
 
 using capsid::host::AppOperationLock;
+using capsid::host::OperationState;
 using capsid::host::OperationStatus;
 using capsid::host::app_operation_slot_count;
 using capsid::host::lookup_operation;
@@ -121,8 +122,11 @@ int main(int argc, char** argv) {
             }
         }
         require(peak <= 256, "slot table exceeded the 256 cap at peak");
-        require(app_operation_slot_count() == 1,
-                "idle slots were not reclaimed after sequential discovery");
+        // LRU retention: the table holds the most recent 256 discovered
+        // Apps (the oldest were evicted once the table overflowed); the
+        // pre-§13.4 static map would have retained all 512.
+        require(app_operation_slot_count() == 256,
+                "idle slots were not reclaimed to the cap after sequential discovery");
         return 0;
     }
 
