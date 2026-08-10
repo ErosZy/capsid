@@ -35,7 +35,28 @@ export default {
             }
             case '/slow': {
                 const ms = Math.min(Number(url.searchParams.get('ms') || 200), 5000);
-                await new Promise((resolve) => setTimeout(resolve, ms));
+                // Race the delay against the request abort signal: a driver
+                // cancel (client disconnect, host timeout) aborts the
+                // request synchronously, and a handler that settles on
+                // abort lets the chain unwind to capsidRequestSettled
+                // instead of parking a detached continuation (worker
+                // poison by design — see §7.4). The soak's cancel and
+                // memory-wave dimensions rely on this clean settle.
+                await new Promise((resolve, reject) => {
+                    if (request.signal.aborted) {
+                        reject(new Error('slow aborted'));
+                        return;
+                    }
+                    const onAbort = () => {
+                        clearTimeout(timer);
+                        reject(new Error('slow aborted'));
+                    };
+                    const timer = setTimeout(() => {
+                        request.signal.removeEventListener('abort', onAbort);
+                        resolve();
+                    }, ms);
+                    request.signal.addEventListener('abort', onAbort, { once: true });
+                });
                 return new Response('slow-ok', {
                     headers: { 'content-type': 'text/plain' },
                 });

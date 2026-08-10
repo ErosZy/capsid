@@ -70,6 +70,10 @@ const char* kBundleEcho =
 const char* kBundleHang =
     "export default { async fetch(request) {"
     " await new Promise(() => {}); } };\n";
+const char* kBundleBig =
+    "export default { async fetch(request) {"
+    " const body = new Uint8Array(512 * 1024).fill(0x53);"
+    " return new Response(body); } };\n";
 
 // Spawn/load/flush (NOT yet READY) — the executor factory contract. The
 // per-test request timeout lets the 504 gate run fast.
@@ -543,6 +547,49 @@ void test_post_echo_and_ceiling(const std::string& worker_path) {
     std::cout << "PASS: POST echo + connection ceiling" << std::endl;
 }
 
+// WP-09 §13.6: response credit across the managed listener. The worker
+// starts each request with a 256 KiB response window (initial_window); a
+// body larger than that only arrives if the listener returns credit on
+// body frames (early window) and write completions, exactly as the M1A
+// single_worker_server contract (§8.1). Without the return path the
+// transfer stalls forever at initial_window bytes — this pins it.
+void test_big_response_credit(const std::string& worker_path) {
+    std::shared_ptr<GenerationPool> pool =
+        make_pool(worker_path, "app-big", kBundleBig, 5000);
+    std::shared_ptr<RoutingTable> routing = std::make_shared<RoutingTable>();
+    routing->publish(RoutingSnapshot::build({{"app-big", pool}}));
+
+    ManagedListenerOptions options;
+    options.config = path_listener("public");
+    options.config.limits.connections = 1;
+    options.routing = routing;
+    ManagedListener listener(options);
+    std::string error;
+    require(listener.start(&error), "listener start failed: " + error);
+
+    const int fd = connect_listener(listener.bound_port());
+    const HttpResponse big = http_exchange(
+        fd, "GET /@capsid/app-big/ HTTP/1.1\r\n"
+            "Host: localhost\r\n"
+            "Connection: close\r\n\r\n");
+    require(big.status == 200 && big.body.size() == 512 * 1024,
+            "large response incomplete (status " +
+                std::to_string(big.status) + ", body " +
+                std::to_string(big.body.size()) +
+                " bytes, expected 524288)");
+    for (std::size_t i = 0; i < big.body.size(); i += 4096) {
+        require(big.body[i] == '\x53',
+                "large response body content mismatch at " +
+                    std::to_string(i));
+    }
+    close(fd);
+
+    listener.request_stop();
+    listener.wait(&error);
+    pool->stop_and_join();
+    std::cout << "PASS: large response credit" << std::endl;
+}
+
 void test_trusted_header_gate(const std::string& worker_path) {
     std::shared_ptr<GenerationPool> pool_a =
         make_pool(worker_path, "app-a", kBundleA, 2000);
@@ -602,6 +649,7 @@ int main(int argc, char** argv) {
     test_routes_two_apps(worker_path);
     test_404_503_504(worker_path);
     test_post_echo_and_ceiling(worker_path);
+    test_big_response_credit(worker_path);
     test_trusted_header_gate(worker_path);
     std::cout << "PASS: Managed listener data plane (WP-05 §9.2)" << std::endl;
     return 0;

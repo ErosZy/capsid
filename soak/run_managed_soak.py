@@ -55,6 +55,9 @@ APP = "soak"
 # fresh version from the counter on.
 INITIAL_VERSION = "v1"
 
+# Path-mode routing serves the app under the /@capsid/{app} prefix.
+DATA_PREFIX = "/@capsid/" + APP
+
 ADMIN_TIMEOUT_S = 30
 
 
@@ -213,13 +216,14 @@ class Soak:
                 sock = socket.create_connection(
                     ("127.0.0.1", self.port), timeout=5)
                 sock.sendall(
-                    b"GET /slow?ms=3000 HTTP/1.1\r\nHost: local\r\n\r\n")
+                    ("GET {}/slow?ms=3000 HTTP/1.1\r\nHost: local\r\n\r\n"
+                     .format(DATA_PREFIX)).encode())
                 time.sleep(0.05)
                 sock.close()  # abort mid-flight
             except OSError:
                 fail("cancel: connection setup failed")
             self.count("cancel_aborted")
-        status, body = http_post(self.port, "/echo", "probe")
+        status, body = http_post(self.port, DATA_PREFIX + "/echo", "probe")
         if status != 200 or body != b"echo:probe":
             fail("cancel: server did not survive aborts "
                  "(POST /echo -> {} {!r})".format(status, body[:32]))
@@ -230,7 +234,8 @@ class Soak:
         # must end cleanly.
         try:
             sock = socket.create_connection(("127.0.0.1", self.port), timeout=5)
-            sock.sendall(b"GET /sse HTTP/1.1\r\nHost: local\r\n\r\n")
+            sock.sendall(("GET {}/sse HTTP/1.1\r\nHost: local\r\n\r\n"
+                          .format(DATA_PREFIX)).encode())
             data = b""
             sock.settimeout(15)
             deadline = time.monotonic() + 15
@@ -251,22 +256,63 @@ class Soak:
 
     def dim_slow_client(self):
         # Trickle-read the 4 MiB body; the stream must complete intact.
-        body = b""
+        # The listener serializes chunked (the worker emits no
+        # Content-Length for a buffered body), so the wire body is
+        # de-framed here like a real HTTP client would. The read loop
+        # ends at the chunked terminal chunk — like dim_sse's tick
+        # marker — because the connection stays keep-alive and an idle
+        # recv would time out waiting for bytes that never come.
+        wire = b""
+        terminal_seen = False
         deadline = time.monotonic() + 30
         try:
             sock = socket.create_connection(("127.0.0.1", self.port), timeout=5)
-            sock.sendall(b"GET /big HTTP/1.1\r\nHost: local\r\n\r\n")
+            sock.sendall(("GET {}/big HTTP/1.1\r\nHost: local\r\n"
+                          "Connection: close\r\n\r\n"
+                          .format(DATA_PREFIX)).encode())
             sock.settimeout(10)
             while time.monotonic() < deadline:
                 chunk = sock.recv(65536)
                 if not chunk:
-                    break
-                body += chunk
+                    break  # the host honored Connection: close
+                wire += chunk
+                if wire.endswith(b"\r\n0\r\n\r\n"):
+                    terminal_seen = True
+                    break  # the chunked terminal chunk has arrived
                 time.sleep(0.05)
             sock.close()
         except OSError as error:
             fail("slow-client: transport error: {}".format(error))
-        _, payload = body.partition(b"\r\n\r\n")
+        if not terminal_seen:
+            fail("slow-client: response did not reach its terminal chunk "
+                 "({} wire bytes)".format(len(wire)))
+        head_end = wire.find(b"\r\n\r\n")
+        if head_end == -1:
+            fail("slow-client: no response head received")
+        head = wire[:head_end].lower()
+        if b"\r\ntransfer-encoding: chunked" not in head:
+            fail("slow-client: expected a chunked response, got {!r}".format(
+                head[:120]))
+        payload = b""
+        pos = head_end + 4
+        wire_len = len(wire)
+        for _ in range(1 << 16):  # framing safety bound
+            line_end = wire.find(b"\r\n", pos)
+            if line_end == -1:
+                fail("slow-client: truncated chunk header")
+            size_field = wire[pos:line_end].split(b";")[0].strip()
+            try:
+                size = int(size_field, 16)
+            except ValueError:
+                fail("slow-client: bad chunk size line {!r}".format(
+                    size_field[:64]))
+            if size == 0:
+                break
+            if line_end + 2 + size > wire_len:
+                fail("slow-client: chunk body truncated (at {} of {})".format(
+                    len(payload), size))
+            payload += wire[line_end + 2: line_end + 2 + size]
+            pos = line_end + 2 + size + 2
         expected = 4 * 1024 * 1024
         if len(payload) != expected or payload != b"\x53" * expected:
             fail("slow-client: body {}/{} bytes or pattern wrong".format(
@@ -293,7 +339,8 @@ class Soak:
         ok = False
         while time.monotonic() < deadline:
             try:
-                status, body = http_post(self.port, "/echo", "postkill")
+                status, body = http_post(self.port, DATA_PREFIX + "/echo",
+                                         "postkill")
                 if status == 200 and body == b"echo:postkill":
                     ok = True
                     break
@@ -305,7 +352,8 @@ class Soak:
         self.count("replacement_cycles")
 
     def dim_queue_fairness(self):
-        urls = ["http://127.0.0.1:{}/slow?ms=150".format(self.port)] * 32
+        urls = ["http://127.0.0.1:{}{}/slow?ms=150".format(
+            self.port, DATA_PREFIX)] * 32
 
         def one(url):
             try:
@@ -339,7 +387,8 @@ class Soak:
         if not status.get("active") or status.get("version") != version:
             fail("secret rotation: status did not publish {}: {!r}".format(
                 version, status))
-        http_status, body = http_get(self.port, "/marker", timeout=10)
+        http_status, body = http_get(self.port, DATA_PREFIX + "/marker",
+                                     timeout=10)
         if http_status != 200 or body.decode("utf-8", "replace") != value:
             fail("secret rotation: served marker {!r} != {!r}".format(
                 body[:32], value))
@@ -441,10 +490,14 @@ def write_host_json(work_dir, port, admin_sock):
             "publicScheme": "http",
             "publicAuthority": "127.0.0.1:{}".format(port),
             "trusted": False,
-            "routing": {"mode": "path", "path": "/"},
+            "routing": {"mode": "path", "suffix": "/"},
             "limits": {},
         }],
-        "capacity": {"workersTotal": 1, "startupsConcurrent": 1},
+        # §9.4: a zero-downtime replace (secret rotation, SIGKILL
+        # replacement) warms the new pool while the old one still serves —
+        # the ledger refuses the reserve without explicit surge headroom.
+        "capacity": {"workersTotal": 1, "startupsConcurrent": 1,
+                     "activationSurgeWorkers": 1},
     }
     path = os.path.join(work_dir, "host.json")
     with open(path, "w") as handle:

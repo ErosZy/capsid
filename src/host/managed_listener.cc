@@ -243,6 +243,13 @@ private:
     std::map<const WorkerExecutor*, std::uint64_t> client_bytes_;
 };
 
+// Early-credit window (host, spec §8.1): response credit is returned at
+// receive time while the per-request HTTP write queue is below this;
+// beyond it, credit falls back to write-completion, so a slow client
+// cannot make the host buffer unboundedly. Mirrored from
+// single_worker_server.cc.
+static constexpr std::size_t kEarlyCreditWindow = 64u * 1024u;
+
 // Request state owned by the io thread only. Mirrors the M1A
 // single_worker_server PendingRequest minus the SSE/E-1 members (deferred
 // follow-up PRs).
@@ -264,8 +271,18 @@ struct PendingRequest {
     std::shared_ptr<http::response<http::buffer_body>> response;
     std::shared_ptr<http::response_serializer<http::buffer_body>> serializer;
     std::vector<std::uint8_t> outgoing;
-    std::deque<std::vector<std::uint8_t>> body_queue;
+    // The response-credit protocol (spec §8.1, mirrored from
+    // single_worker_server): each queued block remembers whether its
+    // credit was returned at receive time (early window) or must be
+    // returned on the write completion.
+    struct QueuedBody {
+        std::vector<std::uint8_t> bytes;
+        bool credit_returned_early = false;
+    };
+    std::deque<QueuedBody> body_queue;
     std::size_t body_queue_bytes = 0;  // client-bytes accounting
+    std::uint32_t pending_response_credit = 0;
+    bool outgoing_credit_returned_early = false;
     bool head_sent = false;
     bool head_only = false;
     bool writing = false;
@@ -360,7 +377,11 @@ private:
                               std::uint64_t request_id);
     void write_body_block(const WorkerExecutor* executor,
                           std::uint64_t request_id,
-                          std::vector<std::uint8_t> bytes);
+                          std::vector<std::uint8_t> bytes,
+                          bool credit_returned_early);
+    void flush_pending_credit(const WorkerExecutor* executor,
+                              std::uint64_t request_id,
+                              PendingRequest& pending);
     void write_end_block(const WorkerExecutor* executor,
                          std::uint64_t request_id);
     void finalize_request(const WorkerExecutor* executor,
@@ -1033,12 +1054,13 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
                 }
                 pending.head_sent = true;
                 if (!pending.body_queue.empty()) {
-                    std::vector<std::uint8_t> queued =
+                    PendingRequest::QueuedBody queued =
                         std::move(pending.body_queue.front());
                     pending.body_queue.pop_front();
-                    pending.body_queue_bytes -= queued.size();
+                    pending.body_queue_bytes -= queued.bytes.size();
                     self->write_body_block(executor, request_id,
-                                           std::move(queued));
+                                           std::move(queued.bytes),
+                                           queued.credit_returned_early);
                 } else if (pending.end_seen) {
                     if (pending.head_only) {
                         self->finalize_request(executor, request_id,
@@ -1056,6 +1078,21 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
             return;
         }
         PendingRequest& pending = it->second;
+        // Response credit (spec §8.1): return credit as soon as the frame
+        // is received, not after the client write completes, while the
+        // per-request write queue stays shallow — one fewer host
+        // round-trip per frame. Beyond the window credit falls back to
+        // write-completion, so a slow client cannot make the host buffer
+        // unboundedly. Without any return path the worker exhausts its
+        // initial response window (256 KiB) and the transfer stalls
+        // forever, which the WP-09 §13.6 soak's /big endpoint exposed.
+        const bool credit_returned_early =
+            pending.body_queue_bytes < kEarlyCreditWindow;
+        if (credit_returned_early) {
+            pending.pending_response_credit +=
+                static_cast<std::uint32_t>(event.body.size());
+            flush_pending_credit(executor, event.request_id, pending);
+        }
         if (pending.head_only) {
             // HEAD consumes the worker body without exposing it.
             return;
@@ -1065,10 +1102,13 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
         mailbox_->add_client_bytes(executor, event.body.size());
         if (pending.writing) {
             pending.body_queue_bytes += event.body.size();
-            pending.body_queue.push_back(std::move(event.body));
+            pending.body_queue.push_back(
+                PendingRequest::QueuedBody{std::move(event.body),
+                                           credit_returned_early});
             return;
         }
-        write_body_block(executor, event.request_id, std::move(event.body));
+        write_body_block(executor, event.request_id, std::move(event.body),
+                         credit_returned_early);
         return;
     }
     case WorkerEvent::Type::kResponseEnd: {
@@ -1078,6 +1118,10 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
         }
         PendingRequest& pending = it->second;
         pending.end_seen = true;
+        // Drain any remaining pending credit; the Runtime erased the
+        // request, so the grant frame is queued only to satisfy the
+        // tombstone check (single_worker_server does the same).
+        flush_pending_credit(executor, event.request_id, pending);
         // Tombstone the id and cancel any stale request-direction frames:
         // the Runtime erased this request with RESPONSE_END.
         const_cast<WorkerExecutor*>(executor)->mark_canceled(event.request_id);
@@ -1234,7 +1278,7 @@ void ManagedListenerImpl::advance_request_body(const WorkerExecutor* executor,
 
 void ManagedListenerImpl::write_body_block(
     const WorkerExecutor* executor, std::uint64_t request_id,
-    std::vector<std::uint8_t> bytes) {
+    std::vector<std::uint8_t> bytes, bool credit_returned_early) {
     auto it = requests_.find({executor, request_id});
     if (it == requests_.end()) {
         return;
@@ -1250,6 +1294,7 @@ void ManagedListenerImpl::write_body_block(
         pending.cl_remaining -= bytes.size();
     }
     pending.outgoing = std::move(bytes);
+    pending.outgoing_credit_returned_early = credit_returned_early;
     pending.writing = true;
     pending.response->body().data = pending.outgoing.data();
     pending.response->body().size = pending.outgoing.size();
@@ -1281,18 +1326,49 @@ void ManagedListenerImpl::write_body_block(
             }
             // need_buffer is the buffer_body serializer's normal signal that
             // the current block was fully written and more data is expected.
+            // Credit is returned only after the client write succeeded, for
+            // exactly the bytes that were written (early-credited blocks
+            // were reimbursed at receive time and must not be doubled).
+            // Once the response ended, the Runtime erased the request and
+            // the credit is moot; submitting the frame would only be
+            // rejected, so it is skipped.
+            if (!pending.end_seen && !pending.outgoing_credit_returned_early) {
+                pending.pending_response_credit +=
+                    static_cast<std::uint32_t>(bytes);
+                self->flush_pending_credit(executor, request_id, pending);
+            }
+            pending.outgoing_credit_returned_early = false;
             pending.outgoing.clear();
             if (!pending.body_queue.empty()) {
-                std::vector<std::uint8_t> queued =
+                PendingRequest::QueuedBody queued =
                     std::move(pending.body_queue.front());
                 pending.body_queue.pop_front();
-                pending.body_queue_bytes -= queued.size();
+                pending.body_queue_bytes -= queued.bytes.size();
                 self->write_body_block(executor, request_id,
-                                       std::move(queued));
+                                       std::move(queued.bytes),
+                                       queued.credit_returned_early);
             } else if (pending.end_seen) {
                 self->write_end_block(executor, request_id);
             }
         });
+}
+
+// Spec §8.1: submit any accumulated response credit as one grant command.
+// Immediate grant (no threshold), matching the reference implementation's
+// default. The executor drops grants for tombstoned ids, so a stale grant
+// raced with RESPONSE_END is harmless.
+void ManagedListenerImpl::flush_pending_credit(
+    const WorkerExecutor* executor, std::uint64_t request_id,
+    PendingRequest& pending) {
+    if (pending.pending_response_credit == 0) {
+        return;
+    }
+    Command grant;
+    grant.type = CommandType::kGrantResponseCredit;
+    grant.request_id = request_id;
+    grant.credit = pending.pending_response_credit;
+    pending.pending_response_credit = 0;
+    const_cast<WorkerExecutor*>(executor)->submit(std::move(grant));
 }
 
 void ManagedListenerImpl::write_end_block(const WorkerExecutor* executor,
