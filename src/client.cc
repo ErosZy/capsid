@@ -65,6 +65,10 @@ struct capsid_worker {
     std::map<uint64_t, RequestState> requests;
     std::set<uint64_t> canceled_requests;
     std::deque<uint64_t> canceled_request_order;
+    // §13.2: ids of requests still inflight when the hard timeout killed
+    // the worker. They drain one REQUEST_TIMEOUT event per next_event call
+    // (stable map order) before the channel reports CAPSID_CLOSED.
+    std::vector<uint64_t> pending_timeouts;
     bool ipc_metrics_enabled;
     capsid::ClientIpcMetrics ipc_metrics;
 };
@@ -2166,6 +2170,21 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
         worker->ipc_metrics.next_event_calls.fetch_add(
                     1, std::memory_order_relaxed);
     }
+    // §13.2: the hard timeout killed the worker with requests inflight;
+    // deliver the remaining terminal reasons before reporting the closed
+    // channel. The construction mirrors the timeout branch (all fields
+    // deterministic).
+    if (worker->closed && !worker->pending_timeouts.empty()) {
+        event->type = CAPSID_EVENT_REQUEST_TIMEOUT;
+        event->request_id = worker->pending_timeouts.front();
+        worker->pending_timeouts.erase(worker->pending_timeouts.begin());
+        event->flags = capsid::protocol::kErrorFlagTimeout;
+        event->status = 0;
+        event->credit = 0;
+        event->payload.data = NULL;
+        event->payload.size = 0;
+        return CAPSID_OK;
+    }
     for (;;) {
         capsid::protocol::Frame frame;
         capsid::protocol::ParseResult parse_result =
@@ -2239,6 +2258,18 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                             close(worker->fd);
                             worker->fd = -1;
                             worker->closed = true;
+                            // §13.2: every request still inflight is gone
+                            // with the killed worker and must receive a
+                            // terminal reason. The timed-out id is reported
+                            // first; the rest drain as successive
+                            // REQUEST_TIMEOUT events in stable map order.
+                            worker->pending_timeouts.clear();
+                            for (const auto &entry : worker->requests) {
+                                if (entry.first != timed_out_id) {
+                                    worker->pending_timeouts.push_back(
+                                        entry.first);
+                                }
+                            }
                             worker->requests.clear();
                             worker->canceled_requests.clear();
                             worker->canceled_request_order.clear();
