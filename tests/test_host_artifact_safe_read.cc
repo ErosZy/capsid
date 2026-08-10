@@ -20,6 +20,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -334,15 +335,26 @@ int main() {
         const std::string big(12U * 1024U * 1024U, 'b');
         write_file_at(fixture.root_fd, (vdir + "/capsid.json").c_str(), "{}");
         write_file_at(fixture.root_fd, (vdir + "/bundle.mjs").c_str(), big);
+        // Deterministic perturbation: a fixed-delay truncate raced the
+        // read window (a 12 MiB page-cache read can finish in ~2-4 ms,
+        // so the truncation sometimes landed outside it and the test
+        // flaked). Instead the truncator toggles size/restore for the
+        // whole read; every toggle changes size+mtime+ctime, so any
+        // toggle inside the reader's window trips the identity check,
+        // and one is near-certain to land there. The loop is bounded and
+        // stopped as soon as the read returns.
+        const std::string path = fixture.root + "/" + vdir + "/bundle.mjs";
+        std::atomic<bool> reader_done{false};
         std::thread truncator([&]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            const std::string path = fixture.root + "/" + vdir + "/bundle.mjs";
-            require(truncate(path.c_str(), 1024) == 0,
-                    "cannot truncate fixture");
+            for (int i = 0; i < 100000 && !reader_done.load(); ++i) {
+                truncate(path.c_str(), 1024);
+                truncate(path.c_str(), big.size());
+            }
         });
         const capsid::host::SafeReadResult result =
             safe_read_version_artifacts(fixture.root_fd, "orders", "v10",
                                         capsid::host::kMaxVersionArtifactTotalBytes);
+        reader_done.store(true);
         truncator.join();
         require(result.code == SafeReadErrorCode::kIdentityChanged,
                 "mid-read truncation was not detected (code " +
