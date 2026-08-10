@@ -790,6 +790,51 @@ void test_partial_write_high_water(const char *worker_path,
     capsid_worker_destroy(worker);
 }
 
+// #15/#16: the untouched-string final shortcut is an internal detail.
+// Once application code observes or replaces Response.body, bootstrap must
+// use the normal stream path and preserve the application-visible bytes.
+void test_accessed_string_body_falls_back(const char *worker_path,
+                                          const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 64u * 1024u, 16384, 2000);
+    require_result(
+        capsid_worker_begin_request(
+            worker, 114, "GET",
+            "https://example.test/string-body-accessed", NULL, 0),
+        "begin accessed string body");
+    require_result(
+        capsid_worker_end_request(worker, 114),
+        "end accessed string body");
+    Collector collector = drive(worker, { 114 }, GrantMode::kImmediate, 3);
+    const auto it = collector.outcomes.find(114);
+    require(it != collector.outcomes.end() && it->second.ended,
+            "accessed string response completed");
+    require(it->second.body == "accessed-ok",
+            "accessed string body preserved");
+    capsid_worker_destroy(worker);
+}
+
+void test_replaced_string_body_falls_back(const char *worker_path,
+                                          const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 64u * 1024u, 16384, 2000);
+    require_result(
+        capsid_worker_begin_request(
+            worker, 115, "GET",
+            "https://example.test/string-body-replaced", NULL, 0),
+        "begin replaced string body");
+    require_result(
+        capsid_worker_end_request(worker, 115),
+        "end replaced string body");
+    Collector collector = drive(worker, { 115 }, GrantMode::kImmediate, 3);
+    const auto it = collector.outcomes.find(115);
+    require(it != collector.outcomes.end() && it->second.ended,
+            "replaced string response completed");
+    require(it->second.body == "replacement-ok",
+            "replacement stream body preserved");
+    capsid_worker_destroy(worker);
+}
+
 }  // namespace
 
 // Optional argv[3]: run only the numbered test (1..8). Without it the
@@ -825,6 +870,8 @@ int main(int argc, char **argv) {
     run_sel(only, argv[1], bundle, 12, test_small_completes_first);
     run_sel(only, argv[1], bundle, 13, test_pending_mutation_snapshot);
     run_sel(only, argv[1], bundle, 14, test_partial_write_high_water);
+    run_sel(only, argv[1], bundle, 15, test_accessed_string_body_falls_back);
+    run_sel(only, argv[1], bundle, 16, test_replaced_string_body_falls_back);
     std::printf("all queue-saturation RED tests passed\n");
     return 0;
 }

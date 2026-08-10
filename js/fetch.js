@@ -21,6 +21,7 @@ export function configureFetchLimits(requestBytes, responseBytes) {
 const headerLists = new WeakMap();
 const setCookieLists = new WeakMap();
 const iteratorStates = new WeakMap();
+const fastResponseBodies = new WeakMap();
 const arrayIteratorPrototype =
     Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
 
@@ -278,6 +279,53 @@ function normalizeBody(body) {
     }
 
     return String(body);
+}
+
+// The txiki Fetch polyfill eagerly wraps every string body in a
+// ReadableStream. Keep an internal byte snapshot for an untouched string
+// response so the Runtime can send it with one native call. Accessing or
+// replacing `response.body` disables the shortcut: application-visible
+// stream consumption must retain the normal Fetch semantics.
+export function getFastResponseBody(response) {
+    const record = fastResponseBodies.get(response);
+
+    if (!record || record.exposed || response.bodyUsed ||
+        response._bodyStream !== record.stream) {
+        return null;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(response, 'body');
+    if (!descriptor || descriptor.get !== record.getter) {
+        return null;
+    }
+    return record.bytes;
+}
+
+function materializeFastResponseBody(response, exposed) {
+    const record = fastResponseBodies.get(response);
+
+    if (!record) {
+        return null;
+    }
+    if (exposed) {
+        record.exposed = true;
+    }
+    if (record.stream === null) {
+        record.stream = new ReadableStream({
+            start(controller) {
+                controller.enqueue(record.bytes);
+                controller.close();
+            },
+        });
+        response._noBody = false;
+        response._bodyStream = record.stream;
+    }
+    return record;
+}
+
+function consumeFastResponseBody(response, method, args) {
+    const record = materializeFastResponseBody(response, true);
+
+    return record.consumers[method].apply(response, args);
 }
 
 function toNativeHeaderEntries(init) {
@@ -674,6 +722,7 @@ function parsePartHeaders(text) {
 }
 
 function multipartFormDataOverride() {
+    materializeFastResponseBody(this, true);
     const contentType = this.headers.get('content-type');
     if (!contentType ||
         !/^multipart\/form-data/i.test(contentType.trim())) {
@@ -686,15 +735,76 @@ class Response extends NativeResponse {
     constructor(body = null, init = undefined) {
         const normalized = normalizeInit(init);
         const status = normalized.status === undefined ? 200 : Number(normalized.status);
+        const normalizedBody = normalizeBody(body);
 
         if (body !== null && body !== undefined && isNullBodyStatus(status)) {
             throw new TypeError('Response with a null-body status cannot have a body');
         }
 
-        super(normalizeBody(body), normalized);
+        const fastBytes = typeof normalizedBody === 'string' && normalizedBody.length > 0
+            ? new TextEncoder().encode(normalizedBody)
+            : null;
+        super(fastBytes === null ? normalizedBody : null, normalized);
         this.headers = new Headers(this.headers);
         this._nativeFormData = this.formData;
         this.formData = multipartFormDataOverride;
+
+        if (fastBytes !== null) {
+            this._noBody = false;
+            this._bodyInit = normalizedBody;
+            this._bodySize = fastBytes.byteLength;
+            this._bodyStream = null;
+            if (!this.headers.has('content-type')) {
+                this.headers.set('content-type', 'text/plain;charset=UTF-8');
+            }
+
+            const record = {
+                bytes: fastBytes,
+                stream: null,
+                exposed: false,
+                getter: null,
+                consumers: {
+                    arrayBuffer: this.arrayBuffer,
+                    blob: this.blob,
+                    json: this.json,
+                    text: this.text,
+                },
+            };
+            fastResponseBodies.set(this, record);
+            record.getter = () => {
+                return materializeFastResponseBody(this, true).stream;
+            };
+            Object.defineProperty(this, 'body', {
+                configurable: true,
+                enumerable: true,
+                get: record.getter,
+                set(value) {
+                    record.exposed = true;
+                    record.stream = value;
+                    this._bodyStream = value;
+                },
+            });
+            delete this.arrayBuffer;
+            delete this.blob;
+            delete this.json;
+            delete this.text;
+        }
+    }
+
+    arrayBuffer(...args) {
+        return consumeFastResponseBody(this, 'arrayBuffer', args);
+    }
+
+    blob(...args) {
+        return consumeFastResponseBody(this, 'blob', args);
+    }
+
+    json(...args) {
+        return consumeFastResponseBody(this, 'json', args);
+    }
+
+    text(...args) {
+        return consumeFastResponseBody(this, 'text', args);
     }
 
     clone() {

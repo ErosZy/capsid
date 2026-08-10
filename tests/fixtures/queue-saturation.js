@@ -90,6 +90,23 @@ export default {
                     },
                 }));
             }
+            case '/string-body-accessed': {
+                const response = new Response('accessed-ok');
+                if (!(response.body instanceof ReadableStream)) {
+                    throw new Error('string body did not materialize as a stream');
+                }
+                return response;
+            }
+            case '/string-body-replaced': {
+                const response = new Response('original');
+                response.body = new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(new TextEncoder().encode('replacement-ok'));
+                        controller.close();
+                    },
+                });
+                return response;
+            }
             default:
                 return new Response('unknown', { status: 404 });
         }
