@@ -508,11 +508,25 @@ app.get('/runtime/globals', context => {
     });
 });
 
-app.get('/runtime/delay', async context => {
+// Abort-aware (same contract as the h3 fixture's delay): on hard timeout
+// the worker fires the request abort, so the timer must be cleared and
+// the route promise settled from the abort listener — otherwise the
+// timer continuation leaks and the reclaim poisons the worker.
+app.get('/runtime/delay', context => new Promise((resolve, reject) => {
     const delay = Number(context.req.query('ms') ?? '0');
-    await new Promise(resolve => setTimeout(resolve, delay));
-    return context.text(`delay:${delay}`);
-});
+    const signal = context.req.raw.signal;
+    const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(context.text(`delay:${delay}`));
+    }, delay);
+    const onAbort = () => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort);
+        reject(signal.reason ?? new Error('request aborted'));
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+}));
 
 let abortedHandlers = 0;
 let abortedStreams = 0;
@@ -555,17 +569,41 @@ app.get('/runtime/concurrent', async context => {
     });
 });
 
-app.use('/runtime/middleware-timeout', async (context, next) => {
-    const delay = Number(context.req.query('ms') ?? '0');
-    await new Promise(resolve => setTimeout(resolve, delay));
-    await next();
-});
+app.use('/runtime/middleware-timeout', (context, next) =>
+    new Promise((resolve, reject) => {
+        const delay = Number(context.req.query('ms') ?? '0');
+        const signal = context.req.raw.signal;
+        const timer = setTimeout(() => {
+            signal.removeEventListener('abort', onAbort);
+            resolve(next());
+        }, delay);
+        const onAbort = () => {
+            clearTimeout(timer);
+            signal.removeEventListener('abort', onAbort);
+            reject(signal.reason ?? new Error('request aborted'));
+        };
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+    }));
 app.get('/runtime/middleware-timeout', context => context.text('too-late'));
 
 app.get('/runtime/cpu-timeout', () => {
     for (;;) {
         // Deliberately exercise the runtime interrupt deadline.
     }
+});
+
+app.get('/runtime/ownership', async context => {
+    console.log('capsid-owner:before');
+    await Promise.resolve();
+    console.log('capsid-owner:after');
+    return context.text('ownership-ok');
+});
+
+app.get('/runtime/ownership-cancel', () => {
+    console.log('capsid-owner:start');
+    setTimeout(() => console.log('capsid-owner:after-cancel'), 80);
+    return new Promise(() => {});
 });
 
 app.get('/runtime/fetch', async context => {

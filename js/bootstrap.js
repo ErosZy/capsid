@@ -451,15 +451,10 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
         signal: abortController.signal,
     });
 
+    // WP-02 §6.2: request identity rides the job-context token captured at
+    // enqueue; no JS-side enter/leave is needed (or trusted) anymore.
     Promise.resolve()
-        .then(() => {
-            core.capsidEnterRequest(id);
-            try {
-                return handler.call(handlerThis, request);
-            } finally {
-                core.capsidLeaveRequest(id);
-            }
-        })
+        .then(() => handler.call(handlerThis, request))
         .then(async response => {
             if (state.cancelled) {
                 if (response instanceof Response && response.body) {
@@ -551,6 +546,10 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
         .finally(() => {
             if (requests.get(id) === state) {
                 requests.delete(id);
+                // WP-02 §6.4: settled signal — the last lifecycle bridge.
+                // Native marks the token terminal; the post-drain reclaim
+                // drops it (or poisons the worker on surviving refs).
+                core.capsidRequestSettled(id);
             }
         });
 };

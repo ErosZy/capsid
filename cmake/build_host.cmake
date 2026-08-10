@@ -32,8 +32,11 @@ if(CAPSID_BUILD_HOST)
         src/host/bytecode_attestation.cc
         src/host/config.cc
         src/host/generation_identity.cc
+        src/host/generation_pool.cc
+        src/host/host_config_model.cc
         src/host/managed_admin_backend.cc
         src/host/managed_host.cc
+        src/host/managed_registry.cc
         src/host/policy_compiler.cc
         src/host/request_normalization.cc
         src/host/secret_file_provider.cc
@@ -41,7 +44,10 @@ if(CAPSID_BUILD_HOST)
         src/host/service_lifecycle.cc
         src/host/static_pool.cc
         src/host/static_pool_server.cc
+        src/host/trusted_key_store.cc
+        src/host/worker_capacity_ledger.cc
         src/host/worker_event_source.cc
+        src/host/worker_executor.cc
         src/host/worker_recovery.cc
     )
     # managed_host.cc and the Admin adapters call the worker API; the
@@ -164,6 +170,17 @@ if(CAPSID_BUILD_HOST)
         target_sources(capsid_host_core PRIVATE
             src/host/admin_http.cc
             src/host/admin_service.cc)
+        # The WP-05 data plane joins the same gate: the Managed listener
+        # is Boost.Asio. (RoutingTable publishes through the C++11 shared_ptr
+        # atomic free functions, so it no longer needs C++20
+        # std::atomic<shared_ptr> — Apple libc++ was the blocker, PR-10.)
+        # A Boost-less platform (e.g. the macOS portable-unit gate, spec
+        # §9.6-10) builds the pure coordinator surface and skips the data
+        # plane; the data-plane tests are already registered under UNIX AND
+        # Boost_FOUND.
+        target_sources(capsid_host_core PRIVATE
+            src/host/managed_listener.cc
+            src/host/routing_snapshot.cc)
         target_link_libraries(capsid_host_core PRIVATE Boost::system)
     else()
         message(STATUS "capsid-host skipped: system Boost not found")

@@ -22,6 +22,55 @@ if(BUILD_TESTING)
         add_test(NAME host_config COMMAND test-host-config)
 
         add_executable(
+            test-host-config-model
+            tests/test_host_config_model.cc)
+        target_include_directories(
+            test-host-config-model PRIVATE include src)
+        target_link_libraries(test-host-config-model PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-config-model PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-config-model PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-config-model PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME host_config_model COMMAND test-host-config-model)
+
+        add_executable(
+            test-host-trusted-key-store
+            tests/test_host_trusted_key_store.cc)
+        target_include_directories(
+            test-host-trusted-key-store PRIVATE include src)
+        target_link_libraries(test-host-trusted-key-store PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-trusted-key-store PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-trusted-key-store PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-trusted-key-store PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME host_trusted_key_store
+            COMMAND test-host-trusted-key-store)
+
+        add_executable(
             test-host-bytecode-attestation
             tests/test_host_bytecode_attestation.cc)
         target_include_directories(
@@ -398,7 +447,10 @@ if(BUILD_TESTING)
                         host_managed_executable_crash_mid_deploy_keeps_old
                         host_managed_executable_crash_staging_remnants
                         host_managed_executable_crash_orphan_generation
-                        host_managed_executable_crash_quarantined_not_resurrected)
+                        host_managed_executable_crash_quarantined_not_resurrected
+                        host_managed_http_e2e_multi_app
+                        host_managed_http_restart_recovers_route
+                        host_managed_http_rejects_multiple_listeners)
                     add_test(
                         NAME "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
                         COMMAND test-host-managed-executable
@@ -412,6 +464,12 @@ if(BUILD_TESTING)
             endif()
 
             # M1D managed host frozen suite: one binary, one mode per test.
+            # Every mode spawns a real worker, and worker spawn requires the
+            # Linux-only strict sandbox (src/sandbox.cc); on other platforms
+            # the suite cannot run, so it is registered on Linux only
+            # (spec §9.6-10: macOS runs portable Host units only, and
+            # §9.6-14: unsupported platforms SKIP, never FAIL).
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_executable(
                 test-host-managed
                 tests/test_host_managed.cc)
@@ -446,9 +504,11 @@ if(BUILD_TESTING)
                     host_managed_sse_permit_config_deploy
                     host_managed_write_timeout_config_deploy
                     host_managed_fixed_pool_deploy_and_recover
+                    host_managed_generation_factory_replacement
                     host_managed_fixed_pool_warm_failure_is_atomic
                     host_managed_admin_fixed_pool_handoff
                     host_managed_admin_worker_lifecycle
+                    host_managed_admin_legacy_unclaimed_pool
                     host_managed_trusted_bytecode
                     host_managed_compatibility_fallback
                     host_managed_fallback_identity_retains_attestation
@@ -458,6 +518,7 @@ if(BUILD_TESTING)
                     host_managed_secret_value_not_persisted
                     host_managed_recovery_accepts_large_valid_env_metadata
                     host_managed_deploy_fail_closed
+                    host_managed_deploy_persist_failure_aborts
                     host_managed_retire_and_recovery
                     host_managed_retire_is_idempotent
                     host_managed_recovery_warms_worker
@@ -518,6 +579,7 @@ if(BUILD_TESTING)
                 set_tests_properties(
                     "${CAPSID_MANAGED_TEST_ID}" PROPERTIES TIMEOUT 120)
             endforeach()
+            endif()  # CMAKE_SYSTEM_NAME STREQUAL "Linux" — worker-spawn suite
         endif()
 
         add_executable(
@@ -627,6 +689,110 @@ if(BUILD_TESTING)
         add_test(
             NAME host_active_state
             COMMAND test-host-active-state)
+
+        add_executable(
+            test-host-worker-capacity-ledger
+            tests/test_worker_capacity_ledger.cc)
+        target_include_directories(
+            test-host-worker-capacity-ledger PRIVATE src)
+        target_link_libraries(test-host-worker-capacity-ledger PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-worker-capacity-ledger PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-worker-capacity-ledger PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-worker-capacity-ledger PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        foreach(CAPSID_LEDGER_TEST_ID
+                ledger_fresh_budget
+                ledger_replace_surge_gate
+                ledger_retire_drain_release
+                ledger_no_surge_refuses)
+            add_test(
+                NAME "host_worker_capacity_ledger_${CAPSID_LEDGER_TEST_ID}"
+                COMMAND test-host-worker-capacity-ledger
+                    "${CAPSID_LEDGER_TEST_ID}")
+            set_tests_properties(
+                "host_worker_capacity_ledger_${CAPSID_LEDGER_TEST_ID}"
+                PROPERTIES TIMEOUT 10)
+        endforeach()
+
+        add_executable(
+            test-host-managed-registry
+            tests/test_managed_registry.cc)
+        target_include_directories(
+            test-host-managed-registry PRIVATE src)
+        target_link_libraries(test-host-managed-registry PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-managed-registry PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-managed-registry PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-managed-registry PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        foreach(CAPSID_REGISTRY_TEST_ID
+                registry_bounded
+                registry_status_roundtrip
+                slots_bounded_reclaimed
+                slots_serialize_same_app
+                slots_pinned_survive)
+            add_test(
+                NAME "host_managed_registry_${CAPSID_REGISTRY_TEST_ID}"
+                COMMAND test-host-managed-registry
+                    "${CAPSID_REGISTRY_TEST_ID}")
+            set_tests_properties(
+                "host_managed_registry_${CAPSID_REGISTRY_TEST_ID}"
+                PROPERTIES TIMEOUT 30)
+        endforeach()
+
+        # WP-09 §13.6 soak platform: the memory-wave client is a real
+        # binary so the CI gates build it and the smoke test proves the
+        # cancel/reclaim convergence protocol against the real worker.
+        add_executable(
+            soak-memory-waves
+            soak/soak_memory_waves.cc)
+        target_include_directories(soak-memory-waves PRIVATE src)
+        target_link_libraries(soak-memory-waves PRIVATE capsid_runtime)
+        set_target_properties(soak-memory-waves PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(soak-memory-waves PRIVATE /W4 /WX)
+            else()
+                target_compile_options(soak-memory-waves PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        if(TARGET capsid-worker)
+            add_test(
+                NAME soak_memory_waves_smoke
+                COMMAND soak-memory-waves
+                    $<TARGET_FILE:capsid-worker>
+                    "${CMAKE_CURRENT_SOURCE_DIR}/soak/fixtures/soak-app.js"
+                    4
+                    50)
+            set_tests_properties(soak_memory_waves_smoke PROPERTIES TIMEOUT 120)
+        endif()
 
         add_executable(
             test-host-request-normalization
@@ -1209,6 +1375,30 @@ if(BUILD_TESTING)
             NAME runtime_build_identity
             COMMAND test-build-identity)
 
+        # WP-07, spec §11.4: a caller compiled against the build-info v1
+        # headers (frozen fixture) links against the current library and
+        # negotiates with the smaller struct_size. This is RED while the
+        # library demands struct_size >= sizeof(current struct).
+        add_executable(test-build-info-v1-link
+            tests/test_build_info_v1_link.c)
+        target_include_directories(test-build-info-v1-link PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+        target_link_libraries(test-build-info-v1-link PRIVATE
+            capsid_runtime
+            capsid_sanitizers)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-build-info-v1-link PRIVATE
+                    /W4 /WX)
+            else()
+                target_compile_options(test-build-info-v1-link PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME runtime_build_info_v1_negotiation
+            COMMAND test-build-info-v1-link)
+
         if(CAPSID_BUILD_WORKER)
             if(NOT TARGET capsid-bytecode-compile)
                 message(FATAL_ERROR
@@ -1314,6 +1504,26 @@ if(BUILD_TESTING)
     add_executable(test-cpp-header tests/test_cpp_header.cc)
     target_link_libraries(test-cpp-header PRIVATE capsid_runtime)
     add_test(NAME cpp_header COMMAND test-cpp-header)
+
+    add_executable(test-abi-guard tests/test_abi_guard.cc)
+    target_link_libraries(test-abi-guard PRIVATE capsid_runtime)
+    if(TARGET capsid-worker)
+        add_test(
+            NAME abi_guard_oom_countdown
+            COMMAND test-abi-guard $<TARGET_FILE:capsid-worker>)
+    else()
+        add_test(NAME abi_guard_oom_countdown COMMAND test-abi-guard)
+    endif()
+
+    add_executable(test-abi-guard-c tests/test_abi_guard_c.c)
+    target_link_libraries(test-abi-guard-c PRIVATE capsid_runtime)
+    if(TARGET capsid-worker)
+        add_test(
+            NAME abi_guard_c_caller
+            COMMAND test-abi-guard-c $<TARGET_FILE:capsid-worker>)
+    else()
+        add_test(NAME abi_guard_c_caller COMMAND test-abi-guard-c)
+    endif()
     if(CAPSID_BUILD_WORKER)
         add_test(
             NAME capsid_product_artifact_names
@@ -1625,6 +1835,21 @@ if(BUILD_TESTING)
         set_tests_properties(
             current_documentation_audit
             PROPERTIES TIMEOUT 20 LABELS "documentation;audit"
+        )
+        # WP-03 §7.3: every async entry point into JS from the txiki
+        # overlay must be classified (context-wired / profile-unreachable /
+        # synchronous-reentry / value-only) in
+        # tools/audit-txiki-async-context.py; an unclassified site fails.
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
+        add_test(
+            NAME txiki_async_context_inventory_audit
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit-txiki-async-context.py"
+                "${CAPSID_TXIKI_OVERLAY}/src"
+        )
+        set_tests_properties(
+            txiki_async_context_inventory_audit
+            PROPERTIES TIMEOUT 20 LABELS "security;ci;audit"
         )
         file(GLOB_RECURSE CAPSID_HONO_BUNDLE_DEPS CONFIGURE_DEPENDS
             "${CAPSID_HONO_REFERENCE_ROOT}/src/*.js"
@@ -2533,6 +2758,21 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
         )
         set_tests_properties(worker_end_after_response PROPERTIES TIMEOUT 20)
+        add_executable(
+            test-worker-exit-fields
+            tests/test_worker_exit_fields.cc)
+        target_include_directories(test-worker-exit-fields PRIVATE tests)
+        target_link_libraries(
+            test-worker-exit-fields
+            PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_exit_fields
+            COMMAND test-worker-exit-fields
+                $<TARGET_FILE:capsid-worker>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
+        )
+        set_tests_properties(worker_exit_fields PROPERTIES TIMEOUT 20)
         add_test(
             NAME worker_bodyless_end_failure
             COMMAND test-worker-integration
@@ -2611,6 +2851,7 @@ if(BUILD_TESTING)
                 "-DCAPSID_TXIKI_EXPECTED_TAG=v26.6.0"
                 "-DCAPSID_TXIKI_OVERLAY_STAMP=${CAPSID_OVERLAY_STAMP}"
                 "-DCAPSID_TXIKI_PREPARE_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrepareTxiki.cmake"
+                "-DCAPSID_TXIKI_PROBE_DIR=${CMAKE_CURRENT_BINARY_DIR}/Testing/txiki-patch-probe"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AuditTxikiVendor.cmake"
         )
         set_tests_properties(
@@ -3193,6 +3434,167 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_p0_contract PROPERTIES TIMEOUT 20)
 
+        # WP-04 PR-06 (spec §8.1/§8.4): the WorkerExecutor ownership
+        # contract — startup failure, factory/adopted lifecycle and
+        # exactly-once reap. RED gate for the extraction: the header does
+        # not exist until the executor is extracted from
+        # single_worker_server.cc, so this target fails to compile on the
+        # pre-extraction tree.
+        add_executable(
+            test-host-worker-executor
+            tests/test_host_worker_executor.cc)
+        target_include_directories(
+            test-host-worker-executor PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-worker-executor PRIVATE
+            capsid_runtime
+            capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-worker-executor PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-worker-executor PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-worker-executor PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-worker-executor capsid-worker)
+        add_test(
+            NAME host_worker_executor_contract
+            COMMAND test-host-worker-executor $<TARGET_FILE:capsid-worker>)
+        set_tests_properties(host_worker_executor_contract PROPERTIES
+            TIMEOUT 40)
+
+        # WP-04 PR-07 (spec §8.2/§8.4): the GenerationPool fleet +
+        # replacement contract — N→READY barrier, least-loaded pick,
+        # N→N-1→N replacement, 0-ready 503 point, crash-budget quarantine
+        # and the host-shutdown vs replacement race. Kill injection scans
+        # /proc for the pool's worker children (Linux only; the kill tests
+        # skip elsewhere). RED gate: generation_pool.h does not exist on
+        # the PR-06 tree.
+        add_executable(
+            test-host-generation-pool
+            tests/test_host_generation_pool.cc)
+        target_include_directories(
+            test-host-generation-pool PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-generation-pool PRIVATE
+            capsid_runtime
+            capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-generation-pool PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-generation-pool PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-generation-pool PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-generation-pool capsid-worker)
+        add_test(
+            NAME host_generation_pool_contract
+            COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker>)
+        set_tests_properties(host_generation_pool_contract PROPERTIES
+            TIMEOUT 90)
+
+        # WP-05 PR-09 §9.2: RoutingSnapshot / RoutingTable + the adopt-create
+        # pool entry (pre-warmed fleet, no respawn). RED gate: the snapshot
+        # and create_adopted do not exist on the PR-08 tree. RoutingTable
+        # stores an atomic shared_ptr; Apple libc++ cannot compile it, so
+        # the contract joins the same Boost gate as the data plane itself
+        # (build_host.cmake) and is not registered on Boost-less platforms
+        # (spec §9.6-14: unsupported platforms SKIP, never FAIL).
+        if(UNIX AND Boost_FOUND)
+        add_executable(
+            test-host-routing-snapshot
+            tests/test_host_routing_snapshot.cc)
+        target_include_directories(
+            test-host-routing-snapshot PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-routing-snapshot PRIVATE
+            capsid_runtime
+            capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-routing-snapshot PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-routing-snapshot PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-routing-snapshot PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-routing-snapshot capsid-worker)
+        add_test(
+            NAME host_routing_snapshot_contract
+            COMMAND test-host-routing-snapshot $<TARGET_FILE:capsid-worker>)
+        set_tests_properties(host_routing_snapshot_contract PROPERTIES
+            TIMEOUT 90)
+
+        # WP-05 PR-09 §9.2: ManagedListener — the Managed data-plane
+        # listener over RoutingSnapshot-pinned GenerationPools: HTTP App
+        # routing, the event-sink bridge (kExit forwarded to fail pinned
+        # requests), connection-ceiling RST, trusted-header gate. RED gate:
+        # the listener and its test do not exist on the PR-09a tree.
+        # Same Boost gate as RoutingTable above: the listener routes through
+        # the atomic-shared_ptr snapshot, which Apple libc++ rejects.
+        add_executable(
+            test-host-managed-listener
+            tests/test_host_managed_listener.cc)
+        target_include_directories(
+            test-host-managed-listener PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-managed-listener PRIVATE
+            capsid_runtime
+            capsid_host_core
+            capsid_jansson
+            OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-managed-listener PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-managed-listener PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-managed-listener PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-managed-listener capsid-worker)
+        add_test(
+            NAME host_managed_listener_contract
+            COMMAND test-host-managed-listener $<TARGET_FILE:capsid-worker>)
+        set_tests_properties(host_managed_listener_contract PROPERTIES
+            TIMEOUT 90)
+        endif()  # UNIX AND Boost_FOUND — RoutingTable contract tests
+
         add_executable(
             test-hono-worker-driver
             tests/test_framework_worker_driver.cc
@@ -3467,6 +3869,190 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_p0_boundaries PROPERTIES TIMEOUT 20)
 
+        # WP-02 §6.5 QuickJS job-context hook unit gate. RED until
+        # 0012-capsid-async-context.patch exists (compile error: missing
+        # JSJobContextHooks / JS_SetJobContextHooks); GREEN after.
+        add_executable(
+            test-quickjs-job-context
+            tests/test_quickjs_job_context.cc
+        )
+        target_link_libraries(test-quickjs-job-context PRIVATE tjs)
+        add_test(
+            NAME quickjs_job_context_hooks
+            COMMAND test-quickjs-job-context
+        )
+        set_tests_properties(quickjs_job_context_hooks
+            PROPERTIES TIMEOUT 20)
+
+        # WP-00/PR-01 RED gates. All three worker tests are expected to
+        # FAIL on the pre-fix bridge (identity collapse P0-1, request
+        # context loss P0-2, terminal continuation survival P0-3); the
+        # script tests fail on the pre-fix distribution (P0-6) and identity
+        # truncation (P0-7). See docs/capsid-remediation-execution-spec.
+
+        add_executable(
+            test-worker-request-id-boundaries
+            tests/test_worker_request_id_boundaries.cc
+        )
+        target_link_libraries(
+            test-worker-request-id-boundaries PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_request_id_boundaries
+            COMMAND test-worker-request-id-boundaries
+                $<TARGET_FILE:capsid-worker>
+        )
+        set_tests_properties(
+            worker_request_id_boundaries PROPERTIES TIMEOUT 20)
+
+        add_executable(
+            test-worker-async-request-context
+            tests/test_worker_async_request_context.cc
+        )
+        target_link_libraries(
+            test-worker-async-request-context PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_async_request_context
+            COMMAND test-worker-async-request-context
+                $<TARGET_FILE:capsid-worker>
+        )
+        set_tests_properties(
+            worker_async_request_context PROPERTIES TIMEOUT 20)
+
+        add_executable(
+            test-worker-terminal-continuation
+            tests/test_worker_terminal_continuation.cc
+        )
+        target_link_libraries(
+            test-worker-terminal-continuation PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_terminal_continuation
+            COMMAND test-worker-terminal-continuation
+                $<TARGET_FILE:capsid-worker>
+        )
+        set_tests_properties(
+            worker_terminal_continuation PROPERTIES TIMEOUT 30)
+
+        # Build identity matrix (P0-7, hardened by WP-07 per spec §11.4):
+        # every controlled build difference must change the build ID, a
+        # real bytecode-ABI difference must change the compatibility ID,
+        # and identical configures must not. Each variant is a fresh
+        # configure; the test requires a clean worktree because the
+        # Release variants fail closed on dirtiness (spec §11.3).
+        add_test(
+            NAME worker_build_identity_matrix
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_CMAKE_COMMAND=${CMAKE_COMMAND}"
+                "-DCAPSID_MATRIX_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/identity-matrix"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_build_identity_matrix.cmake"
+        )
+        set_tests_properties(
+            worker_build_identity_matrix PROPERTIES TIMEOUT 300)
+
+        # Install tree and package contents (P0-6): the frozen runtime
+        # manifest must exist in a fresh install prefix and inside the
+        # package archive, and the package target must not be taken over by
+        # a third-party CPack configuration.
+        # capsid-host is skipped when system Boost is missing, so the
+        # manifest expectation follows target existence, not the option.
+        # The packaging gates themselves require the worker pair: in a
+        # CAPSID_BUILD_WORKER=OFF matrix (host-only) they are not registered.
+        if(TARGET capsid-worker)
+        if(TARGET capsid-host)
+            set(CAPSID_HOST_TARGET_PRESENT ON)
+        else()
+            set(CAPSID_HOST_TARGET_PRESENT OFF)
+        endif()
+
+        add_test(
+            NAME worker_install_tree
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/install-tree-prefix"
+                -DCAPSID_BUILD_HOST=${CAPSID_BUILD_HOST}
+                -DCAPSID_HOST_TARGET=${CAPSID_HOST_TARGET_PRESENT}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_install_tree.cmake"
+        )
+        set_tests_properties(worker_install_tree PROPERTIES TIMEOUT 300)
+
+        add_test(
+            NAME worker_package_contents
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-contents-work"
+                -DCAPSID_BUILD_HOST=${CAPSID_BUILD_HOST}
+                -DCAPSID_HOST_TARGET=${CAPSID_HOST_TARGET_PRESENT}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_contents.cmake"
+        )
+        # The package target rebuilds the whole tree when build products are
+        # stale (e.g. a cold container run right after a reconfigure), so
+        # budget like the reproducibility gate — not a tight incremental
+        # estimate.
+        set_tests_properties(worker_package_contents PROPERTIES TIMEOUT 1800)
+
+        # §12.4: consume the archive as a customer would — extract into an
+        # empty directory, compile C/C++ samples against the packaged
+        # headers+library, run worker round trips, drive the packaged Host
+        # through the node driver, and scan for build-root paths, secrets
+        # and undeclared dynamic dependencies.
+        add_test(
+            NAME worker_package_smoke
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-smoke-work"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_C_COMPILER=${CMAKE_C_COMPILER}"
+                "-DCAPSID_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                "-DCAPSID_SMOKE_SAMPLE_C=${CMAKE_CURRENT_SOURCE_DIR}/tests/package_smoke_sample.c"
+                "-DCAPSID_SMOKE_SAMPLE_CC=${CMAKE_CURRENT_SOURCE_DIR}/tests/package_smoke_sample.cc"
+                -DCAPSID_SMOKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
+                -DCAPSID_HOST_TARGET=${CAPSID_HOST_TARGET_PRESENT}
+                "-DCAPSID_NODE_EXECUTABLE=${CAPSID_NODE_EXECUTABLE}"
+                "-DCAPSID_HOST_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/host-single-worker.js"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/package_smoke.cmake"
+        )
+        set_tests_properties(worker_package_smoke PROPERTIES
+            TIMEOUT 600
+            DEPENDS worker_package_contents)
+
+        # §12.3: reproducibility gate. Two fresh builds from the same inputs
+        # must agree on the file name list, the identity records, the SBOM
+        # identity fields and every deterministic text file; binary hash
+        # differences (toolchain not yet bit-reproducible) are recorded in
+        # repro-differences.txt. The gate mirrors this build's feature flags
+        # by parsing them from the baseline build-info.txt, and reuses this
+        # build's generator, parallelism and toolchain prefix (CI: the
+        # pinned OpenSSL 3.5 install).
+        if(DEFINED CMAKE_BUILD_PARALLEL_LEVEL AND
+           NOT CMAKE_BUILD_PARALLEL_LEVEL STREQUAL "")
+            set(CAPSID_REPRO_PARALLEL "${CMAKE_BUILD_PARALLEL_LEVEL}")
+        else()
+            set(CAPSID_REPRO_PARALLEL 2)
+        endif()
+        add_test(
+            NAME worker_package_reproducibility
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-repro-work"
+                "-DCAPSID_CMAKE_COMMAND=${CMAKE_COMMAND}"
+                "-DCAPSID_REPRO_GENERATOR=${CMAKE_GENERATOR}"
+                "-DCAPSID_REPRO_PARALLEL=${CAPSID_REPRO_PARALLEL}"
+                "-DCAPSID_REPRO_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+                "-DCAPSID_REPRO_OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
+                -DCAPSID_STRICT_WARNINGS=${CAPSID_STRICT_WARNINGS}
+                -DCAPSID_ENABLE_FFI_CAPABILITY=${CAPSID_ENABLE_FFI_CAPABILITY}
+                -DCAPSID_ENABLE_RAW_SOCKET_CAPABILITY=${CAPSID_ENABLE_RAW_SOCKET_CAPABILITY}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_reproducibility.cmake"
+        )
+        set_tests_properties(worker_package_reproducibility PROPERTIES
+            TIMEOUT 1800
+            DEPENDS worker_package_smoke)
+        endif()
+
         add_executable(
             test-sandbox
             tests/test_sandbox.cc
@@ -3726,5 +4312,19 @@ if(BUILD_TESTING)
             COMMAND test-worker-lifecycle $<TARGET_FILE:test-stubborn-worker>
         )
         set_tests_properties(worker_bounded_destroy PROPERTIES TIMEOUT 5)
+        add_executable(
+            test-worker-timeout-drain
+            tests/test_worker_timeout_drain.cc)
+        target_include_directories(test-worker-timeout-drain PRIVATE tests)
+        target_link_libraries(
+            test-worker-timeout-drain
+            PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_timeout_drain
+            COMMAND test-worker-timeout-drain
+                $<TARGET_FILE:test-stubborn-worker>
+        )
+        set_tests_properties(worker_timeout_drain PROPERTIES TIMEOUT 20)
     endif()
 endif()

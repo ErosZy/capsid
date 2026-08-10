@@ -34,9 +34,6 @@ AsyncAdminBackend::AsyncAdminBackend(
       max_pending_(options.max_pending_operations == 0
                        ? 1
                        : options.max_pending_operations),
-      activate_worker_(options.activate_worker),
-      activate_pool_(options.activate_pool),
-      retire_worker_(options.retire_worker),
       external_stop_(options.external_stop) {
     worker_ = std::thread(&AsyncAdminBackend::worker_loop, this);
 }
@@ -143,50 +140,26 @@ void AsyncAdminBackend::worker_loop() {
         DeployOutcome outcome;
         try {
             if (pending.retire) {
+                // The retire transaction (drain signal + tombstone
+                // publish + ledger switch) runs INSIDE the coordinator
+                // (ManagedHostOptions prepare/commit/abort, PR-10 §9.3);
+                // the Async layer has nothing further to hand off.
                 outcome = inner_->retire(pending.application, &recorded);
                 succeeded = outcome.ok;
-                if (succeeded) {
-                    // The owner reclaims the drained pool after a
-                    // successful retire. A throwing callback is caught
-                    // below and fails the public operation (never
-                    // std::terminate).
-                    if (retire_worker_) {
-                        retire_worker_(pending.application);
-                    }
-                }
             } else {
                 outcome = inner_->deploy(pending.application,
                                          pending.version, &recorded);
                 succeeded = outcome.ok;
                 if (succeeded && !outcome.workers.empty()) {
-                    // Ownership handoff: the whole pool moves to exactly
-                    // one callback. A multi-worker pool MUST go through
-                    // the atomic activate_pool — the legacy activate_worker
-                    // would claim just one process of a bigger pool — while
-                    // the single-worker pool keeps the legacy path. A true
-                    // return transfers ownership of every worker; anything
-                    // else (missing callback, false return, exception)
-                    // leaves the pool unclaimed for the tail cleanup to
-                    // recycle and marks the public operation as a redacted
-                    // Failed.
-                    bool activated = false;
-                    if (outcome.workers.size() > 1) {
-                        if (activate_pool_) {
-                            activated = activate_pool_(
-                                pending.application, outcome.workers);
-                        }
-                    } else if (activate_worker_) {
-                        activated = activate_worker_(
-                            pending.application, outcome.workers[0]);
-                    }
-                    if (activated) {
-                        // Ownership transferred: the pool is no longer ours
-                        // (the tail cleanup would double-free).
-                        outcome.workers.clear();
-                        outcome.worker = nullptr;
-                    } else {
-                        succeeded = false;
-                    }
+                    // A successful deploy whose outcome still carries
+                    // workers can only come from a coordinator configured
+                    // WITHOUT the §9.3 transaction callbacks (the legacy
+                    // direct-call path). There is no publisher here —
+                    // worker ownership no longer hands off through this
+                    // layer — so the unclaimed pool is recycled and the
+                    // public operation fails closed instead of leaking
+                    // every worker.
+                    succeeded = false;
                 }
             }
         } catch (const std::exception&) {
@@ -284,35 +257,11 @@ DeployOutcome ManagedAdminBackend::deploy(const std::string& application,
         }
         return outcome;
     }
-    // The permit is bound to the active App slot: a replacement deploy of
-    // an App that already holds its slot does not acquire again, and the
-    // global capacity is consumed BEFORE any spawn or durable activation.
-    bool newly_acquired = true;
-    if (capacity != nullptr) {
-        newly_acquired = capacity->acquire(application);
-        if (!newly_acquired && !capacity->holds(application)) {
-            DeployOutcome outcome;
-            outcome.error = "worker capacity exceeded";
-            if (status != nullptr) {
-                status->state = OperationState::kFailed;
-                status->error = outcome.error;
-            }
-            return outcome;
-        }
-    }
+    // §9.4 capacity is accounted inside the coordinator: the ledger
+    // reserve happens BEFORE any spawn (run_deploy_operation), the settle
+    // on the activation commit, and a denied reserve fails the deploy
+    // with "worker capacity exceeded". The Admin layer only routes.
     DeployOutcome outcome = managed_deploy(options, version, status);
-    if (capacity != nullptr) {
-        if (outcome.ok && !outcome.workers.empty()) {
-            // The activated pool HOLDS the slot until its retire; a
-            // replacement keeps its existing slot.
-            capacity->record_success(application);
-        } else if (newly_acquired) {
-            // Only a permit acquired BY THIS DEPLOY is returned when it
-            // settles without a live worker; a failed replacement leaves
-            // the old holder's slot untouched.
-            capacity->release(application);
-        }
-    }
     return outcome;
 }
 
@@ -328,11 +277,10 @@ DeployOutcome ManagedAdminBackend::retire(const std::string& application,
         }
         return outcome;
     }
+    // The retire's ledger transition (serving → surge) runs inside the
+    // coordinator's retire transaction (PR-10 §9.3/§9.4); the reaper
+    // completion releases the count.
     DeployOutcome outcome = managed_retire(options, status);
-    if (outcome.ok && capacity != nullptr) {
-        // The retired worker's slot returns to the global pool.
-        capacity->release(application);
-    }
     return outcome;
 }
 

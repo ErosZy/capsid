@@ -61,22 +61,56 @@ std::string sha256_id(const std::string& bytes) {
     return result;
 }
 
+// Compatibility record v2 (spec §11.2): exactly the fields that change
+// whether one build's QuickJS bytecode reads in another build.
 std::string canonical_record(const capsid_build_info& info) {
-    return std::string("schema=capsid-bytecode-compatibility-v1\n") +
-           "runtimeVersion=" + info.runtime_version + "\n" +
-           "abiVersion=" + std::to_string(info.abi_version) + "\n" +
-           "fetchRpcVersion=" + std::to_string(info.fetchrpc_version) +
-           "\n" + "quickjsCommit=" + info.quickjs_commit + "\n" +
-           "txikiOverlayKey=" + info.txiki_overlay_key + "\n" +
+    return std::string("schema=capsid-bytecode-compatibility-v2\n") +
+           "quickjsCommit=" + info.quickjs_commit + "\n" +
            "txikiOverlayManifest=" + info.txiki_overlay_manifest + "\n" +
            "bytecodeCompileFlags=" + info.bytecode_compile_flags + "\n" +
            "targetArchitecture=" + info.target_architecture + "\n" +
            "endianness=" + info.endianness + "\n" +
            "pointerWidthBits=" + std::to_string(info.pointer_width_bits) +
            "\n" + "bytecodeFormatIdentity=" +
-           info.bytecode_format_identity + "\n" +
+           info.bytecode_format_identity + "\n";
+}
+
+// Provenance record v1 (spec §11.3) minus the final buildId line, in the
+// fixed order documented in runtime.h. build_id is the SHA-256 of exactly
+// these bytes; recomputing it here proves no record field is missing or
+// misordered (spec §11.4: the test must detect field absence).
+std::string canonical_provenance(const capsid_build_info& info) {
+    return std::string("schema=capsid-build-provenance-v1\n") +
+           "capsidCommit=" + info.capsid_commit + "\n" +
+           "capsidTreeClean=" +
+           (info.capsid_tree_clean == 1 ? "true" : "false") + "\n" +
+           "runtimeVersion=" + info.runtime_version + "\n" +
+           "abiVersion=" + std::to_string(info.abi_version) + "\n" +
+           "fetchRpcVersion=" + std::to_string(info.fetchrpc_version) +
+           "\n" + "compatibilityId=" + info.compatibility_id + "\n" +
            "capabilityManifestSha256=" + info.capability_manifest_sha256 +
-           "\n";
+           "\n" + "compilerId=" + info.compiler_id + "\n" +
+           "compilerVersion=" + info.compiler_version + "\n" +
+           "targetTriple=" + info.target_triple + "\n" +
+           "cmakeBuildType=" + info.cmake_build_type + "\n" +
+           "featureFlags=" + info.build_feature_flags + "\n" +
+           "dependencyOverlayKey=" + info.txiki_overlay_key + "\n";
+}
+
+// Every compile/feature flag key the provenance record promises must be
+// present in the canonical feature-flags string — a missing key means the
+// build identity silently dropped a controlled build difference.
+bool feature_flags_complete(const char* flags) {
+    if (flags == nullptr) {
+        return false;
+    }
+    for (const char* key : { "lto=", "asan=", "ubsan=", "tsan=",
+                             "mimalloc=", "host=", "worker=" }) {
+        if (std::strstr(flags, key) == nullptr) {
+            return false;
+        }
+    }
+    return true;
 }
 
 capsid_build_info read_library_build_info() {
@@ -109,6 +143,32 @@ capsid_build_info read_library_build_info() {
                 info.bytecode_format_identity[0] != 0 &&
                 is_lower_hex(info.capability_manifest_sha256, 64),
             "library build info contains an empty or malformed identity field");
+    require(is_sha256_id(info.build_id),
+            "library build ID is not lowercase sha256");
+    require(sha256_id(canonical_provenance(info)) == info.build_id,
+            "library build ID does not cover the canonical provenance "
+            "record; a provenance field is missing or misordered");
+    require(info.capsid_commit != nullptr &&
+                (is_lower_hex(info.capsid_commit, 40) ||
+                 std::strcmp(info.capsid_commit, "unknown") == 0),
+            "capsid commit must be 40 lowercase hex or \"unknown\"");
+    require(info.capsid_tree_clean == 0 || info.capsid_tree_clean == 1,
+            "capsid_tree_clean is not a boolean");
+    require(info.provenance_dirty == 0 || info.provenance_dirty == 1,
+            "provenance_dirty is not a boolean");
+    const bool commit_known = is_lower_hex(info.capsid_commit, 40);
+    const bool release_grade = std::strcmp(info.cmake_build_type, "Release") == 0 &&
+                               info.capsid_tree_clean == 1 && commit_known;
+    require(info.provenance_dirty == (release_grade ? 0 : 1),
+            "provenance_dirty disagrees with build type/commit/tree state");
+    require(info.compiler_id != nullptr && info.compiler_id[0] != 0 &&
+                info.compiler_version != nullptr &&
+                info.compiler_version[0] != 0 &&
+                info.target_triple != nullptr && info.target_triple[0] != 0 &&
+                info.cmake_build_type != nullptr &&
+                feature_flags_complete(info.build_feature_flags),
+            "library build provenance is missing toolchain or feature "
+            "information");
 #ifdef CAPSID_TEST_EXPECTED_QUICKJS_COMMIT
     require(std::strcmp(info.quickjs_commit,
                         CAPSID_TEST_EXPECTED_QUICKJS_COMMIT) == 0,

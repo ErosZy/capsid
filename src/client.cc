@@ -65,6 +65,10 @@ struct capsid_worker {
     std::map<uint64_t, RequestState> requests;
     std::set<uint64_t> canceled_requests;
     std::deque<uint64_t> canceled_request_order;
+    // §13.2: ids of requests still inflight when the hard timeout killed
+    // the worker. They drain one REQUEST_TIMEOUT event per next_event call
+    // (stable map order) before the channel reports CAPSID_CLOSED.
+    std::vector<uint64_t> pending_timeouts;
     bool ipc_metrics_enabled;
     capsid::ClientIpcMetrics ipc_metrics;
 };
@@ -269,18 +273,33 @@ capsid_result queue_chunked(capsid_worker *worker,
     return result;
 }
 
-void append_string16(std::vector<uint8_t> *output, const uint8_t *data, size_t size) {
+// §10.3: size_t → wire integer conversions are validated here, before
+// any append; on overflow nothing is written and the caller gets a
+// failure instead of a truncated wire field.
+bool append_string16(std::vector<uint8_t> *output,
+                     const uint8_t *data,
+                     size_t size) {
+    if (size > std::numeric_limits<uint16_t>::max()) {
+        return false;
+    }
     capsid::protocol::append_u16(output, static_cast<uint16_t>(size));
     if (size != 0) {
         output->insert(output->end(), data, data + size);
     }
+    return true;
 }
 
-void append_string32(std::vector<uint8_t> *output, const uint8_t *data, size_t size) {
+bool append_string32(std::vector<uint8_t> *output,
+                     const uint8_t *data,
+                     size_t size) {
+    if (size > std::numeric_limits<uint32_t>::max()) {
+        return false;
+    }
     capsid::protocol::append_u32(output, static_cast<uint32_t>(size));
     if (size != 0) {
         output->insert(output->end(), data, data + size);
     }
+    return true;
 }
 
 capsid_result send_hello(capsid_worker *worker,
@@ -311,10 +330,12 @@ capsid_result send_hello(capsid_worker *worker,
         &frame.payload, preinstalled_sandbox_features);
     const char *ca_bundle =
         config.tls_ca_bundle_path ? config.tls_ca_bundle_path : "";
-    append_string16(
-        &frame.payload,
-        reinterpret_cast<const uint8_t *>(ca_bundle),
-        std::strlen(ca_bundle));
+    if (!append_string16(
+            &frame.payload,
+            reinterpret_cast<const uint8_t *>(ca_bundle),
+            std::strlen(ca_bundle))) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
     capsid::protocol::append_u64(
         &frame.payload, config.max_fetch_request_body_bytes);
     capsid::protocol::append_u64(
@@ -337,10 +358,12 @@ capsid_result send_hello(capsid_worker *worker,
                 &frame.payload, rule.port_end);
             capsid::protocol::append_u32(
                 &frame.payload, rule.rule_id);
-            append_string16(
-                &frame.payload,
-                reinterpret_cast<const uint8_t *>(rule.target),
-                std::strlen(rule.target));
+            if (!append_string16(
+                    &frame.payload,
+                    reinterpret_cast<const uint8_t *>(rule.target),
+                    std::strlen(rule.target))) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
         }
     }
     frame.payload.push_back(policy ? 1 : 0);
@@ -353,10 +376,12 @@ capsid_result send_hello(capsid_worker *worker,
         capability && capability->application_identity
             ? capability->application_identity
             : "";
-    append_string16(
-        &frame.payload,
-        reinterpret_cast<const uint8_t *>(application_identity),
-        std::strlen(application_identity));
+    if (!append_string16(
+            &frame.payload,
+            reinterpret_cast<const uint8_t *>(application_identity),
+            std::strlen(application_identity))) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
     capsid::protocol::append_u16(
         &frame.payload,
         static_cast<uint16_t>(
@@ -367,10 +392,12 @@ capsid_result send_hello(capsid_worker *worker,
              ++index) {
             const char *module =
                 capability->allowed_modules[index];
-            append_string16(
-                &frame.payload,
-                reinterpret_cast<const uint8_t *>(module),
-                std::strlen(module));
+            if (!append_string16(
+                    &frame.payload,
+                    reinterpret_cast<const uint8_t *>(module),
+                    std::strlen(module))) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
         }
     }
     capsid::protocol::append_u16(
@@ -393,10 +420,12 @@ capsid_result send_hello(capsid_worker *worker,
                 &frame.payload, rule.rule_id);
             const char *resource =
                 rule.resource ? rule.resource : "";
-            append_string16(
-                &frame.payload,
-                reinterpret_cast<const uint8_t *>(resource),
-                std::strlen(resource));
+            if (!append_string16(
+                    &frame.payload,
+                    reinterpret_cast<const uint8_t *>(resource),
+                    std::strlen(resource))) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
         }
     }
     const capsid_egress_policy *capability_net =
@@ -425,10 +454,12 @@ capsid_result send_hello(capsid_worker *worker,
                 &frame.payload, rule.port_end);
             capsid::protocol::append_u32(
                 &frame.payload, rule.rule_id);
-            append_string16(
-                &frame.payload,
-                reinterpret_cast<const uint8_t *>(rule.target),
-                std::strlen(rule.target));
+            if (!append_string16(
+                    &frame.payload,
+                    reinterpret_cast<const uint8_t *>(rule.target),
+                    std::strlen(rule.target))) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
         }
     }
     const std::vector<
@@ -442,16 +473,20 @@ capsid_result send_hello(capsid_worker *worker,
              it = environment.begin();
          it != environment.end();
          ++it) {
-        append_string16(
-            &frame.payload,
-            reinterpret_cast<const uint8_t *>(
-                it->first.data()),
-            it->first.size());
-        append_string16(
-            &frame.payload,
-            reinterpret_cast<const uint8_t *>(
-                it->second.data()),
-            it->second.size());
+        if (!append_string16(
+                &frame.payload,
+                reinterpret_cast<const uint8_t *>(
+                    it->first.data()),
+                it->first.size())) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
+        if (!append_string16(
+                &frame.payload,
+                reinterpret_cast<const uint8_t *>(
+                    it->second.data()),
+                it->second.size())) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
     }
     return queue_frame(worker, frame);
 }
@@ -914,6 +949,102 @@ bool client_ipc_metrics_snapshot(capsid_worker *worker,
 
 }  // namespace capsid
 
+namespace capsid {
+namespace abi {
+
+// Thread-local, fixed-size error detail storage (WP-06, spec §10.1). The
+// pointer returned by capsid_last_error() is valid until the next Capsid
+// API call on the same thread; the storage never allocates and OOM paths
+// store static text only.
+const size_t kErrorDetailCapacity = 384;
+thread_local char error_detail[kErrorDetailCapacity];
+thread_local bool error_detail_set = false;
+
+void clear_error() {
+    error_detail_set = false;
+}
+
+void set_error(const char *detail) {
+    if (!detail || detail[0] == '\0') {
+        error_detail_set = false;
+        return;
+    }
+    size_t i = 0;
+    while (detail[i] != '\0' && i + 1 < kErrorDetailCapacity) {
+        error_detail[i] = detail[i];
+        ++i;
+    }
+    error_detail[i] = '\0';
+    error_detail_set = true;
+}
+
+// §10.2: no C++ exception may cross an extern "C" boundary. std::bad_alloc
+// becomes CAPSID_OUT_OF_MEMORY (only static text is stored), any other
+// exception becomes CAPSID_INTERNAL_ERROR. The guard itself allocates
+// nothing.
+template <typename Fn>
+capsid_result guard_result(Fn &&fn,
+                           const char *oom_detail,
+                           const char *error_detail_text) {
+    clear_error();
+    try {
+        return fn();
+    } catch (const std::bad_alloc &) {
+        set_error(oom_detail);
+        return CAPSID_OUT_OF_MEMORY;
+    } catch (const std::exception &exception) {
+        set_error(error_detail_text ? error_detail_text
+                                    : exception.what());
+        return CAPSID_INTERNAL_ERROR;
+    } catch (...) {
+        set_error(error_detail_text);
+        return CAPSID_INTERNAL_ERROR;
+    }
+}
+
+// §10.2: for non-result entry points (CPU topology) an internal exception
+// yields a documented conservative value plus a recorded error.
+template <typename Fn, typename Value>
+Value guard_value(Fn &&fn, Value conservative,
+                  const char *error_detail_text) {
+    clear_error();
+    try {
+        return fn();
+    } catch (const std::bad_alloc &) {
+        set_error(error_detail_text);
+        return conservative;
+    } catch (const std::exception &exception) {
+        set_error(error_detail_text ? error_detail_text
+                                    : exception.what());
+        return conservative;
+    } catch (...) {
+        set_error(error_detail_text);
+        return conservative;
+    }
+}
+
+// §10.3: checked accumulation helpers. Every reserve/insert/strlen
+// accumulation before a payload write goes through these; overflow is an
+// INVALID_ARGUMENT-class failure for the caller.
+bool checked_add(size_t a, size_t b, size_t *out) {
+    if (a > std::numeric_limits<size_t>::max() - b) {
+        return false;
+    }
+    *out = a + b;
+    return true;
+}
+
+bool checked_mul(size_t a, size_t b, size_t *out) {
+    if (b != 0 && a > std::numeric_limits<size_t>::max() / b) {
+        return false;
+    }
+    *out = a * b;
+    return true;
+}
+
+}  // namespace abi
+}  // namespace capsid
+
 extern "C" {
 
 void capsid_resource_limits_init(capsid_resource_limits *limits) {
@@ -978,11 +1109,23 @@ const char *capsid_result_string(capsid_result result) {
             return "system error";
         case CAPSID_CHILD_ERROR:
             return "worker process error";
+        case CAPSID_OUT_OF_MEMORY:
+            return "out of memory";
+        case CAPSID_INTERNAL_ERROR:
+            return "internal error";
     }
-    return "unknown error";
+    return "unknown result";
+}
+
+const char *capsid_last_error(void) {
+    return capsid::abi::error_detail_set
+               ? capsid::abi::error_detail
+               : NULL;
 }
 
 capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_worker **out_worker) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!input || !out_worker || input->struct_size < sizeof(capsid_worker_config) ||
         input->abi_version != CAPSID_ABI_VERSION) {
         return CAPSID_INVALID_ARGUMENT;
@@ -1007,45 +1150,81 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         for (uint32_t index = 0;
              index < config.egress_policy->rule_count;
              ++index) {
-            egress_rule_payload_size +=
-                14 + std::strlen(
-                         config.egress_policy->rules[index].target);
+            // §10.3: checked accumulation before any payload sizing.
+            size_t rule_size = 0;
+            if (!capsid::abi::checked_add(
+                    static_cast<size_t>(14),
+                    std::strlen(
+                        config.egress_policy->rules[index].target),
+                    &rule_size) ||
+                !capsid::abi::checked_add(
+                    egress_rule_payload_size, rule_size,
+                    &egress_rule_payload_size)) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
         }
     }
     size_t capability_payload_size = 0;
     if (config.capability_policy) {
         const capsid_capability_policy &capability =
             *config.capability_policy;
-        capability_payload_size +=
-            std::strlen(
-                capability.application_identity
-                    ? capability.application_identity
-                    : "");
+        if (!capsid::abi::checked_add(
+                capability_payload_size,
+                std::strlen(
+                    capability.application_identity
+                        ? capability.application_identity
+                        : ""),
+                &capability_payload_size)) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
         for (uint32_t index = 0;
              index < capability.allowed_module_count;
              ++index) {
-            capability_payload_size +=
-                2 + std::strlen(
-                        capability.allowed_modules[index]);
+            size_t module_size = 0;
+            if (!capsid::abi::checked_add(
+                    static_cast<size_t>(2),
+                    std::strlen(capability.allowed_modules[index]),
+                    &module_size) ||
+                !capsid::abi::checked_add(
+                    capability_payload_size, module_size,
+                    &capability_payload_size)) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
         }
         for (uint32_t index = 0;
              index < capability.rule_count;
              ++index) {
-            capability_payload_size +=
-                14 + std::strlen(
-                         capability.rules[index].resource
-                             ? capability.rules[index].resource
-                             : "");
+            size_t rule_size = 0;
+            if (!capsid::abi::checked_add(
+                    static_cast<size_t>(14),
+                    std::strlen(
+                        capability.rules[index].resource
+                            ? capability.rules[index].resource
+                            : ""),
+                    &rule_size) ||
+                !capsid::abi::checked_add(
+                    capability_payload_size, rule_size,
+                    &capability_payload_size)) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
         }
         if (capability.net_policy) {
             for (uint32_t index = 0;
                  index < capability.net_policy->rule_count;
                  ++index) {
-                capability_payload_size +=
-                    14 + std::strlen(
-                             capability.net_policy
-                                 ->rules[index]
-                                 .target);
+                size_t rule_size = 0;
+                if (!capsid::abi::checked_add(
+                        static_cast<size_t>(14),
+                        std::strlen(
+                            capability.net_policy
+                                ->rules[index]
+                                .target),
+                        &rule_size) ||
+                    !capsid::abi::checked_add(
+                        capability_payload_size, rule_size,
+                        &capability_payload_size)) {
+                    return CAPSID_INVALID_ARGUMENT;
+                }
             }
         }
     }
@@ -1053,14 +1232,27 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         std::pair<std::string, std::string> >
         &validated_environment =
             validated_capability_policy.env_entries();
-    capability_payload_size += 2;
+    if (!capsid::abi::checked_add(
+            capability_payload_size, static_cast<size_t>(2),
+            &capability_payload_size)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
     for (std::vector<
              std::pair<std::string, std::string> >::const_iterator
              it = validated_environment.begin();
          it != validated_environment.end();
          ++it) {
-        capability_payload_size +=
-            4 + it->first.size() + it->second.size();
+        size_t entry_size = 0;
+        if (!capsid::abi::checked_add(
+                static_cast<size_t>(4),
+                it->first.size(), &entry_size) ||
+            !capsid::abi::checked_add(
+                entry_size, it->second.size(), &entry_size) ||
+            !capsid::abi::checked_add(
+                capability_payload_size, entry_size,
+                &capability_payload_size)) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
     }
     capsid_resource_limits resource_limits;
     std::memset(&resource_limits, 0, sizeof(resource_limits));
@@ -1324,10 +1516,21 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     uint32_t preinstalled_sandbox_features = 0;
     if (cgroup_path_size != 0) {
 #if defined(__linux__)
-        if (!configure_and_attach_cgroup_v2(
+        bool cgroup_attached = false;
+        try {
+            cgroup_attached = configure_and_attach_cgroup_v2(
                 pid,
                 config.sandbox_cgroup_path,
-                resource_limits)) {
+                resource_limits);
+        } catch (...) {
+            // WP-06: an allocating failure inside cgroup attach must not
+            // leak the freshly forked child.
+            close(sockets[0]);
+            kill(pid, SIGKILL);
+            waitpid(pid, NULL, 0);
+            throw;
+        }
+        if (!cgroup_attached) {
             close(sockets[0]);
             kill(pid, SIGKILL);
             waitpid(pid, NULL, 0);
@@ -1343,12 +1546,40 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
 #endif
     }
 
-    capsid_worker *worker = new (std::nothrow) capsid_worker();
+    // WP-06, spec §10.4: a failing spawn must never leave a half-built
+    // worker behind. The output is cleared before the body runs so every
+    // failure path — including one that throws into the ABI guard — has a
+    // well-defined out_worker value.
+    *out_worker = NULL;
+
+    // WP-06, spec §10.4: std::nothrow only protects the operator new
+    // call itself. The capsid_worker members (vector/map/set/deque/Parser)
+    // allocate in the constructor, and a bad_alloc from those propagates
+    // past the nothrow guard — the child would leak alive if this were not
+    // caught and reaped. The new expression itself runs the matching
+    // operator delete when the constructor throws, so only the child and
+    // the IPC descriptor need cleanup here.
+    capsid_worker *worker = NULL;
+    try {
+        worker = new (std::nothrow) capsid_worker();
+    } catch (const std::bad_alloc &) {
+        close(sockets[0]);
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+        // Uniform OOM contract: same code and detail the ABI guard would
+        // have produced.
+        capsid::abi::set_error("capsid_worker_spawn: out of memory");
+        return CAPSID_OUT_OF_MEMORY;
+    }
     if (!worker) {
         close(sockets[0]);
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
-        return CAPSID_SYSTEM_ERROR;
+        // WP-06: a nothrow allocation failure is an OOM; report it with
+        // the same code and detail the ABI guard would have produced, so
+        // callers see a uniform CAPSID_OUT_OF_MEMORY contract.
+        capsid::abi::set_error("capsid_worker_spawn: out of memory");
+        return CAPSID_OUT_OF_MEMORY;
     }
     worker->fd = sockets[0];
     worker->pid = pid;
@@ -1360,40 +1591,59 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     worker->write_offset = 0;
     worker->ipc_metrics_enabled = false;
 
-    const capsid_result hello_result = send_hello(
-        worker,
-        config,
-        validated_capability_policy,
-        file_descriptor_limit,
-        preinstalled_sandbox_features);
+    // WP-06, spec §10.2/§10.4: allocations between fork and the first
+    // wire frame (cgroup attach, hello encode/queue) may throw; the child
+    // must be reaped before the exception reaches the ABI guard, or it
+    // leaks as a zombie.
+    capsid_result hello_result = CAPSID_INTERNAL_ERROR;
+    try {
+        hello_result = send_hello(
+            worker,
+            config,
+            validated_capability_policy,
+            file_descriptor_limit,
+            preinstalled_sandbox_features);
+    } catch (...) {
+        close(sockets[0]);
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+        delete worker;
+        throw;
+    }
     if (hello_result != CAPSID_OK) {
         capsid_worker_destroy(worker);
         return hello_result;
     }
     *out_worker = worker;
     return CAPSID_OK;
+        },
+        "capsid_worker_spawn: out of memory",
+        "capsid_worker_spawn: internal error");
 }
 
 void capsid_worker_destroy(capsid_worker *worker) {
     if (!worker) {
         return;
     }
-    if (!worker->closed) {
-        capsid_worker_shutdown(worker);
-        capsid_worker_flush(worker);
-    }
+    // §13.3: abortive cleanup. destroy never attempts graceful shutdown —
+    // a caller who wants a graceful stop must run the documented sequence
+    // shutdown → flush → drain EXIT → destroy explicitly (the Host's
+    // normal-stop path does). In-flight requests are terminated without
+    // warning; the worker is SIGKILLed (cooperative SIGTERM is not part of
+    // the abortive contract). Teardown allocates nothing and never throws
+    // (spec §10.2): close, signal and reap below are unconditional, and
+    // the child is always reaped before destroy returns.
     if (worker->fd >= 0) {
         close(worker->fd);
         worker->fd = -1;
     }
     worker->closed = true;
     if (worker->pid > 0) {
-        if (!wait_for_child(worker->pid, 100)) {
-            kill(worker->pid, SIGTERM);
-            if (!wait_for_child(worker->pid, 250)) {
-                kill(worker->pid, SIGKILL);
-                wait_for_child(worker->pid, 250);
-            }
+        // A short natural-exit window keeps the reap cheap for workers that
+        // are already gone; anything still alive is SIGKILLed and reaped.
+        if (!wait_for_child(worker->pid, 50)) {
+            kill(worker->pid, SIGKILL);
+            wait_for_child(worker->pid, 250);
         }
     }
     delete worker;
@@ -1407,7 +1657,19 @@ int64_t capsid_worker_pid(const capsid_worker *worker) {
     return worker ? static_cast<int64_t>(worker->pid) : -1;
 }
 
+static uint32_t capsid_available_cpu_count_impl(void);
+static uint32_t capsid_recommended_worker_count_impl(void);
+
 uint32_t capsid_available_cpu_count(void) {
+    // Frozen conservative fallback (spec §10.2): 1 CPU on internal error,
+    // with capsid_last_error() set. Documented in runtime.h.
+    return capsid::abi::guard_value(
+        &capsid_available_cpu_count_impl,
+        /*conservative=*/1,
+        "capsid_available_cpu_count: topology query failed");
+}
+
+static uint32_t capsid_available_cpu_count_impl(void) {
     const size_t count = capsid::topology::available_cpus().size();
     return count > UINT32_MAX
         ? UINT32_MAX
@@ -1417,19 +1679,33 @@ uint32_t capsid_available_cpu_count(void) {
 capsid_result capsid_available_cpu_at(
     uint32_t index,
     uint32_t *out_cpu) {
-    if (!out_cpu) {
-        return CAPSID_INVALID_ARGUMENT;
-    }
-    const std::vector<uint32_t> cpus =
-        capsid::topology::available_cpus();
-    if (index >= cpus.size()) {
-        return CAPSID_INVALID_ARGUMENT;
-    }
-    *out_cpu = cpus[index];
-    return CAPSID_OK;
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+            if (!out_cpu) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
+            const std::vector<uint32_t> cpus =
+                capsid::topology::available_cpus();
+            if (index >= cpus.size()) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
+            *out_cpu = cpus[index];
+            return CAPSID_OK;
+        },
+        "capsid_available_cpu_at: out of memory",
+        "capsid_available_cpu_at: topology query failed");
 }
 
 uint32_t capsid_recommended_worker_count(void) {
+    // Frozen conservative fallback (spec §10.2): 1 worker on internal
+    // error, with capsid_last_error() set. Documented in runtime.h.
+    return capsid::abi::guard_value(
+        &capsid_recommended_worker_count_impl,
+        /*conservative=*/1,
+        "capsid_recommended_worker_count: topology query failed");
+}
+
+static uint32_t capsid_recommended_worker_count_impl(void) {
     const std::vector<uint32_t> cpus =
         capsid::topology::available_cpus();
     return capsid::topology::recommended_worker_count(
@@ -1440,6 +1716,8 @@ uint32_t capsid_recommended_worker_count(void) {
 capsid_result capsid_worker_set_cpu_affinity(
     capsid_worker *worker,
     uint32_t cpu) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!worker || worker->pid <= 0) {
         return CAPSID_INVALID_ARGUMENT;
     }
@@ -1466,16 +1744,26 @@ capsid_result capsid_worker_set_cpu_affinity(
         ? CAPSID_OK
         : CAPSID_SYSTEM_ERROR;
 #endif
+        },
+        "capsid_worker_set_cpu_affinity: out of memory",
+        "capsid_worker_set_cpu_affinity: internal error");
 }
 
 capsid_result capsid_worker_load_bundle(capsid_worker *worker, const uint8_t *bundle, size_t bundle_size) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     return queue_chunked(worker, capsid::protocol::kLoadBundle, 0, bundle, bundle_size, true, true);
+        },
+        "capsid_worker_load_bundle: out of memory",
+        "capsid_worker_load_bundle: internal error");
 }
 
 capsid_result capsid_worker_load_bundle_named(capsid_worker *worker,
                                           const uint8_t *bundle,
                                           size_t bundle_size,
                                           const char *source_name) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!source_name || !source_name[0] ||
         (bundle_size != 0 && !bundle)) {
         return CAPSID_INVALID_ARGUMENT;
@@ -1512,6 +1800,9 @@ capsid_result capsid_worker_load_bundle_named(capsid_worker *worker,
         true,
         true,
         capsid::protocol::kFlagBundleName);
+        },
+        "capsid_worker_load_bundle_named: out of memory",
+        "capsid_worker_load_bundle_named: internal error");
 }
 
 capsid_result capsid_worker_load_trusted_bytecode_named(
@@ -1519,6 +1810,8 @@ capsid_result capsid_worker_load_trusted_bytecode_named(
     const uint8_t *bytecode,
     size_t bytecode_size,
     const char *source_name) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!source_name || !source_name[0] ||
         bytecode_size == 0 || !bytecode) {
         return CAPSID_INVALID_ARGUMENT;
@@ -1554,6 +1847,9 @@ capsid_result capsid_worker_load_trusted_bytecode_named(
         true,
         capsid::protocol::kFlagBundleName |
             capsid::protocol::kFlagTrustedBytecode);
+        },
+        "capsid_worker_load_trusted_bytecode_named: out of memory",
+        "capsid_worker_load_trusted_bytecode_named: internal error");
 }
 
 static capsid_result begin_request_impl(capsid_worker *worker,
@@ -1607,12 +1903,20 @@ static capsid_result begin_request_impl(capsid_worker *worker,
     frame.type = capsid::protocol::kRequestHead;
     frame.flags = flags;
     frame.request_id = request_id;
-    append_string16(&frame.payload, reinterpret_cast<const uint8_t *>(method), method_size);
-    append_string32(&frame.payload, reinterpret_cast<const uint8_t *>(url), url_size);
+    if (!append_string16(&frame.payload, reinterpret_cast<const uint8_t *>(method), method_size)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (!append_string32(&frame.payload, reinterpret_cast<const uint8_t *>(url), url_size)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
     capsid::protocol::append_u16(&frame.payload, static_cast<uint16_t>(header_count));
     for (size_t i = 0; i < header_count; ++i) {
-        append_string16(&frame.payload, headers[i].name.data, headers[i].name.size);
-        append_string32(&frame.payload, headers[i].value.data, headers[i].value.size);
+        if (!append_string16(&frame.payload, headers[i].name.data, headers[i].name.size)) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
+        if (!append_string32(&frame.payload, headers[i].value.data, headers[i].value.size)) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
     }
     if (worker->requests.find(request_id) != worker->requests.end()) {
         return CAPSID_INVALID_ARGUMENT;
@@ -1647,11 +1951,16 @@ capsid_result capsid_worker_begin_bodyless_request(capsid_worker *worker,
                                       const char *url,
                                       const capsid_header *headers,
                                       size_t header_count) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     // Reuse the validation and frame assembly of begin_request by setting
     // the flag; the shared impl below handles it.
     return begin_request_impl(worker, request_id, method, url,
                               headers, header_count,
                               capsid::protocol::kFlagRequestEnd);
+        },
+        "capsid_worker_begin_bodyless_request: out of memory",
+        "capsid_worker_begin_bodyless_request: internal error");
 }
 
 capsid_result capsid_worker_begin_request(capsid_worker *worker,
@@ -1660,14 +1969,21 @@ capsid_result capsid_worker_begin_request(capsid_worker *worker,
                                       const char *url,
                                       const capsid_header *headers,
                                       size_t header_count) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     return begin_request_impl(worker, request_id, method, url,
                               headers, header_count, 0);
+        },
+        "capsid_worker_begin_request: out of memory",
+        "capsid_worker_begin_request: internal error");
 }
 
 capsid_result capsid_worker_write_request(capsid_worker *worker,
                                       uint64_t request_id,
                                       const uint8_t *data,
                                       size_t size) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!worker || request_id == 0 || (size && !data)) {
         return CAPSID_INVALID_ARGUMENT;
     }
@@ -1692,9 +2008,14 @@ capsid_result capsid_worker_write_request(capsid_worker *worker,
         state->second.credit -= size;
     }
     return result;
+        },
+        "capsid_worker_write_request: out of memory",
+        "capsid_worker_write_request: internal error");
 }
 
 capsid_result capsid_worker_end_request(capsid_worker *worker, uint64_t request_id) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!worker || request_id == 0) {
         return CAPSID_INVALID_ARGUMENT;
     }
@@ -1712,9 +2033,14 @@ capsid_result capsid_worker_end_request(capsid_worker *worker, uint64_t request_
         state->second.ended = true;
     }
     return result;
+        },
+        "capsid_worker_end_request: out of memory",
+        "capsid_worker_end_request: internal error");
 }
 
 capsid_result capsid_worker_grant_response_credit(capsid_worker *worker, uint64_t request_id, uint32_t credit) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!worker || request_id == 0 || credit == 0) {
         return CAPSID_INVALID_ARGUMENT;
     }
@@ -1728,9 +2054,14 @@ capsid_result capsid_worker_grant_response_credit(capsid_worker *worker, uint64_
     frame.request_id = request_id;
     capsid::protocol::append_u32(&frame.payload, credit);
     return queue_frame(worker, frame);
+        },
+        "capsid_worker_grant_response_credit: out of memory",
+        "capsid_worker_grant_response_credit: internal error");
 }
 
 capsid_result capsid_worker_cancel(capsid_worker *worker, uint64_t request_id) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!worker || request_id == 0) {
         return CAPSID_INVALID_ARGUMENT;
     }
@@ -1749,9 +2080,14 @@ capsid_result capsid_worker_cancel(capsid_worker *worker, uint64_t request_id) {
         worker->requests.erase(state);
     }
     return result;
+        },
+        "capsid_worker_cancel: out of memory",
+        "capsid_worker_cancel: internal error");
 }
 
 capsid_result capsid_worker_request_memory_metrics(capsid_worker *worker) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!worker) {
         return CAPSID_INVALID_ARGUMENT;
     }
@@ -1760,9 +2096,14 @@ capsid_result capsid_worker_request_memory_metrics(capsid_worker *worker) {
     frame.flags = 0;
     frame.request_id = 0;
     return queue_frame(worker, frame);
+        },
+        "capsid_worker_request_memory_metrics: out of memory",
+        "capsid_worker_request_memory_metrics: internal error");
 }
 
 capsid_result capsid_worker_flush(capsid_worker *worker) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!worker || worker->closed) {
         return CAPSID_CLOSED;
     }
@@ -1807,15 +2148,35 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
     worker->write_buffer.clear();
     worker->write_offset = 0;
     return CAPSID_OK;
+        },
+        "capsid_worker_flush: out of memory",
+        "capsid_worker_flush: internal error");
 }
 
 capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *event) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     if (!worker || !event || event->struct_size < sizeof(capsid_event)) {
         return CAPSID_INVALID_ARGUMENT;
     }
     if (worker->ipc_metrics_enabled) {
         worker->ipc_metrics.next_event_calls.fetch_add(
                     1, std::memory_order_relaxed);
+    }
+    // §13.2: the hard timeout killed the worker with requests inflight;
+    // deliver the remaining terminal reasons before reporting the closed
+    // channel. The construction mirrors the timeout branch (all fields
+    // deterministic).
+    if (worker->closed && !worker->pending_timeouts.empty()) {
+        event->type = CAPSID_EVENT_REQUEST_TIMEOUT;
+        event->request_id = worker->pending_timeouts.front();
+        worker->pending_timeouts.erase(worker->pending_timeouts.begin());
+        event->flags = capsid::protocol::kErrorFlagTimeout;
+        event->status = 0;
+        event->credit = 0;
+        event->payload.data = NULL;
+        event->payload.size = 0;
+        return CAPSID_OK;
     }
     for (;;) {
         capsid::protocol::Frame frame;
@@ -1852,8 +2213,17 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                     worker->canceled_request_order.clear();
                     close(worker->fd);
                     worker->fd = -1;
+                    // §13.1: every event construction must leave the unused
+                    // fields at a deterministic value. next_event writes
+                    // only what an event needs, so a reuser of one
+                    // capsid_event would otherwise see a previous event's
+                    // flags/status/credit on EXIT (REQUEST_TIMEOUT zeroes
+                    // all three; EXIT must match).
                     event->type = CAPSID_EVENT_EXIT;
                     event->request_id = 0;
+                    event->flags = 0;
+                    event->status = 0;
+                    event->credit = 0;
                     event->payload.data = NULL;
                     event->payload.size = 0;
                     return CAPSID_OK;
@@ -1881,6 +2251,18 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                             close(worker->fd);
                             worker->fd = -1;
                             worker->closed = true;
+                            // §13.2: every request still inflight is gone
+                            // with the killed worker and must receive a
+                            // terminal reason. The timed-out id is reported
+                            // first; the rest drain as successive
+                            // REQUEST_TIMEOUT events in stable map order.
+                            worker->pending_timeouts.clear();
+                            for (const auto &entry : worker->requests) {
+                                if (entry.first != timed_out_id) {
+                                    worker->pending_timeouts.push_back(
+                                        entry.first);
+                                }
+                            }
                             worker->requests.clear();
                             worker->canceled_requests.clear();
                             worker->canceled_request_order.clear();
@@ -1929,14 +2311,22 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
         }
         return map_frame_to_event(worker, frame, event);
     }
+        },
+        "capsid_worker_next_event: out of memory",
+        "capsid_worker_next_event: internal error");
 }
 
 capsid_result capsid_worker_shutdown(capsid_worker *worker) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
     capsid::protocol::Frame frame;
     frame.type = capsid::protocol::kShutdown;
     frame.flags = 0;
     frame.request_id = 0;
     return queue_frame(worker, frame);
+        },
+        "capsid_worker_shutdown: out of memory",
+        "capsid_worker_shutdown: internal error");
 }
 
 capsid_result capsid_worker_terminate(capsid_worker *worker) {
@@ -1996,3 +2386,4 @@ capsid_result capsid_response_status_text(const capsid_event *event,
 }
 
 }  // extern "C"
+

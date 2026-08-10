@@ -1,0 +1,982 @@
+diff --git a/src/httpclient.c b/src/httpclient.c
+index 994db781..c0d8415a 100644
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -23,6 +23,7 @@
+  */
+ 
+ #include "private.h"
++#include "utils.h"
+ #include "version.h"
+ 
+ #include <string.h>
+@@ -47,6 +48,8 @@ enum {
+ typedef struct {
+     JSContext *ctx;
+     JSValue callbacks[HC_CALLBACK_MAX];
++    void *ctx_data; /* captured async context */
++    TJSRuntime *qrt; /* for defensive finalizer release */
+     JSValue this_val;
+     struct lws *wsi;
+     char *method;
+@@ -69,6 +72,12 @@ static JSClassID tjs_httpclient_class_id;
+ static void tjs_httpclient_finalizer(JSRuntime *rt, JSValue val) {
+     TJSHttpClient *h = JS_GetOpaque(val, tjs_httpclient_class_id);
+     if (h) {
++        /* defensive: the synchronous tjs_httpclient_done() path releases
++           at completed=true; GC can still collect an abandoned client */
++        if (h->ctx_data && h->qrt->async_ctx_hooks.release) {
++            h->qrt->async_ctx_hooks.release(h->ctx_data, h->qrt->async_ctx_opaque);
++            h->ctx_data = NULL;
++        }
+         for (int i = 0; i < HC_CALLBACK_MAX; i++) {
+             JS_FreeValueRT(rt, h->callbacks[i]);
+         }
+@@ -120,13 +129,23 @@ static void maybe_invoke_callback(TJSHttpClient *h, int callback, int argc, JSVa
+         return;
+     }
+ 
+-    tjs_call_handler(ctx, func, argc, argv);
++    tjs_call_handler_ctx(ctx, h->ctx_data, func, argc, argv);
+ 
+     for (int i = 0; i < argc; i++) {
+         JS_FreeValue(ctx, argv[i]);
+     }
+ }
+ 
++static void tjs_httpclient_done(TJSHttpClient *h) {
++    /* releases the captured async context exactly once, synchronously at
++       the completed=true transition point (never deferred to the GC
++       finalizer) — this is what lets a clean abort reuse the worker */
++    if (h->ctx_data) {
++        tjs_release_ctx(h->ctx, h->ctx_data);
++        h->ctx_data = NULL;
++    }
++}
++
+ 
+ typedef struct {
+     struct lws *wsi;
+@@ -500,6 +519,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+                 h->completed = true;
+                 JSValue error = JS_NULL;
+                 maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++                tjs_httpclient_done(h);
+             }
+             return -1;
+         }
+@@ -509,6 +529,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+                 h->completed = true;
+                 JSValue error = JS_NewString(h->ctx, "TIMED_OUT");
+                 maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++                tjs_httpclient_done(h);
+             }
+             return -1;
+         }
+@@ -535,6 +556,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+                     JSValue error = JS_NewString(h->ctx, "CONNECTION_CLOSED");
+                     maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+                 }
++                tjs_httpclient_done(h);
+             }
+ 
+             /* Drop the prevent-GC reference.  The GC finalizer will free
+@@ -573,6 +595,14 @@ static JSValue tjs_httpclient_constructor(JSContext *ctx, JSValue new_target, in
+     }
+ 
+     h->ctx = ctx;
++    h->qrt = TJS_GetRuntime(ctx);
++    h->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &h->ctx_data) < 0) {
++        /* unreachable in the capsid embedder; minimal teardown otherwise */
++        js_free(ctx, h);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+     h->url = JS_NULL;
+     h->this_val = JS_UNDEFINED;
+     tbuf_init(ctx, &h->req_headers);
+@@ -881,6 +911,7 @@ static JSValue tjs_httpclient_abort(JSContext *ctx, JSValue this_val, int argc,
+ 
+         JSValue error = JS_NewString(ctx, "ABORTED");
+         maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++        tjs_httpclient_done(h);
+ 
+         /* Mark the wsi to be killed at the next timeout check.  abort()
+          * is reachable from inside a lws callback for this very wsi (JS
+diff --git a/src/private.h b/src/private.h
+index e27ecf5a..bd0d8845 100644
+--- a/src/private.h
++++ b/src/private.h
+@@ -28,6 +28,7 @@
+ #include "list.h"
+ #include "tbuf.h"
+ #include "tjs.h"
++#include "utils.h"
+ 
+ #include <libwebsockets.h>
+ #include <mbedtls/x509_crt.h>
+@@ -81,6 +82,8 @@ struct TJSRuntime {
+     bool is_worker;
+     bool freeing;
+     bool draining_microtasks;
++    TJSAsyncContextHooks async_ctx_hooks;
++    void *async_ctx_opaque;
+ #ifdef TJS_HAVE_WASM
+     struct {
+         bool initialized;
+diff --git a/src/timers.c b/src/timers.c
+index 19fbe458..94faa0bc 100644
+--- a/src/timers.c
++++ b/src/timers.c
+@@ -35,6 +35,7 @@ struct TJSTimer {
+     uv_timer_t handle;
+     UT_hash_handle hh;
+     int interval;
++    void *ctx_data; /* captured async context */
+     JSValue func;
+     int argc;
+     JSValue argv[];
+@@ -48,6 +49,8 @@ static void uv__timer_close(uv_handle_t *handle) {
+ 
+ static void destroy_timer(TJSTimer *th) {
+     JSContext *ctx = th->ctx;
++    tjs_release_ctx(ctx, th->ctx_data);
++    th->ctx_data = NULL;
+     TJSRuntime *qrt = JS_GetContextOpaque(ctx);
+     CHECK_NOT_NULL(qrt);
+ 
+@@ -84,7 +87,7 @@ static void uv__timer_cb(uv_timer_t *handle) {
+         return;
+     }
+ 
+-    tjs_call_handler(th->ctx, th->func, th->argc, th->argv);
++    tjs_call_handler_ctx(th->ctx, th->ctx_data, th->func, th->argc, th->argv);
+ 
+     if (uv_is_closing((uv_handle_t *) handle)) {
+         return;
+@@ -130,6 +133,13 @@ static JSValue tjs_setTimeout(JSContext *ctx, JSValue this_val, int argc, JSValu
+     }
+ 
+     th->ctx = ctx;
++    th->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &th->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always yields a
++           context); minimal teardown for upstream embedders */
++        tjs__free(th);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     CHECK_EQ(uv_timer_init(tjs_get_loop(ctx), &th->handle), 0);
+     th->handle.data = th;
+     th->interval = magic;
+diff --git a/src/utils.c b/src/utils.c
+index 6553d6ba..40dcfb8a 100644
+--- a/src/utils.c
++++ b/src/utils.c
+@@ -197,22 +197,95 @@ void tjs_call_handler(JSContext *ctx, JSValue func, int argc, JSValue *argv) {
+     tjs__drain_microtasks(ctx);
+ }
+ 
++void tjs_set_async_context_hooks(JSContext *ctx, const TJSAsyncContextHooks *hooks, void *opaque) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    CHECK_NOT_NULL(qrt);
++    if (hooks) {
++        qrt->async_ctx_hooks = *hooks;
++    } else {
++        memset(&qrt->async_ctx_hooks, 0, sizeof(qrt->async_ctx_hooks));
++    }
++    qrt->async_ctx_opaque = opaque;
++}
++
++int tjs_capture_ctx(JSContext *ctx, void **out_ctx_data) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    *out_ctx_data = NULL;
++    if (qrt->async_ctx_hooks.capture) {
++        return qrt->async_ctx_hooks.capture(ctx, qrt->async_ctx_opaque, out_ctx_data);
++    }
++    return 0;
++}
++
++void tjs_enter_ctx(JSContext *ctx, void *ctx_data, void **prev) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    *prev = NULL;
++    if (ctx_data && qrt->async_ctx_hooks.enter) {
++        *prev = qrt->async_ctx_hooks.enter(ctx, ctx_data, qrt->async_ctx_opaque);
++    }
++}
++
++void tjs_leave_ctx(JSContext *ctx, void **prev) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (qrt->async_ctx_hooks.leave) {
++        qrt->async_ctx_hooks.leave(ctx, *prev, qrt->async_ctx_opaque);
++    }
++}
++
++void tjs_release_ctx(JSContext *ctx, void *ctx_data) {
++    if (!ctx_data) {
++        return;
++    }
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (qrt->async_ctx_hooks.release) {
++        qrt->async_ctx_hooks.release(ctx_data, qrt->async_ctx_opaque);
++    }
++}
++
++void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv) {
++    if (!ctx_data) {
++        tjs_call_handler(ctx, func, argc, argv);
++        return;
++    }
++    void *prev = NULL;
++    tjs_enter_ctx(ctx, ctx_data, &prev);
++    tjs_call_handler(ctx, func, argc, argv);
++    tjs_leave_ctx(ctx, &prev);
++}
++
+ JSValue TJS_InitPromise(JSContext *ctx, TJSPromise *p) {
++    p->ctx_data = NULL;
+     p->p = JS_NewPromiseCapability(ctx, p->rfuncs);
+     if (JS_IsException(p->p)) {
+         return JS_EXCEPTION;
+     }
++    if (tjs_capture_ctx(ctx, &p->ctx_data) < 0) {
++        JS_FreeValue(ctx, p->p);
++        JS_FreeValue(ctx, p->rfuncs[0]);
++        JS_FreeValue(ctx, p->rfuncs[1]);
++        p->p = JS_UNDEFINED;
++        p->rfuncs[0] = JS_UNDEFINED;
++        p->rfuncs[1] = JS_UNDEFINED;
++        return JS_EXCEPTION;
++    }
+     return JS_DupValue(ctx, p->p);
+ }
+ 
+ void TJS_ClearPromise(JSContext *ctx, TJSPromise *p) {
++    tjs_release_ctx(ctx, p->ctx_data);
++    p->ctx_data = NULL;
+     p->p = JS_UNDEFINED;
+     p->rfuncs[0] = JS_UNDEFINED;
+     p->rfuncs[1] = JS_UNDEFINED;
+ }
+ 
+ void TJS_SettlePromise(JSContext *ctx, TJSPromise *p, bool is_reject, JSValue arg) {
++    /* enter the owning async context so reaction jobs enqueued by the
++       settle call capture it (native callbacks run outside JS) */
++    void *prev = NULL;
++    tjs_enter_ctx(ctx, p->ctx_data, &prev);
+     JSValue ret = JS_Call(ctx, p->rfuncs[is_reject], JS_UNDEFINED, 1, &arg);
++    tjs_leave_ctx(ctx, &prev);
+     JS_FreeValue(ctx, arg);
+     JS_FreeValue(ctx, ret); /* XXX: what to do if exception ? */
+     JS_FreeValue(ctx, p->rfuncs[0]);
+diff --git a/src/utils.h b/src/utils.h
+index e4287a44..da819064 100644
+--- a/src/utils.h
++++ b/src/utils.h
+@@ -141,12 +141,37 @@ uv_loop_t *tjs_get_loop(JSContext *ctx);
+ int tjs_obj2addr(JSContext *ctx, JSValue obj, struct sockaddr_storage *ss);
+ void tjs_addr2obj(JSContext *ctx, JSValue obj, const struct sockaddr *sa, bool skip_port);
+ void tjs_call_handler(JSContext *ctx, JSValue func, int argc, JSValue *argv);
++
++/* async context hooks: mirror JSJobContextHooks (deps/quickjs) at the txiki
++   layer, so native resources (timers, httpclient, webcrypto ops) can capture
++   and re-enter the owning async context across libuv callbacks. Not
++   installed -> upstream behavior unchanged. */
++typedef struct TJSAsyncContextHooks {
++    /* called when a native resource captures the current context. *out may
++       be set to a context or left NULL ("no owner"). returns -1 to fail. */
++    int (*capture)(JSContext *ctx, void *opaque, void **out_ctx_data);
++    /* called before running a callback owned by ctx_data; must return the
++       previous context (or NULL) so leave can restore it. */
++    void *(*enter)(JSContext *ctx, void *ctx_data, void *opaque);
++    /* called after the callback on all return paths; restores previous. */
++    void (*leave)(JSContext *ctx, void *previous_context, void *opaque);
++    /* called once when the resource no longer holds the context. */
++    void (*release)(void *ctx_data, void *opaque);
++} TJSAsyncContextHooks;
++
++void tjs_set_async_context_hooks(JSContext *ctx, const TJSAsyncContextHooks *hooks, void *opaque);
++int tjs_capture_ctx(JSContext *ctx, void **out_ctx_data);
++void tjs_enter_ctx(JSContext *ctx, void *ctx_data, void **prev);
++void tjs_leave_ctx(JSContext *ctx, void **prev);
++void tjs_release_ctx(JSContext *ctx, void *ctx_data);
++void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv);
+ void tjs_dump_error(JSContext *ctx);
+ void tjs_dump_error1(JSContext *ctx, JSValue exception_val);
+ 
+ typedef struct {
+     JSValue p;
+     JSValue rfuncs[2];
++    void *ctx_data; /* captured async context, released in TJS_ClearPromise */
+ } TJSPromise;
+ 
+ JSValue TJS_InitPromise(JSContext *ctx, TJSPromise *p);
+diff --git a/src/webcrypto.c b/src/webcrypto.c
+index 42066175..cced2c8f 100644
+--- a/src/webcrypto.c
++++ b/src/webcrypto.c
+@@ -62,6 +62,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int type;
+     TJSBufferRef data_ref;
+     uint8_t digest[64]; /* Max digest size (SHA-512). */
+@@ -149,7 +150,9 @@ static void tjs__digest_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, dr->digest, dr->digest_len);
+     }
+ 
+-    tjs_call_handler(ctx, dr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, dr->ctx_data, dr->callback, 2, args);
++    tjs_release_ctx(ctx, dr->ctx_data);
++    dr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -183,6 +186,15 @@ static JSValue tjs_webcrypto_digest(JSContext *ctx, JSValue this_val, int argc,
+ 
+     dr->ctx = ctx;
+     dr->callback = JS_DupValue(ctx, argv[2]);
++    dr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &dr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, dr->callback);
++        dr->callback = JS_UNDEFINED;
++        js_free(ctx, dr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     dr->type = type;
+     dr->digest_len = digest_sizes[type];
+     dr->r = -1;
+@@ -223,6 +235,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int type;
+     TJSBufferRef key_ref;
+     TJSBufferRef data_ref;
+@@ -259,7 +272,9 @@ static void tjs__hmac_sign_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, hr->digest, hr->digest_len);
+     }
+ 
+-    tjs_call_handler(ctx, hr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, hr->ctx_data, hr->callback, 2, args);
++    tjs_release_ctx(ctx, hr->ctx_data);
++    hr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -294,6 +309,15 @@ static JSValue tjs_webcrypto_hmac_sign(JSContext *ctx, JSValue this_val, int arg
+ 
+     hr->ctx = ctx;
+     hr->callback = JS_DupValue(ctx, argv[3]);
++    hr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &hr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, hr->callback);
++        hr->callback = JS_UNDEFINED;
++        js_free(ctx, hr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     hr->type = type;
+     hr->digest_len = digest_sizes[type];
+     hr->r = -1;
+@@ -354,6 +378,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int cipher_type;
+     int operation;
+     TJSBufferRef key_ref;
+@@ -545,7 +570,9 @@ static void tjs__cipher_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, cr->output, cr->output_len);
+     }
+ 
+-    tjs_call_handler(ctx, cr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, cr->ctx_data, cr->callback, 2, args);
++    tjs_release_ctx(ctx, cr->ctx_data);
++    cr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -590,6 +617,15 @@ static JSValue tjs_webcrypto_cipher(JSContext *ctx, JSValue this_val, int argc,
+     memset(cr, 0, sizeof(*cr));
+     cr->ctx = ctx;
+     cr->callback = JS_DupValue(ctx, argv[7]);
++    cr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &cr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, cr->callback);
++        cr->callback = JS_UNDEFINED;
++        js_free(ctx, cr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     cr->cipher_type = cipher_type;
+     cr->operation = operation;
+     cr->tag_length = tag_length;
+@@ -661,6 +697,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int type;
+     TJSBufferRef password_ref;
+     TJSBufferRef salt_ref;
+@@ -697,7 +734,9 @@ static void tjs__pbkdf2_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, pr->output, pr->key_length);
+     }
+ 
+-    tjs_call_handler(ctx, pr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, pr->ctx_data, pr->callback, 2, args);
++    tjs_release_ctx(ctx, pr->ctx_data);
++    pr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -744,6 +783,15 @@ static JSValue tjs_webcrypto_pbkdf2(JSContext *ctx, JSValue this_val, int argc,
+     memset(pr, 0, sizeof(*pr));
+     pr->ctx = ctx;
+     pr->callback = JS_DupValue(ctx, argv[5]);
++    pr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &pr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, pr->callback);
++        pr->callback = JS_UNDEFINED;
++        js_free(ctx, pr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     pr->type = type;
+     pr->iterations = iterations;
+     pr->key_length = key_length;
+@@ -802,6 +850,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int type;
+     TJSBufferRef ikm_ref;
+     TJSBufferRef salt_ref;
+@@ -846,7 +895,9 @@ static void tjs__hkdf_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, hr->output, hr->key_length);
+     }
+ 
+-    tjs_call_handler(ctx, hr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, hr->ctx_data, hr->callback, 2, args);
++    tjs_release_ctx(ctx, hr->ctx_data);
++    hr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -889,6 +940,15 @@ static JSValue tjs_webcrypto_hkdf(JSContext *ctx, JSValue this_val, int argc, JS
+     memset(hkr, 0, sizeof(*hkr));
+     hkr->ctx = ctx;
+     hkr->callback = JS_DupValue(ctx, argv[5]);
++    hkr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &hkr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, hkr->callback);
++        hkr->callback = JS_UNDEFINED;
++        js_free(ctx, hkr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     hkr->type = type;
+     hkr->key_length = key_length;
+     hkr->r = -1;
+@@ -972,6 +1032,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int curve;
+     uint8_t *privkey;
+     size_t privkey_len;
+@@ -1026,7 +1087,9 @@ static void tjs__ec_generate_key_after_work_cb(uv_work_t *req, int status) {
+         args[2] = JS_NewUint8ArrayCopy(ctx, er->pubkey, er->pubkey_len);
+     }
+ 
+-    tjs_call_handler(ctx, er->callback, 3, args);
++    tjs_call_handler_ctx(ctx, er->ctx_data, er->callback, 3, args);
++    tjs_release_ctx(ctx, er->ctx_data);
++    er->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -1065,6 +1128,15 @@ static JSValue tjs_webcrypto_ec_generate_key(JSContext *ctx, JSValue this_val, i
+     memset(er, 0, sizeof(*er));
+     er->ctx = ctx;
+     er->callback = JS_DupValue(ctx, argv[1]);
++    er->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &er->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, er->callback);
++        er->callback = JS_UNDEFINED;
++        js_free(ctx, er);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     er->curve = curve;
+     er->privkey_len = key_size;
+     er->pubkey_len = 1 + 2 * key_size;
+@@ -1103,6 +1175,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int curve;
+     int hash_type;
+     TJSBufferRef privkey_ref;
+@@ -1185,7 +1258,9 @@ static void tjs__ecdsa_sign_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, sr->signature, sr->sig_len);
+     }
+ 
+-    tjs_call_handler(ctx, sr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, sr->ctx_data, sr->callback, 2, args);
++    tjs_release_ctx(ctx, sr->ctx_data);
++    sr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -1233,6 +1308,15 @@ static JSValue tjs_webcrypto_ecdsa_sign(JSContext *ctx, JSValue this_val, int ar
+     memset(sr, 0, sizeof(*sr));
+     sr->ctx = ctx;
+     sr->callback = JS_DupValue(ctx, argv[4]);
++    sr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &sr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, sr->callback);
++        sr->callback = JS_UNDEFINED;
++        js_free(ctx, sr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     sr->curve = curve;
+     sr->hash_type = hash_type;
+     sr->sig_len = 2 * key_size;
+@@ -1277,6 +1361,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int curve;
+     int hash_type;
+     TJSBufferRef pubkey_ref;
+@@ -1364,7 +1449,9 @@ static void tjs__ecdsa_verify_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewBool(ctx, vr->r == 0);
+     }
+ 
+-    tjs_call_handler(ctx, vr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, vr->ctx_data, vr->callback, 2, args);
++    tjs_release_ctx(ctx, vr->ctx_data);
++    vr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -1410,6 +1497,15 @@ static JSValue tjs_webcrypto_ecdsa_verify(JSContext *ctx, JSValue this_val, int
+     memset(vr, 0, sizeof(*vr));
+     vr->ctx = ctx;
+     vr->callback = JS_DupValue(ctx, argv[5]);
++    vr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &vr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, vr->callback);
++        vr->callback = JS_UNDEFINED;
++        js_free(ctx, vr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     vr->curve = curve;
+     vr->hash_type = hash_type;
+     vr->r = -1;
+@@ -1458,6 +1554,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int curve;
+     TJSBufferRef privkey_ref;
+     TJSBufferRef pubkey_ref;
+@@ -1522,7 +1619,9 @@ static void tjs__ecdh_derive_bits_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, dr->output, dr->output_len);
+     }
+ 
+-    tjs_call_handler(ctx, dr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, dr->ctx_data, dr->callback, 2, args);
++    tjs_release_ctx(ctx, dr->ctx_data);
++    dr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -1559,6 +1658,15 @@ static JSValue tjs_webcrypto_ecdh_derive_bits(JSContext *ctx, JSValue this_val,
+     memset(dr, 0, sizeof(*dr));
+     dr->ctx = ctx;
+     dr->callback = JS_DupValue(ctx, argv[3]);
++    dr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &dr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, dr->callback);
++        dr->callback = JS_UNDEFINED;
++        js_free(ctx, dr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     dr->curve = curve;
+     dr->output_len = curve_byte_sizes[curve];
+     dr->r = -1;
+@@ -1606,6 +1714,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     uint32_t modulus_length;
+     int exponent;
+     uint8_t *privkey_der;
+@@ -1707,7 +1816,9 @@ static void tjs__rsa_generate_key_after_work_cb(uv_work_t *req, int status) {
+         args[2] = JS_NewUint8ArrayCopy(ctx, rr->pubkey_der, rr->pubkey_der_len);
+     }
+ 
+-    tjs_call_handler(ctx, rr->callback, 3, args);
++    tjs_call_handler_ctx(ctx, rr->ctx_data, rr->callback, 3, args);
++    tjs_release_ctx(ctx, rr->ctx_data);
++    rr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -1756,6 +1867,15 @@ static JSValue tjs_webcrypto_rsa_generate_key(JSContext *ctx, JSValue this_val,
+     memset(rr, 0, sizeof(*rr));
+     rr->ctx = ctx;
+     rr->callback = JS_DupValue(ctx, argv[2]);
++    rr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &rr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, rr->callback);
++        rr->callback = JS_UNDEFINED;
++        js_free(ctx, rr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     rr->modulus_length = modulus_length;
+     rr->exponent = exponent;
+     rr->r = -1;
+@@ -1779,6 +1899,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int hash_type;
+     TJSBufferRef pubkey_der_ref;
+     TJSBufferRef data_ref;
+@@ -1838,7 +1959,9 @@ static void tjs__rsa_oaep_encrypt_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, er->output, er->output_len);
+     }
+ 
+-    tjs_call_handler(ctx, er->callback, 2, args);
++    tjs_call_handler_ctx(ctx, er->ctx_data, er->callback, 2, args);
++    tjs_release_ctx(ctx, er->ctx_data);
++    er->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -1876,6 +1999,15 @@ static JSValue tjs_webcrypto_rsa_oaep_encrypt(JSContext *ctx, JSValue this_val,
+     memset(er, 0, sizeof(*er));
+     er->ctx = ctx;
+     er->callback = JS_DupValue(ctx, argv[4]);
++    er->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &er->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, er->callback);
++        er->callback = JS_UNDEFINED;
++        js_free(ctx, er);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     er->hash_type = hash_type;
+     er->r = -1;
+     tjs_buf_ref_init(&er->pubkey_der_ref);
+@@ -1922,6 +2054,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int hash_type;
+     TJSBufferRef privkey_der_ref;
+     TJSBufferRef data_ref;
+@@ -1984,7 +2117,9 @@ static void tjs__rsa_oaep_decrypt_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, dr->output, dr->output_len);
+     }
+ 
+-    tjs_call_handler(ctx, dr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, dr->ctx_data, dr->callback, 2, args);
++    tjs_release_ctx(ctx, dr->ctx_data);
++    dr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -2022,6 +2157,15 @@ static JSValue tjs_webcrypto_rsa_oaep_decrypt(JSContext *ctx, JSValue this_val,
+     memset(dr, 0, sizeof(*dr));
+     dr->ctx = ctx;
+     dr->callback = JS_DupValue(ctx, argv[4]);
++    dr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &dr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, dr->callback);
++        dr->callback = JS_UNDEFINED;
++        js_free(ctx, dr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     dr->hash_type = hash_type;
+     dr->r = -1;
+     tjs_buf_ref_init(&dr->privkey_der_ref);
+@@ -2068,6 +2212,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int padding_mode;
+     int hash_type;
+     int salt_length;
+@@ -2154,7 +2299,9 @@ static void tjs__rsa_sign_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, sr->signature, sr->sig_len);
+     }
+ 
+-    tjs_call_handler(ctx, sr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, sr->ctx_data, sr->callback, 2, args);
++    tjs_release_ctx(ctx, sr->ctx_data);
++    sr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -2202,6 +2349,15 @@ static JSValue tjs_webcrypto_rsa_sign(JSContext *ctx, JSValue this_val, int argc
+     memset(sr, 0, sizeof(*sr));
+     sr->ctx = ctx;
+     sr->callback = JS_DupValue(ctx, argv[5]);
++    sr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &sr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, sr->callback);
++        sr->callback = JS_UNDEFINED;
++        js_free(ctx, sr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     sr->padding_mode = padding_mode;
+     sr->hash_type = hash_type;
+     sr->salt_length = salt_length;
+@@ -2240,6 +2396,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     int padding_mode;
+     int hash_type;
+     int salt_length;
+@@ -2311,7 +2468,9 @@ static void tjs__rsa_verify_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewBool(ctx, vr->r == 0);
+     }
+ 
+-    tjs_call_handler(ctx, vr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, vr->ctx_data, vr->callback, 2, args);
++    tjs_release_ctx(ctx, vr->ctx_data);
++    vr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -2360,6 +2519,15 @@ static JSValue tjs_webcrypto_rsa_verify(JSContext *ctx, JSValue this_val, int ar
+     memset(vr, 0, sizeof(*vr));
+     vr->ctx = ctx;
+     vr->callback = JS_DupValue(ctx, argv[6]);
++    vr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &vr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, vr->callback);
++        vr->callback = JS_UNDEFINED;
++        js_free(ctx, vr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     vr->padding_mode = padding_mode;
+     vr->hash_type = hash_type;
+     vr->salt_length = salt_length;
+@@ -3015,6 +3183,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     uint8_t seed[32];
+     uint8_t privkey[32];
+     uint8_t pubkey[32];
+@@ -3053,7 +3222,9 @@ static void tjs__ed25519_generate_key_after_work_cb(uv_work_t *req, int status)
+         args[2] = JS_NewUint8ArrayCopy(ctx, er->pubkey, 32);
+     }
+ 
+-    tjs_call_handler(ctx, er->callback, 3, args);
++    tjs_call_handler_ctx(ctx, er->ctx_data, er->callback, 3, args);
++    tjs_release_ctx(ctx, er->ctx_data);
++    er->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -3079,6 +3250,15 @@ static JSValue tjs_webcrypto_ed25519_generate_key(JSContext *ctx, JSValue this_v
+     memset(er, 0, sizeof(*er));
+     er->ctx = ctx;
+     er->callback = JS_DupValue(ctx, argv[0]);
++    er->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &er->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, er->callback);
++        er->callback = JS_UNDEFINED;
++        js_free(ctx, er);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     er->r = -1;
+ 
+     er->req.data = er;
+@@ -3102,6 +3282,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     TJSBufferRef privkey_ref;
+     TJSBufferRef message_ref;
+     uint8_t signature[64];
+@@ -3143,7 +3324,9 @@ static void tjs__ed25519_sign_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, sr->signature, 64);
+     }
+ 
+-    tjs_call_handler(ctx, sr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, sr->ctx_data, sr->callback, 2, args);
++    tjs_release_ctx(ctx, sr->ctx_data);
++    sr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -3170,6 +3353,15 @@ static JSValue tjs_webcrypto_ed25519_sign(JSContext *ctx, JSValue this_val, int
+     memset(sr, 0, sizeof(*sr));
+     sr->ctx = ctx;
+     sr->callback = JS_DupValue(ctx, argv[2]);
++    sr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &sr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, sr->callback);
++        sr->callback = JS_UNDEFINED;
++        js_free(ctx, sr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     sr->r = -1;
+     tjs_buf_ref_init(&sr->privkey_ref);
+     tjs_buf_ref_init(&sr->message_ref);
+@@ -3210,6 +3402,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     TJSBufferRef pubkey_ref;
+     TJSBufferRef sig_ref;
+     TJSBufferRef message_ref;
+@@ -3254,7 +3447,9 @@ static void tjs__ed25519_verify_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewBool(ctx, vr->r == 0);
+     }
+ 
+-    tjs_call_handler(ctx, vr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, vr->ctx_data, vr->callback, 2, args);
++    tjs_release_ctx(ctx, vr->ctx_data);
++    vr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -3282,6 +3477,15 @@ static JSValue tjs_webcrypto_ed25519_verify(JSContext *ctx, JSValue this_val, in
+     memset(vr, 0, sizeof(*vr));
+     vr->ctx = ctx;
+     vr->callback = JS_DupValue(ctx, argv[3]);
++    vr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &vr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, vr->callback);
++        vr->callback = JS_UNDEFINED;
++        js_free(ctx, vr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     vr->r = -1;
+     tjs_buf_ref_init(&vr->pubkey_ref);
+     tjs_buf_ref_init(&vr->sig_ref);
+@@ -3355,6 +3559,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     uint8_t privkey[32];
+     uint8_t pubkey[32];
+     int r;
+@@ -3390,7 +3595,9 @@ static void tjs__x25519_generate_key_after_work_cb(uv_work_t *req, int status) {
+         args[2] = JS_NewUint8ArrayCopy(ctx, xr->pubkey, 32);
+     }
+ 
+-    tjs_call_handler(ctx, xr->callback, 3, args);
++    tjs_call_handler_ctx(ctx, xr->ctx_data, xr->callback, 3, args);
++    tjs_release_ctx(ctx, xr->ctx_data);
++    xr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -3412,6 +3619,15 @@ static JSValue tjs_webcrypto_x25519_generate_key(JSContext *ctx, JSValue this_va
+     memset(xr, 0, sizeof(*xr));
+     xr->ctx = ctx;
+     xr->callback = JS_DupValue(ctx, argv[0]);
++    xr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &xr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, xr->callback);
++        xr->callback = JS_UNDEFINED;
++        js_free(ctx, xr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     xr->r = -1;
+     xr->req.data = xr;
+ 
+@@ -3434,6 +3650,7 @@ typedef struct {
+     uv_work_t req;
+     JSContext *ctx;
+     JSValue callback;
++    void *ctx_data; /* captured async context */
+     uint8_t privkey[32];
+     uint8_t pubkey[32];
+     uint8_t shared[32];
+@@ -3461,7 +3678,9 @@ static void tjs__x25519_derive_bits_after_work_cb(uv_work_t *req, int status) {
+         args[1] = JS_NewUint8ArrayCopy(ctx, dr->shared, 32);
+     }
+ 
+-    tjs_call_handler(ctx, dr->callback, 2, args);
++    tjs_call_handler_ctx(ctx, dr->ctx_data, dr->callback, 2, args);
++    tjs_release_ctx(ctx, dr->ctx_data);
++    dr->ctx_data = NULL;
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -3504,6 +3723,15 @@ static JSValue tjs_webcrypto_x25519_derive_bits(JSContext *ctx, JSValue this_val
+     memset(dr, 0, sizeof(*dr));
+     dr->ctx = ctx;
+     dr->callback = JS_DupValue(ctx, argv[2]);
++    dr->ctx_data = NULL;
++    if (tjs_capture_ctx(ctx, &dr->ctx_data) < 0) {
++        /* unreachable in the capsid embedder (capture always
++           yields a context); minimal teardown otherwise */
++        JS_FreeValue(ctx, dr->callback);
++        dr->callback = JS_UNDEFINED;
++        js_free(ctx, dr);
++        return JS_ThrowInternalError(ctx, "cannot capture async context");
++    }
+     dr->r = -1;
+     memcpy(dr->privkey, privkey, 32);
+     memcpy(dr->pubkey, pubkey, 32);

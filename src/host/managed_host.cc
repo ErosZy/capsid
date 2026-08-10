@@ -15,6 +15,7 @@
 #include "host/artifact_safe_read.h"
 #include "host/config.h"
 #include "host/generation_identity.h"
+#include "host/managed_registry.h"
 #include "host/secret_file_provider.h"
 #include "host/secret_snapshot.h"
 #include "host/worker_event_source.h"
@@ -178,54 +179,10 @@ std::string unique_operation_id() {
     return out.str();
 }
 
-// In-process operation registry: operation_id -> latest recorded status.
-// Deploy/retire/recovery record their outcome here once the operation
-// settles; managed_operation_status() reads the record. The registry is
-// mutex-guarded because operations may be recorded and queried from
-// different threads.
-std::mutex& operation_registry_mutex() {
-    static std::mutex mutex;
-    return mutex;
-}
-std::map<std::string, OperationStatus>& operation_registry() {
-    static std::map<std::string, OperationStatus> registry;
-    return registry;
-}
-
-void record_operation(const std::string& operation_id,
-                      const OperationStatus& status) {
-    std::lock_guard<std::mutex> lock(operation_registry_mutex());
-    operation_registry()[operation_id] = status;
-}
-
-bool lookup_operation(const std::string& operation_id,
-                      OperationStatus* out) {
-    std::lock_guard<std::mutex> lock(operation_registry_mutex());
-    const std::map<std::string, OperationStatus>::const_iterator found =
-        operation_registry().find(operation_id);
-    if (found == operation_registry().end()) {
-        return false;
-    }
-    *out = found->second;
-    return true;
-}
-
-// Per-App mutex serializing deploy/retire/recover state transitions.
-// Operations on the same App share staging, versions, generations and
-// active.json; their read-modify-write sequences must not interleave.
-// Different Apps proceed in parallel. The table itself is guarded by a
-// static mutex; slots are never removed, so the returned reference stays
-// valid for the process lifetime.
-std::mutex& app_operation_mutex(const std::string& application) {
-    static std::mutex table_mutex;
-    static std::map<std::string, std::unique_ptr<std::mutex>> table;
-    std::lock_guard<std::mutex> lock(table_mutex);
-    std::unique_ptr<std::mutex>& slot = table[application];
-    if (!slot) {
-        slot = std::make_unique<std::mutex>();
-    }
-    return *slot;
-}
+// In-process operation registry and per-App operation locks moved to
+// host/managed_registry.{h,cc} (spec §13.4): bounded by TTL + hard cap
+// instead of growing without bound under an unbounded set of operation ids
+// or application names.
 
 // ---- worker warm-up: spawn, load, READY, compatibility check ----
 
@@ -235,13 +192,22 @@ struct WarmResult {
     std::string error;  // static text
 };
 
-WarmResult warm_worker(const ManagedHostOptions& options,
-                       const std::vector<std::uint8_t>& bundle,
-                       bool trusted_bytecode,
-                       const std::string& source_name,
-                       const EffectiveConfig& effective,
-                       const std::vector<std::pair<std::string, std::string>>& env_values) {
-    WarmResult out;
+// Spawn + load + ONE flush. The worker is up with its bundle loaded, but
+// READY has NOT been consumed: the deploy/recover warm-up consumes it with
+// the compatibility check (warm_worker), while the generation replacement
+// factory hands the worker to a WorkerExecutor whose start() consumes READY
+// and checks the compatibility id itself (PR-09c §8.3/§9.3). On failure the
+// worker is destroyed and nullptr is returned — a half-started worker never
+// escapes.
+capsid_worker* spawn_loaded_worker(
+    const ManagedHostOptions& options,
+    const std::vector<std::uint8_t>& bundle,
+    bool trusted_bytecode,
+    const std::string& source_name,
+    const EffectiveConfig& effective,
+    const std::vector<std::pair<std::string, std::string>>& env_values,
+    std::string* error) {
+    capsid_worker* worker = nullptr;
     // ---- two-phase descriptor build ----
     // Every owning std::vector is fully populated before any pointer into
     // it is taken. A c_str() taken after one push_back and read after a
@@ -276,8 +242,8 @@ WarmResult warm_worker(const ManagedHostOptions& options,
         // The policy compiler assigns a stable non-zero rule id per entry;
         // the Runtime rejects a zero or duplicate id across the policy.
         if (entry.rule_id == 0) {
-            out.error = "missing env rule id";
-            return out;
+            *error = "missing env rule id";
+            return nullptr;
         }
         capsid_permission_rule rule;
         capsid_permission_rule_init(&rule);
@@ -294,8 +260,8 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                 ? effective.fs_rule_ids[index]
                 : 0;
         if (rule_id == 0) {
-            out.error = "missing fs rule id";
-            return out;
+            *error = "missing fs rule id";
+            return nullptr;
         }
         capsid_permission_rule rule;
         capsid_permission_rule_init(&rule);
@@ -317,8 +283,8 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                 ? effective.storage_rule_ids[index]
                 : 0;
         if (rule_id == 0) {
-            out.error = "missing storage rule id";
-            return out;
+            *error = "missing storage rule id";
+            return nullptr;
         }
         capsid_permission_rule rule;
         capsid_permission_rule_init(&rule);
@@ -336,8 +302,8 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                 ? effective.stdio_rule_ids[index]
                 : 0;
         if (rule_id == 0) {
-            out.error = "missing stdio rule id";
-            return out;
+            *error = "missing stdio rule id";
+            return nullptr;
         }
         capsid_permission_rule rule;
         capsid_permission_rule_init(&rule);
@@ -459,8 +425,8 @@ WarmResult warm_worker(const ManagedHostOptions& options,
     if (effective.file_descriptors > 0) {
         if (effective.file_descriptors >
             std::numeric_limits<std::uint32_t>::max()) {
-            out.error = "file descriptor limit exceeds the worker window";
-            return out;
+            *error = "file descriptor limit exceeds the worker window";
+            return nullptr;
         }
         limits.enabled_fields |= CAPSID_RESOURCE_LIMIT_FILE_DESCRIPTORS;
         limits.file_descriptors =
@@ -470,32 +436,61 @@ WarmResult warm_worker(const ManagedHostOptions& options,
     if (effective.requests_per_worker > 0) {
         if (effective.requests_per_worker >
             static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
-            out.error = "request limit exceeds the worker window";
-            return out;
+            *error = "request limit exceeds the worker window";
+            return nullptr;
         }
         config.max_inflight_requests =
             static_cast<std::uint32_t>(effective.requests_per_worker);
     }
     config.strict_sandbox = effective.strict_sandbox ? 1 : 0;
-    const capsid_result spawn_result = capsid_worker_spawn(&config, &out.worker);
+    const capsid_result spawn_result = capsid_worker_spawn(&config, &worker);
     if (spawn_result != CAPSID_OK) {
-        out.error = "worker spawn failed";
-        return out;
+        *error = "worker spawn failed";
+        return nullptr;
     }
     capsid::host::WorkerEventSource event_source;
-    event_source.set_worker(out.worker);
+    event_source.set_worker(worker);
     const capsid_result load_result =
         trusted_bytecode
             ? capsid_worker_load_trusted_bytecode_named(
-                  out.worker, bundle.data(), bundle.size(), source_name.c_str())
+                  worker, bundle.data(), bundle.size(), source_name.c_str())
             : capsid_worker_load_bundle_named(
-                  out.worker, bundle.data(), bundle.size(), source_name.c_str());
+                  worker, bundle.data(), bundle.size(), source_name.c_str());
     if (load_result != CAPSID_OK) {
-        capsid_worker_destroy(out.worker);
-        out.worker = nullptr;
-        out.error = "worker bundle load failed";
+        capsid_worker_destroy(worker);
+        *error = "worker bundle load failed";
+        return nullptr;
+    }
+    // One flush: the loader may already have posted READY; the consumer's
+    // drain loop observes it on its own next flush.
+    const capsid_result flush = capsid_worker_flush(worker);
+    if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
+        capsid_worker_destroy(worker);
+        *error = "worker flush failed";
+        return nullptr;
+    }
+    return worker;
+}
+
+WarmResult warm_worker(const ManagedHostOptions& options,
+                       const std::vector<std::uint8_t>& bundle,
+                       bool trusted_bytecode,
+                       const std::string& source_name,
+                       const EffectiveConfig& effective,
+                       const std::vector<std::pair<std::string, std::string>>& env_values) {
+    WarmResult out;
+    std::string spawn_error;
+    capsid_worker* spawned = spawn_loaded_worker(
+        options, bundle, trusted_bytecode, source_name, effective, env_values,
+        &spawn_error);
+    if (spawned == nullptr) {
+        out.error = spawn_error;
         return out;
     }
+    out.worker = spawned;
+    // ---- READY handshake ----
+    capsid::host::WorkerEventSource event_source;
+    event_source.set_worker(out.worker);
     // Wait for READY; the payload is the worker's compatibility ID.
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(15);
@@ -572,6 +567,42 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                                    std::chrono::milliseconds(100));
         event_source.wait(wait_until);
     }
+}
+
+// PR-09c §8.3/§9.3: the generation's replacement factory — spawn/load/flush
+// from the deploy's own options, artifact, source name, effective config
+// and env values, all captured BY VALUE so replacements reproduce the exact
+// generation after the deploy operation and its options object are gone.
+// The factory entry-checks the process stop signal (the §9.2 replacement
+// path aborts promptly on shutdown) and never consumes READY — the
+// WorkerExecutor that spawns the replacement consumes READY and verifies
+// the compatibility id against capsid_runtime_build_info().
+WorkerExecutor::WorkerFactory make_generation_factory(
+    const ManagedHostOptions& options,
+    const std::vector<std::uint8_t>& bundle,
+    bool trusted_bytecode,
+    const std::string& source_name,
+    const EffectiveConfig& effective,
+    const std::vector<std::pair<std::string, std::string>>& env_values) {
+    return [options, bundle, trusted_bytecode, source_name, effective,
+            env_values](capsid_worker** out,
+                        std::string* factory_error) -> bool {
+        if (options.stop_requested != nullptr &&
+            options.stop_requested->load()) {
+            *factory_error = "host stop requested";
+            return false;
+        }
+        std::string spawn_error;
+        capsid_worker* worker = spawn_loaded_worker(
+            options, bundle, trusted_bytecode, source_name, effective,
+            env_values, &spawn_error);
+        if (worker == nullptr) {
+            *factory_error = spawn_error;
+            return false;
+        }
+        *out = worker;
+        return true;
+    };
 }
 
 struct WarmPoolResult {
@@ -834,6 +865,119 @@ public:
 private:
     int app_dir_fd_;
 };
+
+// §9.3 activation transaction tail, shared by every successful warm path
+// (deploy and idempotent redeploy): prepare (before the persist, may
+// fail) → persist (may fail) → commit (after the persist, noexcept).
+//
+// Caller contract:
+//   - a failed prepare has already destroyed the warmed workers it was
+//     handed (create_adopted's failure contract); the coordinator never
+//     destroys them again,
+//   - on the transactional path the plan owns the pool after prepare, so
+//     the outcome's worker fields are cleared on every exit here,
+//   - the §9.4 ledger reserve is settled here: commit on success, abort
+//     on a failed persist (a failed warm never reaches this point and
+//     must roll its own reserve back).
+// Returns true when the activation was committed.
+bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
+                       const std::vector<capsid_worker*>& warm,
+                       const std::string& version,
+                       const std::string& generation_digest,
+                       int app_state_fd, bool replacement,
+                       OperationStatus* status) {
+    status->state = OperationState::kActivating;
+    std::unique_ptr<ActivationPlan> plan;
+    if (options->prepare_activation != nullptr) {
+        // The warmed workers travel on the outcome (const view) so the
+        // prepare callback can adopt the fleet into its own pool; the plan
+        // owns the workers from prepare onward, so the outcome's fields are
+        // cleared on every exit below.
+        outcome->workers = warm;
+        // The transaction callbacks are an all-or-nothing group; a broken
+        // configuration fails the deploy instead of half-publishing.
+        if (options->commit_activation == nullptr ||
+            options->abort_activation == nullptr) {
+            destroy_pool(warm);
+            status->state = OperationState::kFailed;
+            status->error = "activation transaction misconfigured";
+            outcome->error = status->error;
+            outcome->workers.clear();
+            outcome->worker = nullptr;
+            return false;
+        }
+        std::string plan_error;
+        plan = options->prepare_activation(options->application, *outcome,
+                                           &plan_error);
+        if (plan == nullptr) {
+            // The failed prepare destroyed the warmed workers.
+            status->state = OperationState::kFailed;
+            status->error =
+                plan_error.empty() ? "cannot activate the new generation"
+                                   : plan_error;
+            outcome->error = status->error;
+            outcome->workers.clear();
+            outcome->worker = nullptr;
+            return false;
+        }
+    }
+    // ---- persist (may fail) ----
+    ActiveStateDocument document;
+    document.state = ActiveServiceState::kActive;
+    document.application = options->application;
+    document.version = version;
+    document.generation = generation_digest;
+    PosixActiveStateFilesystem filesystem(app_state_fd);
+    const ActiveStatePersistResult persisted = persist_active_state(
+        document, outcome->operation_id, filesystem);
+    if (!persisted.ok) {
+        // Atomic: the failed deploy recycles its own new pool (the plan's
+        // abort, or destroy_pool on the legacy path); the old active.json
+        // and the old active pool stay untouched.
+        if (plan != nullptr) {
+            options->abort_activation(plan.get());
+        } else {
+            destroy_pool(warm);
+        }
+        if (options->ledger != nullptr) {
+            options->ledger->abort_reserve(
+                options->application, static_cast<std::uint64_t>(warm.size()),
+                replacement);
+        }
+        status->state = OperationState::kFailed;
+        status->error = "cannot persist active state";
+        outcome->error = status->error;
+        outcome->workers.clear();
+        outcome->worker = nullptr;
+        return false;
+    }
+    // ---- commit (noexcept; see activation_transaction.h) ----
+    if (plan != nullptr) {
+        options->commit_activation(plan.get());
+        // Ownership moved to the plan: the warmed pointers are stale.
+        outcome->workers.clear();
+        outcome->worker = nullptr;
+    } else {
+        // Legacy caller path: the coordinator hands the owning pool back.
+        publish_pool(outcome, warm);
+    }
+    // §9.4 settle the reserve: the new pool holds its count. (Commit
+    // callback and ledger settle are both after the persist; the ledger
+    // switch is part of the transactional settle.)
+    if (options->ledger != nullptr) {
+        if (replacement) {
+            options->ledger->commit_replace(
+                options->application,
+                static_cast<std::uint64_t>(warm.size()),
+                options->ledger->steady_of(options->application));
+        } else {
+            options->ledger->commit_fresh(options->application);
+        }
+    }
+    status->state = OperationState::kActive;
+    outcome->ok = true;
+    return true;
+}
 
 // Opens stateRoot exactly once per operation with O_NOFOLLOW and verifies
 // it (directory, Host-owned, mode 0700). Every subdirectory descent anchors
@@ -2858,9 +3002,8 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     // Per-App mutex: the version gate, staging, commit, mapping write and
     // active-state persist form one read-modify-write sequence per App and
     // must not interleave with a concurrent deploy/retire/recover on the
-    // same App.
-    std::lock_guard<std::mutex> app_lock(
-        app_operation_mutex(options->application));
+    // same App. AppOperationLock pins a bounded per-App slot (§13.4).
+    capsid::host::AppOperationLock app_lock(options->application);
     const int mapping =
         check_version_mapping(app_state_fd, version, generation_digest);
     if (mapping == -2) {
@@ -2899,13 +3042,43 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             return outcome;
         }
         status->state = OperationState::kWarming;
+        const std::vector<std::uint8_t> bundle(
+            validated.bundle_bin.begin(), validated.bundle_bin.end());
+        // §9.4: reserve the ENTIRE target pool count before any spawn. A
+        // denied reserve (steady budget exhausted, or a zero-downtime
+        // replace without surge/headroom) fails the deploy before a
+        // single process starts. `replacement` is captured BEFORE the
+        // reserve: a fresh reserve turns the App into a holder, which
+        // must not flip the category of a later rollback.
+        bool replacement = false;
+        if (options->ledger != nullptr) {
+            replacement = options->ledger->holds(options->application);
+            const bool reserved =
+                replacement
+                    ? options->ledger->reserve_replace(
+                          options->application, validated.effective.workers)
+                    : options->ledger->reserve_fresh(
+                          options->application, validated.effective.workers);
+            if (!reserved) {
+                close(app_state_fd);
+                close(state_fd);
+                status->state = OperationState::kFailed;
+                status->error = "worker capacity exceeded";
+                outcome.error = status->error;
+                return outcome;
+            }
+        }
         const WarmPoolResult warm = warm_worker_pool(
-            *options,
-            std::vector<std::uint8_t>(validated.bundle_bin.begin(),
-                                      validated.bundle_bin.end()),
+            *options, bundle,
             validated.selected == SelectedArtifactKind::kTrustedBytecode,
             validated.source_name, validated.effective, validated.env_values);
         if (!warm.ok) {
+            // The failed warm rolls its own reserve back.
+            if (options->ledger != nullptr) {
+                options->ledger->abort_reserve(
+                    options->application, validated.effective.workers,
+                    replacement);
+            }
             close(app_state_fd);
             close(state_fd);
             status->state = OperationState::kFailed;
@@ -2913,27 +3086,19 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             outcome.error = warm.error;
             return outcome;
         }
-        status->state = OperationState::kActivating;
-        ActiveStateDocument document;
-        document.state = ActiveServiceState::kActive;
-        document.application = options->application;
-        document.version = version;
-        document.generation = generation_digest;
-        PosixActiveStateFilesystem filesystem(app_state_fd);
-        const ActiveStatePersistResult persisted = persist_active_state(
-            document, outcome.operation_id, filesystem);
-        if (!persisted.ok) {
-            destroy_pool(warm.workers);
-            close(state_fd);
-            status->state = OperationState::kFailed;
-            status->error = "cannot persist active state";
-            outcome.error = "cannot persist active state";
-            return outcome;
-        }
-        status->state = OperationState::kActive;
-        outcome.ok = true;
         close(state_fd);
-        publish_pool(&outcome, warm.workers);
+        // PR-09c: the generation identity + replacement factory travel with
+        // the outcome so the data plane can adopt a pool in place.
+        outcome.version = version;
+        outcome.generation_digest = generation_digest;
+        outcome.generation_factory = make_generation_factory(
+            *options, bundle,
+            validated.selected == SelectedArtifactKind::kTrustedBytecode,
+            validated.source_name, validated.effective, validated.env_values);
+        finish_activation(options, &outcome, warm.workers, version,
+                          generation_digest, app_state_fd, replacement,
+                          status);
+        close(app_state_fd);
         return outcome;
     }
     // mapping == -1: first publish of this Version ID; stage it.
@@ -3111,45 +3276,57 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
 
     // ---- 10-12. worker warm-up: the whole fixed pool must be READY.
     // NO Active is reported before the ENTIRE pool succeeds.
+    // §9.4: reserve the ENTIRE target pool count before any spawn. A
+    // denied reserve (steady budget exhausted, or a zero-downtime replace
+    // without surge/headroom) fails the deploy before a single process
+    // starts. `replacement` is captured BEFORE the reserve (a fresh
+    // reserve turns the App into a holder — the rollback must not flip
+    // its category).
+    bool replacement = false;
+    if (options->ledger != nullptr) {
+        replacement = options->ledger->holds(options->application);
+        const bool reserved =
+            replacement
+                ? options->ledger->reserve_replace(
+                      options->application, effective.workers)
+                : options->ledger->reserve_fresh(options->application,
+                                                 effective.workers);
+        if (!reserved) {
+            close(app_state_fd);
+            status->state = OperationState::kFailed;
+            status->error = "worker capacity exceeded";
+            outcome.error = status->error;
+            return outcome;
+        }
+    }
     status->state = OperationState::kWarming;
     const WarmPoolResult warm = warm_worker_pool(
         *options, bundle_bytes, selected == SelectedArtifactKind::kTrustedBytecode,
         source_name, effective, env_values);
     if (!warm.ok) {
+        // The failed warm rolls its own reserve back.
+        if (options->ledger != nullptr) {
+            options->ledger->abort_reserve(options->application,
+                                           effective.workers, replacement);
+        }
         close(app_state_fd);
         status->state = OperationState::kFailed;
         status->error = warm.error;
         outcome.error = warm.error;
         return outcome;
     }
-    status->state = OperationState::kActivating;
-
-    // ---- 12. persist active.json through the active-state API ----
-    ActiveStateDocument document;
-    document.state = ActiveServiceState::kActive;
-    document.application = options->application;
-    document.version = version;
-    document.generation = generation_digest;
-    // The verified App dir fd hands ownership to the filesystem adapter.
-    PosixActiveStateFilesystem filesystem(app_state_fd);
-    const ActiveStatePersistResult persisted = persist_active_state(
-        document, outcome.operation_id, filesystem);
-    if (!persisted.ok) {
-        // Atomic: the failed deploy recycles its own new pool; the old
-        // active.json and the old active pool stay untouched.
-        destroy_pool(warm.workers);
-        status->state = OperationState::kFailed;
-        status->error = "cannot persist active state";
-        outcome.error = "cannot persist active state";
-        return outcome;
-    }
-
-    // The pool is warm; the caller publishes the data-plane routing and
-    // drains the old pool (single active App: routing publication is the
-    // caller's step).
-    status->state = OperationState::kActive;
-    outcome.ok = true;
-    publish_pool(&outcome, warm.workers);
+    // PR-09c: the generation identity + replacement factory travel with
+    // the outcome so the data plane can adopt a pool in place.
+    outcome.version = version;
+    outcome.generation_digest = generation_digest;
+    outcome.generation_factory = make_generation_factory(
+        *options, bundle_bytes,
+        selected == SelectedArtifactKind::kTrustedBytecode, source_name,
+        effective, env_values);
+    finish_activation(options, &outcome, warm.workers, version,
+                      generation_digest, app_state_fd, replacement,
+                      status);
+    close(app_state_fd);
     return outcome;
 }
 
@@ -3195,8 +3372,7 @@ DeployOutcome run_retire_operation(ManagedHostOptions* options,
     }
     // Per-App mutex: the retire read-modify-write must not interleave with
     // a concurrent deploy/recover on the same App.
-    std::lock_guard<std::mutex> app_lock(
-        app_operation_mutex(options->application));
+    capsid::host::AppOperationLock app_lock(options->application);
     PosixActiveStateFilesystem filesystem(app_state_fd);
     const ActiveStateReadResult current = filesystem.read_active_file();
     ActiveStateDocument document;
@@ -3219,12 +3395,45 @@ DeployOutcome run_retire_operation(ManagedHostOptions* options,
             }
         }
     }
+    // §9.3 retire transaction: prepare_retire before the tombstone
+    // persist (may fail), commit_retire after it (noexcept — drain
+    // signal + ledger category switch), abort_retire when it failed.
+    std::unique_ptr<RetirePlan> plan;
+    if (options->prepare_retire != nullptr) {
+        if (options->commit_retire == nullptr ||
+            options->abort_retire == nullptr) {
+            outcome.error = "retire transaction misconfigured";
+            status->state = OperationState::kFailed;
+            return outcome;
+        }
+        std::string plan_error;
+        plan = options->prepare_retire(options->application, &plan_error);
+        if (plan == nullptr) {
+            outcome.error =
+                plan_error.empty() ? "cannot prepare the retire" : plan_error;
+            status->state = OperationState::kFailed;
+            return outcome;
+        }
+    }
     const ActiveStatePersistResult persisted = persist_active_state(
         document, outcome.operation_id, filesystem);
     if (!persisted.ok) {
+        if (plan != nullptr) {
+            options->abort_retire(plan.get());
+        }
         outcome.error = "cannot persist retire tombstone";
         status->state = OperationState::kFailed;
         return outcome;
+    }
+    if (plan != nullptr) {
+        options->commit_retire(plan.get());
+    }
+    // §9.4: the serving pool leaves steady for surge (draining); its
+    // count is released when the reaper finished (the pool's
+    // on_drain_complete hook).
+    if (options->ledger != nullptr) {
+        options->ledger->begin_retire(
+            options->application, options->ledger->steady_of(options->application));
     }
     status->state = OperationState::kActive;
     outcome.ok = true;
@@ -3297,8 +3506,7 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
     }
     // Per-App mutex: recovery's read/rebuild/activate sequence must not
     // interleave with a concurrent deploy/retire on the same App.
-    std::lock_guard<std::mutex> app_lock(
-        app_operation_mutex(options->application));
+    capsid::host::AppOperationLock app_lock(options->application);
     // The active-state recovery flow owns the read/parse/decision: it
     // cleans stale active.json.tmp.* first (best effort), then maps the
     // document to an action (activate only when the generation is
@@ -3345,13 +3553,30 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
         return outcome;
     }
     status->state = OperationState::kWarming;
+    const std::vector<std::uint8_t> bundle(
+        validated.bundle_bin.begin(), validated.bundle_bin.end());
+    // §9.4: reserve the recovered fleet's count BEFORE any spawn. At
+    // startup nothing holds, so this is always a fresh reserve; a denied
+    // reserve fails the Host closed before a single process starts
+    // (an active-generation count beyond capacity never overspawns).
+    if (options->ledger != nullptr &&
+        !options->ledger->reserve_fresh(options->application,
+                                        validated.effective.workers)) {
+        status->state = OperationState::kFailed;
+        status->error = "worker capacity exceeded";
+        outcome.error = status->error;
+        return outcome;
+    }
     const WarmPoolResult warm = warm_worker_pool(
-        *options,
-        std::vector<std::uint8_t>(validated.bundle_bin.begin(),
-                                  validated.bundle_bin.end()),
+        *options, bundle,
         validated.selected == SelectedArtifactKind::kTrustedBytecode,
         validated.source_name, validated.effective, validated.env_values);
     if (!warm.ok) {
+        if (options->ledger != nullptr) {
+            options->ledger->abort_reserve(
+                options->application, validated.effective.workers,
+                /*replacement=*/false);
+        }
         status->state = OperationState::kFailed;
         status->error = warm.error;
         outcome.error = warm.error;
@@ -3359,6 +3584,14 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
     }
     status->state = OperationState::kActive;
     outcome.ok = true;
+    // PR-09c: the generation identity + replacement factory travel with
+    // the outcome so the data plane can adopt a pool in place.
+    outcome.version = recovered.document.version;
+    outcome.generation_digest = active_generation;
+    outcome.generation_factory = make_generation_factory(
+        *options, bundle,
+        validated.selected == SelectedArtifactKind::kTrustedBytecode,
+        validated.source_name, validated.effective, validated.env_values);
     publish_pool(&outcome, warm.workers);
     return outcome;
 }

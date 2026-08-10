@@ -57,7 +57,14 @@ public:
             }
             return false;
         }
-        shards_.reserve(options_.workers);
+        // TSan gate (PR-06): reserve writes the vector's begin/end pair,
+        // which request_stop() reads under shards_mutex_ — a concurrent
+        // stop during start would race the lockless reallocation. Every
+        // shards_ mutation holds the same mutex as every read.
+        {
+            std::lock_guard<std::mutex> lock(shards_mutex_);
+            shards_.reserve(options_.workers);
+        }
         // StaticPoolState wiring (E-4): register each worker under its
         // immutable owner shard BEFORE it is spawned, mark READY the
         // instant start() returns (barrier-mode start() completes

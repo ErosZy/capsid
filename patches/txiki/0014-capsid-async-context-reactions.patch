@@ -1,0 +1,106 @@
+--- a/deps/quickjs/quickjs.c	2026-08-10 03:09:55
++++ b/deps/quickjs/quickjs.c	2026-08-10 03:18:03
+@@ -2149,8 +2149,14 @@
+ }
+ 
+ /* return 0 if OK, < 0 if exception */
+-int JS_EnqueueJob(JSContext *ctx, JSJobFunc *job_func,
+-                  int argc, JSValueConst *argv)
++/* Internal variant: a caller that already captured a job context (the
++   promise reaction path captures at reaction creation, not at settle)
++   hands it in with has_job_ctx=true to override the capture. The
++   context is transferred to the job entry: the caller must not release
++   it afterwards. */
++static int js_enqueue_job_ex(JSContext *ctx, JSJobFunc *job_func,
++                             int argc, JSValueConst *argv,
++                             void *job_ctx, bool has_job_ctx)
+ {
+     JSRuntime *rt = ctx->rt;
+     JSJobEntry *e;
+@@ -2168,7 +2174,9 @@
+     for(i = 0; i < argc; i++) {
+         e->argv[i] = js_dup(argv[i]);
+     }
+-    if (rt->job_ctx_hooks.capture) {
++    if (has_job_ctx) {
++        e->job_ctx = job_ctx;
++    } else if (rt->job_ctx_hooks.capture) {
+         if (rt->job_ctx_hooks.capture(ctx, rt->job_ctx_opaque,
+                                       &e->job_ctx) < 0) {
+             /* fail closed: no identity-less job may be created */
+@@ -2183,6 +2191,12 @@
+     return 0;
+ }
+ 
++int JS_EnqueueJob(JSContext *ctx, JSJobFunc *job_func,
++                  int argc, JSValueConst *argv)
++{
++    return js_enqueue_job_ex(ctx, job_func, argc, argv, NULL, false);
++}
++
+ bool JS_IsJobPending(JSRuntime *rt)
+ {
+     return !list_empty(&rt->job_list);
+@@ -54345,6 +54359,9 @@
+     struct list_head link; /* not used in promise_reaction_job */
+     JSValue resolving_funcs[2];
+     JSValue handler;
++    void *ctx_data; /* captured when .then()/await creates the reaction,
++                       transferred to the settle job, released by
++                       promise_reaction_data_free */
+ } JSPromiseReactionData;
+ 
+ JSPromiseStateEnum JS_PromiseState(JSContext *ctx, JSValueConst promise)
+@@ -54381,6 +54398,9 @@
+ static void promise_reaction_data_free(JSRuntime *rt,
+                                        JSPromiseReactionData *rd)
+ {
++    if (rd->ctx_data != NULL && rt->job_ctx_hooks.release) {
++        rt->job_ctx_hooks.release(rd->ctx_data, rt->job_ctx_opaque);
++    }
+     JS_FreeValueRT(rt, rd->resolving_funcs[0]);
+     JS_FreeValueRT(rt, rd->resolving_funcs[1]);
+     JS_FreeValueRT(rt, rd->handler);
+@@ -54492,7 +54512,12 @@
+         args[2] = rd->handler;
+         args[3] = js_bool(is_reject);
+         args[4] = value;
+-        JS_EnqueueJob(ctx, promise_reaction_job, 5, args);
++        /* the reaction carries the context captured when .then() (or the
++           await) was created; the settle job runs under that identity,
++           not the resolving job's */
++        js_enqueue_job_ex(ctx, promise_reaction_job, 5, args,
++                          rd->ctx_data, true);
++        rd->ctx_data = NULL; /* ownership moved to the job entry */
+         list_del(&rd->link);
+         promise_reaction_data_free(ctx->rt, rd);
+     }
+@@ -55264,6 +55289,17 @@
+         if (!JS_IsFunction(ctx, handler))
+             handler = JS_UNDEFINED;
+         rd->handler = js_dup(handler);
++        /* async-context: capture the .then() caller's identity now; the
++           reaction may settle from a different job's context and the
++           settle job must still run under the caller's identity */
++        if (ctx->rt->job_ctx_hooks.capture &&
++            ctx->rt->job_ctx_hooks.capture(ctx, ctx->rt->job_ctx_opaque,
++                                           &rd->ctx_data) < 0) {
++            promise_reaction_data_free(ctx->rt, rd);
++            if (i == 1)
++                promise_reaction_data_free(ctx->rt, rd_array[0]);
++            return -1;
++        }
+         rd_array[i] = rd;
+     }
+ 
+@@ -55285,7 +55321,9 @@
+         args[2] = rd->handler;
+         args[3] = js_bool(i);
+         args[4] = s->promise_result;
+-        JS_EnqueueJob(ctx, promise_reaction_job, 5, args);
++        js_enqueue_job_ex(ctx, promise_reaction_job, 5, args,
++                          rd->ctx_data, true);
++        rd->ctx_data = NULL; /* ownership moved to the job entry */
+         for(i = 0; i < 2; i++)
+             promise_reaction_data_free(ctx->rt, rd_array[i]);
+     }

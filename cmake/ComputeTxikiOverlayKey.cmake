@@ -170,12 +170,15 @@ function(capsid_compute_txiki_overlay_key)
     file(SHA256 "${CTOK_PREPARE_SCRIPT}" CTOK_PREPARE_HASH)
 
     # --- patches -------------------------------------------------------------
+    # The count is a sanity guard: adding or removing a patch file changes
+    # the overlay key (each patch is hashed below), and the count ensures a
+    # patch set change is noticed even before the hashes are compared.
     file(GLOB CTOK_PATCH_LIST "${CTOK_PATCH_DIR}/*.patch")
     list(SORT CTOK_PATCH_LIST)
     list(LENGTH CTOK_PATCH_LIST CTOK_PATCH_COUNT)
-    if(NOT CTOK_PATCH_COUNT EQUAL 11)
+    if(NOT CTOK_PATCH_COUNT EQUAL 16)
         message(FATAL_ERROR
-            "expected 11 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 16 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

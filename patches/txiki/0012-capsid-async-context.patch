@@ -1,0 +1,131 @@
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -1140,6 +1140,27 @@
+ typedef int JSInterruptHandler(JSRuntime *rt, void *opaque);
+ JS_EXTERN void JS_SetInterruptHandler(JSRuntime *rt, JSInterruptHandler *cb, void *opaque);
+ /* if can_block is true, Atomics.wait() can be used */
++
++/* job context hooks: an embedder may attach an opaque identity to each
++   enqueued job so asynchronous continuations can be attributed to their
++   owning request. Not installed -> upstream behavior unchanged. */
++typedef struct JSJobContextHooks {
++    /* called once per successfully enqueued job, at enqueue time.
++       returns 0 on success; *job_context may be set to a context or left
++       NULL to indicate "no owner" (the job then runs without hooks).
++       returns -1 to fail the enqueue (fail closed: no identity-less job). */
++    int (*capture)(JSContext *ctx, void *opaque, void **job_context);
++    /* called before job_func; must return the previous context (or NULL)
++       so leave can restore it. */
++    void *(*enter)(JSContext *ctx, void *job_context, void *opaque);
++    /* called after job_func on all return paths; restores previous. */
++    void (*leave)(JSContext *ctx, void *previous_context, void *opaque);
++    /* called once after a job executes, and once per unexecuted job
++       during JS_FreeRuntime. */
++    void (*release)(void *job_context, void *opaque);
++} JSJobContextHooks;
++
++JS_EXTERN void JS_SetJobContextHooks(JSRuntime *rt, const JSJobContextHooks *hooks, void *opaque);
+ JS_EXTERN void JS_SetCanBlock(JSRuntime *rt, bool can_block);
+ /* set the [IsHTMLDDA] internal slot */
+ JS_EXTERN void JS_SetIsHTMLDDA(JSContext *ctx, JSValueConst obj);
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -313,6 +313,8 @@
+ 
+     JSInterruptHandler *interrupt_handler;
+     void *interrupt_opaque;
++    JSJobContextHooks job_ctx_hooks;
++    void *job_ctx_opaque;
+ 
+     JSPromiseHook *promise_hook;
+     void *promise_hook_opaque;
+@@ -993,6 +995,7 @@
+     JSContext *ctx;
+     JSJobFunc *job_func;
+     int argc;
++    void *job_ctx; /* captured by the job context hooks, NULL if none */
+     JSValue argv[];
+ } JSJobEntry;
+ 
+@@ -2123,6 +2126,17 @@
+     rt->interrupt_opaque = opaque;
+ }
+ 
++void JS_SetJobContextHooks(JSRuntime *rt, const JSJobContextHooks *hooks,
++                           void *opaque)
++{
++    if (hooks) {
++        rt->job_ctx_hooks = *hooks;
++    } else {
++        memset(&rt->job_ctx_hooks, 0, sizeof(rt->job_ctx_hooks));
++    }
++    rt->job_ctx_opaque = opaque;
++}
++
+ void JS_SetCanBlock(JSRuntime *rt, bool can_block)
+ {
+     rt->can_block = can_block;
+@@ -2150,9 +2164,21 @@
+     e->ctx = ctx;
+     e->job_func = job_func;
+     e->argc = argc;
++    e->job_ctx = NULL;
+     for(i = 0; i < argc; i++) {
+         e->argv[i] = js_dup(argv[i]);
+     }
++    if (rt->job_ctx_hooks.capture) {
++        if (rt->job_ctx_hooks.capture(ctx, rt->job_ctx_opaque,
++                                      &e->job_ctx) < 0) {
++            /* fail closed: no identity-less job may be created */
++            for(i = 0; i < argc; i++) {
++                JS_FreeValue(ctx, e->argv[i]);
++            }
++            js_free(ctx, e);
++            return -1;
++        }
++    }
+     list_add_tail(&e->link, &rt->job_list);
+     return 0;
+ }
+@@ -2178,6 +2204,7 @@
+     JSJobEntry *e;
+     JSValue res;
+     int i, ret;
++    void *job_ctx_prev = NULL;
+ 
+     if (list_empty(&rt->job_list)) {
+         *pctx = NULL;
+@@ -2188,7 +2215,14 @@
+     e = list_entry(rt->job_list.next, JSJobEntry, link);
+     list_del(&e->link);
+     ctx = e->ctx;
++    if (rt->job_ctx_hooks.enter && e->job_ctx) {
++        job_ctx_prev = rt->job_ctx_hooks.enter(ctx, e->job_ctx,
++                                               rt->job_ctx_opaque);
++    }
+     res = e->job_func(e->ctx, e->argc, vc(e->argv));
++    if (rt->job_ctx_hooks.leave && e->job_ctx) {
++        rt->job_ctx_hooks.leave(ctx, job_ctx_prev, rt->job_ctx_opaque);
++    }
+     for(i = 0; i < e->argc; i++)
+         JS_FreeValue(ctx, e->argv[i]);
+     if (JS_IsException(res))
+@@ -2196,6 +2230,9 @@
+     else
+         ret = 1;
+     JS_FreeValue(ctx, res);
++    if (rt->job_ctx_hooks.release && e->job_ctx) {
++        rt->job_ctx_hooks.release(e->job_ctx, rt->job_ctx_opaque);
++    }
+     js_free(ctx, e);
+     *pctx = ctx;
+     return ret;
+@@ -2296,6 +2333,8 @@
+ 
+     list_for_each_safe(el, el1, &rt->job_list) {
+         JSJobEntry *e = list_entry(el, JSJobEntry, link);
++        if (rt->job_ctx_hooks.release && e->job_ctx)
++            rt->job_ctx_hooks.release(e->job_ctx, rt->job_ctx_opaque);
+         for(i = 0; i < e->argc; i++)
+             JS_FreeValueRT(rt, e->argv[i]);
+         js_free_rt(rt, e);

@@ -46,6 +46,10 @@ function perfUsable() {
         const probe = spawn('perf', [ 'stat', '-e', 'task-clock', 'true' ],
             { stdio: 'ignore' });
         probe.on('exit', (code) => resolve(code === 0));
+        // A missing perf binary fires 'error' (ENOENT), not 'exit'; without
+        // this the promise never settles and the gate times out instead of
+        // skipping (77).
+        probe.on('error', () => resolve(false));
     });
 }
 

@@ -58,12 +58,25 @@ endfunction()
 
 set(CAPSID_STRIPPED "${CAPSID_TEST_WORK_DIR}/capsid-worker-stripped")
 configure_file("${CAPSID_WORKER}" "${CAPSID_STRIPPED}" COPYONLY)
+# Capability probe (§13.5): GNU strip accepts --strip-all, Apple's strip
+# rejects the long option. Probe the GNU spelling first and fall back to
+# the POSIX -s both accept; the negative control then works on either
+# tool. A failed probe leaves the copy untouched (unknown option), so the
+# fallback retries the same file.
 execute_process(
     COMMAND "${CAPSID_STRIP}" --strip-all "${CAPSID_STRIPPED}"
     RESULT_VARIABLE CAPSID_STRIP_RESULT
     ERROR_VARIABLE CAPSID_STRIP_ERROR)
 if(NOT CAPSID_STRIP_RESULT EQUAL 0)
-    message(FATAL_ERROR "strip negative-control artifact: ${CAPSID_STRIP_ERROR}")
+    execute_process(
+        COMMAND "${CAPSID_STRIP}" -s "${CAPSID_STRIPPED}"
+        RESULT_VARIABLE CAPSID_STRIP_RESULT
+        ERROR_VARIABLE CAPSID_STRIP_ERROR)
+    if(NOT CAPSID_STRIP_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "strip negative-control artifact (--strip-all then -s): "
+            "${CAPSID_STRIP_ERROR}")
+    endif()
 endif()
 capsid_expect_audit_failure(
     "${CAPSID_STRIPPED}"

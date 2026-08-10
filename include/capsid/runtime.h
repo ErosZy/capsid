@@ -12,7 +12,7 @@ extern "C" {
 #define CAPSID_CAPABILITY_POLICY_VERSION_1 1u
 #define CAPSID_CAPABILITY_POLICY_VERSION 2u
 #define CAPSID_MEMORY_METRICS_VERSION 1u
-#define CAPSID_BUILD_INFO_VERSION 1u
+#define CAPSID_BUILD_INFO_VERSION 2u
 
 #define CAPSID_RESOURCE_UNLIMITED UINT64_MAX
 #define CAPSID_RESOURCE_PIDS_UNLIMITED UINT32_MAX
@@ -57,17 +57,39 @@ typedef enum capsid_result {
     CAPSID_INVALID_ARGUMENT = 3,
     CAPSID_PROTOCOL_ERROR = 4,
     CAPSID_SYSTEM_ERROR = 5,
-    CAPSID_CHILD_ERROR = 6
+    CAPSID_CHILD_ERROR = 6,
+    /* WP-06 additions to ABI v7: no exception may cross an extern "C"
+     * boundary. CAPSID_OUT_OF_MEMORY is a std::bad_alloc caught by the
+     * ABI guard; CAPSID_INTERNAL_ERROR is any other C++ exception. */
+    CAPSID_OUT_OF_MEMORY = 7,
+    CAPSID_INTERNAL_ERROR = 8
 } capsid_result;
 
 /*
- * Immutable identity of the Runtime/QuickJS bytecode toolchain. String
- * pointers returned by capsid_runtime_build_info() have process lifetime and
- * must not be freed. compatibility_id is "sha256:" followed by 64 lowercase
- * hexadecimal digits and covers every field below in the documented order.
+ * Thread-local error detail for the last Capsid API call on this thread.
+ * Points into a fixed-size buffer owned by the Runtime: never free it, and
+ * treat it as valid only until the next Capsid API call on the same
+ * thread. Returns NULL when the last call succeeded (or never ran), and
+ * on OOM paths only static text is stored — the mechanism never allocates.
+ */
+const char *capsid_last_error(void);
+
+/*
+ * Immutable identity of the Runtime/QuickJS bytecode toolchain plus the
+ * provenance of the exact build being linked. String pointers returned by
+ * capsid_runtime_build_info() have process lifetime and must not be freed.
+ * compatibility_id is "sha256:" followed by 64 lowercase hexadecimal
+ * digits and covers the bytecode-compatibility record v2 below in the
+ * documented order. build_id is "sha256:" plus 64 lowercase hexadecimal
+ * digits and covers the build-provenance record v1 minus its buildId line.
  *
- * This structure is additive to ABI v7. Future versions may append fields;
- * callers must initialize it and preserve struct_size for size negotiation.
+ * This structure is additive to ABI v7. Version 2 (CAPSID_BUILD_INFO_VERSION
+ * 2) appended the provenance fields after compatibility_id. Callers
+ * compiled against the version-1 headers pass the smaller v1 struct_size
+ * and still succeed: capsid_runtime_build_info() fills exactly the leading
+ * fields that fit and never touches memory beyond the caller's buffer.
+ * Callers must initialize the envelope first (capsid_build_info_init or
+ * memset + struct_size) and preserve struct_size for size negotiation.
  */
 typedef struct capsid_build_info {
     uint32_t struct_size;
@@ -85,6 +107,23 @@ typedef struct capsid_build_info {
     const char *bytecode_format_identity;
     const char *capability_manifest_sha256;
     const char *compatibility_id;
+    /* Build-info v2 (WP-07, spec §11.3/§11.4): provenance of the exact
+     * linked build. capsid_commit is 40 lowercase hex on a git checkout,
+     * "unknown" when the commit could not be resolved; capsid_tree_clean
+     * is 1 when git status --porcelain was empty at configure time;
+     * provenance_dirty is 1 whenever release packaging must reject this
+     * build (non-Release configure, unresolved commit, or dirty tree).
+     * build_feature_flags is one canonical ASCII string:
+     *   "lto=ON|OFF asan=... ubsan=... tsan=... mimalloc=... host=... worker=..." */
+    const char *build_id;
+    const char *capsid_commit;
+    uint32_t capsid_tree_clean;
+    uint32_t provenance_dirty;
+    const char *compiler_id;
+    const char *compiler_version;
+    const char *target_triple;
+    const char *cmake_build_type;
+    const char *build_feature_flags;
 } capsid_build_info;
 
 /*
@@ -421,35 +460,85 @@ void capsid_env_entry_init(capsid_env_entry *entry);
 void capsid_capability_policy_init(capsid_capability_policy *policy);
 void capsid_audit_record_init(capsid_audit_record *record);
 void capsid_memory_metrics_init(capsid_memory_metrics *metrics);
-void capsid_build_info_init(capsid_build_info *info);
+/*
+ * Initializes the build-info envelope for size negotiation. Stamps the
+ * CALLER's struct size — which only the caller's own header knows — so
+ * this is an inline: callers compiled against the current headers use it
+ * directly. Callers compiled against the build-info v1 headers (which
+ * declare it as a plain function) link the library's legacy symbol of the
+ * same name instead, which stamps a v1-sized envelope and never writes
+ * past a v1 buffer. In both cases the version stamped is the current
+ * CAPSID_BUILD_INFO_VERSION; a caller from an older ABI must treat newer
+ * versions conservatively.
+ */
+#ifndef CAPSID_BUILD_INFO_INIT_IMPLEMENTATION
+static inline void capsid_build_info_init(capsid_build_info *info) {
+    if (info == NULL) {
+        return;
+    }
+    info->struct_size = (uint32_t)sizeof(*info);
+    info->version = CAPSID_BUILD_INFO_VERSION;
+}
+#endif
 void capsid_worker_config_init(capsid_worker_config *config);
 const char *capsid_result_string(capsid_result result);
 
 /*
- * Returns the library-side build identity. The compatibility ID is computed
- * from this exact canonical UTF-8 record, including the final newline:
+ * Returns the library-side build identity and provenance. struct_size is a
+ * size negotiation: the caller announces its buffer size and only the
+ * leading fields that fit are written. Callers compiled against the
+ * build-info v1 headers pass the v1 size and receive the v1 fields;
+ * anything below the v1 size is CAPSID_INVALID_ARGUMENT.
  *
- * schema=capsid-bytecode-compatibility-v1
- * runtimeVersion=<runtime_version>
- * abiVersion=<abi_version decimal>
- * fetchRpcVersion=<fetchrpc_version decimal>
+ * The compatibility ID is computed from this exact canonical UTF-8 record
+ * (compatibility record v2, spec §11.2), including the final newline:
+ *
+ * schema=capsid-bytecode-compatibility-v2
  * quickjsCommit=<quickjs_commit>
- * txikiOverlayKey=<txiki_overlay_key>
  * txikiOverlayManifest=<txiki_overlay_manifest>
  * bytecodeCompileFlags=<bytecode_compile_flags>
  * targetArchitecture=<target_architecture>
  * endianness=<endianness>
  * pointerWidthBits=<pointer_width_bits decimal>
  * bytecodeFormatIdentity=<bytecode_format_identity>
- * capabilityManifestSha256=<capability_manifest_sha256>
  *
  * Hash the record with SHA-256 and prefix its lowercase hexadecimal digest
  * with "sha256:". No locale-dependent formatting or JSON canonicalization is
  * involved.
+ *
+ * The build ID (build_id) is computed from the provenance record v1
+ * (spec §11.3) minus its final buildId line, in this order:
+ *
+ * schema=capsid-build-provenance-v1
+ * capsidCommit=<capsid_commit>
+ * capsidTreeClean=<true|false>
+ * runtimeVersion=<runtime_version>
+ * abiVersion=<abi_version decimal>
+ * fetchRpcVersion=<fetchrpc_version decimal>
+ * compatibilityId=<compatibility_id>
+ * capabilityManifestSha256=<capability_manifest_sha256>
+ * compilerId=<compiler_id>
+ * compilerVersion=<compiler_version>
+ * targetTriple=<target_triple>
+ * cmakeBuildType=<cmake_build_type>
+ * featureFlags=<build_feature_flags>
+ * dependencyOverlayKey=<txiki_overlay_key>
  */
 capsid_result capsid_runtime_build_info(capsid_build_info *out_info);
 
 capsid_result capsid_worker_spawn(const capsid_worker_config *config, capsid_worker **out_worker);
+/*
+ * Abortive cleanup (spec §13.3): closes the IPC channel and terminates the
+ * worker process immediately — in-flight requests are dropped without
+ * warning and the worker gets no chance to flush application state. The
+ * child is always reaped before destroy returns; it allocates nothing and
+ * never throws. A host that wants a graceful stop must run the explicit
+ * sequence capsid_worker_shutdown → capsid_worker_flush → poll
+ * capsid_worker_next_event until CAPSID_EVENT_EXIT / CAPSID_CLOSED →
+ * capsid_worker_destroy. Terminate-on-deadline is the only non-abortive
+ * escape: the Host's normal stop is graceful, and only a shutdown deadline
+ * turns into capsid_worker_terminate.
+ */
 void capsid_worker_destroy(capsid_worker *worker);
 int capsid_worker_fd(const capsid_worker *worker);
 int64_t capsid_worker_pid(const capsid_worker *worker);
@@ -459,6 +548,12 @@ int64_t capsid_worker_pid(const capsid_worker *worker);
  * process CPU affinity and, on Linux cgroup v2, cpu.max. Available CPU
  * indices reflect the calling process affinity. Affinity is host-only and
  * never observable by application JavaScript.
+ *
+ * Frozen conservative fallbacks (WP-06, spec §10.2): if querying the host
+ * topology raises an internal error, capsid_recommended_worker_count()
+ * and capsid_available_cpu_count() return 1 and capsid_available_cpu_at()
+ * returns CAPSID_INTERNAL_ERROR; in all three cases capsid_last_error()
+ * is set on the calling thread.
  */
 uint32_t capsid_recommended_worker_count(void);
 uint32_t capsid_available_cpu_count(void);
@@ -512,7 +607,20 @@ capsid_result capsid_worker_cancel(capsid_worker *worker, uint64_t request_id);
 capsid_result capsid_worker_request_memory_metrics(capsid_worker *worker);
 capsid_result capsid_worker_flush(capsid_worker *worker);
 capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *event);
+/*
+ * Graceful stop (spec §13.3), used only as part of the explicit sequence
+ * shutdown → flush → drain EXIT → destroy: queues the worker-side shutdown
+ * frame; the worker flushes its state and exits, after which next_event
+ * reports CAPSID_EVENT_EXIT and the channel closes. A caller that abandons
+ * the drain must still run capsid_worker_destroy (abortive) to reap the
+ * child.
+ */
 capsid_result capsid_worker_shutdown(capsid_worker *worker);
+/*
+ * Abortive signal: SIGKILLs the worker process without a graceful frame.
+ * Use only when a shutdown deadline expired; the worker must still be
+ * reaped with capsid_worker_destroy afterwards.
+ */
 capsid_result capsid_worker_terminate(capsid_worker *worker);
 
 /*

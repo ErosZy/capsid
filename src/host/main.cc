@@ -14,9 +14,12 @@
 #include "capsid/runtime.h"
 #include "host/admin_service.h"
 #include "host/config.h"
+#include "host/generation_pool.h"
+#include "host/host_config_model.h"
 #include "host/managed_admin_backend.h"
-
-#include <jansson.h>
+#include "host/managed_listener.h"
+#include "host/routing_snapshot.h"
+#include "host/trusted_key_store.h"
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/system/error_code.hpp>
@@ -35,6 +38,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -205,68 +209,6 @@ std::vector<std::uint8_t> read_bundle(const std::string& path) {
 // inside a signal handler.
 std::atomic<bool> g_stop{false};
 
-// Parsed host.json fields that drive the managed mode. The authoritative
-// schema validation runs first (validate_config_json); this extraction maps
-// the validated document onto the coordinator options and fails closed on
-// anything it cannot map.
-struct ManagedConfig {
-    std::string applications_root;
-    std::string state_root;
-    std::string secret_root_template;  // contains "{application}"
-    std::string admin_unix_path;
-    mode_t admin_mode = 0600;
-    capsid::host::HostPolicy policy;
-    // capacity.workersTotal: the process-global worker permit. It is
-    // consumed before any spawn/durable activation and returned when the
-    // operation settles. startupsConcurrent is NOT reinterpreted as the
-    // Admin pending-queue ceiling.
-    int worker_capacity = 1;
-};
-
-std::string json_string_field(json_t* object, const char* key) {
-    json_t* value = json_object_get(object, key);
-    return json_is_string(value) ? json_string_value(value) : std::string();
-}
-
-// "host:port" / "host" (any port); decimal ports only.
-bool parse_fetch_target_text(const std::string& text,
-                             capsid::host::FetchTarget* out) {
-    const std::size_t colon = text.find(':');
-    if (colon == std::string::npos) {
-        if (text.empty()) {
-            return false;
-        }
-        out->host = text;
-        return true;
-    }
-    out->host = text.substr(0, colon);
-    if (out->host.empty()) {
-        return false;
-    }
-    const std::string ports = text.substr(colon + 1);
-    std::size_t begin = 0;
-    while (begin <= ports.size()) {
-        const std::size_t comma = ports.find(',', begin);
-        const std::string part = ports.substr(
-            begin, comma == std::string::npos ? std::string::npos
-                                              : comma - begin);
-        if (part.empty()) {
-            return false;
-        }
-        char* end = nullptr;
-        const long port = std::strtol(part.c_str(), &end, 10);
-        if (end == nullptr || *end != '\0' || port <= 0 || port > 65535) {
-            return false;
-        }
-        out->ports.push_back(static_cast<std::uint16_t>(port));
-        if (comma == std::string::npos) {
-            break;
-        }
-        begin = comma + 1;
-    }
-    return !out->ports.empty();
-}
-
 // "256MiB" style size with explicit suffix (same grammar as the managed
 // coordinator's worker.memoryMax).
 bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
@@ -303,246 +245,6 @@ bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
     return true;
 }
 
-bool parse_string_array(json_t* parent, const char* key,
-                        std::vector<std::string>* out) {
-    json_t* value = json_object_get(parent, key);
-    if (value == nullptr) {
-        return true;
-    }
-    if (!json_is_array(value)) {
-        return false;
-    }
-    std::size_t index = 0;
-    json_t* item = nullptr;
-    json_array_foreach(value, index, item) {
-        if (!json_is_string(item)) {
-            return false;
-        }
-        out->push_back(json_string_value(item));
-    }
-    return true;
-}
-
-bool parse_managed_config(const std::string& json, ManagedConfig* out,
-                          std::string* error) {
-    json_error_t parse_error;
-    json_t* root = json_loadb(json.data(), json.size(),
-                              JSON_REJECT_DUPLICATES, &parse_error);
-    if (root == nullptr || !json_is_object(root)) {
-        *error = "invalid host.json";
-        if (root) {
-            json_decref(root);
-        }
-        return false;
-    }
-    out->applications_root = json_string_field(root, "applicationsRoot");
-    out->state_root = json_string_field(root, "stateRoot");
-    out->secret_root_template = json_string_field(root, "secretRootTemplate");
-    json_t* admin = json_object_get(root, "admin");
-    if (json_is_object(admin)) {
-        out->admin_unix_path = json_string_field(admin, "unix");
-        const std::string mode_text = json_string_field(admin, "mode");
-        if (!mode_text.empty()) {
-            char* end = nullptr;
-            const unsigned long parsed =
-                std::strtoul(mode_text.c_str(), &end, 8);
-            if (end == nullptr || *end != '\0' || parsed > 07777) {
-                *error = "invalid admin.mode";
-                json_decref(root);
-                return false;
-            }
-            // host-v1 has no management-group field, so a
-            // group/world-accessible pathname cannot be authorized
-            // coherently; managed mode keeps the socket at exact 0600.
-            if (static_cast<mode_t>(parsed) != 0600) {
-                *error = "admin.mode must be 0600";
-                json_decref(root);
-                return false;
-            }
-            out->admin_mode = static_cast<mode_t>(parsed);
-        }
-    }
-    json_t* permissions = json_object_get(root, "permissions");
-    if (json_is_object(permissions)) {
-        if (!parse_string_array(permissions, "modules",
-                                &out->policy.module_allowlist) ||
-            !parse_string_array(permissions, "environmentNames",
-                                &out->policy.env_patterns) ||
-            !parse_string_array(permissions, "fsReadRoots",
-                                &out->policy.fs_read_roots) ||
-            !parse_string_array(permissions, "storageNamespaces",
-                                &out->policy.storage_namespaces) ||
-            !parse_string_array(permissions, "stdioStreams",
-                                &out->policy.stdio_streams)) {
-            *error = "invalid host.json permissions";
-            json_decref(root);
-            return false;
-        }
-        out->policy.storage_allowed = !out->policy.storage_namespaces.empty();
-        out->policy.stdio_allowed = !out->policy.stdio_streams.empty();
-        std::vector<std::string> targets;
-        if (!parse_string_array(permissions, "fetchTargets", &targets)) {
-            *error = "invalid host.json fetchTargets";
-            json_decref(root);
-            return false;
-        }
-        for (const std::string& target : targets) {
-            capsid::host::FetchTarget parsed;
-            if (!parse_fetch_target_text(target, &parsed)) {
-                *error = "invalid host.json fetchTargets entry";
-                json_decref(root);
-                return false;
-            }
-            out->policy.fetch_targets.push_back(std::move(parsed));
-        }
-    }
-    json_t* isolation = json_object_get(root, "isolation");
-    if (json_is_object(isolation)) {
-        const std::string mode = json_string_field(isolation, "mode");
-        if (!mode.empty() && mode != "strict") {
-            *error = "isolation.mode must be strict";
-            json_decref(root);
-            return false;
-        }
-    }
-    json_t* maximums = json_object_get(root, "maximums");
-    if (json_is_object(maximums)) {
-        json_t* request = json_object_get(maximums, "request");
-        if (json_is_object(request)) {
-            json_t* inflight =
-                json_object_get(request, "maxInflightPerWorker");
-            if (json_is_integer(inflight)) {
-                const json_int_t value = json_integer_value(inflight);
-                if (value < 0) {
-                    *error = "invalid maximums.request.maxInflightPerWorker";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_requests_per_worker =
-                    static_cast<std::uint64_t>(value);
-            }
-            // E-2 SSE-permit caps (maximums.request.*, §9.3): the Host
-            // ceilings the App stream config is compiled against in
-            // compile_policy. Each cap is optional; 0 = no ceiling.
-            json_t* max_streaming = json_object_get(
-                request, "maxStreamingInflightPerWorker");
-            if (json_is_integer(max_streaming)) {
-                const json_int_t value = json_integer_value(max_streaming);
-                if (value < 0) {
-                    *error = "invalid maximums.request."
-                             "maxStreamingInflightPerWorker";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_streaming_inflight_per_worker =
-                    static_cast<std::uint64_t>(value);
-            }
-            json_t* stream_idle =
-                json_object_get(request, "streamIdleTimeoutMs");
-            if (json_is_integer(stream_idle)) {
-                const json_int_t value = json_integer_value(stream_idle);
-                if (value < 0) {
-                    *error = "invalid maximums.request.streamIdleTimeoutMs";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_stream_idle_timeout_ms =
-                    static_cast<std::uint64_t>(value);
-            }
-            // E-3 slow-client write deadline cap (§9.2): 0 = no ceiling.
-            json_t* write_timeout =
-                json_object_get(request, "writeTimeoutMs");
-            if (json_is_integer(write_timeout)) {
-                const json_int_t value = json_integer_value(write_timeout);
-                if (value < 0) {
-                    *error = "invalid maximums.request.writeTimeoutMs";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_write_timeout_ms =
-                    static_cast<std::uint64_t>(value);
-            }
-        }
-        json_t* worker = json_object_get(maximums, "worker");
-        if (json_is_object(worker)) {
-            json_t* memory = json_object_get(worker, "memoryMax");
-            if (json_is_string(memory)) {
-                std::uint64_t bytes = 0;
-                if (!parse_size_bytes_text(json_string_value(memory),
-                                           &bytes)) {
-                    *error = "invalid maximums.worker.memoryMax";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_worker_memory_bytes = bytes;
-            }
-        }
-        // E-1 admission-queue caps (maximums.pool.*, §10.3): the Host
-        // ceilings the App queue is compiled against in compile_policy.
-        // Each cap is optional; an absent cap leaves the App free to set
-        // its own queue values.
-        json_t* pool = json_object_get(maximums, "pool");
-        if (json_is_object(pool)) {
-            json_t* queue_requests = json_object_get(pool, "queueRequests");
-            if (json_is_integer(queue_requests)) {
-                const json_int_t value = json_integer_value(queue_requests);
-                if (value < 0) {
-                    *error = "invalid maximums.pool.queueRequests";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_queue_requests =
-                    static_cast<std::uint64_t>(value);
-            }
-            json_t* queue_header_bytes =
-                json_object_get(pool, "queueHeaderBytes");
-            if (json_is_string(queue_header_bytes)) {
-                std::uint64_t bytes = 0;
-                if (!parse_size_bytes_text(json_string_value(queue_header_bytes),
-                                           &bytes)) {
-                    *error = "invalid maximums.pool.queueHeaderBytes";
-                    json_decref(root);
-                    return false;
-                }
-                out->policy.max_queue_header_bytes = bytes;
-            }
-            json_t* queue_timeout = json_object_get(pool, "queueTimeout");
-            if (json_is_string(queue_timeout)) {
-                out->policy.max_queue_timeout_ms = parse_duration_ms(
-                    json_string_value(queue_timeout), "maximums.pool.queueTimeout");
-            }
-        }
-    }
-    json_t* capacity = json_object_get(root, "capacity");
-    if (json_is_object(capacity)) {
-        json_t* workers = json_object_get(capacity, "workersTotal");
-        if (json_is_integer(workers)) {
-            const json_int_t value = json_integer_value(workers);
-            if (value <= 0) {
-                *error = "capacity.workersTotal must be positive";
-                json_decref(root);
-                return false;
-            }
-            if (value > static_cast<json_int_t>(std::numeric_limits<int>::max())) {
-                *error = "capacity.workersTotal exceeds the Host limit";
-                json_decref(root);
-                return false;
-            }
-            out->worker_capacity = static_cast<int>(value);
-        }
-    }
-    if (out->applications_root.empty() || out->state_root.empty() ||
-        out->admin_unix_path.empty() ||
-        out->secret_root_template.find("{application}") ==
-            std::string::npos) {
-        *error = "host.json is missing a required root or admin path";
-        json_decref(root);
-        return false;
-    }
-    json_decref(root);
-    return true;
-}
-
 // Safe open of a Host-owned directory: O_NOFOLLOW, directory, euid owner,
 // no group/other bits.
 int open_verified_root(const std::string& path, const char* what) {
@@ -576,50 +278,6 @@ bool valid_managed_app_id(const std::string& value) {
         }
     }
     return true;
-}
-
-// True when the App has a durable active-state document (an active
-// generation or a retired tombstone). Recovery only needs a permit for
-// those; an App with no state cannot consume capacity.
-bool has_durable_active_state(int state_root_fd,
-                              const std::string& application) {
-    const int apps_fd = openat(state_root_fd, "apps",
-                               O_RDONLY | O_DIRECTORY | O_CLOEXEC |
-                                   O_NOFOLLOW);
-    if (apps_fd < 0) {
-        return false;
-    }
-    struct stat directory = {};
-    if (fstat(apps_fd, &directory) != 0 || !S_ISDIR(directory.st_mode) ||
-        directory.st_uid != geteuid() || (directory.st_mode & 0077) != 0) {
-        close(apps_fd);
-        return false;
-    }
-    const int app_fd = openat(apps_fd, application.c_str(),
-                              O_RDONLY | O_DIRECTORY | O_CLOEXEC |
-                                  O_NOFOLLOW);
-    close(apps_fd);
-    if (app_fd < 0) {
-        return false;
-    }
-    if (fstat(app_fd, &directory) != 0 || !S_ISDIR(directory.st_mode) ||
-        directory.st_uid != geteuid() || (directory.st_mode & 0077) != 0) {
-        close(app_fd);
-        return false;
-    }
-    const int active_fd = openat(app_fd, "active.json",
-                                 O_RDONLY | O_CLOEXEC | O_NOFOLLOW |
-                                     O_NONBLOCK);
-    close(app_fd);
-    if (active_fd < 0) {
-        return false;
-    }
-    struct stat active = {};
-    const bool durable = fstat(active_fd, &active) == 0 &&
-                         S_ISREG(active.st_mode) &&
-                         active.st_uid == geteuid();
-    close(active_fd);
-    return durable;
 }
 
 // Discovers configured Apps beneath the verified applications root.
@@ -737,11 +395,24 @@ int run_managed(const std::string& host_config_path,
         fail("host.json rejected at " + validated.error.path + ": " +
              validated.error.message);
     }
-    ManagedConfig config;
+    capsid::host::ParsedHostConfig config;
     std::string config_error;
-    if (!parse_managed_config(host_json, &config, &config_error)) {
+    if (!parse_host_config(host_json, &config, &config_error)) {
         fail(config_error);
     }
+    // Load the trusted bytecode keys BEFORE any worker spawns: attestation
+    // verification is fail-closed, and an empty key set means every
+    // trusted-bytecode deployment is rejected (never silently accepted).
+    // The store owns the key bytes; the options below hold views into it,
+    // so the store must outlive every ManagedHostOptions.
+    capsid::host::TrustedKeyStore trusted_keys =
+        capsid::host::TrustedKeyStore::load(config.trusted_keys,
+                                            &config_error);
+    if (trusted_keys.size() != config.trusted_keys.size()) {
+        fail(config_error);
+    }
+    const std::vector<capsid::host::TrustedBytecodeKey> trusted_key_views(
+        trusted_keys.keys().begin(), trusted_keys.keys().end());
     // Safe-open the roots; the secret template's parent is the dirfd the
     // coordinator opens App subdirectories from.
     const int apps_fd = open_verified_root(config.applications_root,
@@ -761,6 +432,9 @@ int run_managed(const std::string& host_config_path,
     }
     const int secrets_fd = open_verified_root(secret_parent,
                                               "secret root template");
+    // Fail-early validation only: the coordinator re-opens the state root
+    // per operation (verified the same way); this open proves the root is
+    // present and well-formed before any worker spawns.
     const int state_fd = open_verified_root(config.state_root, "state root");
     const std::vector<std::string> applications =
         discover_applications(apps_fd);
@@ -779,126 +453,375 @@ int run_managed(const std::string& host_config_path,
         options->application = application;
         options->worker_path = worker_path;
         options->host_policy = config.policy;
+        options->trusted_keys = trusted_key_views;
         options->runtime_compatibility_id = CAPSID_BUILD_COMPATIBILITY_ID;
         options->stop_requested = &g_stop;
         app_options.push_back(options.get());
         owned.push_back(std::move(options));
     }
-    // Active workers owned by this process: App -> complete worker pool.
-    // A managed fixed pool is an atomic ownership unit; retaining only the
-    // legacy single-worker pointer silently drops every shard beyond the
-    // first one during recovery and replacement.
-    std::map<std::string, std::vector<capsid_worker*>> active_worker_pools;
-    std::mutex workers_mutex;
-    const auto activate_pool =
+    // ---- PR-09c §9.3: the Managed data plane ----
+    // The routing snapshot maps each App to its ACTIVE GenerationPool; the
+    // listener routes every request through one atomic snapshot load and
+    // pins the pool it found. Pools are ADOPTED from the warmed fleet — the
+    // §8.3 replacement factory and the generation identity travel with the
+    // deploy/recover outcome — so replacements respawn the same artifact
+    // and effective config, and the route identity survives replacement.
+    const capsid::host::ResolvedRecoveryPolicy recovery_resolved =
+        capsid::host::resolve_recovery_policy(config.recovery);
+    if (!recovery_resolved.ok) {
+        fail("invalid host.json recovery policy: " +
+             recovery_resolved.error);
+    }
+    auto routing = std::make_shared<capsid::host::RoutingTable>();
+    // App -> ACTIVE pool (the only pool a new request may route to).
+    std::map<std::string,
+             std::shared_ptr<capsid::host::GenerationPool>> active_pools;
+    // Drained (retired or replaced) pools stay alive until shutdown: the
+    // pool destructor drains and joins, and holding the shared_ptr keeps
+    // that off the Admin worker thread.
+    std::vector<std::shared_ptr<capsid::host::GenerationPool>> draining_pools;
+    // §9.6-6 retired Apps: the name keeps a route-level tombstone (no
+    // pool) so the router answers 404 after retire — the durable retire
+    // tombstone of the coordinator is mirrored here, and a redeploy
+    // revives the route. Never-deployed Apps stay unrouted (503).
+    std::set<std::string> retired_apps;
+    std::mutex pools_mutex;
+    // The listener is created AFTER startup recovery (see below); pools
+    // activated during recovery are wired by its start(), which wires every
+    // pool in the current snapshot. Pools activated later are wired by the
+    // §9.3 prepare callback (adopt_generation) before any commit publishes
+    // a snapshot.
+    std::unique_ptr<capsid::host::ManagedListener> data_plane;
+    // Builds a fresh snapshot over the current view (live pools +
+    // tombstones). Caller holds pools_mutex. Allocation allowed —
+    // prepare-time only, never inside a commit.
+    const auto build_snapshot = [&]() {
+        std::vector<std::pair<
+            std::string, std::shared_ptr<capsid::host::GenerationPool>>> routes;
+        routes.reserve(active_pools.size() + retired_apps.size());
+        for (const auto& entry : active_pools) {
+            routes.emplace_back(entry.first, entry.second);
+        }
+        for (const std::string& application : retired_apps) {
+            // Tombstone: routed name, no pool — the router's 404.
+            routes.emplace_back(application, nullptr);
+        }
+        return capsid::host::RoutingSnapshot::build(std::move(routes));
+    };
+    // Publishes a fresh snapshot over the current view (the routing table
+    // itself is lock-free; the lock makes the active_pools view atomic for
+    // its writers). Allocation-free — also used by the commit callbacks.
+    const auto publish_snapshot = [&]() {
+        routing->publish(build_snapshot());
+    };
+    // The process-global weighted capacity ledger (§9.4): workersTotal is
+    // the steady-state budget, activationSurgeWorkers the overlapping
+    // replacement budget. Every reserve happens BEFORE any spawn, inside
+    // the coordinator; the ledger is wired into every App's options below
+    // and into every adopted pool's drain-complete hook.
+    capsid::host::WorkerCapacityLedger ledger(
+        config.capacity.workers_total,
+        config.capacity.activation_surge_workers);
+    // Ownership handoff for a warmed generation: adopt the fleet into a
+    // GenerationPool (create_adopted destroys everything on failure — no
+    // worker escapes) and install the event sink. A generation without its
+    // replacement factory is rejected (factory null) — §8.3 replacement is
+    // not optional. The pool is not yet routed, so it has no in-flight
+    // requests when the sink is installed.
+    const auto adopt_generation =
         [&](const std::string& application,
-            std::vector<capsid_worker*> workers) {
-            std::lock_guard<std::mutex> lock(workers_mutex);
-            const auto existing = active_worker_pools.find(application);
-            if (existing != active_worker_pools.end()) {
-                for (capsid_worker* worker : existing->second) {
-                    if (worker != nullptr) {
-                        capsid_worker_destroy(worker);
-                    }
-                }
-            }
-            active_worker_pools[application] = std::move(workers);
-            return true;
-        };
-    const auto activate_worker =
-        [&](const std::string& application, capsid_worker* worker) {
-            std::vector<capsid_worker*> workers;
-            if (worker != nullptr) {
-                workers.push_back(worker);
-            }
-            return activate_pool(application, std::move(workers));
-        };
-    const auto retire_worker = [&](const std::string& application) {
-        std::lock_guard<std::mutex> lock(workers_mutex);
-        const auto existing = active_worker_pools.find(application);
-        if (existing != active_worker_pools.end()) {
-            for (capsid_worker* worker : existing->second) {
-                if (worker != nullptr) {
+            const std::vector<capsid_worker*>& workers,
+            const capsid::host::WorkerExecutor::WorkerFactory& factory,
+            const std::string& version,
+            const std::string& generation_digest)
+        -> std::shared_ptr<capsid::host::GenerationPool> {
+            if (!factory) {
+                for (capsid_worker* worker : workers) {
                     capsid_worker_destroy(worker);
                 }
+                return nullptr;
             }
-            active_worker_pools.erase(existing);
+            capsid::host::GenerationPoolOptions pool_options;
+            pool_options.application_id = application;
+            pool_options.version = version;
+            pool_options.generation_digest = generation_digest;
+            pool_options.workers =
+                static_cast<std::uint32_t>(workers.size());
+            pool_options.factory = factory;
+            pool_options.recovery = recovery_resolved.policy;
+            const std::uint32_t pool_size = pool_options.workers;
+            // §9.4: the reaper-finished instant releases the pool's
+            // capacity count. The hook captures the size by value and
+            // touches only the ledger (never the pools map or the plan),
+            // so it is safe on the pool's pump thread.
+            pool_options.on_drain_complete =
+                [&ledger, application, pool_size] {
+                    ledger.release_drained(application, pool_size);
+                };
+            std::string pool_error;
+            std::shared_ptr<capsid::host::GenerationPool> pool =
+                capsid::host::GenerationPool::create_adopted(
+                    std::move(pool_options), workers, &pool_error);
+            if (pool == nullptr) {
+                return nullptr;
+            }
+            // The sink must be installed before the pool starts serving:
+            // a request pinned before wiring would lose its response
+            // events (wire_pool precondition: no in-flight requests).
+            if (data_plane != nullptr) {
+                data_plane->wire_pool(pool);
+            }
+            return pool;
+        };
+    // ---- §9.3 activation transaction callbacks ----
+    // The coordinator runs these around the durable active.json write
+    // (persist). prepare builds the ENTIRE new world (pool + view +
+    // snapshot); commit is a single atomic publication (no allocation, no
+    // I/O, no lock waiting); abort rolls the view back. The Async Admin
+    // worker is single-threaded, so a whole transaction is never observed
+    // mid-flight by another transaction.
+    const auto prepare_activation =
+        [&](const std::string& application,
+            const capsid::host::DeployOutcome& prepared,
+            std::string* error) -> std::unique_ptr<capsid::host::ActivationPlan> {
+            std::unique_ptr<capsid::host::ActivationPlan> plan(
+                new capsid::host::ActivationPlan());
+            plan->application = application;
+            plan->version = prepared.version;
+            plan->generation_digest = prepared.generation_digest;
+            plan->new_workers = prepared.workers.size();
+            std::shared_ptr<capsid::host::GenerationPool> pool =
+                adopt_generation(application, prepared.workers,
+                                 prepared.generation_factory,
+                                 prepared.version,
+                                 prepared.generation_digest);
+            if (pool == nullptr) {
+                *error = "cannot activate the new generation";
+                return nullptr;
+            }
+            plan->new_pool = pool;
+            {
+                std::lock_guard<std::mutex> lock(pools_mutex);
+                const auto existing = active_pools.find(application);
+                if (existing != active_pools.end()) {
+                    plan->old_pool = existing->second;
+                    plan->old_workers =
+                        existing->second->configured_workers();
+                    // The replaced generation stops serving only at
+                    // COMMIT; the reference is parked here so commit
+                    // needs no allocation.
+                    draining_pools.push_back(existing->second);
+                }
+                // View pre-insert: commit's find+assign never allocates,
+                // and the snapshot below already reflects the new
+                // generation. A redeploy revives a retired App: the live
+                // route wins over the tombstone, so the publish must not
+                // emit both.
+                active_pools[application] = pool;
+                retired_apps.erase(application);
+                // The COMPLETE new route map is built at prepare time so
+                // commit is a single atomic snapshot swap.
+                plan->new_snapshot = build_snapshot();
+            }
+            return plan;
+        };
+    const auto commit_activation = [&](capsid::host::ActivationPlan* plan) {
+        std::lock_guard<std::mutex> lock(pools_mutex);
+        // The new pool is already in the view (prepared): commit only
+        // publishes and signals the drain. No allocation, no file I/O.
+        if (plan->old_pool != nullptr) {
+            // Drain signal only: new requests route to the new pool,
+            // in-flight requests finish on the old one, and a drained
+            // generation never starts a replacement.
+            plan->old_pool->request_drain();
+        }
+        const auto entry = active_pools.find(plan->application);
+        if (entry != active_pools.end()) {
+            entry->second = plan->new_pool;
+        }
+        retired_apps.erase(plan->application);
+        routing->publish(plan->new_snapshot);
+    };
+    const auto abort_activation = [&](capsid::host::ActivationPlan* plan) {
+        std::lock_guard<std::mutex> lock(pools_mutex);
+        // The persist failed: the disk still points at the old generation,
+        // so the memory must too. The node check is defensive — the
+        // single-threaded Async worker guarantees no other transaction
+        // touched the view since prepare.
+        const auto entry = active_pools.find(plan->application);
+        if (entry != active_pools.end() &&
+            entry->second == plan->new_pool) {
+            if (plan->old_pool != nullptr) {
+                entry->second = plan->old_pool;
+            } else {
+                active_pools.erase(entry);
+            }
+        }
+        // The plan (and with it the never-published pool) dies on return;
+        // the still-serving old pool stays parked in draining_pools until
+        // shutdown (harmless — stop_and_join is idempotent).
+    };
+    // ---- §9.3 retire transaction callbacks ----
+    const auto prepare_retire =
+        [&](const std::string& application,
+            std::string* error) -> std::unique_ptr<capsid::host::RetirePlan> {
+            (void) error;
+            std::unique_ptr<capsid::host::RetirePlan> plan(
+                new capsid::host::RetirePlan());
+            plan->application = application;
+            {
+                std::lock_guard<std::mutex> lock(pools_mutex);
+                const auto existing = active_pools.find(application);
+                if (existing != active_pools.end()) {
+                    plan->pool = existing->second;
+                    plan->workers =
+                        existing->second->configured_workers();
+                    // The route becomes a TOMBSTONE at prepare; commit
+                    // only publishes. New requests get 404 (§9.6-6) while
+                    // old in-flight requests finish on their pinned pool.
+                    active_pools.erase(existing);
+                    retired_apps.insert(application);
+                    draining_pools.push_back(plan->pool);
+                    plan->view_mutated = true;
+                } else if (retired_apps.find(application) ==
+                           retired_apps.end()) {
+                    // Idempotent retire of a never-deployed App: the
+                    // durable tombstone is (re)persisted; the route keeps
+                    // its current shape (tombstone pre-inserted so commit
+                    // has nothing to allocate).
+                    retired_apps.insert(application);
+                    plan->view_mutated = true;
+                }
+                plan->new_snapshot = build_snapshot();
+            }
+            return plan;
+        };
+    const auto commit_retire = [&](capsid::host::RetirePlan* plan) {
+        std::lock_guard<std::mutex> lock(pools_mutex);
+        if (plan->pool != nullptr) {
+            // Drain signal only; the reference is parked in
+            // draining_pools.
+            plan->pool->request_drain();
+        }
+        routing->publish(plan->new_snapshot);
+    };
+    const auto abort_retire = [&](capsid::host::RetirePlan* plan) {
+        std::lock_guard<std::mutex> lock(pools_mutex);
+        if (!plan->view_mutated) {
+            return;
+        }
+        const auto entry = active_pools.find(plan->application);
+        if (plan->pool != nullptr) {
+            // Restore the still-serving generation (may allocate — abort
+            // runs only in the already-failed path).
+            if (entry != active_pools.end()) {
+                entry->second = plan->pool;
+            } else {
+                active_pools[plan->application] = plan->pool;
+            }
+            retired_apps.erase(plan->application);
+        } else {
+            retired_apps.erase(plan->application);
         }
     };
     const auto reclaim_workers = [&]() {
-        std::lock_guard<std::mutex> lock(workers_mutex);
-        for (const auto& entry : active_worker_pools) {
-            for (capsid_worker* worker : entry.second) {
-                if (worker != nullptr) {
-                    capsid_worker_destroy(worker);
-                }
+        std::vector<std::shared_ptr<capsid::host::GenerationPool>> all;
+        {
+            std::lock_guard<std::mutex> lock(pools_mutex);
+            for (const auto& entry : active_pools) {
+                all.push_back(entry.second);
             }
+            active_pools.clear();
+            all.insert(all.end(), draining_pools.begin(),
+                       draining_pools.end());
+            draining_pools.clear();
         }
-        active_worker_pools.clear();
+        for (const auto& pool : all) {
+            pool->stop_and_join();
+        }
     };
-    // The process-global worker permit (capacity.workersTotal). The slot
-    // is bound to an active App: replacements do not re-acquire, a failed
-    // replacement keeps the old slot, and only a newly acquired permit is
-    // returned when the operation settles without a live worker.
-    capsid::host::WorkerCapacityPermit capacity(config.worker_capacity);
+    // Wire the §9.3 transaction callbacks and the §9.4 ledger into every
+    // App's coordinator options.
+    for (capsid::host::ManagedHostOptions* options : app_options) {
+        options->ledger = &ledger;
+        options->prepare_activation = prepare_activation;
+        options->commit_activation = commit_activation;
+        options->abort_activation = abort_activation;
+        options->prepare_retire = prepare_retire;
+        options->commit_retire = commit_retire;
+        options->abort_retire = abort_retire;
+    }
     // Startup recovery: a durable active App is revalidated and its
     // replacement worker reaches READY before Admin readiness is
-    // published. The global permit is acquired BEFORE any spawn; an
+    // published. The §9.4 reserve for the recovered fleet happens INSIDE
+    // run_recover_operation — the coordinator learns the pool size only
+    // after re-compiling the effective policy — and before any spawn: an
     // active-generation count beyond capacity fails closed at startup
     // instead of overspawning first.
     for (capsid::host::ManagedHostOptions* options : app_options) {
-        // Only an App with durable state may consume a permit; a fresh
-        // App never occupies capacity before its first deploy.
-        bool newly_acquired = false;
-        if (has_durable_active_state(state_fd, options->application)) {
-            newly_acquired = capacity.acquire(options->application);
-            if (!newly_acquired &&
-                !capacity.holds(options->application)) {
-                fail("active generation count exceeds "
-                     "capacity.workersTotal");
-            }
-        }
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome recovered =
             capsid::host::managed_recover(options, &status);
         if (!recovered.ok) {
-            if (newly_acquired) {
-                capacity.release(options->application);
-            }
             fail("cannot recover active application " + options->application);
         }
         if (!recovered.workers.empty()) {
-            // A state-file race can create an active document after the
-            // preflight check. Reconcile the permit before retaining any
-            // recovered workers; never leave a live pool outside capacity.
-            if (!newly_acquired &&
-                !capacity.holds(options->application)) {
-                if (!capacity.acquire(options->application)) {
-                    for (capsid_worker* worker : recovered.workers) {
-                        capsid_worker_destroy(worker);
-                    }
-                    fail("active generation count exceeds "
-                         "capacity.workersTotal");
-                }
-                newly_acquired = true;
+            // The reserve was committed inside run_recover_operation
+            // (reserve_fresh before any spawn); a fresh adoption has
+            // nothing further to settle.
+            const std::shared_ptr<capsid::host::GenerationPool> pool =
+                adopt_generation(options->application, recovered.workers,
+                                 recovered.generation_factory,
+                                 recovered.version,
+                                 recovered.generation_digest);
+            if (pool == nullptr) {
+                fail("cannot activate the recovered pool for application " +
+                     options->application);
             }
-            // READY succeeded: the complete recovered pool holds the slot.
-            capacity.record_success(options->application);
-            activate_pool(options->application, std::move(recovered.workers));
-        } else if (newly_acquired) {
-            // No active/retired generation: no permanent occupancy.
-            capacity.release(options->application);
+            {
+                std::lock_guard<std::mutex> lock(pools_mutex);
+                active_pools[options->application] = pool;
+                publish_snapshot();
+            }
+        } else {
+            // Durable state but no recovered workers: the App is retired
+            // (or quarantined). Mirror the coordinator's durable tombstone
+            // in the route — the name stays routed with no pool, so the
+            // router keeps answering 404 after restart, exactly as it did
+            // before the restart (§9.6-6). No capacity occupancy.
+            {
+                std::lock_guard<std::mutex> lock(pools_mutex);
+                retired_apps.insert(options->application);
+                publish_snapshot();
+            }
+        }
+    }
+    // §9.2 data plane: 0..1 public listeners, bound all-or-fail BEFORE
+    // Admin readiness is published (a configured listener that cannot bind
+    // must fail the Host, never serve a degraded control plane). The v1
+    // event sink is single-consumer — exactly one listener may own the
+    // pools' fan-out — so more than one configured listener fails closed at
+    // startup instead of serving with a broken response fan-out.
+    if (config.listeners.size() > 1) {
+        fail("host.json configures multiple listeners; the v1 data plane "
+             "supports exactly one");
+    }
+    if (config.listeners.size() == 1) {
+        capsid::host::ManagedListenerOptions listener_options;
+        listener_options.config = config.listeners[0];
+        listener_options.routing = routing;
+        data_plane = std::make_unique<capsid::host::ManagedListener>(
+            std::move(listener_options));
+        std::string listener_error;
+        if (!data_plane->start(&listener_error)) {
+            fail("cannot bind the data plane listener: " + listener_error);
         }
     }
     capsid::host::ManagedAdminBackend managed(app_options);
-    managed.capacity = &capacity;
     capsid::host::AsyncAdminBackendOptions async_options;
     // Fixed bounded queue; startupsConcurrent is not the Admin ceiling.
     async_options.max_pending_operations = 8;
     async_options.external_stop = &g_stop;
-    async_options.activate_worker = activate_worker;
-    async_options.activate_pool = activate_pool;
-    async_options.retire_worker = retire_worker;
     auto async = std::make_unique<capsid::host::AsyncAdminBackend>(
         &managed, async_options);
     capsid::host::AdminServiceOptions service_options;
@@ -932,6 +855,15 @@ int run_managed(const std::string& host_config_path,
     // cancelled, running deploys interrupted) BEFORE reclaiming workers;
     // shutdown never depends on destructor ordering at function return.
     async.reset();
+    // The data plane stops accepting and closes its sessions BEFORE the
+    // pools drain: no new request can pin a dying pool, and the mailbox
+    // (owned by the listener) outlives every pool's sink.
+    if (data_plane != nullptr) {
+        data_plane->request_stop();
+        if (!data_plane->wait(&service_error)) {
+            fail("data plane failed: " + service_error);
+        }
+    }
     reclaim_workers();
     close(state_fd);
     return 0;

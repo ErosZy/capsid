@@ -1,0 +1,25 @@
+--- a/src/vm.c	2026-08-10 04:41:14
++++ b/src/vm.c	2026-08-10 04:41:14
+@@ -698,7 +698,21 @@
+             if (err < 0) {
+                 TJSRuntime *qrt = TJS_GetRuntime(ctx);
+                 CHECK_NOT_NULL(qrt);
+-                TJS_Stop(qrt);
++                /* Capsid: an uncatchable job exception - the CPU-deadline
++                 * interrupt from JS_SetInterruptHandler, which the promise
++                 * machinery deliberately refuses to convert into a
++                 * rejection - must not tear the runtime down. The worker
++                 * owns error delivery through its deadline and reclaim
++                 * machinery; consume the exception so subsequent jobs run
++                 * normally. Catchable job exceptions keep the upstream
++                 * fatal behavior (re-thrown, then stopped). */
++                JSValue exc = JS_GetException(ctx1);
++                if (JS_IsUncatchableError(exc)) {
++                    JS_FreeValue(ctx1, exc);
++                } else {
++                    JS_Throw(ctx1, exc);
++                    TJS_Stop(qrt);
++                }
+             }
+ 
+             break;
