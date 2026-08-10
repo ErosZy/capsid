@@ -527,6 +527,18 @@ const char *capsid_result_string(capsid_result result);
 capsid_result capsid_runtime_build_info(capsid_build_info *out_info);
 
 capsid_result capsid_worker_spawn(const capsid_worker_config *config, capsid_worker **out_worker);
+/*
+ * Abortive cleanup (spec §13.3): closes the IPC channel and terminates the
+ * worker process immediately — in-flight requests are dropped without
+ * warning and the worker gets no chance to flush application state. The
+ * child is always reaped before destroy returns; it allocates nothing and
+ * never throws. A host that wants a graceful stop must run the explicit
+ * sequence capsid_worker_shutdown → capsid_worker_flush → poll
+ * capsid_worker_next_event until CAPSID_EVENT_EXIT / CAPSID_CLOSED →
+ * capsid_worker_destroy. Terminate-on-deadline is the only non-abortive
+ * escape: the Host's normal stop is graceful, and only a shutdown deadline
+ * turns into capsid_worker_terminate.
+ */
 void capsid_worker_destroy(capsid_worker *worker);
 int capsid_worker_fd(const capsid_worker *worker);
 int64_t capsid_worker_pid(const capsid_worker *worker);
@@ -595,7 +607,20 @@ capsid_result capsid_worker_cancel(capsid_worker *worker, uint64_t request_id);
 capsid_result capsid_worker_request_memory_metrics(capsid_worker *worker);
 capsid_result capsid_worker_flush(capsid_worker *worker);
 capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *event);
+/*
+ * Graceful stop (spec §13.3), used only as part of the explicit sequence
+ * shutdown → flush → drain EXIT → destroy: queues the worker-side shutdown
+ * frame; the worker flushes its state and exits, after which next_event
+ * reports CAPSID_EVENT_EXIT and the channel closes. A caller that abandons
+ * the drain must still run capsid_worker_destroy (abortive) to reap the
+ * child.
+ */
 capsid_result capsid_worker_shutdown(capsid_worker *worker);
+/*
+ * Abortive signal: SIGKILLs the worker process without a graceful frame.
+ * Use only when a shutdown deadline expired; the worker must still be
+ * reaped with capsid_worker_destroy afterwards.
+ */
 capsid_result capsid_worker_terminate(capsid_worker *worker);
 
 /*

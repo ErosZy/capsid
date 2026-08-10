@@ -1625,32 +1625,25 @@ void capsid_worker_destroy(capsid_worker *worker) {
     if (!worker) {
         return;
     }
-    // WP-06, spec §10.2: teardown must never leak the child. The graceful
-    // shutdown path allocates (queue_frame / flush buffers) and may throw;
-    // if it does, swallow the exception and fall through — close, signal
-    // and reaping below are unconditional and allocate nothing. Never
-    // return early between the shutdown attempt and the reap.
-    try {
-        if (!worker->closed) {
-            capsid_worker_shutdown(worker);
-            capsid_worker_flush(worker);
-        }
-    } catch (...) {
-        // Only the graceful shutdown frame was skipped; the worker process
-        // is still terminated and reaped below.
-    }
+    // §13.3: abortive cleanup. destroy never attempts graceful shutdown —
+    // a caller who wants a graceful stop must run the documented sequence
+    // shutdown → flush → drain EXIT → destroy explicitly (the Host's
+    // normal-stop path does). In-flight requests are terminated without
+    // warning; the worker is SIGKILLed (cooperative SIGTERM is not part of
+    // the abortive contract). Teardown allocates nothing and never throws
+    // (spec §10.2): close, signal and reap below are unconditional, and
+    // the child is always reaped before destroy returns.
     if (worker->fd >= 0) {
         close(worker->fd);
         worker->fd = -1;
     }
     worker->closed = true;
     if (worker->pid > 0) {
-        if (!wait_for_child(worker->pid, 100)) {
-            kill(worker->pid, SIGTERM);
-            if (!wait_for_child(worker->pid, 250)) {
-                kill(worker->pid, SIGKILL);
-                wait_for_child(worker->pid, 250);
-            }
+        // A short natural-exit window keeps the reap cheap for workers that
+        // are already gone; anything still alive is SIGKILLed and reaped.
+        if (!wait_for_child(worker->pid, 50)) {
+            kill(worker->pid, SIGKILL);
+            wait_for_child(worker->pid, 250);
         }
     }
     delete worker;
