@@ -1,7 +1,0 @@
-DIAGNOSTIC RUN — PRE-AUDIT RUNNER (ASYMMETRIC PROBE)
-
-Generated with the pre-audit runner: CAPSID_HOST_IPC_METRICS was armed on
-headline rounds, and only the C++ side emits host metrics, so the probe
-cost (fprintf+JSON per pump) fell on the C++ side alone. The -6.93% QPS
-reading is inflated by that asymmetry. Final comparison:
-go-vs-cpp-20260802T170344 (zero-probe runner, release build).
