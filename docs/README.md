@@ -27,6 +27,9 @@ App/pool、多 worker 与安全部署闭环（M1D）继续实现中。里程碑�
   工作包、RED 证据与验收门（PR-01…PR-14 的当前执行依据）
 - [WP-08 完成报告（PR-13）](capsid-wp08-completion-2026-08-10.md)：安装、CPack
   与 Release CI 的验收证据、不变量与 RED/GREEN 记录
+- [WP-09 完成报告（PR-14）](capsid-wp09-completion-2026-08-10.md)：P1 收尾包 —
+  EXIT 清零、timeout drain、destroy 语义、有界 registry、24h/72h soak 平台
+  与 managed 数据平面 response-credit 修复
 - [安全审计交接](capsid-audit-handoff-2026-08-09.md)：审计输入、已确认发现和
   修复完成后的复核要求
 
