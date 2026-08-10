@@ -15,6 +15,7 @@
 #include "host/artifact_safe_read.h"
 #include "host/config.h"
 #include "host/generation_identity.h"
+#include "host/managed_registry.h"
 #include "host/secret_file_provider.h"
 #include "host/secret_snapshot.h"
 #include "host/worker_event_source.h"
@@ -178,54 +179,10 @@ std::string unique_operation_id() {
     return out.str();
 }
 
-// In-process operation registry: operation_id -> latest recorded status.
-// Deploy/retire/recovery record their outcome here once the operation
-// settles; managed_operation_status() reads the record. The registry is
-// mutex-guarded because operations may be recorded and queried from
-// different threads.
-std::mutex& operation_registry_mutex() {
-    static std::mutex mutex;
-    return mutex;
-}
-std::map<std::string, OperationStatus>& operation_registry() {
-    static std::map<std::string, OperationStatus> registry;
-    return registry;
-}
-
-void record_operation(const std::string& operation_id,
-                      const OperationStatus& status) {
-    std::lock_guard<std::mutex> lock(operation_registry_mutex());
-    operation_registry()[operation_id] = status;
-}
-
-bool lookup_operation(const std::string& operation_id,
-                      OperationStatus* out) {
-    std::lock_guard<std::mutex> lock(operation_registry_mutex());
-    const std::map<std::string, OperationStatus>::const_iterator found =
-        operation_registry().find(operation_id);
-    if (found == operation_registry().end()) {
-        return false;
-    }
-    *out = found->second;
-    return true;
-}
-
-// Per-App mutex serializing deploy/retire/recover state transitions.
-// Operations on the same App share staging, versions, generations and
-// active.json; their read-modify-write sequences must not interleave.
-// Different Apps proceed in parallel. The table itself is guarded by a
-// static mutex; slots are never removed, so the returned reference stays
-// valid for the process lifetime.
-std::mutex& app_operation_mutex(const std::string& application) {
-    static std::mutex table_mutex;
-    static std::map<std::string, std::unique_ptr<std::mutex>> table;
-    std::lock_guard<std::mutex> lock(table_mutex);
-    std::unique_ptr<std::mutex>& slot = table[application];
-    if (!slot) {
-        slot = std::make_unique<std::mutex>();
-    }
-    return *slot;
-}
+// In-process operation registry and per-App operation locks moved to
+// host/managed_registry.{h,cc} (spec §13.4): bounded by TTL + hard cap
+// instead of growing without bound under an unbounded set of operation ids
+// or application names.
 
 // ---- worker warm-up: spawn, load, READY, compatibility check ----
 
@@ -3045,9 +3002,8 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     // Per-App mutex: the version gate, staging, commit, mapping write and
     // active-state persist form one read-modify-write sequence per App and
     // must not interleave with a concurrent deploy/retire/recover on the
-    // same App.
-    std::lock_guard<std::mutex> app_lock(
-        app_operation_mutex(options->application));
+    // same App. AppOperationLock pins a bounded per-App slot (§13.4).
+    capsid::host::AppOperationLock app_lock(options->application);
     const int mapping =
         check_version_mapping(app_state_fd, version, generation_digest);
     if (mapping == -2) {
@@ -3416,8 +3372,7 @@ DeployOutcome run_retire_operation(ManagedHostOptions* options,
     }
     // Per-App mutex: the retire read-modify-write must not interleave with
     // a concurrent deploy/recover on the same App.
-    std::lock_guard<std::mutex> app_lock(
-        app_operation_mutex(options->application));
+    capsid::host::AppOperationLock app_lock(options->application);
     PosixActiveStateFilesystem filesystem(app_state_fd);
     const ActiveStateReadResult current = filesystem.read_active_file();
     ActiveStateDocument document;
@@ -3551,8 +3506,7 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
     }
     // Per-App mutex: recovery's read/rebuild/activate sequence must not
     // interleave with a concurrent deploy/retire on the same App.
-    std::lock_guard<std::mutex> app_lock(
-        app_operation_mutex(options->application));
+    capsid::host::AppOperationLock app_lock(options->application);
     // The active-state recovery flow owns the read/parse/decision: it
     // cleans stale active.json.tmp.* first (best effort), then maps the
     // document to an action (activate only when the generation is

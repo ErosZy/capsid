@@ -727,6 +727,43 @@ if(BUILD_TESTING)
         endforeach()
 
         add_executable(
+            test-host-managed-registry
+            tests/test_managed_registry.cc)
+        target_include_directories(
+            test-host-managed-registry PRIVATE src)
+        target_link_libraries(test-host-managed-registry PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-managed-registry PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-managed-registry PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-managed-registry PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        foreach(CAPSID_REGISTRY_TEST_ID
+                registry_bounded
+                registry_status_roundtrip
+                slots_bounded_reclaimed
+                slots_serialize_same_app
+                slots_pinned_survive)
+            add_test(
+                NAME "host_managed_registry_${CAPSID_REGISTRY_TEST_ID}"
+                COMMAND test-host-managed-registry
+                    "${CAPSID_REGISTRY_TEST_ID}")
+            set_tests_properties(
+                "host_managed_registry_${CAPSID_REGISTRY_TEST_ID}"
+                PROPERTIES TIMEOUT 30)
+        endforeach()
+
+        add_executable(
             test-host-request-normalization
             tests/test_host_request_normalization.cc)
         target_include_directories(
