@@ -152,8 +152,13 @@ bool parse_duration_ms_text(const std::string& text, std::uint64_t* out) {
     }
     errno = 0;
     char* end = nullptr;
+    // The strtoull end-pointer must not outlive the string it points into;
+    // a temporary from substr() would be destroyed at the end of the full
+    // expression, leaving *end a stack-use-after-scope read (ASAN caught
+    // this). Keep the substring alive for the duration of the check.
+    const std::string numeric_text = text.substr(0, number_end);
     const unsigned long long parsed =
-        std::strtoull(text.substr(0, number_end).c_str(), &end, 10);
+        std::strtoull(numeric_text.c_str(), &end, 10);
     if (errno != 0 || end == nullptr || *end != '\0' || parsed == 0 ||
         parsed > static_cast<unsigned long long>(
                       std::numeric_limits<std::uint64_t>::max() /
