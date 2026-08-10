@@ -4244,5 +4244,19 @@ if(BUILD_TESTING)
             COMMAND test-worker-lifecycle $<TARGET_FILE:test-stubborn-worker>
         )
         set_tests_properties(worker_bounded_destroy PROPERTIES TIMEOUT 5)
+        add_executable(
+            test-worker-timeout-drain
+            tests/test_worker_timeout_drain.cc)
+        target_include_directories(test-worker-timeout-drain PRIVATE tests)
+        target_link_libraries(
+            test-worker-timeout-drain
+            PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_timeout_drain
+            COMMAND test-worker-timeout-drain
+                $<TARGET_FILE:test-stubborn-worker>
+        )
+        set_tests_properties(worker_timeout_drain PROPERTIES TIMEOUT 20)
     endif()
 endif()
