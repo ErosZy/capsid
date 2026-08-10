@@ -763,6 +763,37 @@ if(BUILD_TESTING)
                 PROPERTIES TIMEOUT 30)
         endforeach()
 
+        # WP-09 §13.6 soak platform: the memory-wave client is a real
+        # binary so the CI gates build it and the smoke test proves the
+        # cancel/reclaim convergence protocol against the real worker.
+        add_executable(
+            soak-memory-waves
+            soak/soak_memory_waves.cc)
+        target_include_directories(soak-memory-waves PRIVATE src)
+        target_link_libraries(soak-memory-waves PRIVATE capsid_runtime)
+        set_target_properties(soak-memory-waves PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(soak-memory-waves PRIVATE /W4 /WX)
+            else()
+                target_compile_options(soak-memory-waves PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        if(TARGET capsid-worker)
+            add_test(
+                NAME soak_memory_waves_smoke
+                COMMAND soak-memory-waves
+                    $<TARGET_FILE:capsid-worker>
+                    "${CMAKE_CURRENT_SOURCE_DIR}/soak/fixtures/soak-app.js"
+                    4
+                    50)
+            set_tests_properties(soak_memory_waves_smoke PROPERTIES TIMEOUT 120)
+        endif()
+
         add_executable(
             test-host-request-normalization
             tests/test_host_request_normalization.cc)
