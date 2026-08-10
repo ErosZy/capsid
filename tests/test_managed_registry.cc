@@ -144,6 +144,7 @@ int main(int argc, char** argv) {
             threads.emplace_back([&]() {
                 ready.fetch_add(1);
                 while (!go.load()) {
+                    std::this_thread::yield();
                 }
                 for (int i = 0; i < kSections; ++i) {
                     AppOperationLock lock("shared-app");
@@ -154,6 +155,7 @@ int main(int argc, char** argv) {
             });
         }
         while (ready.load() != kThreads) {
+            std::this_thread::yield();
         }
         go.store(true);
         // Distinct Apps are not blocked by the shared-app critical
@@ -181,6 +183,7 @@ int main(int argc, char** argv) {
         constexpr int kPins = 256;
         constexpr int kExtra = 64;
         std::atomic<int> ready{0};
+        std::atomic<int> extras_ready{0};
         std::atomic<bool> go{false};
         std::vector<std::atomic<int>> values(kPins);
         std::vector<std::thread> threads;
@@ -190,24 +193,41 @@ int main(int argc, char** argv) {
                 values[t].store(1);  // touch the slot while pinned
                 ready.fetch_add(1);
                 while (!go.load()) {
+                    std::this_thread::yield();
                 }
             });
         }
         while (ready.load() != kPins) {
+            std::this_thread::yield();
         }
         // All 256 slots are pinned; new Apps still acquire a lock — the
         // table grows past the cap because nothing is reclaimable. The
         // extras must stay held while we observe the size; releasing one
-        // lets prune reclaim it immediately.
-        std::vector<std::unique_ptr<AppOperationLock>> extras;
+        // lets prune reclaim it immediately. Each extra is held by its
+        // own thread: TSan's deadlock detector tracks at most 64 held
+        // locks per thread, so holding all extras in the main thread
+        // would trip its CHECK (n_all_locks_ == 64) even though there is
+        // no real cycle.
+        std::vector<std::thread> extra_threads;
         for (int i = 0; i < kExtra; ++i) {
-            extras.push_back(
-                std::make_unique<AppOperationLock>("extra-app-" + std::to_string(i)));
+            extra_threads.emplace_back([&, i]() {
+                AppOperationLock lock("extra-app-" + std::to_string(i));
+                extras_ready.fetch_add(1);
+                while (!go.load()) {
+                    std::this_thread::yield();
+                }
+            });
+        }
+        while (extras_ready.load() != kExtra) {
+            std::this_thread::yield();
         }
         require(app_operation_slot_count() == kPins + kExtra,
                 "pinned slots were evicted or extras were not created");
         go.store(true);
         for (std::thread& thread : threads) {
+            thread.join();
+        }
+        for (std::thread& thread : extra_threads) {
             thread.join();
         }
         int touched = 0;

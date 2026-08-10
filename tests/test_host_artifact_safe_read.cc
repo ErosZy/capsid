@@ -331,28 +331,68 @@ int main() {
         Fixture fixture = make_fixture("orders", "v10");
         const std::string vdir = "orders/v10";
         // Under the per-file limit (16 MiB) but large enough that the
-        // truncation lands inside the read window.
-        const std::string big(12U * 1024U * 1024U, 'b');
+        // read window (fstat before -> resize -> pread -> fstat after)
+        // is much longer than one mutation.
+        const std::size_t big = 12U * 1024U * 1024U;
+        const std::string big_fill(big, 'b');
         write_file_at(fixture.root_fd, (vdir + "/capsid.json").c_str(), "{}");
-        write_file_at(fixture.root_fd, (vdir + "/bundle.mjs").c_str(), big);
-        // Deterministic perturbation: a fixed-delay truncate raced the
-        // read window (a 12 MiB page-cache read can finish in ~2-4 ms,
-        // so the truncation sometimes landed outside it and the test
-        // flaked). Instead the truncator toggles size/restore for the
-        // whole read; every toggle changes size+mtime+ctime, so any
-        // toggle inside the reader's window trips the identity check,
-        // and one is near-certain to land there. The loop is bounded and
-        // stopped as soon as the read returns.
+        write_file_at(fixture.root_fd, (vdir + "/bundle.mjs").c_str(), big_fill);
+        // Deterministic mid-read perturbation, not a probabilistic race.
+        // The truncator toggles the file between `big` and `big + 4 KiB`
+        // for the whole read:
+        //
+        //   * the file never drops below `big`, so the reader's first
+        //     fstat always sees a multi-MiB file and the read window
+        //     (resize + pread of ~12 MiB) is at least ~1 ms;
+        //   * each truncate only touches the 4 KiB tail, so both
+        //     directions complete in tens of microseconds and the toggle
+        //     cycle is ~100-400 us — far shorter than the window, so at
+        //     least one mutation always lands inside it;
+        //   * the shrink direction makes pread return short (offset !=
+        //     size) and the grow direction changes size/mtime/ctime —
+        //     either branch returns kIdentityChanged.
+        //
+        // A shrink-to-1024 / restore-to-12 MiB toggle was tried first and
+        // fails by construction under TSan: restoring 12 MiB through
+        // virtiofs zero-allocates the range (~3 ms per restore), so the
+        // toggle cycle is longer than the read window and no mutation
+        // reliably lands inside it. The ready/start handshake below also
+        // pins the truncator's first toggle before the read begins: a
+        // freshly spawned thread can lag the reader's whole window.
         const std::string path = fixture.root + "/" + vdir + "/bundle.mjs";
         std::atomic<bool> reader_done{false};
+        std::atomic<bool> truncator_ready{false};
+        std::atomic<bool> start{false};
+        std::atomic<bool> restored{false};
         std::thread truncator([&]() {
+            truncator_ready.store(true);
+            while (!start.load()) {
+                std::this_thread::yield();
+            }
+            // First full toggle completes before the reader starts: the
+            // main thread waits on `restored`, so the truncator is
+            // provably running (one mutation ahead) when the read begins.
+            if (truncate(path.c_str(), static_cast<off_t>(big)) != 0 ||
+                truncate(path.c_str(), static_cast<off_t>(big + 4096)) != 0) {
+                std::exit(2);  // fixture error
+            }
+            restored.store(true);
             for (int i = 0; i < 100000 && !reader_done.load(); ++i) {
-                if (truncate(path.c_str(), 1024) != 0 ||
-                    truncate(path.c_str(), big.size()) != 0) {
-                    break;  // fixture error: the identity stays stable
+                if (truncate(path.c_str(), static_cast<off_t>(big)) != 0 ||
+                    truncate(path.c_str(), static_cast<off_t>(big + 4096)) !=
+                        0) {
+                    std::exit(2);  // fixture error: no mutation reaches
+                                   // the reader's window
                 }
             }
         });
+        while (!truncator_ready.load()) {
+            std::this_thread::yield();
+        }
+        start.store(true);
+        while (!restored.load()) {
+            std::this_thread::yield();
+        }
         const capsid::host::SafeReadResult result =
             safe_read_version_artifacts(fixture.root_fd, "orders", "v10",
                                         capsid::host::kMaxVersionArtifactTotalBytes);
