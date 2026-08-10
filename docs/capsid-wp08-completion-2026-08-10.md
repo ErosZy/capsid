@@ -87,10 +87,8 @@ Release 的 WPT 配置要求）与发布前加固提交。结论：
 | 框架 5 门 | hono / itty-router×3 / h3-v2 lifecycle | **全通过** | — |
 | Host 2 门 | host_managed_executable 家族（~16 tests）/ in-process host_managed 家族 | **全通过** | — |
 | 身份门 | runtime_worker_compiler_identity_matches | **通过** | — |
-| TSan scope | `ctest -j 2 -E '^(wpt_conformance_not_configured\|worker_strict_sandbox_direct_fetch\|worker_strict_sandbox_https_ca\|worker_package_.*)$'`（build-tsan，388 tests） | 385/388（3 失败均已在修复后 solo/复跑验证，见 §4） | 199.19s |
-| ASAN scope | 同款排除（build-asan，307 tests） | 296/301（首轮；5 失败分类见 §4） | 229.06s |
-
-最终复跑数字以 §4/commit 记录为准；表格是执行期快照。
+| TSan scope | `ctest -j 2 -E '^(wpt_conformance_not_configured\|worker_strict_sandbox_direct_fetch\|worker_strict_sandbox_https_ca\|worker_package_.*)$'`（build-tsan，388 tests） | **388/388 通过**（最终复跑；首轮 385/388 的 3 失败分类见 §4） | ~200s |
+| ASAN scope | 同款排除（build-asan，307 tests） | **301/301 通过**（最终复跑；首轮 296/301 的 5 失败分类见 §4） | ~4min |
 
 ## 3. 每条不变量
 
@@ -190,7 +188,8 @@ docker exec capsid-linux-bench sh -c 'cd /capsid/build-asan && \
 ## 8. 后续 WP 风险
 
 - **WP-08 内已顺手关闭**：ASAN 捕获的 `parse_duration_ms_text` 悬垂 end
-  指针（6d5fd23）——本类缺陷正是 sanitizer 门禁的 CI 矩阵价值。
+  指针（6d5fd23）——本类缺陷正是 sanitizer 门禁的 CI 矩阵价值。最终复跑
+  TSan 388/388、ASAN 301/301，此前记录的两类负载 flake 均未复发。
 - **WP-09 §13.1**：`src/client.cc` EOF/EXIT 构造（约 2204-2207 行）未清零
   flags/status/credit — 与 REQUEST_TIMEOUT 路径（2236-2246 已清零）不一致；
   复用 event 结构的上游会读到陈旧字段。
