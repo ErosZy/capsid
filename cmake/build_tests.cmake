@@ -2690,6 +2690,21 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
         )
         set_tests_properties(worker_end_after_response PROPERTIES TIMEOUT 20)
+        add_executable(
+            test-worker-exit-fields
+            tests/test_worker_exit_fields.cc)
+        target_include_directories(test-worker-exit-fields PRIVATE tests)
+        target_link_libraries(
+            test-worker-exit-fields
+            PRIVATE capsid_runtime
+        )
+        add_test(
+            NAME worker_exit_fields
+            COMMAND test-worker-exit-fields
+                $<TARGET_FILE:capsid-worker>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
+        )
+        set_tests_properties(worker_exit_fields PROPERTIES TIMEOUT 20)
         add_test(
             NAME worker_bodyless_end_failure
             COMMAND test-worker-integration
