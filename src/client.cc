@@ -2201,8 +2201,17 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                     worker->canceled_request_order.clear();
                     close(worker->fd);
                     worker->fd = -1;
+                    // §13.1: every event construction must leave the unused
+                    // fields at a deterministic value. next_event writes
+                    // only what an event needs, so a reuser of one
+                    // capsid_event would otherwise see a previous event's
+                    // flags/status/credit on EXIT (REQUEST_TIMEOUT zeroes
+                    // all three; EXIT must match).
                     event->type = CAPSID_EVENT_EXIT;
                     event->request_id = 0;
+                    event->flags = 0;
+                    event->status = 0;
+                    event->credit = 0;
                     event->payload.data = NULL;
                     event->payload.size = 0;
                     return CAPSID_OK;
