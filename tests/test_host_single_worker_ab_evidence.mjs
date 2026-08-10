@@ -103,6 +103,28 @@ const requiredFiles = [
     'report.md',
 ];
 
+// ---- GREEN: the documented quick-run flag skips every perf artifact while
+// preserving the headline/correctness evidence contract. ----
+{
+    const result = await runnerOutput(args, {
+        extraArgs: [ '--no-profile' ],
+        env: { CAPSID_BENCH_TEST_MODE: '1' },
+    });
+    assert.equal(result.code, 0,
+        `runner rejected --no-profile evidence: ${result.stderr}`);
+    for (const file of [ 'manifest.json', 'samples.jsonl',
+        'correctness.json', 'report.md' ]) {
+        const full = path.join(result.out, file);
+        assert.ok(fs.statSync(full).size > 0, `missing or empty ${file}`);
+    }
+    for (const file of [ 'baseline-gateway.pprof',
+        'baseline-worker.perf.data', 'candidate-host.perf.data',
+        'candidate-worker.perf.data' ]) {
+        assert.ok(!fs.existsSync(path.join(result.out, file)),
+            `--no-profile unexpectedly created ${file}`);
+    }
+}
+
 // ---- GREEN: fake components produce complete evidence. The working tree
 // is dirty during development, so the test exempts the dirty-tree check
 // (production runs never set the exemption). ----

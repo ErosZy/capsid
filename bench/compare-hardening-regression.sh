@@ -16,7 +16,7 @@
 set -euo pipefail
 cd /capsid
 
-OUT="bench/results/hardening-regression-$(date +%Y%m%dT%H%M%S)"
+OUT=${OUT:-"bench/results/hardening-regression-$(date +%Y%m%dT%H%M%S)"}
 mkdir -p "$OUT"
 OLD_HOST=${OLD_HOST:-/tmp/capsid-old/build-linux/capsid-host}
 NEW_HOST=${NEW_HOST:-/capsid/build-linux/capsid-host}
@@ -25,9 +25,34 @@ NEW_WORKER=${NEW_WORKER:-${WORKER:-/capsid/build-linux/capsid-worker}}
 BUNDLE=${BUNDLE:-/tmp/hono-bench-bundle.mjs}
 LOADGEN=${LOADGEN:-/capsid/bench/bin/loadgen}
 LOADGEN_CORE=${LOADGEN_CORE:-3}
+SERVICE_CORESET=${SERVICE_CORESET:-0-2}
+WORKERS=${WORKERS:-1}
+WORKLOADS=${WORKLOADS:-"json json16k json64k"}
+ROUNDS=${ROUNDS:-3}
+WARMUP_S=${WARMUP_S:-3}
+DURATION_S=${DURATION_S:-8}
+LATENCY_ROUNDS=${LATENCY_ROUNDS:-2}
+
+case "$WORKERS" in
+1|2|4|6|8) ;;
+*) echo "WORKERS must be 1, 2, 4, 6 or 8 (got $WORKERS)" >&2; exit 2 ;;
+esac
+for numeric in ROUNDS WARMUP_S DURATION_S LATENCY_ROUNDS; do
+    value=${!numeric}
+    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+        echo "$numeric must be a non-negative integer (got $value)" >&2
+        exit 2
+    fi
+done
+if [ "$ROUNDS" -lt 1 ] || [ "$DURATION_S" -lt 1 ]; then
+    echo "ROUNDS and DURATION_S must be positive" >&2
+    exit 2
+fi
 
 echo "old host: $OLD_HOST"
 echo "new host: $NEW_HOST"
+echo "service cpuset: $SERVICE_CORESET; loadgen core: $LOADGEN_CORE"
+echo "workers: $WORKERS; rounds: $ROUNDS; warmup/duration: $WARMUP_S/$DURATION_S"
 sha256sum "$OLD_HOST" "$NEW_HOST" "$OLD_WORKER" "$NEW_WORKER" "$BUNDLE" "$LOADGEN" | tee "$OUT/identity.sha256"
 
 PORT_OLD=18111
@@ -36,7 +61,11 @@ HOST_PID=""
 
 start_host() {
     local bin="$1" port="$2" worker="$3"
-    "$bin" --mode single-worker \
+    local mode_args=(--mode single-worker)
+    if [ "$WORKERS" -gt 1 ]; then
+        mode_args=(--mode static-pool --workers "$WORKERS")
+    fi
+    taskset -c "$SERVICE_CORESET" "$bin" "${mode_args[@]}" \
         --worker "$worker" --source-bundle "$BUNDLE" \
         --source-name "file://$BUNDLE" \
         --application orders --listen "127.0.0.1:$port" --routing path \
@@ -63,7 +92,7 @@ run_loadgen() {
     local samples="$OUT/samples.$side.$workload.c$conns.r$round.jsonl"
     local corr="$OUT/correctness.$side.$workload.c$conns.r$round.json"
     env CAPSID_BENCH_TARGET="$target" CAPSID_BENCH_WORKLOAD="$workload" \
-        CAPSID_BENCH_WARMUP_S=3 CAPSID_BENCH_DURATION_S=8 \
+        CAPSID_BENCH_WARMUP_S="$WARMUP_S" CAPSID_BENCH_DURATION_S="$DURATION_S" \
         CAPSID_BENCH_CONNECTIONS="$conns" CAPSID_BENCH_INFLIGHT="$conns" \
         CAPSID_BENCH_SIDE="$side" CAPSID_BENCH_ROUND="$round" \
         CAPSID_BENCH_SAMPLES_OUT="$samples" CAPSID_BENCH_CORRECTNESS_OUT="$corr" \
@@ -86,9 +115,9 @@ side_worker() {
     esac
 }
 
-# 主矩阵：json 1k / 16k / 64k × 64 并发 × 3 轮交错。
-for workload in json json16k json64k; do
-    for round in 1 2 3; do
+# 主矩阵：所选 workload × 64 并发 × ROUNDS 轮交错。
+for workload in $WORKLOADS; do
+    for round in $(seq 1 "$ROUNDS"); do
         if [ $((round % 2)) -eq 1 ]; then
             FIRST=old SECOND=new
         else
@@ -104,7 +133,7 @@ for workload in json json16k json64k; do
 done
 
 # 延迟探针：64k × 1 并发（credit 往返路径）。
-for round in 1 2; do
+for round in $(seq 1 "$LATENCY_ROUNDS"); do
     start_host "$NEW_HOST" $PORT_NEW "$NEW_WORKER"
     run_loadgen "http://127.0.0.1:$PORT_NEW" json64k new "$round" 1
     stop_host
@@ -113,7 +142,7 @@ for round in 1 2; do
     stop_host
 done
 
-# 汇总：每侧每个 workload×conn 取 3 轮（延迟探针取 2 轮）的均值。
+# 汇总：每侧每个 workload×conn 取全部完成轮次的均值。
 python3 - "$OUT" <<'PY'
 import json, sys, os, glob
 out = sys.argv[1]

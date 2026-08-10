@@ -156,6 +156,7 @@ while [ $# -gt 0 ]; do
     --candidate-env) CANDIDATE_ENV="${2:?}"; shift 2 ;;
     --statistic) STATISTIC="${2:?}"; shift 2 ;;
     --require-ipc-counters) REQUIRE_IPC_COUNTERS=1; shift ;;
+    --no-profile) NO_PROFILE=1; shift ;;
     --baseline-host-profile) BASELINE_HOST_PROFILE=1; shift ;;
     --baseline-workers) BASELINE_WORKERS="${2:?}"; shift 2 ;;
     --candidate-workers) CANDIDATE_WORKERS="${2:?}"; shift 2 ;;
