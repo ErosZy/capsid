@@ -12,9 +12,11 @@ export default {
         // Restore before constructing the response: this probe is scoped to
         // bootstrap's inbound Request representation only.
         RegExp.prototype.test = originalTest;
-        return new Response(
-            request.headers.get('x-capsid-probe') ?? 'missing',
-            { headers: { 'content-type': 'text/plain' } },
-        );
+        const clone = request.clone();
+        return new Response(JSON.stringify({
+            probe: request.headers.get('x-capsid-probe'),
+            duplicate: request.headers.get('x-duplicate'),
+            cloneProbe: clone.headers.get('x-capsid-probe'),
+        }), { headers: { 'content-type': 'application/json' } });
     },
 };
