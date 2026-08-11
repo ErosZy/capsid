@@ -144,19 +144,40 @@ done
 
 # 汇总：每侧每个 workload×conn 取全部完成轮次的均值。
 python3 - "$OUT" <<'PY'
-import json, sys, os, glob
+import csv, glob, json, os, sys
 out = sys.argv[1]
 rows = {}
+measured_rows = []
 for path in sorted(glob.glob(os.path.join(out, "samples.*.jsonl"))):
     base = os.path.basename(path).replace("samples.", "").replace(".jsonl", "")
     side, workload, conn, round_ = base.split(".")
     conn = int(conn.lstrip("c"))
+    round_number = int(round_.lstrip("r"))
     for line in open(path):
         s = json.loads(line)
         if s.get("phase") != "measured":
             continue
         key = (side, workload, conn)
         rows.setdefault(key, []).append(s)
+        measured_rows.append((side, workload, conn, round_number, s))
+
+# Keep the raw per-round table as durable evidence.  The old script created
+# results.csv before the run but never appended any rows, leaving only the
+# header even after a successful matrix.
+with open(os.path.join(out, "results.csv"), "w", newline="") as result_file:
+    writer = csv.writer(result_file)
+    writer.writerow((
+        "side", "workload", "conn", "round", "qps", "p50_ms", "p95_ms",
+        "p99_ms", "completed", "errors",
+    ))
+    for side, workload, conn, round_number, sample in sorted(
+            measured_rows, key=lambda row: row[:4]):
+        writer.writerow((
+            side, workload, conn, round_number, sample["qps"],
+            sample["p50_ms"], sample["p95_ms"], sample["p99_ms"],
+            sample["completed"], sample["errors"],
+        ))
+
 print(f"{'side':4s} {'workload':8s} {'conn':>4s} {'rounds':>6s} {'QPS':>9s} {'p50_ms':>8s} {'p95_ms':>8s} {'p99_ms':>8s} err")
 summary = {}
 for key, samples in sorted(rows.items()):
