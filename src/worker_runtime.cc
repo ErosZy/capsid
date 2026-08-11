@@ -89,11 +89,6 @@ static const uint64_t kPoisonGraceNs = 100 * 1000000ull;  // 100ms
 // treated as a detached continuation and the worker poisons.
 static const uint64_t kReclaimSettleWindowNs = 2 * 1000000000ull;  // 2s
 
-// Sent-prefix compaction threshold for the output vector: below this
-// the prefix is cheap to carry, at/above it the vector is compacted so
-// physical memory stays bounded (see compact_output_if_needed).
-static const size_t kOutputCompactThreshold = 64u * 1024u;
-
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
 #ifdef MSG_NOSIGNAL
     return send(fd, data, size, MSG_NOSIGNAL);

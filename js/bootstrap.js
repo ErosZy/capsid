@@ -17,7 +17,7 @@ import './file.js';
 import 'txiki-polyfills/form-data.js';
 import 'txiki-polyfills/abort-controller.js';
 import 'txiki-polyfills/fetch/polyfill.js';
-import { configureFetchLimits } from './fetch.js';
+import { configureFetchLimits, getFastResponseBody } from './fetch.js';
 import 'txiki-polyfills/crypto/crypto.js';
 import { CryptoKey } from 'txiki-polyfills/crypto/crypto-key.js';
 import { SubtleCrypto } from 'txiki-polyfills/crypto/subtle.js';
@@ -484,6 +484,18 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
             // response (head + body + end) in one native call, avoiding
             // two JS round-trips per request. Streamed bodies keep the
             // incremental path below.
+            const fastBody = getFastResponseBody(response);
+            if (fastBody !== null) {
+                core.capsidResponseFinal(
+                    id,
+                    response.status,
+                    response.statusText,
+                    headers,
+                    fastBody,
+                );
+                return;
+            }
+
             const body = response.body;
             if (body && !(body instanceof ReadableStream)) {
                 let bytes = null;

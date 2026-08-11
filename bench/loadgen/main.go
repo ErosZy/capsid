@@ -219,27 +219,31 @@ func main() {
 	if expectedLen > 0 {
 		expectedBuf = bytes.Repeat([]byte{expectedByte}, expectedLen)
 	}
+	// JSON marker check is serializer-format-agnostic: compact (PHP json_encode
+	// / Ruby JSON.generate) and spaced (Python json.dumps default) forms both
+	// carry the marker; requiring one spacing fails valid cross-stack fixtures.
+	jsonMarker := func(body []byte) bool {
+		return bytes.Contains(body, []byte(`"status":"ok"`)) ||
+			bytes.Contains(body, []byte(`"status": "ok"`))
+	}
 	verify := func(body []byte) bool {
 		switch workload {
 		case "json":
 			// The JSON document starts with '{' and carries the marker.
-			return len(body) > 2 && body[0] == '{' &&
-				bytes.Contains(body, []byte(`"status":"ok"`))
+			return len(body) > 2 && body[0] == '{' && jsonMarker(body)
 		case "stream":
 			// 1024 streamed bytes: b*341 c*341 d*342.
 			return len(body) == 1024 && body[0] == 0x62 &&
 				body[341] == 0x63 && body[1023] == 0x64
 		case "json16k":
 			// ~16 KiB JSON document with the status marker.
-			return len(body) > 16000 && body[0] == '{' &&
-				bytes.Contains(body, []byte(`"status":"ok"`))
+			return len(body) > 16000 && body[0] == '{' && jsonMarker(body)
 		case "stream16k":
 			// 16384 streamed bytes: b*5462 c*5461 d*5461.
 			return len(body) == 16384 && body[0] == 0x62 &&
 				body[5462] == 0x63 && body[16383] == 0x64
 		case "json64k", "json64k-pre", "json64k-bytes", "json64k-octet":
-			return len(body) > 64000 && body[0] == '{' &&
-				bytes.Contains(body, []byte(`"status":"ok"`))
+			return len(body) > 64000 && body[0] == '{' && jsonMarker(body)
 		case "bare":
 			return string(body) == "x"
 		case "no-content":
