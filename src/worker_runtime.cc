@@ -4097,14 +4097,9 @@ private:
             // Bodyless requests get no request-direction window update.
             send_window_update(frame.request_id, config_.initial_window);
         }
-        const bool needs_request_end_bridge =
-            decoded.bodyless &&
-            decoded.method != "GET" && decoded.method != "HEAD";
-        if (called && needs_request_end_bridge) {
-            // bootstrap.js creates GET/HEAD request state with ended=true,
-            // so entering requestEnd for those methods can only return
-            // immediately. Body-capable methods still need this bridge to
-            // close their ReadableStream after a fused bodyless begin. A
+        if (called && decoded.bodyless) {
+            // Notify the JS side that the request direction ended
+            // immediately, matching the request-end frame semantics. A
             // bridge failure propagates exactly like the standalone
             // request-end frame path: fail closed.
             //
