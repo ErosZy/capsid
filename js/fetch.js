@@ -40,7 +40,20 @@ function toByteString(value) {
 function normalizeName(value) {
     const name = toByteString(value);
 
-    if (name === '' || /[^!#$%&'*+.^_`|~0-9A-Za-z-]/.test(name)) {
+    let valid = name !== '';
+    for (let i = 0; valid && i < name.length; i++) {
+        const code = name.charCodeAt(i);
+        valid =
+            (code >= 0x30 && code <= 0x39) ||
+            (code >= 0x41 && code <= 0x5a) ||
+            (code >= 0x61 && code <= 0x7a) ||
+            code === 0x21 || code === 0x23 || code === 0x24 ||
+            code === 0x25 || code === 0x26 || code === 0x27 ||
+            code === 0x2a || code === 0x2b || code === 0x2d ||
+            code === 0x2e || code === 0x5e || code === 0x5f ||
+            code === 0x60 || code === 0x7c || code === 0x7e;
+    }
+    if (!valid) {
         throw new TypeError(`Invalid character in header field name: "${name}"`);
     }
 
@@ -50,11 +63,31 @@ function normalizeName(value) {
 function normalizeValue(value) {
     const string = toByteString(value);
 
-    if (/[\0\r\n]/.test(string)) {
-        throw new TypeError('Invalid character in header field value');
+    for (let i = 0; i < string.length; i++) {
+        const code = string.charCodeAt(i);
+        if (code === 0x00 || code === 0x0a || code === 0x0d) {
+            throw new TypeError('Invalid character in header field value');
+        }
     }
-
-    return string.replace(/^[\t ]+|[\t ]+$/g, '');
+    let start = 0;
+    let end = string.length;
+    while (start < end) {
+        const code = string.charCodeAt(start);
+        if (code !== 0x09 && code !== 0x20) {
+            break;
+        }
+        start++;
+    }
+    while (end > start) {
+        const code = string.charCodeAt(end - 1);
+        if (code !== 0x09 && code !== 0x20) {
+            break;
+        }
+        end--;
+    }
+    return start === 0 && end === string.length
+        ? string
+        : string.slice(start, end);
 }
 
 function requireHeaders(value) {
