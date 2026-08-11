@@ -22,6 +22,7 @@ const headerLists = new WeakMap();
 const setCookieLists = new WeakMap();
 const iteratorStates = new WeakMap();
 const fastResponseBodies = new WeakMap();
+const incomingRequestBrand = Symbol('capsid incoming request');
 const arrayIteratorPrototype =
     Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
 
@@ -266,6 +267,29 @@ class Headers {
     }
 }
 
+function wrapNormalizedNativeHeaders(nativeHeaders) {
+    const headers = Object.create(Headers.prototype);
+    const list = new Map();
+    const cookies = [];
+
+    headerLists.set(headers, list);
+    setCookieLists.set(headers, cookies);
+    for (const [ name, value ] of nativeHeaders) {
+        if (name !== 'set-cookie') {
+            list.set(name, value);
+        }
+    }
+    for (const value of nativeHeaders.getSetCookie()) {
+        const existing = list.get('set-cookie');
+        cookies.push(value);
+        list.set(
+            'set-cookie',
+            existing === undefined ? value : `${existing}, ${value}`,
+        );
+    }
+    return headers;
+}
+
 function normalizeBody(body) {
     if (body === undefined || body === null ||
         typeof body === 'string' ||
@@ -506,8 +530,9 @@ function limitedResponseBody(response, limit) {
 }
 
 class Request extends NativeRequest {
-    constructor(input, init = undefined) {
-        const normalized = normalizeInit(init);
+    constructor(input, init = undefined, brand = undefined) {
+        const incoming = brand === incomingRequestBrand;
+        const normalized = incoming ? init : normalizeInit(init);
 
         if (input instanceof Request) {
             const inherited = {
@@ -529,7 +554,9 @@ class Request extends NativeRequest {
             super(input, normalized);
         }
 
-        this.headers = new Headers(this.headers);
+        this.headers = incoming
+            ? wrapNormalizedNativeHeaders(this.headers)
+            : new Headers(this.headers);
         /*
          * BodyMixin is mixed in as own properties by the vendor constructor.
          * Capture its formData before replacing it with our override that does
@@ -551,6 +578,10 @@ class Request extends NativeRequest {
         cloned.referrerPolicy = nativeClone.referrerPolicy;
         return cloned;
     }
+}
+
+export function createIncomingRequest(input, init) {
+    return new Request(input, init, incomingRequestBrand);
 }
 
 /*
