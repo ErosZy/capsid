@@ -1419,26 +1419,47 @@ private:
         }
         // Body: Uint8Array or string; both are encoded/read here, then
         // pushed through the fast path with the remainder snapshotted
-        // for credit-driven advancement.
+        // for credit-driven advancement. Untouched string Responses arrive
+        // here as strings so the common ASCII case can use QuickJS's stable
+        // string storage directly, without a JS TextEncoder allocation and
+        // a second Uint8Array copy.
         size_t body_size = 0;
         const uint8_t *body_bytes = NULL;
-        JSValue body_copy = JS_UNDEFINED;
+        const char *body_text = NULL;
+        std::vector<uint8_t> normalized_body;
         if (!JS_IsNull(argv[4]) && !JS_IsUndefined(argv[4])) {
             if (JS_IsString(argv[4])) {
-                const char *text = JS_ToCStringLen(ctx, &body_size, argv[4]);
-                if (!text) {
+                body_text = JS_ToCStringLen(ctx, &body_size, argv[4]);
+                if (!body_text) {
                     return JS_EXCEPTION;
                 }
-                // JS_NewUint8ArrayCopy copies the bytes; pass text
-                // directly to avoid a redundant intermediate vector.
-                body_copy = JS_NewUint8ArrayCopy(
-                    ctx, reinterpret_cast<const uint8_t *>(text),
-                    body_size);
-                JS_FreeCString(ctx, text);
-                if (JS_IsException(body_copy)) {
-                    return JS_EXCEPTION;
+                body_bytes = reinterpret_cast<const uint8_t *>(body_text);
+
+                // JS_ToCStringLen preserves unmatched UTF-16 surrogate code
+                // points as their three-byte UTF-8 encodings. Fetch's
+                // TextEncoder semantics require each unmatched surrogate to
+                // become U+FFFD instead. Valid pairs have already become one
+                // four-byte scalar, so only the UTF-8 surrogate range needs
+                // rewriting; replacement is also three bytes and never
+                // changes the body length. Allocate only on this rare path.
+                for (size_t i = 0; i + 2 < body_size; ++i) {
+                    if (body_bytes[i] == 0xed &&
+                        body_bytes[i + 1] >= 0xa0 &&
+                        body_bytes[i + 1] <= 0xbf &&
+                        body_bytes[i + 2] >= 0x80 &&
+                        body_bytes[i + 2] <= 0xbf) {
+                        if (normalized_body.empty()) {
+                            normalized_body.assign(
+                                body_bytes, body_bytes + body_size);
+                        }
+                        normalized_body[i] = 0xef;
+                        normalized_body[i + 1] = 0xbf;
+                        normalized_body[i + 2] = 0xbd;
+                    }
                 }
-                body_bytes = JS_GetUint8Array(ctx, &body_size, body_copy);
+                if (!normalized_body.empty()) {
+                    body_bytes = &normalized_body[0];
+                }
             } else {
                 body_bytes = JS_GetUint8Array(ctx, &body_size, argv[4]);
             }
@@ -1448,7 +1469,9 @@ private:
             const EnqueueResult result = g_worker->queue_response_bytes_fast(
                 id, body_bytes, body_size, &state->second, &fast_sent);
             if (result == EnqueueResult::kFatal) {
-                JS_FreeValue(ctx, body_copy);
+                if (body_text) {
+                    JS_FreeCString(ctx, body_text);
+                }
                 return JS_ThrowInternalError(ctx, "response output is wedged");
             }
             if (result == EnqueueResult::kWouldBlock) {
@@ -1463,7 +1486,9 @@ private:
                 g_worker->enqueue_pump(id);
             }
         }
-        JS_FreeValue(ctx, body_copy);
+        if (body_text) {
+            JS_FreeCString(ctx, body_text);
+        }
         // End terminal: waits for the body to drain, then sends the
         // ResponseEnd frame (existing machinery).
         TerminalPending terminal;

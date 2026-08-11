@@ -282,10 +282,11 @@ function normalizeBody(body) {
 }
 
 // The txiki Fetch polyfill eagerly wraps every string body in a
-// ReadableStream. Keep an internal byte snapshot for an untouched string
-// response so the Runtime can send it with one native call. Accessing or
-// replacing `response.body` disables the shortcut: application-visible
-// stream consumption must retain the normal Fetch semantics.
+// ReadableStream. Keep an internal text snapshot for an untouched string
+// response so the Runtime can encode and send it with one native call.
+// Accessing or replacing `response.body` disables the shortcut:
+// application-visible stream consumption must retain the normal Fetch
+// semantics.
 export function getFastResponseBody(response) {
     const record = fastResponseBodies.get(response);
 
@@ -297,7 +298,7 @@ export function getFastResponseBody(response) {
     if (!descriptor || descriptor.get !== record.getter) {
         return null;
     }
-    return record.bytes;
+    return record.text;
 }
 
 function materializeFastResponseBody(response, exposed) {
@@ -310,6 +311,9 @@ function materializeFastResponseBody(response, exposed) {
         record.exposed = true;
     }
     if (record.stream === null) {
+        if (record.bytes === null) {
+            record.bytes = new TextEncoder().encode(record.text);
+        }
         record.stream = new ReadableStream({
             start(controller) {
                 controller.enqueue(record.bytes);
@@ -317,6 +321,7 @@ function materializeFastResponseBody(response, exposed) {
             },
         });
         response._noBody = false;
+        response._bodySize = record.bytes.byteLength;
         response._bodyStream = record.stream;
     }
     return record;
@@ -741,25 +746,29 @@ class Response extends NativeResponse {
             throw new TypeError('Response with a null-body status cannot have a body');
         }
 
-        const fastBytes = typeof normalizedBody === 'string' && normalizedBody.length > 0
-            ? new TextEncoder().encode(normalizedBody)
+        const fastText = typeof normalizedBody === 'string' && normalizedBody.length > 0
+            ? normalizedBody
             : null;
-        super(fastBytes === null ? normalizedBody : null, normalized);
+        super(fastText === null ? normalizedBody : null, normalized);
         this.headers = new Headers(this.headers);
         this._nativeFormData = this.formData;
         this.formData = multipartFormDataOverride;
 
-        if (fastBytes !== null) {
+        if (fastText !== null) {
             this._noBody = false;
             this._bodyInit = normalizedBody;
-            this._bodySize = fastBytes.byteLength;
+            // The untouched response goes straight to the native final
+            // bridge, so defer UTF-8 sizing/encoding until application code
+            // actually asks for the standards-visible body stream.
+            this._bodySize = -1;
             this._bodyStream = null;
             if (!this.headers.has('content-type')) {
                 this.headers.set('content-type', 'text/plain;charset=UTF-8');
             }
 
             const record = {
-                bytes: fastBytes,
+                text: fastText,
+                bytes: null,
                 stream: null,
                 exposed: false,
                 getter: null,
