@@ -270,6 +270,15 @@ struct PendingRequest {
     // through in-flight async writes after the request is erased.
     std::shared_ptr<http::response<http::buffer_body>> response;
     std::shared_ptr<http::response_serializer<http::buffer_body>> serializer;
+    // Complete responses advertised by the bounded fixed-body protocol are
+    // accumulated to their exact <=4 KiB size and emitted in one HTTP write.
+    std::shared_ptr<http::response<
+        http::vector_body<std::uint8_t>>> fixed_response;
+    std::shared_ptr<http::response_serializer<
+        http::vector_body<std::uint8_t>>> fixed_serializer;
+    std::size_t fixed_body_expected = 0;
+    std::size_t fixed_body_received = 0;
+    bool fixed_write_started = false;
     std::vector<std::uint8_t> outgoing;
     // The response-credit protocol (spec §8.1, mirrored from
     // single_worker_server): each queued block remembers whether its
@@ -382,6 +391,8 @@ private:
     void flush_pending_credit(const WorkerExecutor* executor,
                               std::uint64_t request_id,
                               PendingRequest& pending);
+    void write_fixed_response(const WorkerExecutor* executor,
+                              std::uint64_t request_id);
     void write_end_block(const WorkerExecutor* executor,
                          std::uint64_t request_id);
     void finalize_request(const WorkerExecutor* executor,
@@ -982,6 +993,59 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
                                  "invalid worker response headers");
             return;
         }
+        pending.head_only = pending.method == "HEAD";
+        if (event.fixed_body) {
+            pending.fixed_response = std::make_shared<http::response<
+                http::vector_body<std::uint8_t>>>();
+            pending.fixed_response->result(
+                static_cast<http::status>(event.status));
+            pending.fixed_response->version(pending.version);
+            pending.fixed_response->keep_alive(pending.keep_alive);
+            for (const auto& [name, value] : event.headers) {
+                pending.fixed_response->base().insert(name, value);
+            }
+            const auto content_length_field =
+                pending.fixed_response->base().find(
+                    http::field::content_length);
+            if (content_length_field !=
+                pending.fixed_response->base().end()) {
+                std::uint64_t value = 0;
+                bool valid = true;
+                const std::string_view text(
+                    content_length_field->value());
+                if (text.empty()) {
+                    valid = false;
+                }
+                for (const char c : text) {
+                    if (c < '0' || c > '9') {
+                        valid = false;
+                        break;
+                    }
+                    const std::uint64_t digit =
+                        static_cast<std::uint64_t>(c - '0');
+                    if (value >
+                        (std::numeric_limits<std::uint64_t>::max() -
+                         digit) / 10) {
+                        valid = false;
+                        break;
+                    }
+                    value = value * 10 + digit;
+                }
+                if (!valid || value != event.fixed_body_size) {
+                    reject_response_head(
+                        executor, event.request_id,
+                        "fixed response Content-Length mismatch");
+                    return;
+                }
+            }
+            pending.fixed_body_expected = event.fixed_body_size;
+            pending.fixed_body_received = 0;
+            if (!pending.head_only) {
+                pending.fixed_response->body().reserve(
+                    pending.fixed_body_expected);
+            }
+            return;
+        }
         pending.response =
             std::make_shared<http::response<http::buffer_body>>();
         pending.response->result(static_cast<http::status>(event.status));
@@ -1029,7 +1093,6 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
         }
         pending.serializer = std::make_shared<
             http::response_serializer<http::buffer_body>>(*pending.response);
-        pending.head_only = pending.method == "HEAD";
         pending.writing = true;
         arm_write_timer(event.request_id, pending);
         http::async_write_header(
@@ -1078,6 +1141,24 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
             return;
         }
         PendingRequest& pending = it->second;
+        if (pending.fixed_response) {
+            if (pending.fixed_body_received >
+                    pending.fixed_body_expected ||
+                event.body.size() >
+                    pending.fixed_body_expected -
+                        pending.fixed_body_received) {
+                fail_request(executor, event.request_id, pending.session);
+                return;
+            }
+            pending.fixed_body_received += event.body.size();
+            if (!pending.head_only) {
+                mailbox_->add_client_bytes(executor, event.body.size());
+                pending.fixed_response->body().insert(
+                    pending.fixed_response->body().end(),
+                    event.body.begin(), event.body.end());
+            }
+            return;
+        }
         // Response credit (spec §8.1): return credit as soon as the frame
         // is received, not after the client write completes, while the
         // per-request write queue stays shallow — one fewer host
@@ -1129,6 +1210,15 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
         cancel.type = CommandType::kCancel;
         cancel.request_id = event.request_id;
         const_cast<WorkerExecutor*>(executor)->submit(std::move(cancel));
+        if (pending.fixed_response) {
+            if (pending.fixed_body_received !=
+                pending.fixed_body_expected) {
+                fail_request(executor, event.request_id, pending.session);
+                return;
+            }
+            write_fixed_response(executor, event.request_id);
+            return;
+        }
         if (pending.head_only) {
             if (!pending.writing) {
                 finalize_request(executor, event.request_id, pending.session);
@@ -1371,6 +1461,56 @@ void ManagedListenerImpl::flush_pending_credit(
     const_cast<WorkerExecutor*>(executor)->submit(std::move(grant));
 }
 
+void ManagedListenerImpl::write_fixed_response(
+    const WorkerExecutor* executor, std::uint64_t request_id) {
+    auto it = requests_.find({executor, request_id});
+    if (it == requests_.end()) {
+        return;
+    }
+    PendingRequest& pending = it->second;
+    pending.fixed_response->content_length(
+        pending.fixed_body_expected);
+    pending.fixed_serializer = std::make_shared<http::response_serializer<
+        http::vector_body<std::uint8_t>>>(*pending.fixed_response);
+    pending.fixed_write_started = true;
+    pending.writing = true;
+    arm_write_timer(request_id, pending);
+    const std::size_t bytes =
+        pending.head_only ? 0 : pending.fixed_body_received;
+    const auto completion =
+        [self = shared_from_this(), response = pending.fixed_response,
+         serializer = pending.fixed_serializer, session = pending.session,
+         executor, request_id, bytes](beast::error_code ec, std::size_t) {
+            (void)response;
+            (void)serializer;
+            (void)session;
+            self->mailbox_->sub_client_bytes(executor, bytes);
+            auto it = self->requests_.find({executor, request_id});
+            if (it == self->requests_.end()) {
+                return;
+            }
+            PendingRequest& pending = it->second;
+            pending.writing = false;
+            self->disarm_write_timer(pending);
+            if (ec) {
+                self->fail_request(executor, request_id, pending.session);
+                return;
+            }
+            pending.head_sent = true;
+            self->finalize_request(
+                executor, request_id, pending.session);
+        };
+    if (pending.head_only) {
+        http::async_write_header(
+            pending.session->stream(), *pending.fixed_serializer,
+            completion);
+    } else {
+        http::async_write(
+            pending.session->stream(), *pending.fixed_serializer,
+            completion);
+    }
+}
+
 void ManagedListenerImpl::write_end_block(const WorkerExecutor* executor,
                                             std::uint64_t request_id) {
     auto it = requests_.find({executor, request_id});
@@ -1448,6 +1588,12 @@ void ManagedListenerImpl::cancel_request(const WorkerExecutor* executor,
     // Queued response bytes never reach the wire; return their client-bytes
     // accounting (the in-flight write returns its own on completion).
     mailbox_->sub_client_bytes(executor, it->second.body_queue_bytes);
+    if (it->second.fixed_response &&
+        !it->second.fixed_write_started &&
+        !it->second.head_only) {
+        mailbox_->sub_client_bytes(
+            executor, it->second.fixed_body_received);
+    }
     requests_.erase(it);
     // const: the §9.2 sink signature; tombstones and cancels are the
     // listener's.

@@ -237,11 +237,12 @@ ListenerConfig path_listener(const std::string& name) {
 
 // One raw HTTP/1.1 exchange over an existing connection; reads until the
 // response body matches Content-Length, until the terminal chunk of a
-// chunked body (the worker runtime emits no Content-Length — the listener
-// serializes chunked), or until the connection closes.
+// chunked body, or until the connection closes.
 struct HttpResponse {
     int status = 0;
     std::string body;
+    std::int64_t content_length = -1;
+    bool chunked = false;
 };
 
 HttpResponse http_exchange(int fd, const std::string& request) {
@@ -258,6 +259,7 @@ HttpResponse http_exchange(int fd, const std::string& request) {
     char buffer[4096];
     bool done = false;
     bool chunked = false;      // the response used Transfer-Encoding: chunked
+    std::int64_t content_length = -1;
     std::string chunked_body;  // its de-framed body
     while (!done) {
         const ssize_t count = recv(fd, buffer, sizeof(buffer), 0);
@@ -293,6 +295,7 @@ HttpResponse http_exchange(int fd, const std::string& request) {
             const std::size_t length = static_cast<std::size_t>(
                 std::strtoull(head.substr(offset, end - offset).c_str(),
                               nullptr, 10));
+            content_length = static_cast<std::int64_t>(length);
             if (wire.size() >= head_end + 4 + length) {
                 wire = wire.substr(0, head_end + 4 + length);
                 done = true;
@@ -350,6 +353,8 @@ HttpResponse http_exchange(int fd, const std::string& request) {
         response.body =
             chunked ? chunked_body : wire.substr(head_end + 4);
     }
+    response.content_length = content_length;
+    response.chunked = chunked;
     return response;
 }
 
@@ -399,6 +404,8 @@ void test_routes_two_apps(const std::string& worker_path) {
     require(first.status == 200 && first.body == "hello-app-a",
             "path routing did not reach app-a (" +
                 std::to_string(first.status) + " '" + first.body + "')");
+    require(first.content_length == 11 && !first.chunked,
+            "managed fixed response was not serialized with Content-Length");
     // Keep-alive: the second request rides the same connection.
     const HttpResponse second = http_exchange(
         fd, "GET /@capsid/app-b/ HTTP/1.1\r\n"
@@ -407,6 +414,8 @@ void test_routes_two_apps(const std::string& worker_path) {
     require(second.status == 200 && second.body == "hello-app-b",
             "path routing did not reach app-b (" +
                 std::to_string(second.status) + " '" + second.body + "')");
+    require(second.content_length == 11 && !second.chunked,
+            "managed close response missed fixed serialization");
     close(fd);
 
     // HEAD consumes the worker body without exposing it.
@@ -417,6 +426,8 @@ void test_routes_two_apps(const std::string& worker_path) {
                  "Connection: close\r\n\r\n");
     require(head.status == 200 && head.body.empty(),
             "HEAD leaked a body (" + std::to_string(head.status) + ")");
+    require(head.content_length == 11 && !head.chunked,
+            "managed HEAD missed fixed Content-Length");
     close(head_fd);
 
     listener.request_stop();

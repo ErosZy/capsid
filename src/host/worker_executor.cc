@@ -517,6 +517,10 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
         worker_event.type = WorkerEvent::Type::kResponseHead;
         worker_event.request_id = event.request_id;
         worker_event.status = static_cast<std::uint16_t>(event.status);
+        worker_event.fixed_body =
+            (event.flags & CAPSID_RESPONSE_HEAD_FLAG_FIXED_BODY) != 0;
+        worker_event.fixed_body_size =
+            worker_event.fixed_body ? event.credit : 0;
         std::size_t count = 0;
         if (capsid_response_header_count(&event, &count) == CAPSID_OK) {
             worker_event.headers.reserve(count);

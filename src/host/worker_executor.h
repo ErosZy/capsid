@@ -97,6 +97,8 @@ struct WorkerEvent {
     std::uint64_t request_id = 0;
     std::uint32_t credit = 0;
     std::uint16_t status = 0;
+    bool fixed_body = false;
+    std::uint32_t fixed_body_size = 0;
     std::vector<std::pair<std::string, std::string>> headers;
     std::vector<std::uint8_t> body;
     std::string text;

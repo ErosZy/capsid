@@ -33,6 +33,7 @@ configureFetchLimits(
     core.capsidFetchRequestBodyLimit(),
     core.capsidFetchResponseBodyLimit(),
 );
+const fixedResponseBodyLimit = Number(core.capsidFixedResponseBodyLimit());
 
 const nativeCrypto = globalThis.crypto;
 let cryptoObject;
@@ -486,13 +487,23 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
             // incremental path below.
             const fastBody = getFastResponseBody(response);
             if (fastBody !== null) {
-                core.capsidResponseFinal(
-                    id,
-                    response.status,
-                    response.statusText,
-                    headers,
-                    fastBody,
-                );
+                if (fastBody.length <= fixedResponseBodyLimit) {
+                    core.capsidResponseFixed(
+                        id,
+                        response.status,
+                        response.statusText,
+                        headers,
+                        fastBody,
+                    );
+                } else {
+                    core.capsidResponseFinal(
+                        id,
+                        response.status,
+                        response.statusText,
+                        headers,
+                        fastBody,
+                    );
+                }
                 return;
             }
 
@@ -511,13 +522,26 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
                     bytes = null;
                 }
                 if (bytes !== null) {
-                    core.capsidResponseFinal(
-                        id,
-                        response.status,
-                        response.statusText,
-                        headers,
-                        bytes,
-                    );
+                    const fixedCandidate = typeof bytes === 'string'
+                        ? bytes.length <= fixedResponseBodyLimit
+                        : bytes.byteLength <= fixedResponseBodyLimit;
+                    if (fixedCandidate) {
+                        core.capsidResponseFixed(
+                            id,
+                            response.status,
+                            response.statusText,
+                            headers,
+                            bytes,
+                        );
+                    } else {
+                        core.capsidResponseFinal(
+                            id,
+                            response.status,
+                            response.statusText,
+                            headers,
+                            bytes,
+                        );
+                    }
                     return;
                 }
             }

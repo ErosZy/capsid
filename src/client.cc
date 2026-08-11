@@ -782,6 +782,14 @@ capsid_result map_frame_to_event(capsid_worker *worker,
                 return CAPSID_PROTOCOL_ERROR;
             }
             event->status = status;
+            if ((frame.flags &
+                 capsid::protocol::kFlagResponseFixedBody) != 0) {
+                if (!capsid::protocol::read_u32(
+                        &cursor, end, &event->credit) ||
+                    event->credit > capsid::protocol::kMaxFixedBodySize) {
+                    return CAPSID_PROTOCOL_ERROR;
+                }
+            }
             event->payload.data = cursor;
             event->payload.size = static_cast<size_t>(end - cursor);
             event->type = CAPSID_EVENT_RESPONSE_HEAD;
@@ -2386,4 +2394,3 @@ capsid_result capsid_response_status_text(const capsid_event *event,
 }
 
 }  // extern "C"
-
