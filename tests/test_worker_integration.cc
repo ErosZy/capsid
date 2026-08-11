@@ -267,9 +267,77 @@ void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
     }
 }
 
-std::string run_request(capsid_worker *worker, const char *url) {
+void invalid_request_header_fails_closed(capsid_worker *worker,
+                                         const uint8_t *name,
+                                         size_t name_size,
+                                         const uint8_t *value,
+                                         size_t value_size) {
+    capsid_header header = {};
+    header.name.data = name;
+    header.name.size = name_size;
+    header.value.data = value;
+    header.value.size = value_size;
     require_result(
-        capsid_worker_begin_request(worker, 1, "GET", url, NULL, 0),
+        capsid_worker_begin_request(
+            worker,
+            1,
+            "GET",
+            "https://example.test/invalid-header",
+            &header,
+            1),
+        "begin invalid-header request");
+    require_result(
+        capsid_worker_end_request(worker, 1),
+        "end invalid-header request");
+
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (;;) {
+        const capsid_result flush = capsid_worker_flush(worker);
+        if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
+            fail(std::string("invalid-header flush: ") +
+                 capsid_result_string(flush));
+        }
+        capsid_event event = {};
+        event.struct_size = sizeof(event);
+        const capsid_result result =
+            capsid_worker_next_event(worker, &event);
+        if (result == CAPSID_OK) {
+            if (event.type == CAPSID_EVENT_ERROR) {
+                return;
+            }
+            if (event.type == CAPSID_EVENT_RESPONSE_HEAD ||
+                event.type == CAPSID_EVENT_RESPONSE_BODY ||
+                event.type == CAPSID_EVENT_RESPONSE_END) {
+                fail("invalid incoming header reached the application");
+            }
+            if (event.type == CAPSID_EVENT_EXIT) {
+                fail("worker exited without invalid-header error");
+            }
+            continue;
+        }
+        if (result != CAPSID_WOULD_BLOCK) {
+            fail(std::string("invalid-header event: ") +
+                 capsid_result_string(result));
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            fail("invalid incoming header did not fail closed");
+        }
+        struct pollfd descriptor = {};
+        descriptor.fd = capsid_worker_fd(worker);
+        descriptor.events =
+            POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
+        poll(&descriptor, 1, 50);
+    }
+}
+
+std::string run_request(capsid_worker *worker,
+                        const char *url,
+                        const capsid_header *headers = NULL,
+                        size_t header_count = 0) {
+    require_result(
+        capsid_worker_begin_request(
+            worker, 1, "GET", url, headers, header_count),
         "begin request");
     require_result(capsid_worker_end_request(worker, 1), "end request");
 
@@ -411,6 +479,56 @@ int main(int argc, char **argv) {
 
     if (mode == "bodyless-end-failure") {
         bodyless_request_end_failure_fails_closed(worker);
+        capsid_worker_destroy(worker);
+        return 0;
+    }
+
+    if (mode == "incoming-request-fast-path") {
+        static const uint8_t probe_name[] = "X-Capsid-Probe";
+        static const uint8_t probe_value[] = " \ttrusted-input\t ";
+        static const uint8_t duplicate_name_a[] = "X-Duplicate";
+        static const uint8_t duplicate_name_b[] = "x-duplicate";
+        static const uint8_t duplicate_value_a[] = "one";
+        static const uint8_t duplicate_value_b[] = "two";
+        capsid_header headers[3] = {};
+        headers[0].name.data = probe_name;
+        headers[0].name.size = sizeof(probe_name) - 1;
+        headers[0].value.data = probe_value;
+        headers[0].value.size = sizeof(probe_value) - 1;
+        headers[1].name.data = duplicate_name_a;
+        headers[1].name.size = sizeof(duplicate_name_a) - 1;
+        headers[1].value.data = duplicate_value_a;
+        headers[1].value.size = sizeof(duplicate_value_a) - 1;
+        headers[2].name.data = duplicate_name_b;
+        headers[2].name.size = sizeof(duplicate_name_b) - 1;
+        headers[2].value.data = duplicate_value_b;
+        headers[2].value.size = sizeof(duplicate_value_b) - 1;
+        const std::string body = run_request(
+            worker, request_url.c_str(), headers, 3);
+        if (body !=
+            "{\"probe\":\"trusted-input\","
+            "\"duplicate\":\"one, two\","
+            "\"cloneProbe\":\"trusted-input\"}") {
+            fail("incoming Request lost its normalized header");
+        }
+        capsid_worker_destroy(worker);
+        return 0;
+    }
+
+    if (mode == "invalid-request-header-name") {
+        static const uint8_t name[] = "bad name";
+        static const uint8_t value[] = "value";
+        invalid_request_header_fails_closed(
+            worker, name, sizeof(name) - 1, value, sizeof(value) - 1);
+        capsid_worker_destroy(worker);
+        return 0;
+    }
+
+    if (mode == "invalid-request-header-value") {
+        static const uint8_t name[] = "x-value";
+        static const uint8_t value[] = "one\r\ntwo";
+        invalid_request_header_fails_closed(
+            worker, name, sizeof(name) - 1, value, sizeof(value) - 1);
         capsid_worker_destroy(worker);
         return 0;
     }
