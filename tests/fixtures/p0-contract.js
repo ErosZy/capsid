@@ -48,6 +48,59 @@ function assertSetCookieHeaderSemantics() {
 
 assertSetCookieHeaderSemantics();
 
+function assertHeaderNormalizationSemantics() {
+    const token = "!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const normalizedToken = token.toLowerCase();
+    const headers = new Headers([[ token, '\t  value\t with spaces  \t' ]]);
+    if (headers.get(normalizedToken) !== 'value\t with spaces') {
+        throw new Error('Headers name/value normalization mismatch');
+    }
+
+    for (const name of [ '', 'has space', 'has:colon', '\u0100' ]) {
+        try {
+            new Headers([[ name, 'value' ]]);
+            throw new Error(`Headers accepted invalid name ${JSON.stringify(name)}`);
+        } catch (error) {
+            if (!(error instanceof TypeError)) {
+                throw error;
+            }
+        }
+    }
+    for (const value of [ 'a\0b', 'a\rb', 'a\nb', '\u0100' ]) {
+        try {
+            new Headers([[ 'x-value', value ]]);
+            throw new Error(`Headers accepted invalid value ${JSON.stringify(value)}`);
+        } catch (error) {
+            if (!(error instanceof TypeError)) {
+                throw error;
+            }
+        }
+    }
+
+    // Header validation is an independent primitive. It must not dispatch
+    // through mutable RegExp/String prototype methods owned by application
+    // code; doing so also puts regex execution on every request's hot path.
+    const originalTest = RegExp.prototype.test;
+    const originalReplace = String.prototype.replace;
+    RegExp.prototype.test = () => {
+        throw new Error('Headers called RegExp.prototype.test');
+    };
+    String.prototype.replace = () => {
+        throw new Error('Headers called String.prototype.replace');
+    };
+    try {
+        const isolated = new Headers([[ 'X-Isolated', '  kept  ' ]]);
+        if (isolated.get('x-isolated') !== 'kept') {
+            throw new Error('prototype-independent normalization mismatch');
+        }
+    } finally {
+        RegExp.prototype.test = originalTest;
+        String.prototype.replace = originalReplace;
+    }
+}
+
+assertHeaderNormalizationSemantics();
+
 function streamingResponse() {
     let produced = 0;
     const total = 96 * 1024 + 37;
