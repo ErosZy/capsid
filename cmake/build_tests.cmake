@@ -2782,6 +2782,24 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_bodyless_end_failure PROPERTIES TIMEOUT 20)
         add_test(
+            NAME worker_bodyless_get_elides_end_bridge
+            COMMAND test-worker-integration
+                $<TARGET_FILE:capsid-worker>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
+                bodyless-get-elides-end
+        )
+        set_tests_properties(
+            worker_bodyless_get_elides_end_bridge PROPERTIES TIMEOUT 20)
+        add_test(
+            NAME worker_bodyless_head_elides_end_bridge
+            COMMAND test-worker-integration
+                $<TARGET_FILE:capsid-worker>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
+                bodyless-head-elides-end
+        )
+        set_tests_properties(
+            worker_bodyless_head_elides_end_bridge PROPERTIES TIMEOUT 20)
+        add_test(
             NAME worker_wasm_minimal
             COMMAND test-worker-integration
                 $<TARGET_FILE:capsid-worker>
