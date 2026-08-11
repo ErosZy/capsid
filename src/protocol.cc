@@ -58,21 +58,9 @@ bool valid_flags(uint16_t type, uint32_t flags) {
 
 }  // namespace
 
-Parser::Parser() : offset_(0), view_active_(false) {}
-
-void Parser::release_view() {
-    if (!view_active_) {
-        return;
-    }
-    view_active_ = false;
-    if (offset_ == buffer_.size()) {
-        buffer_.clear();
-        offset_ = 0;
-    }
-}
+Parser::Parser() : offset_(0) {}
 
 bool Parser::append(const uint8_t *data, size_t size) {
-    release_view();
     if (!error_.empty()) {
         return false;
     }
@@ -108,33 +96,6 @@ ParseResult Parser::next(Frame *frame, std::vector<uint8_t> *payload) {
     if (!frame || !payload || !error_.empty()) {
         return kParseError;
     }
-    const uint8_t *payload_data = NULL;
-    size_t payload_size = 0;
-    const ParseResult result =
-        next_view(frame, &payload_data, &payload_size);
-    if (result != kParseFrame) {
-        return result;
-    }
-    payload->clear();
-    if (payload_size != 0) {
-        payload->assign(payload_data, payload_data + payload_size);
-    }
-    if (payload != &frame->payload) {
-        frame->payload.clear();
-    }
-    release_view();
-    return kParseFrame;
-}
-
-ParseResult Parser::next_view(Frame *frame,
-                              const uint8_t **payload_data,
-                              size_t *payload_size_out) {
-    release_view();
-    if (!frame || !payload_data || !payload_size_out || !error_.empty()) {
-        return kParseError;
-    }
-    *payload_data = NULL;
-    *payload_size_out = 0;
     const size_t buffered = buffer_.size() - offset_;
     if (buffered < kHeaderSize) {
         return kParseNeedMore;
@@ -174,13 +135,17 @@ ParseResult Parser::next_view(Frame *frame,
     frame->type = type;
     frame->flags = flags;
     frame->request_id = load_u64(header + 12);
-    frame->payload.clear();
-    if (payload_size != 0) {
-        *payload_data = header + kHeaderSize;
-        *payload_size_out = payload_size;
+    payload->assign(
+        buffer_.begin() + static_cast<ptrdiff_t>(offset_ + kHeaderSize),
+        buffer_.begin() + static_cast<ptrdiff_t>(offset_ + frame_size));
+    if (payload != &frame->payload) {
+        frame->payload.clear();
     }
     offset_ += frame_size;
-    view_active_ = true;
+    if (offset_ == buffer_.size()) {
+        buffer_.clear();
+        offset_ = 0;
+    }
     return kParseFrame;
 }
 

@@ -177,59 +177,6 @@ void test_parser_can_decode_into_reusable_payload_storage() {
     require(payload.capacity() == capacity, "reusable payload capacity is retained");
 }
 
-void test_parser_can_borrow_payload_storage() {
-    capsid::protocol::Frame first;
-    first.type = capsid::protocol::kResponseBody;
-    first.flags = 0;
-    first.request_id = 92;
-    first.payload.assign(4096, 0x6c);
-    capsid::protocol::Frame second = first;
-    second.request_id = 93;
-    second.payload.assign(17, 0x7d);
-
-    std::vector<uint8_t> wire;
-    require(capsid::protocol::encode(first, &wire), "first view frame encodes");
-    std::vector<uint8_t> second_wire;
-    require(capsid::protocol::encode(second, &second_wire),
-            "second view frame encodes");
-    wire.insert(wire.end(), second_wire.begin(), second_wire.end());
-
-    capsid::protocol::Parser parser;
-    require(parser.append(&wire[0], wire.size()), "view frames buffered");
-    capsid::protocol::Frame metadata;
-    const uint8_t *payload = NULL;
-    size_t payload_size = 0;
-    require(
-        parser.next_view(&metadata, &payload, &payload_size) ==
-            capsid::protocol::kParseFrame,
-        "first payload view emitted");
-    require(metadata.request_id == 92 && metadata.payload.empty(),
-            "first view metadata intact");
-    require(payload_size == first.payload.size() && payload != NULL,
-            "first payload view sized");
-    require(std::vector<uint8_t>(payload, payload + payload_size) ==
-                first.payload,
-            "first payload view intact");
-
-    require(
-        parser.next_view(&metadata, &payload, &payload_size) ==
-            capsid::protocol::kParseFrame,
-        "second payload view emitted");
-    require(metadata.request_id == 93 &&
-                payload_size == second.payload.size() && payload != NULL,
-            "second payload view sized");
-    require(std::vector<uint8_t>(payload, payload + payload_size) ==
-                second.payload,
-            "second payload view intact");
-
-    require(
-        parser.next_view(&metadata, &payload, &payload_size) ==
-            capsid::protocol::kParseNeedMore,
-        "view parser drained");
-    require(payload == NULL && payload_size == 0,
-            "drained view is empty");
-}
-
 void test_u64_wire_value_round_trips() {
     const uint64_t expected = 0xfedcba9876543210ull;
     std::vector<uint8_t> wire;
@@ -371,7 +318,6 @@ int main() {
     test_accepts_multiple_coalesced_frames();
     test_append_encoded_preserves_prefix_and_rejects_transactionally();
     test_parser_can_decode_into_reusable_payload_storage();
-    test_parser_can_borrow_payload_storage();
     test_u64_wire_value_round_trips();
     test_rejects_unknown_flags();
     test_ready_sandbox_feature_flags();
