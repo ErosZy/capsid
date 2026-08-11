@@ -68,11 +68,21 @@ public:
     bool append(const uint8_t *data, size_t size);
     ParseResult next(Frame *frame);
     ParseResult next(Frame *frame, std::vector<uint8_t> *payload);
+    // Returns a payload view into parser-owned storage. The view remains
+    // valid until the next non-const Parser call. This lets synchronous
+    // consumers take their one required ownership snapshot directly,
+    // without first copying into an intermediate vector.
+    ParseResult next_view(Frame *frame,
+                          const uint8_t **payload_data,
+                          size_t *payload_size_out);
     const std::string &error() const { return error_; }
 
 private:
+    void release_view();
+
     std::vector<uint8_t> buffer_;
     size_t offset_;
+    bool view_active_;
     std::string error_;
 };
 

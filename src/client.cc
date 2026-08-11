@@ -61,7 +61,6 @@ struct capsid_worker {
     size_t write_offset;
     std::vector<uint8_t> write_buffer;
     capsid::protocol::Parser parser;
-    std::vector<uint8_t> event_payload;
     std::map<uint64_t, RequestState> requests;
     std::set<uint64_t> canceled_requests;
     std::deque<uint64_t> canceled_request_order;
@@ -736,16 +735,18 @@ bool decode_header_at(const capsid_event *event,
                       capsid_header *out_header);
 
 capsid_result map_frame_to_event(capsid_worker *worker,
-                               const capsid::protocol::Frame &frame,
-                               capsid_event *event) {
+                                 const capsid::protocol::Frame &frame,
+                                 const uint8_t *payload_data,
+                                 size_t payload_size,
+                                 capsid_event *event) {
     event->type = CAPSID_EVENT_NONE;
     event->request_id = frame.request_id;
     event->flags = frame.flags;
     event->status = 0;
     event->credit = 0;
 
-    event->payload.data = worker->event_payload.empty() ? NULL : &worker->event_payload[0];
-    event->payload.size = worker->event_payload.size();
+    event->payload.data = payload_data;
+    event->payload.size = payload_size;
 
     switch (frame.type) {
         case capsid::protocol::kReady:
@@ -2180,8 +2181,10 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
     }
     for (;;) {
         capsid::protocol::Frame frame;
+        const uint8_t *payload_data = NULL;
+        size_t payload_size = 0;
         capsid::protocol::ParseResult parse_result =
-            worker->parser.next(&frame, &worker->event_payload);
+            worker->parser.next_view(&frame, &payload_data, &payload_size);
         if (parse_result == capsid::protocol::kParseError) {
             return CAPSID_PROTOCOL_ERROR;
         }
@@ -2285,7 +2288,8 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                 return CAPSID_CLOSED;
             }
             parse_result =
-                worker->parser.next(&frame, &worker->event_payload);
+                worker->parser.next_view(
+                    &frame, &payload_data, &payload_size);
         }
         if (parse_result == capsid::protocol::kParseNeedMore) {
             return CAPSID_WOULD_BLOCK;
@@ -2296,8 +2300,6 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
         if (worker->ipc_metrics_enabled) {
             worker->ipc_metrics.parsed_frames.fetch_add(
                     1, std::memory_order_relaxed);
-            worker->ipc_metrics.parser_payload_copied_bytes.fetch_add(
-                worker->event_payload.size(), std::memory_order_relaxed);
         }
         std::set<uint64_t>::iterator canceled =
             worker->canceled_requests.find(frame.request_id);
@@ -2309,7 +2311,8 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
             }
             continue;
         }
-        return map_frame_to_event(worker, frame, event);
+        return map_frame_to_event(
+            worker, frame, payload_data, payload_size, event);
     }
         },
         "capsid_worker_next_event: out of memory",
@@ -2386,4 +2389,3 @@ capsid_result capsid_response_status_text(const capsid_event *event,
 }
 
 }  // extern "C"
-
