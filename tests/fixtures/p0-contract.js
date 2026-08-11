@@ -78,7 +78,7 @@ function assertHeaderNormalizationSemantics() {
     }
 
     // Header validation is an independent primitive. It must not dispatch
-    // through RegExp execution or String.replace hooks owned by application
+    // through mutable RegExp/String prototype methods owned by application
     // code; doing so also puts regex execution on every request's hot path.
     const originalTest = RegExp.prototype.test;
     const originalReplace = String.prototype.replace;
