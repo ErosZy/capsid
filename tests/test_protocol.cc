@@ -200,6 +200,24 @@ void test_rejects_unknown_flags() {
     require(!capsid::protocol::encode(input, &wire), "unknown frame flags rejected");
 }
 
+void test_fixed_response_head_flag() {
+    capsid::protocol::Frame input;
+    input.type = capsid::protocol::kResponseHead;
+    input.flags = capsid::protocol::kFlagResponseFixedBody;
+    input.request_id = 17;
+    capsid::protocol::append_u16(&input.payload, 200);
+    capsid::protocol::append_u32(&input.payload, 4096);
+
+    std::vector<uint8_t> wire;
+    require(
+        capsid::protocol::encode(input, &wire),
+        "fixed response-head flag accepted");
+    input.flags |= 2u;
+    require(
+        !capsid::protocol::encode(input, &wire),
+        "unknown response-head flag rejected");
+}
+
 void test_ready_sandbox_feature_flags() {
     capsid::protocol::Frame ready;
     ready.type = capsid::protocol::kReady;
@@ -320,6 +338,7 @@ int main() {
     test_parser_can_decode_into_reusable_payload_storage();
     test_u64_wire_value_round_trips();
     test_rejects_unknown_flags();
+    test_fixed_response_head_flag();
     test_ready_sandbox_feature_flags();
     test_bundle_name_flag_requires_start();
     test_trusted_bytecode_flag_requires_start();

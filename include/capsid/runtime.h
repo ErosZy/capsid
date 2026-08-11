@@ -438,6 +438,15 @@ typedef enum capsid_event_type {
     CAPSID_EVENT_MEMORY_METRICS = 11
 } capsid_event_type;
 
+/*
+ * CAPSID_EVENT_RESPONSE_HEAD flag: `credit` carries the exact byte length
+ * of a small complete non-streamed response body. The body/end events still
+ * obey ordinary response credit; this is a representation hint, not a bypass
+ * of flow control. Larger bodies use the pipelined representation and leave
+ * the flag clear.
+ */
+#define CAPSID_RESPONSE_HEAD_FLAG_FIXED_BODY 1u
+
 typedef struct capsid_event {
     uint32_t struct_size;
     capsid_event_type type;

@@ -46,6 +46,21 @@ export default {
                 headers: { 'content-type': 'application/octet-stream' },
             });
         }
+        if (url.pathname === '/fixed-string') {
+            return new Response('x'.repeat(1024), {
+                headers: { 'content-type': 'text/plain' },
+            });
+        }
+        if (url.pathname === '/fixed-string-16k') {
+            return new Response('y'.repeat(16 * 1024), {
+                headers: { 'content-type': 'text/plain' },
+            });
+        }
+        if (url.pathname === '/fixed-string-utf8-overflow') {
+            return new Response('\u4e2d'.repeat(2048), {
+                headers: { 'content-type': 'text/plain' },
+            });
+        }
         if (url.pathname === '/echo') {
             const body = new Uint8Array(await request.arrayBuffer());
             return new Response(body, {

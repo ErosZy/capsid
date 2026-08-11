@@ -122,6 +122,20 @@ bool has_response_head_for(const std::vector<WorkerEvent>& events,
     return false;
 }
 
+bool has_fixed_response_head_for(
+    const std::vector<WorkerEvent>& events,
+    std::uint64_t request_id,
+    std::uint32_t body_size) {
+    for (const WorkerEvent& event : events) {
+        if (event.type == WorkerEvent::Type::kResponseHead &&
+            event.request_id == request_id && event.fixed_body &&
+            event.fixed_body_size == body_size) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Submits a bodyless begin request and observes the round trip, granting
 // response credit for every body frame exactly once. Returns when
 // RESPONSE_END for `request_id` has arrived (or fails the test).
@@ -189,13 +203,16 @@ void test_startup_failure() {
     std::cout << "PASS: startup failure leaves nothing behind" << std::endl;
 }
 
-WorkerExecutor::WorkerFactory hello_factory(const std::string& worker_path) {
-    return [worker_path](capsid_worker** out,
+WorkerExecutor::WorkerFactory hello_factory(
+    const std::string& worker_path,
+    std::uint32_t initial_stream_window = 0) {
+    return [worker_path, initial_stream_window](capsid_worker** out,
                          std::string* factory_error) -> bool {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
         config.worker_path = worker_path.c_str();
         config.request_timeout_ms = 2000;
+        config.initial_stream_window = initial_stream_window;
         capsid_worker* worker = nullptr;
         if (capsid_worker_spawn(&config, &worker) != CAPSID_OK) {
             *factory_error = "worker spawn failed";
@@ -232,6 +249,8 @@ void test_factory_lifecycle(const std::string& worker_path) {
     begin_and_observe(executor, harness, 7, events);
     require(has_response_head_for(events, 7),
             "missing RESPONSE_HEAD for request 7");
+    require(has_fixed_response_head_for(events, 7, 14),
+            "non-streamed response missing exact fixed-body metadata");
     require(executor.inflight() == 0, "inflight 0 after response end");
 
     // Cancel path: a begun request returns to inflight 0 at mark_canceled
@@ -267,6 +286,27 @@ void test_factory_lifecycle(const std::string& worker_path) {
     executor.stop_and_join();
     executor.stop_and_join();  // idempotent: no second destroy
     std::cout << "PASS: factory lifecycle + exactly-once reap" << std::endl;
+}
+
+void test_fixed_response_requires_credit(const std::string& worker_path) {
+    WorkerExecutor executor;
+    EventHarness harness(executor);
+    std::string error;
+    require(executor.start(hello_factory(worker_path, 8), &error),
+            "low-window start: " + error);
+
+    std::vector<WorkerEvent> events;
+    begin_and_observe(executor, harness, 10, events);
+    require(has_response_head_for(events, 10),
+            "low-window response missing head");
+    require(!has_fixed_response_head_for(events, 10, 14),
+            "fixed response exceeded available response credit");
+    require(executor.inflight() == 0,
+            "low-window response did not drain through ordinary credit");
+
+    executor.stop_and_join();
+    std::cout << "PASS: fixed response falls back below body credit"
+              << std::endl;
 }
 
 void test_adopt_ready(const std::string& worker_path) {
@@ -338,6 +378,7 @@ int main(int argc, char** argv) {
     const std::string worker_path = argv[1];
     test_startup_failure();
     test_factory_lifecycle(worker_path);
+    test_fixed_response_requires_credit(worker_path);
     test_adopt_ready(worker_path);
     std::cout << "PASS: WorkerExecutor ownership contract (WP-04 §8.1)"
               << std::endl;

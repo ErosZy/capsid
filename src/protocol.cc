@@ -47,6 +47,9 @@ bool valid_flags(uint16_t type, uint32_t flags) {
         // kFlagRequestEnd: request has no body.
         return (flags & ~kFlagRequestEnd) == 0;
     }
+    if (type == kResponseHead) {
+        return (flags & ~kFlagResponseFixedBody) == 0;
+    }
     if (type == kError) {
         return (flags & ~kErrorFlagTimeout) == 0;
     }

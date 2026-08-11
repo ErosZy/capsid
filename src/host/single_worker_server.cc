@@ -219,6 +219,16 @@ struct PendingRequest {
     // request is cancelled or fails before the write completes.
     std::shared_ptr<http::response<http::buffer_body>> response;
     std::shared_ptr<http::response_serializer<http::buffer_body>> serializer;
+    // Complete non-streamed responses up to the protocol's 4 KiB fixed-body
+    // bound are held until RESPONSE_END and emitted as one fixed-length Beast
+    // write. The Runtime supplies the exact size before any extra credit is
+    // granted, so this allocation cannot grow with a slow client.
+    std::shared_ptr<http::response<
+        http::vector_body<std::uint8_t>>> fixed_response;
+    std::shared_ptr<http::response_serializer<
+        http::vector_body<std::uint8_t>>> fixed_serializer;
+    std::size_t fixed_body_expected = 0;
+    std::size_t fixed_body_received = 0;
     std::vector<std::uint8_t> outgoing;
     std::deque<QueuedResponseBody> body_queue;
     // Total bytes currently queued for the HTTP write, so the early
@@ -404,6 +414,7 @@ private:
     void write_body_block(std::uint64_t request_id,
                           std::vector<std::uint8_t> bytes,
                           bool credit_returned_early = false);
+    void write_fixed_response(std::uint64_t request_id);
     void write_end_block(std::uint64_t request_id);
     void io_post(std::function<void()> function);
     bool bind_listener();
@@ -1249,6 +1260,59 @@ void Impl::handle_worker_event(WorkerEvent event) {
                                  "streaming capacity exhausted");
             return;
         }
+        pending.head_only = pending.method == "HEAD";
+        if (event.fixed_body) {
+            pending.fixed_response = std::make_shared<http::response<
+                http::vector_body<std::uint8_t>>>();
+            pending.fixed_response->result(
+                static_cast<http::status>(event.status));
+            pending.fixed_response->version(pending.version);
+            pending.fixed_response->keep_alive(pending.keep_alive);
+            for (const auto& [name, value] : event.headers) {
+                pending.fixed_response->base().insert(name, value);
+            }
+            const auto content_length_field =
+                pending.fixed_response->base().find(
+                    http::field::content_length);
+            if (content_length_field !=
+                pending.fixed_response->base().end()) {
+                std::uint64_t value = 0;
+                bool valid = true;
+                const std::string_view text(
+                    content_length_field->value());
+                if (text.empty()) {
+                    valid = false;
+                }
+                for (const char c : text) {
+                    if (c < '0' || c > '9') {
+                        valid = false;
+                        break;
+                    }
+                    const std::uint64_t digit =
+                        static_cast<std::uint64_t>(c - '0');
+                    if (value >
+                        (std::numeric_limits<std::uint64_t>::max() -
+                         digit) / 10) {
+                        valid = false;
+                        break;
+                    }
+                    value = value * 10 + digit;
+                }
+                if (!valid || value != event.fixed_body_size) {
+                    reject_response_head(
+                        event.request_id,
+                        "fixed response Content-Length mismatch");
+                    return;
+                }
+            }
+            pending.fixed_body_expected = event.fixed_body_size;
+            pending.fixed_body_received = 0;
+            if (!pending.head_only) {
+                pending.fixed_response->body().reserve(
+                    pending.fixed_body_expected);
+            }
+            return;
+        }
         pending.response =
             std::make_shared<http::response<http::buffer_body>>();
         pending.response->result(static_cast<http::status>(event.status));
@@ -1256,10 +1320,6 @@ void Impl::handle_worker_event(WorkerEvent event) {
         pending.response->keep_alive(pending.keep_alive);
         for (const auto& [name, value] : event.headers) {
             pending.response->base().insert(name, value);
-        }
-        if (!pending.response->has_content_length() &&
-            !pending.response->chunked()) {
-            pending.response->chunked(true);
         }
         const auto content_length_field =
             pending.response->base().find(http::field::content_length);
@@ -1294,10 +1354,13 @@ void Impl::handle_worker_event(WorkerEvent event) {
             pending.cl_known = true;
             pending.cl_remaining = static_cast<std::size_t>(value);
         }
+        if (!pending.response->has_content_length() &&
+            !pending.response->chunked()) {
+            pending.response->chunked(true);
+        }
         pending.serializer = std::make_shared<
             http::response_serializer<http::buffer_body>>(
             *pending.response);
-        pending.head_only = pending.method == "HEAD";
         pending.writing = true;
         // E-3 §9.2: the head write has a deadline; a client that stops
         // reading while the head is in flight is torn down.
@@ -1366,6 +1429,23 @@ void Impl::handle_worker_event(WorkerEvent event) {
             // Heartbeat (§9.3): any body frame keeps the stream alive.
             arm_stream_idle_timer(event.request_id, pending);
         }
+        if (pending.fixed_response) {
+            if (pending.fixed_body_received >
+                    pending.fixed_body_expected ||
+                event.body.size() >
+                pending.fixed_body_expected -
+                    pending.fixed_body_received) {
+                fail_request(event.request_id, pending.session);
+                return;
+            }
+            pending.fixed_body_received += event.body.size();
+            if (!pending.head_only) {
+                pending.fixed_response->body().insert(
+                    pending.fixed_response->body().end(),
+                    event.body.begin(), event.body.end());
+            }
+            return;
+        }
         // Performance loop v1: return credit as soon as the frame is
         // received, not after the client write completes, while the
         // per-request write queue stays shallow. This removes one host
@@ -1419,6 +1499,15 @@ void Impl::handle_worker_event(WorkerEvent event) {
         cancel.type = CommandType::kCancel;
         cancel.request_id = event.request_id;
         executor_->submit(std::move(cancel));
+        if (pending.fixed_response) {
+            if (pending.fixed_body_received !=
+                pending.fixed_body_expected) {
+                fail_request(event.request_id, pending.session);
+                return;
+            }
+            write_fixed_response(event.request_id);
+            return;
+        }
         if (pending.head_only) {
             if (!pending.writing) {
                 finalize_request(event.request_id, pending.session);
@@ -1679,6 +1768,54 @@ void Impl::write_body_block(std::uint64_t request_id,
                 self->write_end_block(request_id);
             }
         });
+}
+
+void Impl::write_fixed_response(std::uint64_t request_id) {
+    auto it = requests_.find(request_id);
+    if (it == requests_.end()) {
+        return;
+    }
+    PendingRequest& pending = it->second;
+    pending.fixed_response->content_length(
+        pending.fixed_body_expected);
+    pending.fixed_serializer = std::make_shared<http::response_serializer<
+        http::vector_body<std::uint8_t>>>(*pending.fixed_response);
+    pending.writing = true;
+    arm_write_timer(request_id, pending);
+    const auto completion =
+        [self = shared_from_this(),
+         response = pending.fixed_response,
+         serializer = pending.fixed_serializer,
+         session = pending.session,
+         request_id](beast::error_code ec, std::size_t) {
+            (void)response;
+            (void)serializer;
+            (void)session;
+            auto it = self->requests_.find(request_id);
+            if (it == self->requests_.end()) {
+                return;
+            }
+            PendingRequest& pending = it->second;
+            pending.writing = false;
+            self->disarm_write_timer(pending);
+            if (ec) {
+                self->fail_request(request_id, pending.session);
+                return;
+            }
+            pending.head_sent = true;
+            self->finalize_request(request_id, pending.session);
+        };
+    if (pending.head_only) {
+        http::async_write_header(
+            pending.session->stream(),
+            *pending.fixed_serializer,
+            completion);
+    } else {
+        http::async_write(
+            pending.session->stream(),
+            *pending.fixed_serializer,
+            completion);
+    }
 }
 
 void Impl::write_end_block(std::uint64_t request_id) {

@@ -1015,6 +1015,7 @@ private:
             !self->define_native(core, "capsidResponseEnd", js_response_end, 1) ||
             !self->define_native(core, "capsidResponseError", js_response_error, 2) ||
             !self->define_native(core, "capsidResponseFinal", js_response_final, 5) ||
+            !self->define_native(core, "capsidResponseFixed", js_response_fixed, 5) ||
             !self->define_native(core, "capsidRequestSettled", js_request_settled, 1) ||
             !self->define_native(
                 core,
@@ -1025,6 +1026,11 @@ private:
                 core,
                 "capsidFetchResponseBodyLimit",
                 js_fetch_response_body_limit,
+                0) ||
+            !self->define_native(
+                core,
+                "capsidFixedResponseBodyLimit",
+                js_fixed_response_body_limit,
                 0) ||
             !self->define_native(core, "capsidInstallBridge", js_install_bridge, 4)) {
             if (!JS_HasException(ctx)) {
@@ -1211,6 +1217,15 @@ private:
                     : 0));
     }
 
+    static JSValue js_fixed_response_body_limit(JSContext *ctx,
+                                                JSValueConst,
+                                                int,
+                                                JSValueConst *) {
+        return JS_NewInt64(
+            ctx,
+            static_cast<int64_t>(capsid::protocol::kMaxFixedBodySize));
+    }
+
     // §6.4: the only lifecycle entry a terminal token may still call. The
     // bootstrap calls it after requests.delete(id) and the final cleanup;
     // native validates the token and marks it terminal. The post-drain
@@ -1284,8 +1299,93 @@ private:
         return JS_UNDEFINED;
     }
 
-    // Builds and queues the ResponseHead frame; shared by
-    // js_response_head and js_response_final. Returns true on success.
+    // The fixed-body path must hold its head until the exact UTF-8 body size
+    // is known. Ordinary responses use build_response_head below and retain
+    // the original head-first IPC pipeline.
+    static bool build_fixed_response_head(
+                                    JSContext *ctx,
+                                    uint64_t id,
+                                    uint32_t status,
+                                    JSValueConst status_text_value,
+                                    JSValueConst headers_value,
+                                    capsid::protocol::Frame *out_frame) {
+        if (!out_frame) {
+            return false;
+        }
+        capsid::protocol::Frame frame;
+        frame.type = capsid::protocol::kResponseHead;
+        frame.flags = 0;
+        frame.request_id = id;
+        capsid::protocol::append_u16(
+            &frame.payload, static_cast<uint16_t>(status));
+        const std::string status_text = to_string(ctx, status_text_value);
+        if (status_text.size() > std::numeric_limits<uint16_t>::max() ||
+            status_text.size() + sizeof(uint16_t) >
+                g_worker->config_.max_header_bytes - frame.payload.size()) {
+            return false;
+        }
+        append_string16(
+            &frame.payload,
+            reinterpret_cast<const uint8_t *>(status_text.data()),
+            status_text.size());
+
+        uint32_t count = 0;
+        JSValue length_value =
+            JS_GetPropertyStr(ctx, headers_value, "length");
+        if (JS_ToUint32(ctx, &count, length_value)) {
+            JS_FreeValue(ctx, length_value);
+            return false;
+        }
+        JS_FreeValue(ctx, length_value);
+        if (count > std::numeric_limits<uint16_t>::max()) {
+            return false;
+        }
+        capsid::protocol::append_u16(
+            &frame.payload, static_cast<uint16_t>(count));
+        for (uint32_t i = 0; i < count; ++i) {
+            JSValue pair = JS_GetPropertyUint32(ctx, headers_value, i);
+            JSValue name_value = JS_GetPropertyUint32(ctx, pair, 0);
+            JSValue value_value = JS_GetPropertyUint32(ctx, pair, 1);
+            const std::string name = to_string(ctx, name_value);
+            const std::string value = to_string(ctx, value_value);
+            JS_FreeValue(ctx, value_value);
+            JS_FreeValue(ctx, name_value);
+            JS_FreeValue(ctx, pair);
+            if (name.size() > std::numeric_limits<uint16_t>::max() ||
+                value.size() > std::numeric_limits<uint32_t>::max()) {
+                return false;
+            }
+            const size_t overhead = sizeof(uint16_t) + sizeof(uint32_t);
+            if (name.size() >
+                    g_worker->config_.max_header_bytes -
+                        frame.payload.size() ||
+                overhead >
+                    g_worker->config_.max_header_bytes -
+                        frame.payload.size() - name.size() ||
+                value.size() >
+                    g_worker->config_.max_header_bytes -
+                        frame.payload.size() - name.size() - overhead) {
+                return false;
+            }
+            append_string16(
+                &frame.payload,
+                reinterpret_cast<const uint8_t *>(name.data()),
+                name.size());
+            append_string32(
+                &frame.payload,
+                reinterpret_cast<const uint8_t *>(value.data()),
+                value.size());
+        }
+        if (frame.payload.size() > g_worker->config_.max_header_bytes) {
+            return false;
+        }
+        *out_frame = std::move(frame);
+        return true;
+    }
+
+    // Builds and queues the ordinary ResponseHead frame. Keep this hot path
+    // independent of the bounded fixed-response representation so large and
+    // streamed responses retain their original IPC overlap and code shape.
     static bool build_response_head(JSContext *ctx,
                                     uint64_t id,
                                     uint32_t status,
@@ -1388,12 +1488,9 @@ private:
         return JS_UNDEFINED;
     }
 
-    // Single-shot response for non-streamed bodies (performance loop):
-    // head frame + body frames + end terminal in ONE native call,
-    // eliminating two JS round-trips per request. The head frame is
-    // queued first, the body goes through the normal credit-driven
-    // fast/pending path, and the end terminal waits for the body to
-    // drain (existing machinery).
+    // Ordinary single-shot response for non-streamed bodies. This is kept
+    // separate from js_response_fixed so the high-volume large-body path
+    // retains its original head-first pipeline and has no fixed-body branch.
     static JSValue js_response_final(JSContext *ctx,
                                      JSValueConst,
                                      int argc,
@@ -1442,7 +1539,19 @@ private:
                 // four-byte scalar, so only the UTF-8 surrogate range needs
                 // rewriting; replacement is also three bytes and never
                 // changes the body length. Allocate only on this rare path.
-                for (size_t i = 0; i + 2 < body_size; ++i) {
+                const size_t surrogate_search_size =
+                    body_size > 2 ? body_size - 2 : 0;
+                size_t search_offset = 0;
+                while (search_offset < surrogate_search_size) {
+                    const void *found = std::memchr(
+                        body_bytes + search_offset,
+                        0xed,
+                        surrogate_search_size - search_offset);
+                    if (!found) {
+                        break;
+                    }
+                    const size_t i =
+                        static_cast<const uint8_t *>(found) - body_bytes;
                     if (body_bytes[i] == 0xed &&
                         body_bytes[i + 1] >= 0xa0 &&
                         body_bytes[i + 1] <= 0xbf &&
@@ -1456,6 +1565,7 @@ private:
                         normalized_body[i + 1] = 0xbf;
                         normalized_body[i + 2] = 0xbd;
                     }
+                    search_offset = i + 1;
                 }
                 if (!normalized_body.empty()) {
                     body_bytes = &normalized_body[0];
@@ -1463,6 +1573,154 @@ private:
             } else {
                 body_bytes = JS_GetUint8Array(ctx, &body_size, argv[4]);
             }
+        }
+        if (body_bytes != NULL && body_size > 0) {
+            size_t fast_sent = 0;
+            const EnqueueResult result = g_worker->queue_response_bytes_fast(
+                id, body_bytes, body_size, &state->second, &fast_sent);
+            if (result == EnqueueResult::kFatal) {
+                if (body_text) {
+                    JS_FreeCString(ctx, body_text);
+                }
+                return JS_ThrowInternalError(ctx, "response output is wedged");
+            }
+            if (result == EnqueueResult::kWouldBlock) {
+                PendingWrite pending;
+                pending.data.assign(body_bytes + fast_sent,
+                                    body_bytes + body_size);
+                pending.offset = 0;
+                pending.size = pending.data.size();
+                pending.resolve = JS_UNDEFINED;
+                pending.reject = JS_UNDEFINED;
+                state->second.pending.push_back(std::move(pending));
+                g_worker->enqueue_pump(id);
+            }
+        }
+        if (body_text) {
+            JS_FreeCString(ctx, body_text);
+        }
+        TerminalPending terminal;
+        terminal.kind = TerminalPending::Kind::kResponseEnd;
+        terminal.error_flags = 0;
+        g_worker->queue_terminal_or_defer(id, terminal);
+        return JS_UNDEFINED;
+    }
+
+    // Bounded single-shot response. The JS bootstrap calls this entry only
+    // when its representation proves the body may fit the fixed-response
+    // bound; native still checks the exact encoded byte count.
+    static JSValue js_response_fixed(JSContext *ctx,
+                                     JSValueConst,
+                                     int argc,
+                                     JSValueConst *argv) {
+        uint64_t id = 0;
+        uint32_t status = 0;
+        if (!g_worker || argc < 5 || JS_ToBigUint64(ctx, &id, argv[0]) ||
+            JS_ToUint32(ctx, &status, argv[1]) || id == 0 || status > 999) {
+            return JS_EXCEPTION;
+        }
+        if (!g_worker->require_active_request(ctx, id, true, false, "js_response_final")) {
+            return JS_EXCEPTION;
+        }
+        std::map<uint64_t, ResponseState>::iterator state =
+            g_worker->responses_.find(id);
+        if (state == g_worker->responses_.end()) {
+            return JS_UNDEFINED;
+        }
+        state->second.t_head_ns = uv_hrtime();
+        capsid::protocol::Frame head;
+        if (!build_fixed_response_head(
+                ctx, id, status, argv[2], argv[3], &head)) {
+            return JS_ThrowInternalError(
+                ctx, "response head encoding failed");
+        }
+        // Body: Uint8Array or string; both are encoded/read here, then
+        // pushed through the fast path with the remainder snapshotted
+        // for credit-driven advancement. Untouched string Responses arrive
+        // here as strings so the common ASCII case can use QuickJS's stable
+        // string storage directly, without a JS TextEncoder allocation and
+        // a second Uint8Array copy.
+        size_t body_size = 0;
+        const uint8_t *body_bytes = NULL;
+        const char *body_text = NULL;
+        std::vector<uint8_t> normalized_body;
+        if (!JS_IsNull(argv[4]) && !JS_IsUndefined(argv[4])) {
+            if (JS_IsString(argv[4])) {
+                body_text = JS_ToCStringLen(ctx, &body_size, argv[4]);
+                if (!body_text) {
+                    return JS_EXCEPTION;
+                }
+                body_bytes = reinterpret_cast<const uint8_t *>(body_text);
+
+                // JS_ToCStringLen preserves unmatched UTF-16 surrogate code
+                // points as their three-byte UTF-8 encodings. Fetch's
+                // TextEncoder semantics require each unmatched surrogate to
+                // become U+FFFD instead. Valid pairs have already become one
+                // four-byte scalar, so only the UTF-8 surrogate range needs
+                // rewriting; replacement is also three bytes and never
+                // changes the body length. Allocate only on this rare path.
+                const size_t surrogate_search_size =
+                    body_size > 2 ? body_size - 2 : 0;
+                size_t search_offset = 0;
+                while (search_offset < surrogate_search_size) {
+                    const void *found = std::memchr(
+                        body_bytes + search_offset,
+                        0xed,
+                        surrogate_search_size - search_offset);
+                    if (!found) {
+                        break;
+                    }
+                    const size_t i =
+                        static_cast<const uint8_t *>(found) - body_bytes;
+                    if (body_bytes[i] == 0xed &&
+                        body_bytes[i + 1] >= 0xa0 &&
+                        body_bytes[i + 1] <= 0xbf &&
+                        body_bytes[i + 2] >= 0x80 &&
+                        body_bytes[i + 2] <= 0xbf) {
+                        if (normalized_body.empty()) {
+                            normalized_body.assign(
+                                body_bytes, body_bytes + body_size);
+                        }
+                        normalized_body[i] = 0xef;
+                        normalized_body[i + 1] = 0xbf;
+                        normalized_body[i + 2] = 0xbd;
+                    }
+                    search_offset = i + 1;
+                }
+                if (!normalized_body.empty()) {
+                    body_bytes = &normalized_body[0];
+                }
+            } else {
+                body_bytes = JS_GetUint8Array(ctx, &body_size, argv[4]);
+            }
+        }
+        const bool fixed_body =
+            body_size <= capsid::protocol::kMaxFixedBodySize &&
+            body_size <= state->second.credit;
+        if (fixed_body) {
+            if (g_worker->config_.max_header_bytes < sizeof(uint32_t) ||
+                head.payload.size() >
+                    g_worker->config_.max_header_bytes - sizeof(uint32_t)) {
+                if (body_text) {
+                    JS_FreeCString(ctx, body_text);
+                }
+                return JS_ThrowInternalError(
+                    ctx, "response head encoding failed");
+            }
+            head.flags = capsid::protocol::kFlagResponseFixedBody;
+            const uint32_t size = static_cast<uint32_t>(body_size);
+            head.payload.insert(head.payload.begin() + 2, 4, 0);
+            head.payload[2] = static_cast<uint8_t>(size);
+            head.payload[3] = static_cast<uint8_t>(size >> 8);
+            head.payload[4] = static_cast<uint8_t>(size >> 16);
+            head.payload[5] = static_cast<uint8_t>(size >> 24);
+        }
+        if (!g_worker->queue_output(head)) {
+            if (body_text) {
+                JS_FreeCString(ctx, body_text);
+            }
+            return JS_ThrowInternalError(
+                ctx, "response head encoding failed");
         }
         if (body_bytes != NULL && body_size > 0) {
             size_t fast_sent = 0;
