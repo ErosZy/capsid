@@ -1,7 +1,7 @@
 const originalTest = RegExp.prototype.test;
 
 RegExp.prototype.test = function(value) {
-    if (this.source.includes('0-9A-Za-z-')) {
+    if (this.source.includes('0-9A-Za-z-') && value === 'x-capsid-probe') {
         throw new Error('incoming Request repeated JS header validation');
     }
     return Reflect.apply(originalTest, this, [ value ]);

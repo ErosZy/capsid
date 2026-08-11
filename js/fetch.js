@@ -383,6 +383,31 @@ function normalizeInit(init) {
     return normalized;
 }
 
+function normalizeIncomingInit(init) {
+    const normalized = { ...init };
+    const source = normalized.headers;
+
+    if (source !== undefined) {
+        // bootstrap owns this array-of-pairs shape. Normalize each field once
+        // without constructing an intermediate Headers object whose iterator
+        // repeatedly sorts/materializes the whole list; NativeRequest still
+        // receives ordinary canonical header entries below.
+        const entries = new Array(source.length);
+        for (let i = 0; i < source.length; i++) {
+            const pair = source[i];
+            entries[i] = [
+                normalizeName(pair[0]),
+                normalizeValue(pair[1]),
+            ];
+        }
+        normalized.headers = entries;
+    }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'body')) {
+        normalized.body = normalizeBody(normalized.body);
+    }
+    return normalized;
+}
+
 function isNullBodyStatus(status) {
     return status === 101 || status === 204 || status === 205 || status === 304;
 }
@@ -532,7 +557,9 @@ function limitedResponseBody(response, limit) {
 class Request extends NativeRequest {
     constructor(input, init = undefined, brand = undefined) {
         const incoming = brand === incomingRequestBrand;
-        const normalized = incoming ? init : normalizeInit(init);
+        const normalized = incoming
+            ? normalizeIncomingInit(init)
+            : normalizeInit(init);
 
         if (input instanceof Request) {
             const inherited = {
