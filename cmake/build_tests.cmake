@@ -2782,6 +2782,14 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_bodyless_end_failure PROPERTIES TIMEOUT 20)
         add_test(
+            NAME worker_incoming_request_fast_path
+            COMMAND test-worker-integration
+                $<TARGET_FILE:capsid-worker>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/incoming-request-fast-path.js"
+                incoming-request-fast-path
+        )
+        set_tests_properties(worker_incoming_request_fast_path PROPERTIES TIMEOUT 20)
+        add_test(
             NAME worker_wasm_minimal
             COMMAND test-worker-integration
                 $<TARGET_FILE:capsid-worker>

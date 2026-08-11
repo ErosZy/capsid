@@ -267,9 +267,13 @@ void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
     }
 }
 
-std::string run_request(capsid_worker *worker, const char *url) {
+std::string run_request(capsid_worker *worker,
+                        const char *url,
+                        const capsid_header *headers = NULL,
+                        size_t header_count = 0) {
     require_result(
-        capsid_worker_begin_request(worker, 1, "GET", url, NULL, 0),
+        capsid_worker_begin_request(
+            worker, 1, "GET", url, headers, header_count),
         "begin request");
     require_result(capsid_worker_end_request(worker, 1), "end request");
 
@@ -411,6 +415,23 @@ int main(int argc, char **argv) {
 
     if (mode == "bodyless-end-failure") {
         bodyless_request_end_failure_fails_closed(worker);
+        capsid_worker_destroy(worker);
+        return 0;
+    }
+
+    if (mode == "incoming-request-fast-path") {
+        static const uint8_t name[] = "x-capsid-probe";
+        static const uint8_t value[] = "trusted-input";
+        capsid_header header = {};
+        header.name.data = name;
+        header.name.size = sizeof(name) - 1;
+        header.value.data = value;
+        header.value.size = sizeof(value) - 1;
+        const std::string body = run_request(
+            worker, request_url.c_str(), &header, 1);
+        if (body != "trusted-input") {
+            fail("incoming Request lost its normalized header");
+        }
         capsid_worker_destroy(worker);
         return 0;
     }
