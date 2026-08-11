@@ -216,16 +216,16 @@ void wait_for_ready(capsid_worker *worker) {
     }
 }
 
-// Frozen RED (bodyless request-end fail-closed): a body-capable method still
-// needs the request_end bridge synchronously inside a fused begin. A throwing
-// bridge must propagate exactly like the standalone request-end frame path —
-// the worker must surface an error event; swallowing the exception leaves the
-// request hanging with no error (the pre-fix fused path returned the begin
-// result and dropped the end-bridge failure).
+// Frozen RED (bodyless request-end fail-closed): the fused path calls the
+// request_end bridge synchronously inside begin. A throwing bridge must
+// propagate exactly like the standalone request-end frame path — the worker
+// must surface an error event; swallowing the exception leaves the request
+// hanging with no error (the pre-fix fused path returned the begin result
+// and dropped the end-bridge failure).
 void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
     require_result(
         capsid_worker_begin_bodyless_request(
-            worker, 1, "POST", "https://example.test/bodyless", NULL, 0),
+            worker, 1, "GET", "https://example.test/bodyless", NULL, 0),
         "begin bodyless request");
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -267,21 +267,11 @@ void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
     }
 }
 
-std::string run_request(capsid_worker *worker,
-                        const char *url,
-                        bool bodyless = false,
-                        const char *method = "GET") {
-    if (bodyless) {
-        require_result(
-            capsid_worker_begin_bodyless_request(
-                worker, 1, method, url, NULL, 0),
-            "begin bodyless request");
-    } else {
-        require_result(
-            capsid_worker_begin_request(worker, 1, method, url, NULL, 0),
-            "begin request");
-        require_result(capsid_worker_end_request(worker, 1), "end request");
-    }
+std::string run_request(capsid_worker *worker, const char *url) {
+    require_result(
+        capsid_worker_begin_request(worker, 1, "GET", url, NULL, 0),
+        "begin request");
+    require_result(capsid_worker_end_request(worker, 1), "end request");
 
     bool received_head = false;
     std::string body;
@@ -377,9 +367,7 @@ int main(int argc, char **argv) {
     capsid_permission_rule fail_end_rule;
     capsid_capability_policy fail_end_policy;
     const char *const fail_end_modules[] = { "capsid:env" };
-    if (mode == "bodyless-end-failure" ||
-        mode == "bodyless-get-elides-end" ||
-        mode == "bodyless-head-elides-end") {
+    if (mode == "bodyless-end-failure") {
         capsid_env_entry_init(&fail_end_entry);
         fail_end_entry.name = "CAPSID_TEST_FAIL_REQUEST_END_BRIDGE";
         fail_end_entry.value = "1";
@@ -423,21 +411,6 @@ int main(int argc, char **argv) {
 
     if (mode == "bodyless-end-failure") {
         bodyless_request_end_failure_fails_closed(worker);
-        capsid_worker_destroy(worker);
-        return 0;
-    }
-
-    if (mode == "bodyless-get-elides-end") {
-        // GET/HEAD are born ended in bootstrap.js. The fused RequestHead must
-        // not enter the redundant requestEnd bridge; the injected bridge
-        // failure therefore cannot affect this request.
-        run_request(worker, request_url.c_str(), true);
-        capsid_worker_destroy(worker);
-        return 0;
-    }
-
-    if (mode == "bodyless-head-elides-end") {
-        run_request(worker, request_url.c_str(), true, "HEAD");
         capsid_worker_destroy(worker);
         return 0;
     }
