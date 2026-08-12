@@ -47,6 +47,13 @@ bool RoutingSnapshot::retired(std::string_view application) const {
     return tombstones_.find(std::string(application)) != tombstones_.end();
 }
 
+// The C++11 shared_ptr atomic free functions are a deliberate choice
+// (PR-10): std::atomic<std::shared_ptr> is unavailable on the Apple libc++
+// toolchain the Host supports. GCC 15 deprecates the free functions — this
+// is the documented trade-off, so silence just this diagnostic class here
+// instead of weakening the target-wide -Werror.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 void RoutingTable::publish(std::shared_ptr<const RoutingSnapshot> snapshot) {
     std::atomic_store_explicit(&snapshot_, std::move(snapshot),
                                std::memory_order_release);
@@ -56,5 +63,6 @@ void RoutingTable::publish(std::shared_ptr<const RoutingSnapshot> snapshot) {
 std::shared_ptr<const RoutingSnapshot> RoutingTable::load() const {
     return std::atomic_load_explicit(&snapshot_, std::memory_order_acquire);
 }
+#pragma GCC diagnostic pop
 
 }  // namespace capsid::host

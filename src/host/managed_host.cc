@@ -3644,8 +3644,7 @@ DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
     }
     // Per-App mutex: the quarantine read-modify-write must not interleave
     // with a concurrent deploy/retire/recover on the same App.
-    std::lock_guard<std::mutex> app_lock(
-        app_operation_mutex(options->application));
+    capsid::host::AppOperationLock app_lock(options->application);
     PosixActiveStateFilesystem filesystem(app_state_fd);
     const ActiveStateReadResult current = filesystem.read_active_file();
     if (current.status == ActiveStateIoStatus::kNotFound) {

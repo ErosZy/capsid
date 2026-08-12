@@ -492,6 +492,12 @@ int run_managed(const std::string& host_config_path,
     std::atomic<pid_t> worker_pid{0};
     metrics->set_process_snapshot_provider(
         capsid::host::default_process_snapshot_provider(&worker_pid));
+    const capsid::host::ResolvedRecoveryPolicy recovery_resolved =
+        capsid::host::resolve_recovery_policy(config.recovery);
+    if (!recovery_resolved.ok) {
+        fail("invalid host.json recovery policy: " +
+             recovery_resolved.error);
+    }
     // Stable ownership for every App's options (the coordinator stores
     // pointers to them).
     std::vector<std::unique_ptr<capsid::host::ManagedHostOptions>> owned;
@@ -504,7 +510,7 @@ int run_managed(const std::string& host_config_path,
         options->application = application;
         options->worker_path = worker_path;
         options->host_policy = config.policy;
-        options->recovery_policy = config.recovery;
+        options->recovery_policy = recovery_resolved.policy;
         options->trusted_keys = trusted_key_views;
         options->runtime_compatibility_id = CAPSID_BUILD_COMPATIBILITY_ID;
         options->stop_requested = &g_stop;
@@ -520,12 +526,6 @@ int run_managed(const std::string& host_config_path,
     // §8.3 replacement factory and the generation identity travel with the
     // deploy/recover outcome — so replacements respawn the same artifact
     // and effective config, and the route identity survives replacement.
-    const capsid::host::ResolvedRecoveryPolicy recovery_resolved =
-        capsid::host::resolve_recovery_policy(config.recovery);
-    if (!recovery_resolved.ok) {
-        fail("invalid host.json recovery policy: " +
-             recovery_resolved.error);
-    }
     auto routing = std::make_shared<capsid::host::RoutingTable>();
     // App -> ACTIVE pool (the only pool a new request may route to).
     std::map<std::string,
@@ -582,6 +582,32 @@ int run_managed(const std::string& host_config_path,
     // replacement factory is rejected (factory null) — §8.3 replacement is
     // not optional. The pool is not yet routed, so it has no in-flight
     // requests when the sink is installed.
+    // Active workers owned by this process: App -> worker. The supervisor
+    // observes the current worker through this map (the map is the single
+    // source of truth for "which worker is current"; a deploy or retire
+    // that races the observation wins). The pool's §8.3 replacement is
+    // pool-owned; the map tracks the pool's first slot (v1 pools are
+    // single-worker) so the supervisor can probe it and recycle it.
+    std::map<std::string, capsid_worker*> active_workers;
+    std::mutex workers_mutex;
+    const auto activate_worker =
+        [&](const std::string& application, capsid_worker* worker) {
+            std::lock_guard<std::mutex> lock(workers_mutex);
+            const std::map<std::string, capsid_worker*>::iterator existing =
+                active_workers.find(application);
+            if (existing != active_workers.end() &&
+                existing->second != nullptr) {
+                // Activation replaces the previous worker.
+                capsid_worker_destroy(existing->second);
+            }
+            active_workers[application] = worker;
+            // M2 item 7 (§12.1): the render-time process snapshot reads
+            // the currently active worker's RSS.
+            worker_pid.store(worker != nullptr
+                                 ? static_cast<pid_t>(capsid_worker_pid(worker))
+                                 : 0);
+            return true;
+        };
     const auto adopt_generation =
         [&](const std::string& application,
             const std::vector<capsid_worker*>& workers,
@@ -820,43 +846,6 @@ int run_managed(const std::string& host_config_path,
             pool->stop_and_join();
         }
     };
-    // Active workers owned by this process: App -> worker. The supervisor
-    // observes the current worker through this map (the map is the single
-    // source of truth for "which worker is current"; a deploy or retire
-    // that races the observation wins). The pool's §8.3 replacement is
-    // pool-owned; the map tracks the pool's first slot (v1 pools are
-    // single-worker) so the supervisor can probe it and recycle it.
-    std::map<std::string, capsid_worker*> active_workers;
-    std::mutex workers_mutex;
-    const auto activate_worker =
-        [&](const std::string& application, capsid_worker* worker) {
-            std::lock_guard<std::mutex> lock(workers_mutex);
-            const std::map<std::string, capsid_worker*>::iterator existing =
-                active_workers.find(application);
-            if (existing != active_workers.end() &&
-                existing->second != nullptr) {
-                // Activation replaces the previous worker.
-                capsid_worker_destroy(existing->second);
-            }
-            active_workers[application] = worker;
-            // M2 item 7 (§12.1): the render-time process snapshot reads
-            // the currently active worker's RSS.
-            worker_pid.store(worker != nullptr
-                                 ? static_cast<pid_t>(capsid_worker_pid(worker))
-                                 : 0);
-            return true;
-        };
-    const auto retire_worker = [&](const std::string& application) {
-        std::lock_guard<std::mutex> lock(workers_mutex);
-        const std::map<std::string, capsid_worker*>::iterator existing =
-            active_workers.find(application);
-        if (existing != active_workers.end() &&
-            existing->second != nullptr) {
-            capsid_worker_destroy(existing->second);
-            active_workers.erase(existing);
-        }
-        worker_pid.store(0);
-    };
     // Wire the §9.3 transaction callbacks and the §9.4 ledger into every
     // App's coordinator options.
     for (capsid::host::ManagedHostOptions* options : app_options) {
@@ -949,7 +938,7 @@ int run_managed(const std::string& host_config_path,
     for (capsid::host::ManagedHostOptions* options : app_options) {
         capsid::host::WorkerSupervisorOptions supervisor_options;
         supervisor_options.managed_options = options;
-        supervisor_options.policy = config.recovery;
+        supervisor_options.policy = recovery_resolved.policy;
         supervisor_options.current_worker =
             [&](const std::string& application) -> capsid_worker* {
                 std::lock_guard<std::mutex> lock(workers_mutex);
@@ -972,9 +961,9 @@ int run_managed(const std::string& host_config_path,
         // Individual Apps opt in with capsid.json healthCheck; the host
         // interval/failures apply to every configured App.
         supervisor_options.active_health_interval_ms =
-            config.active_health_interval_ms;
+            config.recovery.active_health_interval_ms;
         supervisor_options.active_health_failures =
-            config.active_health_failures;
+            config.recovery.active_health_failures;
         supervisors.push_back(
             std::make_unique<capsid::host::WorkerSupervisor>(
                 std::move(supervisor_options)));
