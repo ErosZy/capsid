@@ -2,6 +2,8 @@
 
 #include "capsid/runtime.h"
 #include "host/managed_admin_backend.h"
+#include "host/metrics.h"
+#include "host/structured_log.h"
 
 #include <poll.h>
 
@@ -11,6 +13,27 @@
 #include <thread>
 
 namespace capsid::host {
+
+namespace {
+
+// M2 item 7 (design §12.2): single write path for every supervisor event.
+// Null log (unit fixtures without the process-wide instance) is a no-op.
+void emit_log(StructuredLog* log, LogLane lane, LogFields fields) {
+    if (log != nullptr) {
+        log->log(lane, std::move(fields));
+    }
+}
+
+void count_event(MetricsRegistry* metrics,
+                 const std::string& event,
+                 const std::string& app,
+                 const std::string& generation) {
+    if (metrics != nullptr) {
+        metrics->count_worker_event(event, app, generation);
+    }
+}
+
+}  // namespace
 
 // M2 item 6 (design §7.4): the fixed small probe response cap. A probe
 // body beyond this fails the verdict regardless of status. Bodies under
@@ -247,13 +270,17 @@ void WorkerSupervisor::run() {
                             cursor += level_size;
                         }
                     }
-                    std::fprintf(
-                        stderr,
-                        "capsid-host: [%s] worker %s: %.*s\n",
-                        options_.managed_options->application.c_str(),
-                        level.c_str(),
-                        static_cast<int>(end - cursor),
-                        reinterpret_cast<const char*>(cursor));
+                    // §12.2: runtime LOG forwarding lives in the bounded
+                    // app lane (droppable + counted); the message payload
+                    // is the worker's own sanitized text.
+                    LogFields fields;
+                    fields.level = level.empty() ? "info" : level;
+                    fields.event = log_events::kAppLog;
+                    fields.app = options_.managed_options->application;
+                    fields.message.assign(
+                        reinterpret_cast<const char*>(cursor),
+                        static_cast<std::size_t>(end - cursor));
+                    emit_log(options_.log, LogLane::kApp, std::move(fields));
                 }
                 if (probe_in_flight_ &&
                     event.request_id == probe_request_id_) {
@@ -329,10 +356,19 @@ void WorkerSupervisor::start_probe(capsid_worker* worker) {
         return;
     }
     if (result == CAPSID_WOULD_BLOCK) {
-        std::fprintf(stderr,
-                     "capsid-host: [%s] health probe skipped (worker "
-                     "busy)\n",
-                     options_.managed_options->application.c_str());
+        // §7.4: the only busy source in managed mode. A skip is neither a
+        // success nor a failure verdict; the schedule simply re-arms.
+        LogFields fields;
+        fields.level = "warn";
+        fields.event = log_events::kHealthProbe;
+        fields.app = options_.managed_options->application;
+        fields.generation = recovery_state_.generation;
+        fields.result = "skipped";
+        fields.message = "health probe skipped (worker busy)";
+        emit_log(options_.log, LogLane::kApp, std::move(fields));
+        count_event(options_.metrics, "busy",
+                    options_.managed_options->application,
+                    recovery_state_.generation);
         schedule_next_probe();
         return;
     }
@@ -382,11 +418,16 @@ void WorkerSupervisor::probe_success() {
 
 void WorkerSupervisor::probe_failure(capsid_worker* worker) {
     ++consecutive_probe_failures_;
-    std::fprintf(stderr,
-                 "capsid-host: [%s] health probe failed (%u "
-                 "consecutive)\n",
-                 options_.managed_options->application.c_str(),
-                 consecutive_probe_failures_);
+    LogFields fields;
+    fields.level = "warn";
+    fields.event = log_events::kHealthProbe;
+    fields.app = options_.managed_options->application;
+    fields.generation = recovery_state_.generation;
+    fields.result = "failed";
+    fields.message = "health probe failed (" +
+                     std::to_string(consecutive_probe_failures_) +
+                     " consecutive)";
+    emit_log(options_.log, LogLane::kApp, std::move(fields));
     if (options_.active_health_failures > 0 &&
         consecutive_probe_failures_ >= options_.active_health_failures) {
         // §7.4: consecutive failed verdicts (timeout, non-2xx, protocol
@@ -429,10 +470,15 @@ void WorkerSupervisor::handle_unhealthy_worker(capsid_worker* worker) {
     const ManagedLifecycleSnapshot snapshot =
         managed_read_lifecycle(options_.managed_options);
     if (!snapshot.ok) {
-        std::fprintf(stderr,
-                     "capsid-host: [%s] cannot read lifecycle after "
-                     "health probe failure; stopping automatic recovery\n",
-                     options_.managed_options->application.c_str());
+        LogFields fields;
+        fields.level = "error";
+        fields.event = log_events::kRecoveryDecision;
+        fields.app = options_.managed_options->application;
+        fields.generation = recovery_state_.generation;
+        fields.result = "error";
+        fields.message = "cannot read lifecycle after health probe failure; "
+                         "stopping automatic recovery";
+        emit_log(options_.log, LogLane::kControl, std::move(fields));
         remove_current(worker);
         observed_ = nullptr;
         return;
@@ -458,14 +504,36 @@ void WorkerSupervisor::handle_unhealthy_worker(capsid_worker* worker) {
         recovery_state_, options_.policy, snapshot.state, observation);
     recovery_state_ = decision.state;
     if (!decision.ok) {
-        std::fprintf(stderr,
-                     "capsid-host: [%s] instability decision failed: %s; "
-                     "stopping automatic recovery\n",
-                     options_.managed_options->application.c_str(),
-                     decision.error.message.c_str());
+        LogFields fields;
+        fields.level = "error";
+        fields.event = log_events::kRecoveryDecision;
+        fields.app = options_.managed_options->application;
+        fields.generation = recovery_state_.generation;
+        fields.result = "error";
+        fields.message = "instability decision failed: " +
+                         decision.error.message;
+        emit_log(options_.log, LogLane::kControl, std::move(fields));
         remove_current(worker);
         observed_ = nullptr;
         return;
+    }
+    count_event(options_.metrics, "unhealthy",
+                options_.managed_options->application,
+                recovery_state_.generation);
+    // §12.1 recovery family: the remaining instability budget after this
+    // counted event, and the backoff the decision chose.
+    if (options_.metrics != nullptr) {
+        const std::uint64_t remaining =
+            decision.events_in_window >= options_.policy.max_events
+                ? 0
+                : static_cast<std::uint64_t>(
+                      options_.policy.max_events -
+                      decision.events_in_window);
+        options_.metrics->set_recovery_instability_budget_remaining(
+            options_.managed_options->application, remaining);
+        options_.metrics->set_recovery_backoff_ms(
+            options_.managed_options->application,
+            decision.replacement_delay_ms);
     }
     if (decision.disposition ==
         GenerationRecoveryDisposition::kBeginQuarantine) {
@@ -504,10 +572,16 @@ void WorkerSupervisor::handle_worker_gone(capsid_worker* worker) {
     const ManagedLifecycleSnapshot snapshot =
         managed_read_lifecycle(options_.managed_options);
     if (!snapshot.ok) {
-        std::fprintf(stderr,
-                     "capsid-host: [%s] cannot read lifecycle after worker "
-                     "exit; stopping automatic recovery\n",
-                     options_.managed_options->application.c_str());
+        LogFields fields;
+        fields.level = "error";
+        fields.event = log_events::kRecoveryDecision;
+        fields.app = options_.managed_options->application;
+        fields.generation = recovery_state_.generation;
+        fields.result = "error";
+        fields.message =
+            "cannot read lifecycle after worker exit; "
+            "stopping automatic recovery";
+        emit_log(options_.log, LogLane::kControl, std::move(fields));
         remove_current(worker);
         observed_ = nullptr;
         return;
@@ -533,14 +607,34 @@ void WorkerSupervisor::handle_worker_gone(capsid_worker* worker) {
         recovery_state_, options_.policy, snapshot.state, observation);
     recovery_state_ = decision.state;
     if (!decision.ok) {
-        std::fprintf(stderr,
-                     "capsid-host: [%s] instability decision failed: %s; "
-                     "stopping automatic recovery\n",
-                     options_.managed_options->application.c_str(),
-                     decision.error.message.c_str());
+        LogFields fields;
+        fields.level = "error";
+        fields.event = log_events::kRecoveryDecision;
+        fields.app = options_.managed_options->application;
+        fields.generation = recovery_state_.generation;
+        fields.result = "error";
+        fields.message =
+            "instability decision failed: " + decision.error.message;
+        emit_log(options_.log, LogLane::kControl, std::move(fields));
         remove_current(worker);
         observed_ = nullptr;
         return;
+    }
+    count_event(options_.metrics, "crash",
+                options_.managed_options->application,
+                recovery_state_.generation);
+    if (options_.metrics != nullptr) {
+        const std::uint64_t remaining =
+            decision.events_in_window >= options_.policy.max_events
+                ? 0
+                : static_cast<std::uint64_t>(
+                      options_.policy.max_events -
+                      decision.events_in_window);
+        options_.metrics->set_recovery_instability_budget_remaining(
+            options_.managed_options->application, remaining);
+        options_.metrics->set_recovery_backoff_ms(
+            options_.managed_options->application,
+            decision.replacement_delay_ms);
     }
     if (decision.disposition ==
         GenerationRecoveryDisposition::kBeginQuarantine) {
@@ -600,6 +694,11 @@ void WorkerSupervisor::attempt_replacement(
                 // respawn, which may begin quarantine.
             } else {
                 grant_held = true;
+                // §12.1 recovery family: a replacement permit was granted.
+                if (options_.metrics != nullptr) {
+                    options_.metrics->count_recovery_startup_permit_grant(
+                        options_.managed_options->application);
+                }
             }
         }
         // The grant (or the queue rejection) elapsed. The map and the
@@ -649,10 +748,18 @@ void WorkerSupervisor::attempt_replacement(
                 tracking_stability_ = true;
                 recovery_state_.last_observed_ms = ready_since_ms_;
                 recovery_state_.has_last_observed_time = true;
-                std::fprintf(stderr,
-                             "capsid-host: [%s] %s\n",
-                             options_.managed_options->application.c_str(),
-                             replaced_message);
+                // §12.2: a replacement publish is a process-lifecycle
+                // event (control lane, never dropped).
+                LogFields fields;
+                fields.event = log_events::kWorkerReplaced;
+                fields.app = options_.managed_options->application;
+                fields.generation = recovery_state_.generation;
+                fields.result = "replaced";
+                fields.message = replaced_message;
+                emit_log(options_.log, LogLane::kControl, std::move(fields));
+                count_event(options_.metrics, "replacement",
+                            options_.managed_options->application,
+                            recovery_state_.generation);
             } else {
                 options_.discard_worker(recovered.worker);
                 observed_ = nullptr;
@@ -685,11 +792,15 @@ void WorkerSupervisor::attempt_replacement(
             recovery_state_, options_.policy, snapshot.state, observation);
         recovery_state_ = next.state;
         if (!next.ok) {
-            std::fprintf(stderr,
-                         "capsid-host: [%s] replacement failure decision "
-                         "failed: %s; stopping automatic recovery\n",
-                         options_.managed_options->application.c_str(),
-                         next.error.message.c_str());
+            LogFields fields;
+            fields.level = "error";
+            fields.event = log_events::kRecoveryDecision;
+            fields.app = options_.managed_options->application;
+            fields.generation = recovery_state_.generation;
+            fields.result = "error";
+            fields.message = "replacement failure decision failed: " +
+                             next.error.message;
+            emit_log(options_.log, LogLane::kControl, std::move(fields));
             remove_current(worker);
             observed_ = nullptr;
             return;
@@ -741,16 +852,30 @@ void WorkerSupervisor::quarantine(capsid_worker* worker) {
     observed_ = nullptr;
     tracking_stability_ = false;
     if (!outcome.ok) {
-        std::fprintf(stderr,
-                     "capsid-host: [%s] quarantine tombstone write failed: "
-                     "%s; automatic recovery stopped\n",
-                     options_.managed_options->application.c_str(),
-                     outcome.error.c_str());
+        // §12.2: CRASH_BUDGET_EXCEEDED and the quarantine transition are
+        // control-plane events — the control lane never drops them.
+        LogFields fields;
+        fields.level = "error";
+        fields.event = log_events::kQuarantine;
+        fields.app = options_.managed_options->application;
+        fields.generation = recovery_state_.generation;
+        fields.result = "error";
+        fields.message = "quarantine tombstone write failed: " +
+                         outcome.error + "; automatic recovery stopped";
+        emit_log(options_.log, LogLane::kControl, std::move(fields));
         return;
     }
-    std::fprintf(stderr,
-                 "capsid-host: [%s] quarantined: crash budget exceeded\n",
-                 options_.managed_options->application.c_str());
+    LogFields fields;
+    fields.event = log_events::kQuarantine;
+    fields.app = options_.managed_options->application;
+    fields.generation = recovery_state_.generation;
+    fields.result = "crash_budget_exceeded";
+    fields.message = "quarantined: crash budget exceeded";
+    emit_log(options_.log, LogLane::kControl, std::move(fields));
+    if (options_.metrics != nullptr) {
+        options_.metrics->count_recovery_quarantine(
+            options_.managed_options->application);
+    }
 }
 
 void WorkerSupervisor::remove_current(capsid_worker* worker) {

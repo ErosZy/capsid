@@ -34,6 +34,12 @@ struct AdminApiOptions {
     AdminAuthorization authorization;
     std::size_t max_header_bytes = 64U * 1024U;
     std::size_t max_body_bytes = 64U * 1024U;
+    // M2 item 7: the process-wide structured log and metrics registry
+    // (design §12). Admin authorization failures are control-plane events
+    // (never dropped); GET /metrics renders the registry. Null disables
+    // both on this path.
+    StructuredLog* log = nullptr;
+    MetricsRegistry* metrics = nullptr;
 };
 
 // Kernel peer credentials captured from the connected socket.

@@ -17,6 +17,8 @@ struct capsid_event;
 
 namespace capsid::host {
 class StartupPermitCoordinator;
+class StructuredLog;
+class MetricsRegistry;
 
 // M2 item 5a: the per-App worker supervisor. One thread per configured
 // App owns the observation of its current worker's IPC stream and the
@@ -61,6 +63,10 @@ struct WorkerSupervisorOptions {
     // An unconfigured App is never probed regardless of these values.
     std::uint64_t active_health_interval_ms = 0;
     std::uint32_t active_health_failures = 0;
+    // M2 item 7: the process-wide structured log and metrics registry
+    // (design §12). Null disables event logging/metrics on this path.
+    StructuredLog* log = nullptr;
+    MetricsRegistry* metrics = nullptr;
 };
 
 class WorkerSupervisor {

@@ -1190,6 +1190,171 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_executable_structured_logs_json") {
+        // M2 item 7 (design §12.2): every Host log line is a single JSON
+        // object with the fixed field set. The old text form
+        // ("capsid-host: [app] ...") must be gone from the process stderr
+        // after a full deploy + clean shutdown cycle.
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string body = "{\"app\":\"orders\",\"version\":\"v1\"}";
+        const std::string deploy_request =
+            "POST /v1/deploy HTTP/1.1\r\nHost: local\r\n"
+            "Content-Type: application/json\r\nContent-Length: " +
+            std::to_string(body.size()) + "\r\n\r\n" + body;
+        json_t* root = parse_response(
+            http_request(fixture.socket_path, deploy_request), 202);
+        json_t* id = json_object_get(root, "operationId");
+        require(json_is_string(id), "managed deploy omitted its operation ID");
+        const std::string operation = json_string_value(id);
+        json_decref(root);
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(20);
+        for (;;) {
+            const std::string operation_request =
+                "GET /v1/operations/" + operation +
+                " HTTP/1.1\r\nHost: local\r\n\r\n";
+            json_t* poll = parse_response(
+                http_request(fixture.socket_path, operation_request), 200);
+            json_t* state = json_object_get(poll, "state");
+            require(json_is_string(state),
+                    "managed operation omitted its state");
+            const std::string value = json_string_value(state);
+            json_decref(poll);
+            if (value == "active") {
+                break;
+            }
+            require(value != "failed",
+                    "structured-log deploy failed: " + fixture.diagnostics());
+            require(std::chrono::steady_clock::now() < deadline,
+                    "structured-log deploy did not become active");
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        stop_host(fixture);
+        const std::string stderr_text = fixture.diagnostics();
+        require(stderr_text.find("capsid-host: [") == std::string::npos,
+                "Host still emits the legacy text log format");
+        // Every non-empty line must be one JSON object carrying the fixed
+        // §12.2 field set. The supervisor log-forward line is the one place
+        // worker payload text appears, and it must be inside "message".
+        std::size_t lines = 0;
+        std::size_t offset = 0;
+        while (offset < stderr_text.size()) {
+            const std::size_t newline = stderr_text.find('\n', offset);
+            const std::string line =
+                stderr_text.substr(offset, newline == std::string::npos
+                                               ? std::string::npos
+                                               : newline - offset);
+            offset = newline == std::string::npos ? stderr_text.size()
+                                                  : newline + 1;
+            if (line.empty()) {
+                continue;
+            }
+            ++lines;
+            require(line[0] == '{',
+                    "non-JSON log line: " + line);
+            json_error_t error = {};
+            json_t* entry = json_loads(line.c_str(), JSON_REJECT_DUPLICATES,
+                                       &error);
+            require(entry != nullptr && json_is_object(entry),
+                    "log line is not a JSON object: " + line);
+            require(json_is_string(json_object_get(entry, "timestamp")) &&
+                        json_is_string(json_object_get(entry, "level")) &&
+                        json_is_string(json_object_get(entry, "event")),
+                    "log line misses fixed fields: " + line);
+            json_decref(entry);
+        }
+        require(lines >= 2,
+                "Host produced no log lines across deploy and shutdown");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_metrics_endpoint") {
+        // M2 item 7 (design §12.1): GET /metrics on the Admin unix socket
+        // returns Prometheus text for the fixed low-cardinality metric
+        // families — worker events, recovery, deploy stages, isolation and
+        // process resources — with controlled labels only. No request IDs,
+        // URLs, version free text or error messages ever become labels.
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string body = "{\"app\":\"orders\",\"version\":\"v1\"}";
+        const std::string deploy_request =
+            "POST /v1/deploy HTTP/1.1\r\nHost: local\r\n"
+            "Content-Type: application/json\r\nContent-Length: " +
+            std::to_string(body.size()) + "\r\n\r\n" + body;
+        json_t* root = parse_response(
+            http_request(fixture.socket_path, deploy_request), 202);
+        json_t* id = json_object_get(root, "operationId");
+        require(json_is_string(id), "managed deploy omitted its operation ID");
+        const std::string operation = json_string_value(id);
+        json_decref(root);
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(20);
+        for (;;) {
+            const std::string operation_request =
+                "GET /v1/operations/" + operation +
+                " HTTP/1.1\r\nHost: local\r\n\r\n";
+            json_t* poll = parse_response(
+                http_request(fixture.socket_path, operation_request), 200);
+            json_t* state = json_object_get(poll, "state");
+            require(json_is_string(state),
+                    "managed operation omitted its state");
+            const std::string value = json_string_value(state);
+            json_decref(poll);
+            if (value == "active") {
+                break;
+            }
+            require(value != "failed",
+                    "metrics deploy failed: " + fixture.diagnostics());
+            require(std::chrono::steady_clock::now() < deadline,
+                    "metrics deploy did not become active");
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        const std::string response = http_request(
+            fixture.socket_path,
+            "GET /metrics HTTP/1.1\r\nHost: local\r\n\r\n");
+        require(response.rfind("HTTP/1.1 200 ", 0) == 0,
+                "metrics endpoint returned a non-200 status: " + response);
+        const std::size_t boundary = response.find("\r\n\r\n");
+        require(boundary != std::string::npos,
+                "metrics endpoint returned an incomplete HTTP response");
+        const std::string body_text = response.substr(boundary + 4);
+        // Prometheus text format.
+        require(body_text.find("# TYPE capsid_worker_events_total counter") !=
+                    std::string::npos,
+                "metrics omit the worker events family");
+        require(body_text.find("event=\"starting\"") != std::string::npos ||
+                    body_text.find("event=\"ready\"") != std::string::npos ||
+                    body_text.find("event=\"crash\"") != std::string::npos,
+                "metrics omit any worker event");
+        require(body_text.find("capsid_recovery_") != std::string::npos,
+                "metrics omit the recovery family");
+        require(body_text.find("capsid_deploy_stage") != std::string::npos,
+                "metrics omit the deploy stage family");
+        require(body_text.find("capsid_isolation_") != std::string::npos,
+                "metrics omit the isolation family");
+        require(body_text.find("capsid_process_") != std::string::npos ||
+                    body_text.find("capsid_worker_rss_bytes") !=
+                        std::string::npos,
+                "metrics omit the process resource family");
+        require(body_text.find("capsid_log_") != std::string::npos,
+                "metrics omit the log-drop family");
+        // Controlled labels only: the App label is present, high-cardinality
+        // label sources never are.
+        require(body_text.find("app=\"orders\"") != std::string::npos,
+                "metrics omit the controlled app label");
+        require(body_text.find("request_id=") == std::string::npos &&
+                    body_text.find("url=") == std::string::npos &&
+                    body_text.find("host=") == std::string::npos &&
+                    body_text.find("version=") == std::string::npos &&
+                    body_text.find("error=") == std::string::npos,
+                "metrics leaked a high-cardinality label");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_crash_mid_deploy_keeps_old") {
         // M2 item 2a, boundary #7 (post version-mapping, pre active.json) —
         // a REAL SIGKILL, no clean-shutdown path. The v2 deploy must hang

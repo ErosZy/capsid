@@ -29,6 +29,9 @@ struct StaticPoolServerOptions {
     std::uint64_t max_streaming_inflight_per_worker = 0;  // 0 = not set
     std::uint64_t stream_idle_timeout_ms = 0;             // 0 = not set
     std::uint64_t write_timeout_ms = 0;                   // 0 = not set
+    // M2 item 7: the process-wide structured log (design §12). Null
+    // disables event logging on this path.
+    StructuredLog* log = nullptr;
 };
 
 // M2 fixed-pool Host data plane: N independently owned shards, each with

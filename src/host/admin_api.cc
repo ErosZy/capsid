@@ -2,6 +2,9 @@
 
 #include "host/admin_api.h"
 
+#include "host/metrics.h"
+#include "host/structured_log.h"
+
 #include <jansson.h>
 
 #include <sys/socket.h>
@@ -558,6 +561,14 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
     // 1. Global authorization from kernel credentials, before anything
     // else: an unauthorized peer never reaches the coordinator.
     if (!admin_peer_authorized(options.authorization, peer)) {
+        // M2 item 7: §12.2 — an admin authorization failure is a
+        // control-plane event, never dropped, no request content in the
+        // line.
+        if (options.log != nullptr) {
+            options.log->log(LogLane::kControl,
+                             {.event = log_events::kAdminAuth,
+                              .result = "forbidden"});
+        }
         return error_response(403, "forbidden");
     }
     // 2. Bounded request: header ceiling and body ceiling.
@@ -735,6 +746,25 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
                 return json_response(200, body);
             },
             "operation failed");
+    }
+    // 4. /metrics: the fixed registry (§12.1), rendered on demand. Only a
+    // GET with no body; a missing registry is a static 500, never a
+    // fabricated empty scrape.
+    if (request.target == "/metrics") {
+        if (request.method != "GET") {
+            return error_response(405, "method not allowed");
+        }
+        if (!request.body.empty()) {
+            return error_response(400, "invalid request");
+        }
+        if (options.metrics == nullptr) {
+            return error_response(500, "metrics unavailable");
+        }
+        AdminResponse response;
+        response.status = 200;
+        response.content_type = "text/plain; version=0.0.4; charset=utf-8";
+        response.body = options.metrics->render_prometheus_text();
+        return response;
     }
     return error_response(404, "not found");
 }

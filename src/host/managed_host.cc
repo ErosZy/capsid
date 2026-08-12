@@ -16,8 +16,10 @@
 #include "host/config.h"
 #include "host/generation_identity.h"
 #include "host/managed_registry.h"
+#include "host/metrics.h"
 #include "host/secret_file_provider.h"
 #include "host/secret_snapshot.h"
+#include "host/structured_log.h"
 #include "host/worker_event_source.h"
 
 #include <jansson.h>
@@ -46,6 +48,35 @@ namespace capsid::host {
 namespace {
 
 constexpr const char* kCompleteMarker = "COMPLETE";
+
+// M2 item 7 (design §12.2): single write path for coordinator events.
+// Null log (unit fixtures without the process-wide instance) is a no-op.
+void emit_log(StructuredLog* log, LogLane lane, LogFields fields) {
+    if (log != nullptr) {
+        log->log(lane, std::move(fields));
+    }
+}
+
+// M2 item 7 (design §12.1): the deploy-stage counters are emitted on the
+// success edge of every pipeline phase; an operation-level failure is
+// counted by the operation series at the terminal state.
+void emit_deploy_stage(MetricsRegistry* metrics,
+                       const std::string& stage,
+                       const std::string& result,
+                       const std::string& app) {
+    if (metrics != nullptr) {
+        metrics->count_deploy_stage(stage, result, app);
+    }
+}
+
+// M2 item 7 (design §12.1): worker-family event counters (starting, ready,
+// crash, unhealthy, replacement).
+void count_event(MetricsRegistry* metrics, const std::string& event,
+                 const std::string& app, const std::string& generation) {
+    if (metrics != nullptr) {
+        metrics->count_worker_event(event, app, generation);
+    }
+}
 
 std::string sha256_hex(const std::string& data) {
     unsigned char digest[EVP_MAX_MD_SIZE];
@@ -448,6 +479,18 @@ capsid_worker* spawn_loaded_worker(
         *error = "worker spawn failed";
         return nullptr;
     }
+    // M2 item 7: §12.1 deploy family — spawn and load phases on their
+    // success edge.
+    emit_deploy_stage(options.metrics, "spawn", "ok", options.application);
+    // M2 item 7: §12.1 isolation family — the strict sandbox is the single
+    // required/applied feature in managed mode; recorded per worker spawn
+    // (idempotent gauge).
+    if (options.metrics != nullptr) {
+        options.metrics->set_isolation_required_features(options.application,
+                                                         1);
+        options.metrics->set_isolation_applied_features(
+            options.application, effective.strict_sandbox ? 1 : 0);
+    }
     capsid::host::WorkerEventSource event_source;
     event_source.set_worker(worker);
     const capsid_result load_result =
@@ -476,9 +519,17 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                        const std::vector<std::uint8_t>& bundle,
                        bool trusted_bytecode,
                        const std::string& source_name,
+                       const std::string& generation,
                        const EffectiveConfig& effective,
                        const std::vector<std::pair<std::string, std::string>>& env_values) {
     WarmResult out;
+    // M2 item 7: §12.1 worker family on the spawn edge — the operation
+    // identifier is the generation being deployed.
+    emit_log(options.log, LogLane::kControl,
+             {.event = log_events::kWorkerStarting,
+              .app = options.application,
+              .generation = generation});
+    count_event(options.metrics, "starting", options.application, generation);
     std::string spawn_error;
     capsid_worker* spawned = spawn_loaded_worker(
         options, bundle, trusted_bytecode, source_name, effective, env_values,
@@ -491,6 +542,7 @@ WarmResult warm_worker(const ManagedHostOptions& options,
     // ---- READY handshake ----
     capsid::host::WorkerEventSource event_source;
     event_source.set_worker(out.worker);
+    emit_deploy_stage(options.metrics, "load", "ok", options.application);
     // Wait for READY; the payload is the worker's compatibility ID.
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(15);
@@ -515,9 +567,21 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                     capsid_worker_destroy(out.worker);
                     out.worker = nullptr;
                     out.error = "worker compatibility mismatch";
+                    emit_deploy_stage(options.metrics, "health", "fail",
+                                      options.application);
                     return out;
                 }
                 out.ok = true;
+                // M2 item 7: §12.1 worker family on the READY edge; the
+                // health probe phase is what the READY handshake is.
+                emit_log(options.log, LogLane::kControl,
+                         {.event = log_events::kWorkerReady,
+                          .app = options.application,
+                          .generation = generation});
+                count_event(options.metrics, "ready", options.application,
+                            generation);
+                emit_deploy_stage(options.metrics, "health", "ok",
+                                  options.application);
                 return out;
             }
             if (event.type == CAPSID_EVENT_ERROR) {
@@ -621,13 +685,15 @@ WarmPoolResult warm_worker_pool(
     const std::vector<std::uint8_t>& bundle,
     bool trusted_bytecode,
     const std::string& source_name,
+    const std::string& generation,
     const EffectiveConfig& effective,
     const std::vector<std::pair<std::string, std::string>>& env_values) {
     WarmPoolResult out;
     out.workers.reserve(effective.workers);
     for (std::uint32_t index = 0; index < effective.workers; ++index) {
         const WarmResult warm = warm_worker(options, bundle, trusted_bytecode,
-                                            source_name, effective, env_values);
+                                            source_name, generation, effective,
+                                            env_values);
         if (!warm.ok) {
             for (capsid_worker* worker : out.workers) {
                 capsid_worker_destroy(worker);
@@ -976,6 +1042,16 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
     }
     status->state = OperationState::kActive;
     outcome->ok = true;
+    // M2 item 7: §12.1 deploy family — the generation is active; the
+    // caller's drain (old pool) belongs to the caller's data-plane.
+    emit_deploy_stage(options->metrics, "activate", "ok",
+                      options->application);
+    emit_log(options->log, LogLane::kControl,
+             {.event = log_events::kDeployStage,
+              .app = options->application,
+              .generation = generation_digest,
+              .stage = "activate",
+              .result = "ok"});
     return true;
 }
 
@@ -1433,8 +1509,12 @@ bool parse_artifact_json(const std::string& json, SelectedArtifactKind* selected
         }
         return false;
     }
+    // M2 item 7: "reason" is OPTIONAL — an old committed artifact record
+    // (or a non-fallback deployment) simply has none. The three original
+    // fields stay mandatory, so an old record parses exactly as before
+    // (fail-closed on the fields that define the selection).
     static const std::set<std::string> kArtifactFields = {
-        "selected", "sourceName", "attestationDigest",
+        "selected", "sourceName", "attestationDigest", "reason",
     };
     if (!reject_unknown_keys(root, kArtifactFields)) {
         *error = "unknown artifact snapshot field";
@@ -1444,8 +1524,10 @@ bool parse_artifact_json(const std::string& json, SelectedArtifactKind* selected
     json_t* kind = json_object_get(root, "selected");
     json_t* name = json_object_get(root, "sourceName");
     json_t* digest = json_object_get(root, "attestationDigest");
+    json_t* reason = json_object_get(root, "reason");
     if (!json_is_string(kind) || !json_is_string(name) ||
-        !json_is_string(digest)) {
+        !json_is_string(digest) ||
+        (reason != nullptr && !json_is_string(reason))) {
         *error = "invalid artifact snapshot record";
         json_decref(root);
         return false;
@@ -1470,9 +1552,13 @@ bool parse_artifact_json(const std::string& json, SelectedArtifactKind* selected
 // Artifact record for the committed generation: the selected kind, the
 // frozen sourceName and the attestation digest when the deployment carried
 // a provenance-valid attestation (trusted or compatibility-fallback).
+// The optional reason (§13:682) names why the selection happened — it is
+// written ONLY for a fallback, so a trusted or source deployment keeps an
+// identical byte record across restarts (restart_identity_stable).
 std::string artifact_json(SelectedArtifactKind selected,
                           const std::string& source_name,
-                          const std::string& attestation_digest) {
+                          const std::string& attestation_digest,
+                          const std::string& reason = "") {
     std::ostringstream out;
     out << "{\"selected\":\""
         << (selected == SelectedArtifactKind::kTrustedBytecode
@@ -1480,7 +1566,11 @@ std::string artifact_json(SelectedArtifactKind selected,
                 : "source")
         << "\",\"sourceName\":\"" << json_escape(source_name)
         << "\",\"attestationDigest\":\"" << json_escape(attestation_digest)
-        << "\"}";
+        << "\"";
+    if (!reason.empty()) {
+        out << ",\"reason\":\"" << json_escape(reason) << "\"";
+    }
+    out << "}";
     return out.str();
 }
 
@@ -2228,6 +2318,12 @@ struct PreparedDeployment {
     // key IDs, opaque revisions — never values). The committed generation
     // stores no literal or secret values.
     std::string env_metadata_json;
+    // M2 item 7 (design §13:682): why the actual selected artifact was
+    // chosen. Empty for a direct source or trusted-bytecode selection;
+    // "compatibility-mismatch" when a provenance-valid attestation fell
+    // back to source. Recorded in artifact.json; never part of the
+    // generation identity (the artifact record is not a digest input).
+    std::string fallback_reason;
 };
 
 PreparedDeployment prepare_deployment(ManagedHostOptions* options,
@@ -2304,6 +2400,10 @@ PreparedDeployment prepare_deployment(ManagedHostOptions* options,
             // the identity of an otherwise identical source-only deploy.
             selected = SelectedArtifactKind::kSource;
             attestation_digest = sha256_hex(attestation_json_text);
+            // §13:682: the committed artifact record names the fallback
+            // reason next to the verified attestation and the actual
+            // selected artifact.
+            prepared.fallback_reason = "compatibility-mismatch";
         } else {
             fail("bytecode attestation rejected: " + verified.message);
             return prepared;
@@ -2990,6 +3090,16 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         outcome.error = prepared.error;
         return outcome;
     }
+    // M2 item 7: §12.1 deploy family — validation completed; the remaining
+    // stage events land on their success edges below (stage/activate).
+    emit_deploy_stage(options->metrics, "validate", "ok",
+                      options->application);
+    emit_log(options->log, LogLane::kControl,
+             {.event = log_events::kDeployStage,
+              .app = options->application,
+              .generation = prepared.generation_digest,
+              .stage = "validate",
+              .result = "ok"});
     const SelectedArtifactKind selected = prepared.selected;
     const std::string source_name = prepared.source_name;
     const EffectiveConfig& effective = prepared.effective;
@@ -3100,7 +3210,8 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         const WarmPoolResult warm = warm_worker_pool(
             *options, bundle,
             validated.selected == SelectedArtifactKind::kTrustedBytecode,
-            validated.source_name, validated.effective, validated.env_values);
+            validated.source_name, generation_digest, validated.effective,
+            validated.env_values);
         if (!warm.ok) {
             // The failed warm rolls its own reserve back.
             if (options->ledger != nullptr) {
@@ -3209,7 +3320,8 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
                       &error) &&
         write_file_at(staging_fd, "artifact.json",
                       artifact_json(selected, source_name,
-                                    prepared.attestation_digest),
+                                    prepared.attestation_digest,
+                                    prepared.fallback_reason),
                       &error) &&
         write_file_at(staging_fd, "generation.json",
                       "{\"generation\":\"" + generation_digest + "\"}", &error) &&
@@ -3290,6 +3402,15 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         return outcome;
     }
     close(staging_root_fd);
+    // M2 item 7: §12.1 deploy family — staging committed (generation
+    // snapshot + COMPLETE marker + object rename all durable).
+    emit_deploy_stage(options->metrics, "stage", "ok", options->application);
+    emit_log(options->log, LogLane::kControl,
+             {.event = log_events::kDeployStage,
+              .app = options->application,
+              .generation = generation_digest,
+              .stage = "stage",
+              .result = "ok"});
     // ---- 9. immutable version mapping, after the generation commit ----
     // Only a successfully published generation may freeze a Version ID.
     if (!write_version_mapping(app_state_fd, version, generation_digest,
@@ -3331,7 +3452,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     status->state = OperationState::kWarming;
     const WarmPoolResult warm = warm_worker_pool(
         *options, bundle_bytes, selected == SelectedArtifactKind::kTrustedBytecode,
-        source_name, effective, env_values);
+        source_name, generation_digest, effective, env_values);
     if (!warm.ok) {
         // The failed warm rolls its own reserve back.
         if (options->ledger != nullptr) {
@@ -3372,6 +3493,13 @@ DeployOutcome managed_deploy(ManagedHostOptions* options,
     // Every operation records its terminal state (success or failure) in
     // the registry.
     record_operation(outcome.operation_id, *status);
+    // M2 item 7: §12.1 deploy family — one terminal operation count per
+    // deploy, whether it activated or failed anywhere in the chain.
+    if (options->metrics != nullptr) {
+        const bool ok = status->state == OperationState::kActive;
+        options->metrics->count_deploy_operation(ok ? "ok" : "fail",
+                                                 options->application);
+    }
     return outcome;
 }
 
@@ -3466,6 +3594,14 @@ DeployOutcome run_retire_operation(ManagedHostOptions* options,
     }
     status->state = OperationState::kActive;
     outcome.ok = true;
+    // M2 item 7: §12.1 recovery family — a retire is a terminal recovery
+    // decision, recorded only when the tombstone is durable.
+    if (options->metrics != nullptr) {
+        options->metrics->count_recovery_retire(options->application);
+    }
+    emit_log(options->log, LogLane::kControl,
+             {.event = log_events::kRetire, .app = options->application,
+              .result = "ok"});
     return outcome;
 }
 
@@ -3551,6 +3687,14 @@ DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
     }
     status->state = OperationState::kActive;
     outcome.ok = true;
+    // M2 item 7: §12.1 recovery family — the coordinator-level quarantine
+    // (crash-budget tombstone) mirrors the supervisor-level one.
+    if (options->metrics != nullptr) {
+        options->metrics->count_recovery_quarantine(options->application);
+    }
+    emit_log(options->log, LogLane::kControl,
+             {.event = log_events::kQuarantine, .app = options->application,
+              .result = "ok"});
     return outcome;
 }
 
@@ -3652,10 +3796,16 @@ HealthCheckConfig managed_read_health_check(ManagedHostOptions* options,
         generation_fd, "capsid.json", kMaxConfigFileBytes, &capsid_json);
     close(generation_fd);
     if (status != ReadFileStatus::kOk) {
-        std::fprintf(stderr,
-                     "capsid-host: [%s] cannot read committed health "
-                     "check; passive signals only\n",
-                     options->application.c_str());
+        // M2 item 7: §12.2 control-plane event — a committed health check
+        // that cannot be read means the App is silently passive; never
+        // fabricate a probe from an unreadable document.
+        emit_log(options->log, LogLane::kControl,
+                 {.event = log_events::kHealthProbe,
+                  .app = options->application,
+                  .generation = generation,
+                  .result = "error",
+                  .message = "cannot read committed health check; "
+                             "passive signals only"});
         return result;
     }
     AppRequest app;
@@ -3664,10 +3814,13 @@ HealthCheckConfig managed_read_health_check(ManagedHostOptions* options,
             std::vector<std::uint8_t>(capsid_json.begin(),
                                       capsid_json.end()),
             &app, &error)) {
-        std::fprintf(stderr,
-                     "capsid-host: [%s] cannot parse committed health "
-                     "check; passive signals only\n",
-                     options->application.c_str());
+        emit_log(options->log, LogLane::kControl,
+                 {.event = log_events::kHealthProbe,
+                  .app = options->application,
+                  .generation = generation,
+                  .result = "error",
+                  .message = "cannot parse committed health check; "
+                             "passive signals only"});
         return result;
     }
     return app.health_check;
@@ -3791,7 +3944,8 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
     const WarmPoolResult warm = warm_worker_pool(
         *options, bundle,
         validated.selected == SelectedArtifactKind::kTrustedBytecode,
-        validated.source_name, validated.effective, validated.env_values);
+        validated.source_name, active_generation, validated.effective,
+        validated.env_values);
     if (!warm.ok) {
         if (options->ledger != nullptr) {
             options->ledger->abort_reserve(

@@ -18,7 +18,10 @@
 #include "host/host_config_model.h"
 #include "host/managed_admin_backend.h"
 #include "host/managed_listener.h"
+#include "host/metrics.h"
+#include "host/process_snapshot.h"
 #include "host/routing_snapshot.h"
+#include "host/structured_log.h"
 #include "host/trusted_key_store.h"
 #include "host/worker_supervisor.h"
 
@@ -32,6 +35,7 @@
 #include <sys/stat.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -55,7 +59,33 @@ constexpr std::string_view kProbeGeneration =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 void fail(const std::string& message) {
-    std::fprintf(stderr, "capsid-host: %s\n", message.c_str());
+    // M2 item 7 (§12.2): a startup failure is a structured line on stderr
+    // — one JSON object with the fixed field set, message JSON-escaped.
+    // There is no StructuredLog instance yet at this point (a failure may
+    // precede its construction), so the line is written directly.
+    std::string escaped;
+    escaped.reserve(message.size());
+    for (const char c : message) {
+        switch (c) {
+            case '"': escaped += "\\\""; break;
+            case '\\': escaped += "\\\\"; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            default: escaped.push_back(c); break;
+        }
+    }
+    const std::uint64_t timestamp_ms =
+        static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count());
+    std::fprintf(stderr,
+                 "{\"timestamp\":\"%llu\",\"level\":\"error\","
+                 "\"event\":\"startup\",\"result\":\"fail\","
+                 "\"message\":\"%s\"}\n",
+                 static_cast<unsigned long long>(timestamp_ms),
+                 escaped.c_str());
     std::exit(2);
 }
 
@@ -444,6 +474,24 @@ int run_managed(const std::string& host_config_path,
     if (applications.empty()) {
         fail("applications root contains no configured Apps");
     }
+    // M2 item 7 (design §12): the process-wide structured log and metrics
+    // registry. Created after the config is validated so their lifetime
+    // covers every option object below; injected into the coordinator,
+    // supervisors and the Admin API. The worker-pid atomic tracks the
+    // currently active worker for the render-time process snapshot.
+    auto structured_log = std::make_unique<capsid::host::StructuredLog>(
+        [](const std::string& line) {
+            // One JSON object per line on stderr (design §12.2); a torn
+            // partial write is impossible per call (single write below the
+            // PIPE_BUF ceiling on regular stderr).
+            const ssize_t written = ::write(STDERR_FILENO, line.data(),
+                                            line.size());
+            (void)written;
+        });
+    auto metrics = std::make_unique<capsid::host::MetricsRegistry>();
+    std::atomic<pid_t> worker_pid{0};
+    metrics->set_process_snapshot_provider(
+        capsid::host::default_process_snapshot_provider(&worker_pid));
     // Stable ownership for every App's options (the coordinator stores
     // pointers to them).
     std::vector<std::unique_ptr<capsid::host::ManagedHostOptions>> owned;
@@ -460,6 +508,8 @@ int run_managed(const std::string& host_config_path,
         options->trusted_keys = trusted_key_views;
         options->runtime_compatibility_id = CAPSID_BUILD_COMPATIBILITY_ID;
         options->stop_requested = &g_stop;
+        options->log = structured_log.get();
+        options->metrics = metrics.get();
         app_options.push_back(options.get());
         owned.push_back(std::move(options));
     }
@@ -568,6 +618,13 @@ int run_managed(const std::string& host_config_path,
                     std::move(pool_options), workers, &pool_error);
             if (pool == nullptr) {
                 return nullptr;
+            }
+            // The supervisor's observation map tracks the pool's first
+            // slot (v1 pools are single-worker); the §8.3 replacement is
+            // pool-owned, but the supervisor needs the current worker to
+            // probe it (item 6) and recycle it through the item-5a chain.
+            if (!workers.empty()) {
+                activate_worker(application, workers[0]);
             }
             // The sink must be installed before the pool starts serving:
             // a request pinned before wiring would lose its response
@@ -763,6 +820,43 @@ int run_managed(const std::string& host_config_path,
             pool->stop_and_join();
         }
     };
+    // Active workers owned by this process: App -> worker. The supervisor
+    // observes the current worker through this map (the map is the single
+    // source of truth for "which worker is current"; a deploy or retire
+    // that races the observation wins). The pool's §8.3 replacement is
+    // pool-owned; the map tracks the pool's first slot (v1 pools are
+    // single-worker) so the supervisor can probe it and recycle it.
+    std::map<std::string, capsid_worker*> active_workers;
+    std::mutex workers_mutex;
+    const auto activate_worker =
+        [&](const std::string& application, capsid_worker* worker) {
+            std::lock_guard<std::mutex> lock(workers_mutex);
+            const std::map<std::string, capsid_worker*>::iterator existing =
+                active_workers.find(application);
+            if (existing != active_workers.end() &&
+                existing->second != nullptr) {
+                // Activation replaces the previous worker.
+                capsid_worker_destroy(existing->second);
+            }
+            active_workers[application] = worker;
+            // M2 item 7 (§12.1): the render-time process snapshot reads
+            // the currently active worker's RSS.
+            worker_pid.store(worker != nullptr
+                                 ? static_cast<pid_t>(capsid_worker_pid(worker))
+                                 : 0);
+            return true;
+        };
+    const auto retire_worker = [&](const std::string& application) {
+        std::lock_guard<std::mutex> lock(workers_mutex);
+        const std::map<std::string, capsid_worker*>::iterator existing =
+            active_workers.find(application);
+        if (existing != active_workers.end() &&
+            existing->second != nullptr) {
+            capsid_worker_destroy(existing->second);
+            active_workers.erase(existing);
+        }
+        worker_pid.store(0);
+    };
     // Wire the §9.3 transaction callbacks and the §9.4 ledger into every
     // App's coordinator options.
     for (capsid::host::ManagedHostOptions* options : app_options) {
@@ -869,6 +963,11 @@ int run_managed(const std::string& host_config_path,
         supervisor_options.discard_worker = discard_worker;
         supervisor_options.stop_requested = &g_stop;
         supervisor_options.startup_permits = &startup_permits;
+        // M2 item 7: the process-wide log/metrics (supervisor events are
+        // control-plane; the crash budget and quarantine counters feed
+        // §12.1).
+        supervisor_options.log = structured_log.get();
+        supervisor_options.metrics = metrics.get();
         // M2 item 6 (design §7.4): the active health probe schedule.
         // Individual Apps opt in with capsid.json healthCheck; the host
         // interval/failures apply to every configured App.
@@ -898,6 +997,10 @@ int run_managed(const std::string& host_config_path,
         static_cast<std::uint64_t>(geteuid());
     service_options.http.api.max_header_bytes = 64U * 1024U;
     service_options.http.api.max_body_bytes = 64U * 1024U;
+    // M2 item 7: the Admin API renders /metrics from the process-wide
+    // registry and logs authorization failures as control-plane events.
+    service_options.http.api.log = structured_log.get();
+    service_options.http.api.metrics = metrics.get();
     service_options.http.header_timeout_ms = 5000;
     service_options.http.body_timeout_ms = 5000;
     service_options.http.write_timeout_ms = 5000;
@@ -939,6 +1042,11 @@ int run_managed(const std::string& host_config_path,
         supervisor->join();
     }
     close(state_fd);
+    // M2 item 7 (§12.2): the shutdown event lands, then both lanes drain
+    // (the supervisor join above already closed every observed channel).
+    structured_log->log(capsid::host::LogLane::kControl,
+                        {.event = capsid::host::log_events::kShutdown});
+    structured_log->flush();
     return 0;
 }
 
@@ -1134,6 +1242,22 @@ int main(int argc, char** argv) {
     const std::vector<std::uint8_t> bundle =
         read_bundle(options.source_bundle_path);
 
+    // M2 item 7 (design §12): the process-wide structured log and metrics
+    // registry for the data-plane modes. The render-time snapshot follows
+    // the single active worker, which these modes publish at spawn.
+    auto structured_log = std::make_unique<capsid::host::StructuredLog>(
+        [](const std::string& line) {
+            const ssize_t written = ::write(STDERR_FILENO, line.data(),
+                                            line.size());
+            (void)written;
+        });
+    auto metrics = std::make_unique<capsid::host::MetricsRegistry>();
+    std::atomic<pid_t> worker_pid{0};
+    metrics->set_process_snapshot_provider(
+        capsid::host::default_process_snapshot_provider(&worker_pid));
+    options.log = structured_log.get();
+    options.metrics = metrics.get();
+
     if (mode == "static-pool") {
         capsid::host::StaticPoolServerOptions pool_options;
         pool_options.workers = workers;
@@ -1143,8 +1267,16 @@ int main(int argc, char** argv) {
         // managed-pool batch) and override the template when set.
         pool_options.worker_options = std::move(options);
         capsid::host::StaticPoolServer pool(std::move(pool_options));
-        return pool.run(bundle);
+        const int exit_code = pool.run(bundle);
+        structured_log->log(capsid::host::LogLane::kControl,
+                            {.event = capsid::host::log_events::kShutdown});
+        structured_log->flush();
+        return exit_code;
     }
     capsid::host::SingleWorkerServer server(std::move(options));
-    return server.run(bundle);
+    const int exit_code = server.run(bundle);
+    structured_log->log(capsid::host::LogLane::kControl,
+                        {.event = capsid::host::log_events::kShutdown});
+    structured_log->flush();
+    return exit_code;
 }

@@ -37,12 +37,15 @@ if(CAPSID_BUILD_HOST)
         src/host/managed_admin_backend.cc
         src/host/managed_host.cc
         src/host/managed_registry.cc
+        src/host/metrics.cc
         src/host/policy_compiler.cc
+        src/host/process_snapshot.cc
         src/host/request_normalization.cc
         src/host/secret_file_provider.cc
         src/host/secret_snapshot.cc
         src/host/service_lifecycle.cc
         src/host/static_pool.cc
+        src/host/structured_log.cc
         src/host/static_pool_server.cc
         src/host/trusted_key_store.cc
         src/host/worker_capacity_ledger.cc

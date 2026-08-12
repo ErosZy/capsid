@@ -54,6 +54,7 @@
 #include "capsid/runtime.h"
 #include "client_ipc_metrics.h"
 #include "host/request_normalization.h"
+#include "host/structured_log.h"
 #include "host/worker_event_source.h"
 #include "host/worker_executor.h"
 
@@ -62,6 +63,20 @@ namespace capsid::host {
 namespace asio = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
+
+namespace {
+
+// M2 item 7 (design §12.2): single write path for data-plane control
+// events. Null log (unit fixtures without the process-wide instance) is a
+// no-op. App-lane (kLog forwarding) goes through LogLane::kApp; every
+// Host-side failure below is a control-plane event.
+void emit_log(StructuredLog* log, LogLane lane, LogFields fields) {
+    if (log != nullptr) {
+        log->log(lane, std::move(fields));
+    }
+}
+
+}  // namespace
 using tcp = asio::ip::tcp;
 using SteadyClock = std::chrono::steady_clock;
 
@@ -71,11 +86,6 @@ constexpr std::size_t kMaxRequestBodyBytes = 16u * 1024u * 1024u;
 // the per-request HTTP write queue is below this; beyond it credit
 // falls back to write-completion so slow clients stay bounded.
 static const size_t kEarlyCreditWindow = 64u * 1024u;
-
-void write_stderr(std::string_view message) {
-    std::fwrite(message.data(), 1, message.size(), stderr);
-    std::fputc('\n', stderr);
-}
 
 // RFC 7230 tchar: the only legal header-name characters.
 bool is_token_char(unsigned char c) {
@@ -292,11 +302,12 @@ public:
         // TCP_NODELAY is on by default (single-connection latency drops
         // 43ms→1.3ms with no throughput regression; A/B fairness requires
         // it, as the Go baseline's net/http also disables Nagle). Only the
-        // exact value "0" disables it.
+        // exact value "0" disables it. The M2 item 7 warn line is emitted
+        // in start() (Impl is incomplete here); the option state is
+        // captured instead.
         const char* nodelay = std::getenv("CAPSID_TCP_NODELAY");
         if (nodelay != nullptr && std::strcmp(nodelay, "0") == 0) {
-            std::fprintf(stderr,
-                         "capsid-host: TCP_NODELAY disabled\n");
+            nodelay_disabled_ = true;
         } else {
             beast::error_code ec;
             stream_.socket().set_option(asio::ip::tcp::no_delay(true), ec);
@@ -330,6 +341,7 @@ private:
     beast::flat_buffer buffer_;
     bool closed_ = false;
     bool probe_active_ = false;
+    bool nodelay_disabled_ = false;
     std::optional<std::uint64_t> current_id_;
 };
 
@@ -375,6 +387,8 @@ public:
         return metrics;
     }
     std::uint16_t bound_port() const { return bound_port_; }
+    // M2 item 7: the process-wide structured log (null in unit fixtures).
+    StructuredLog* log() const { return options_.log; }
     bool activate_accept(std::string* error);
     bool worker_available() const {
         return worker_available_.load(std::memory_order_relaxed);
@@ -599,7 +613,17 @@ private:
     std::optional<SteadyClock::time_point> drain_deadline_;
 };
 
-void Session::start() { read_request(); }
+void Session::start() {
+    // M2 item 7 (§12.2): the delayed TCP_NODELAY warning lands here —
+    // Impl is complete at this point.
+    if (nodelay_disabled_) {
+        emit_log(impl_->log(), LogLane::kControl,
+                 {.level = "warn",
+                  .event = log_events::kStartup,
+                  .message = "TCP_NODELAY disabled"});
+    }
+    read_request();
+}
 
 // While a request is in flight the Host keeps an async_wait on the socket so
 // an abortive peer disconnect (RST) cancels the worker request immediately
@@ -891,8 +915,10 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     const char* bodyless_env = std::getenv("CAPSID_BODYLESS");
     if (bodyless_env != nullptr && std::strcmp(bodyless_env, "0") == 0) {
         bodyless_enabled_ = false;
-        std::fprintf(stderr,
-                     "capsid-host: bodyless request fusion disabled\n");
+        emit_log(log(), LogLane::kControl,
+                 {.level = "warn",
+                  .event = log_events::kStartup,
+                  .message = "bodyless request fusion disabled"});
     }
 
     WorkerExecutor::WorkerFactory factory =
@@ -1343,12 +1369,9 @@ void Impl::complete_drain() {
         }
     }
     // §7.5 row 3: inflight cleared → shutdown; the worker flushes and
-    // reads to EXIT (never a forced terminate on this path).
-    Command shutdown;
-    shutdown.type = CommandType::kShutdown;
-    if (!shutdown_sent_.exchange(true)) {
-        submit_command(std::move(shutdown));
-    }
+    // reads to EXIT (never a forced terminate on this path). The
+    // executor's request_shutdown owns the exactly-once gate.
+    executor_->request_shutdown();
 }
 
 std::uint64_t Impl::steady_ms() {
@@ -1689,12 +1712,20 @@ void Impl::handle_worker_event(WorkerEvent event) {
         return;
     }
     case WorkerEvent::Type::kLog:
-        write_stderr(event.text);
+        // M2 item 7 (§12.2): worker LOG frames are application log
+        // forwarding — bounded app lane, droppable and counted; the text
+        // is the application's own emitted log line (the worker already
+        // sanitizes secrets out of LOG frames).
+        emit_log(log(), LogLane::kApp,
+                 {.event = log_events::kAppLog,
+                  .message = event.text});
         return;
     case WorkerEvent::Type::kError:
-        write_stderr(std::string("capsid-host: worker error: ") +
-                     event.text + " (request " +
-                     std::to_string(event.request_id) + ")");
+        // A worker error is a process-lifecycle control-plane event.
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kWorkerCrash,
+                  .result = "error",
+                  .message = event.text});
         return;
     case WorkerEvent::Type::kRequestTimeout: {
         auto it = requests_.find(event.request_id);
@@ -2328,19 +2359,28 @@ bool Impl::bind_listener() {
         asio::ip::make_address(options_.listen_address, ec),
         options_.listen_port);
     if (ec) {
-        write_stderr("capsid-host: invalid listen address " +
-                     options_.listen_address);
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "invalid listen address " +
+                             options_.listen_address});
         return false;
     }
     acceptor_.emplace(ioc_);
     acceptor_->open(endpoint.protocol(), ec);
     if (ec) {
-        write_stderr("capsid-host: listener open failed: " + ec.message());
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "listener open failed: " + ec.message()});
         return false;
     }
     acceptor_->set_option(asio::socket_base::reuse_address(true), ec);
     if (ec) {
-        write_stderr("capsid-host: listener option failed: " + ec.message());
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "listener option failed: " + ec.message()});
         return false;
     }
     // M2 shared-port pools: every shard must be able to bind the SAME
@@ -2352,24 +2392,36 @@ bool Impl::bind_listener() {
         const int enable = 1;
         if (::setsockopt(acceptor_->native_handle(), SOL_SOCKET,
                          SO_REUSEPORT, &enable, sizeof(enable)) != 0) {
-            write_stderr(
-                "capsid-host: listener reuse_port option is unavailable");
+            emit_log(log(), LogLane::kControl,
+                     {.event = log_events::kStartup,
+                      .result = "fail",
+                      .message =
+                          "listener reuse_port option is unavailable"});
             return false;
         }
     }
     acceptor_->bind(endpoint, ec);
     if (ec) {
-        write_stderr("capsid-host: listener bind failed: " + ec.message());
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "listener bind failed: " + ec.message()});
         return false;
     }
     acceptor_->listen(asio::socket_base::max_listen_connections, ec);
     if (ec) {
-        write_stderr("capsid-host: listener listen failed: " + ec.message());
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "listener listen failed: " + ec.message()});
         return false;
     }
     const tcp::endpoint local = acceptor_->local_endpoint(ec);
     if (ec) {
-        write_stderr("capsid-host: listener endpoint failed: " + ec.message());
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "listener endpoint failed: " + ec.message()});
         return false;
     }
     bound_address_ = local.address().to_string();
@@ -2411,13 +2463,20 @@ bool Impl::write_ready_line() {
             continue;
         }
         if (written <= 0) {
-            write_stderr("capsid-host: failed to write the READY record");
+            emit_log(log(), LogLane::kControl,
+                     {.event = log_events::kStartup,
+                      .result = "fail",
+                      .message = "failed to write the READY record"});
             return false;
         }
         offset += static_cast<std::size_t>(written);
     }
     if (offset != line.size()) {
-        write_stderr("capsid-host: failed to write the READY record");
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "failed to write the READY record"});
+
         return false;
     }
     return true;
@@ -2824,11 +2883,17 @@ bool SingleWorkerServer::worker_available() const {
 int SingleWorkerServer::run(const std::vector<std::uint8_t>& bundle) {
     std::string error;
     if (!impl_->start(bundle, &error)) {
-        write_stderr(std::string("capsid-host: ") + error);
+        emit_log(impl_->log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = error});
         return 1;
     }
     if (!impl_->wait(&error)) {
-        write_stderr(std::string("capsid-host: ") + error);
+        emit_log(impl_->log(), LogLane::kControl,
+                 {.event = log_events::kShutdown,
+                  .result = "fail",
+                  .message = error});
         return 1;
     }
     return 0;

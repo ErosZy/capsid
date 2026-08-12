@@ -21,6 +21,9 @@ struct capsid_worker;
 
 namespace capsid::host {
 
+class StructuredLog;
+class MetricsRegistry;
+
 // M1D managed host coordinator. One active App, one worker per generation,
 // one path listener. The deploy pipeline follows the frozen commit
 // sequence: safe-read the version, select the artifact (source / trusted
@@ -108,6 +111,10 @@ struct ManagedHostOptions {
     // count before ANY spawn and settles the reserve on the transaction
     // commit; null disables the gate.
     WorkerCapacityLedger* ledger = nullptr;
+    // M2 item 7: the process-wide structured log and metrics registry
+    // (design §12). Null disables event logging/metrics on this path.
+    StructuredLog* log = nullptr;
+    MetricsRegistry* metrics = nullptr;
 };
 
 enum class OperationState {

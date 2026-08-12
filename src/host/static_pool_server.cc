@@ -3,6 +3,7 @@
 #include "host/static_pool_server.h"
 
 #include "host/static_pool.h"
+#include "host/structured_log.h"
 
 #include <signal.h>
 #include <unistd.h>
@@ -19,11 +20,25 @@
 
 namespace capsid::host {
 
+namespace {
+
+// M2 item 7 (design §12.2): single write path for pool control events.
+// Null log (fixtures without the process-wide instance) is a no-op.
+void emit_log(StructuredLog* log, LogFields fields) {
+    if (log != nullptr) {
+        log->log(LogLane::kControl, std::move(fields));
+    }
+}
+
+}  // namespace
+
 class StaticPoolServerImpl {
 public:
     explicit StaticPoolServerImpl(StaticPoolServerOptions options)
         : options_(std::move(options)),
           state_(options_.workers) {}
+
+    StructuredLog* structured_log() const { return options_.log; }
 
     ~StaticPoolServerImpl() {
         // A running pool is torn down with the same bounded stop the
@@ -405,7 +420,12 @@ std::size_t StaticPoolServer::active_workers() const {
 int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
     std::string error;
     if (!impl_->start(bundle, &error)) {
-        std::fprintf(stderr, "capsid-host: %s\n", error.c_str());
+        // M2 item 7 (§12.2): a failed pool start is a structured startup
+        // line; the error text is static and sanitized.
+        emit_log(impl_->structured_log(),
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = error});
         return 1;
     }
     // Benchmark-only signal handling: SIGTERM/SIGINT are blocked and
@@ -417,14 +437,20 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
     sigaddset(&term_set, SIGTERM);
     sigaddset(&term_set, SIGINT);
     if (sigprocmask(SIG_BLOCK, &term_set, nullptr) != 0) {
-        std::fprintf(stderr, "capsid-host: cannot block signals\n");
+        emit_log(impl_->structured_log(),
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "cannot block signals"});
         impl_->request_stop();
         impl_->wait(&error);
         return 1;
     }
     int signal_number = 0;
     if (sigwait(&term_set, &signal_number) != 0) {
-        std::fprintf(stderr, "capsid-host: cannot wait for signals\n");
+        emit_log(impl_->structured_log(),
+                 {.event = log_events::kShutdown,
+                  .result = "fail",
+                  .message = "cannot wait for signals"});
         impl_->request_stop();
         impl_->wait(&error);
         return 1;

@@ -759,6 +759,14 @@ std::string json_string_field(const std::string& json,
     return json.substr(value_begin, end - value_begin);
 }
 
+// M2 item 7: an optional JSON string field must be distinguished from a
+// missing one (fallback reason is only written when a fallback happened).
+bool json_has_string_field(const std::string& json,
+                           const std::string& field) {
+    const std::string needle = "\"" + field + "\":\"";
+    return json.find(needle) != std::string::npos;
+}
+
 void install_compatibility_mismatch(const Fixtures& fixtures,
                                     const TestKey& key,
                                     const std::string& attestation) {
@@ -1533,6 +1541,84 @@ int main(int argc, char** argv) {
         require(fallback_generation != source_generation,
                 "compatibility fallback discarded verified attestation from "
                 "generation identity");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_fallback_records_reason") {
+        // M2 item 7 (design §13:682): a compatibility fallback records the
+        // verified attestation, the fallback reason AND the actual selected
+        // artifact in artifact.json. The reason is written only when a
+        // fallback actually happened: a trusted-bytecode deployment has no
+        // reason field at all, so the committed document stays byte-stable
+        // for the non-fallback path (restart_identity_stable).
+        const TestKey key = test_key();
+        std::vector<std::uint8_t> bytecode;
+        std::string attestation;
+        std::vector<std::uint8_t> signature;
+        compile_and_sign(fixtures, key, &bytecode, &attestation, &signature);
+        install_compatibility_mismatch(fixtures, key, attestation);
+        capsid::host::ManagedHostOptions options = make_options(fixtures);
+        capsid::host::TrustedBytecodeKey trusted;
+        trusted.key_id = "test-key-1";
+        trusted.public_key = std::span<const std::uint8_t>(
+            key.public_key.data(), key.public_key.size());
+        options.trusted_keys.push_back(trusted);
+        capsid::host::OperationStatus status;
+        const capsid::host::DeployOutcome outcome =
+            capsid::host::managed_deploy(&options, "v1", &status);
+        require(outcome.ok,
+                "compatibility fallback deploy failed: " + outcome.error);
+        require(outcome.worker != nullptr, "no worker for fallback");
+        capsid_worker_destroy(outcome.worker);
+        const std::string generation = json_string_field(
+            read_file(fixtures.state_root + "/apps/orders/active.json"),
+            "generation");
+        const std::string artifact = read_file(
+            fixtures.state_root + "/apps/orders/generations/" + generation +
+            "/artifact.json");
+        require(json_string_field(artifact, "selected") == "source",
+                "fallback artifact did not select source");
+        require(json_string_field(artifact, "reason") ==
+                    "compatibility-mismatch",
+                "fallback artifact omits the fallback reason");
+        require(json_string_field(artifact, "attestationDigest") != "",
+                "fallback artifact omits the verified attestation");
+        // Positive control: the non-fallback path never records a reason.
+        Fixtures trusted_only =
+            make_fixtures(worker_path, compiler_tool, fixture_source);
+        write_file(trusted_only.vdir + "/capsid.json", kMinimalAppConfig);
+        write_file(trusted_only.vdir + "/bundle.mjs", kSourceBundle);
+        std::vector<std::uint8_t> trusted_bytecode;
+        std::string trusted_attestation;
+        std::vector<std::uint8_t> trusted_signature;
+        compile_and_sign(trusted_only, key, &trusted_bytecode,
+                         &trusted_attestation, &trusted_signature);
+        capsid::host::ManagedHostOptions trusted_options =
+            make_options(trusted_only);
+        capsid::host::TrustedBytecodeKey trusted_key;
+        trusted_key.key_id = "test-key-1";
+        trusted_key.public_key = std::span<const std::uint8_t>(
+            key.public_key.data(), key.public_key.size());
+        trusted_options.trusted_keys.push_back(trusted_key);
+        capsid::host::OperationStatus trusted_status;
+        const capsid::host::DeployOutcome trusted_outcome =
+            capsid::host::managed_deploy(&trusted_options, "v1",
+                                         &trusted_status);
+        require(trusted_outcome.ok && trusted_outcome.worker != nullptr,
+                "trusted control deploy failed: " + trusted_outcome.error);
+        capsid_worker_destroy(trusted_outcome.worker);
+        const std::string trusted_generation = json_string_field(
+            read_file(trusted_only.state_root + "/apps/orders/active.json"),
+            "generation");
+        const std::string trusted_artifact = read_file(
+            trusted_only.state_root + "/apps/orders/generations/" +
+            trusted_generation + "/artifact.json");
+        require(json_string_field(trusted_artifact, "selected") ==
+                    "trusted-bytecode",
+                "trusted control deploy did not select trusted bytecode");
+        require(!json_has_string_field(trusted_artifact, "reason"),
+                "trusted deployment unexpectedly records a fallback reason");
         std::cout << "PASS" << std::endl;
         return 0;
     }

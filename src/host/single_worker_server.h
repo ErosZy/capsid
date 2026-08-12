@@ -8,6 +8,9 @@
 
 namespace capsid::host {
 
+class StructuredLog;
+class MetricsRegistry;
+
 // Defined in single_worker_server.cc; the server keeps it behind a shared
 // pointer so the header exposes no Boost or worker-Runtime types.
 class Impl;
@@ -70,6 +73,10 @@ struct SingleWorkerServerOptions {
     // view only: the worker-side request timeout is a separate timer
     // (§8.3, independent accounting). 0 = disabled.
     std::uint64_t write_timeout_ms = 60000;
+    // M2 item 7: the process-wide structured log and metrics registry
+    // (design §12). Null disables event logging/metrics on this path.
+    StructuredLog* log = nullptr;
+    MetricsRegistry* metrics = nullptr;
 };
 
 // M1A single-worker Host data plane: one Boost.Asio io_context owner, one

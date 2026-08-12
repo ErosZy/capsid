@@ -445,6 +445,8 @@ if(BUILD_TESTING)
                         host_managed_executable_redeploys_with_capacity_one
                         host_managed_executable_recovery_consumes_capacity
                         host_managed_executable_secret_canary_no_leak
+                        host_managed_executable_structured_logs_json
+                        host_managed_executable_metrics_endpoint
                         host_managed_executable_crash_mid_deploy_keeps_old
                         host_managed_executable_crash_staging_remnants
                         host_managed_executable_crash_orphan_generation
@@ -536,6 +538,7 @@ if(BUILD_TESTING)
                     host_managed_trusted_bytecode
                     host_managed_compatibility_fallback
                     host_managed_fallback_identity_retains_attestation
+                    host_managed_fallback_records_reason
                     host_managed_bytecode_key_rotation_deploys
                     host_managed_revoked_key_deploy_rejected
                     host_managed_revoked_key_recovery_fail_closed
@@ -610,6 +613,41 @@ if(BUILD_TESTING)
             endforeach()
             endif()  # CMAKE_SYSTEM_NAME STREQUAL "Linux" — worker-spawn suite
         endif()
+
+        add_executable(
+            test-host-structured-log
+            tests/test_host_structured_log.cc)
+        target_include_directories(
+            test-host-structured-log PRIVATE include src)
+        target_link_libraries(test-host-structured-log PRIVATE
+            capsid_host_core
+            capsid_sanitizers)
+        set_target_properties(test-host-structured-log PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(
+                    test-host-structured-log PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-host-structured-log PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        foreach(CAPSID_STRUCTURED_LOG_TEST_ID
+                structured_log_emits_single_line_json
+                structured_log_app_lane_drops_and_counts
+                structured_log_control_lane_never_drops
+                structured_log_control_precedes_app_backlog)
+            add_test(
+                NAME "${CAPSID_STRUCTURED_LOG_TEST_ID}"
+                COMMAND test-host-structured-log
+                    "${CAPSID_STRUCTURED_LOG_TEST_ID}")
+            set_tests_properties(
+                "${CAPSID_STRUCTURED_LOG_TEST_ID}" PROPERTIES TIMEOUT 30)
+        endforeach()
 
         add_executable(
             test-host-policy-compiler
