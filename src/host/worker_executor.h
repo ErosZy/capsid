@@ -58,7 +58,24 @@ enum class CommandType {
     kCancel,
     kGrantResponseCredit,
     kShutdown,
+    // M2 item 6: the active-health probe channel (direction A wiring).
+    // The supervisor schedules probes THROUGH the executor — the executor
+    // worker thread is the sole IPC event consumer, so a direct supervisor
+    // read would steal data-plane response events, and a direct supervisor
+    // Runtime call would break the "worker thread owns every Runtime API
+    // call" protocol. Probe request ids live in a reserved high range that
+    // never collides with data-plane ids; probe response events are folded
+    // into probe_state() on the worker thread and never enter the pool's
+    // event queue.
+    kProbeRequest,
+    kProbeCancel,
 };
+
+// Probe request ids are allocated from the top of the uint64 space so a
+// data-plane id (allocated from 1 upward) can never collide. The probe
+// never participates in inflight accounting (it is not a data-plane
+// request); kProbeCancel releases its slot on the Runtime.
+inline constexpr std::uint64_t kProbeRequestIdBase = 1ULL << 62;
 
 // A command from the owner thread to the worker thread. Strings are copied
 // so the worker thread never reads owner-thread-owned buffers.
@@ -77,6 +94,25 @@ struct Command {
     // before the end frame arrives — which it rejects as an invalid frame
     // and kills the worker.
     bool end_request = false;
+    // kProbeRequest only: the probe id assigned by submit() (from the
+    // reserved high range). The probe is a bodyless GET against the App's
+    // healthCheck path; the worker thread folds its response events into
+    // probe_state() instead of the pool's event queue.
+    std::uint64_t probe_id = 0;
+};
+
+// M2 item 6 (design §7.4): the active-health probe verdict, written on the
+// worker thread and read by the supervisor through probe_state(). A probe
+// is complete when a terminal event (RESPONSE_END / REQUEST_TIMEOUT /
+// oversized body) arrived; healthy means 2xx and body under the fixed cap.
+// in_flight=false with complete=false means no probe is outstanding or the
+// worker died mid-probe (the supervisor treats that as a failed verdict).
+struct ProbeState {
+    bool in_flight = false;
+    bool complete = false;
+    bool healthy = false;
+    std::int32_t status = 0;
+    std::uint64_t body_bytes = 0;
 };
 
 // An event decoded from the capsid_event protocol on the worker thread and
@@ -144,6 +180,17 @@ public:
     // ---- command direction (owner thread) ------------------------------
 
     void submit(Command command);
+    // M2 item 6: fire one bodyless GET probe against the App's
+    // healthCheck.path (the absolute data-plane URL shape). The command
+    // carries the probe id; the worker thread executes the Runtime call
+    // and folds the response events into probe_state(). The supervisor
+    // owns the deadline: it polls probe_state() and submits kProbeCancel
+    // on expiry.
+    void submit_probe(const std::string& url);
+    void cancel_probe();
+    // The latest probe verdict (thread-safe; a copy under the executor
+    // mutex). The probe state resets when the next probe is submitted.
+    ProbeState probe_state() const;
     // Tombstone: no further frame for this request may reach the IPC
     // channel — the Runtime erased it (RESPONSE_END / REQUEST_TIMEOUT), or
     // the owner cancelled it. Called by the owner synchronously before the
@@ -228,6 +275,16 @@ private:
     // or the owner cancelled (owner thread): any queued frame for them is
     // dropped before it reaches the IPC channel.
     std::set<std::uint64_t> canceled_;
+    // M2 item 6: probe state (worker thread writes, supervisor reads).
+    // next_probe_id_ is the owner-thread allocator for the reserved high
+    // range; the rest lives under mutex_.
+    std::atomic<std::uint64_t> next_probe_id_ = kProbeRequestIdBase;
+    bool probe_in_flight_ = false;
+    bool probe_complete_ = false;
+    bool probe_healthy_ = false;
+    std::int32_t probe_status_ = 0;
+    std::uint64_t probe_body_bytes_ = 0;
+    std::uint64_t probe_id_ = 0;
     // Inflight accounting: every begun request id, erased exactly once at
     // its terminal point. Guards the inflight_ counter against double
     // decrements (a cancel racing an already-queued RESPONSE_END).

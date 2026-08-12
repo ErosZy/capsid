@@ -1,10 +1,14 @@
 // GenerationPool implementation — see generation_pool.h. One pump thread
 // owns every slot executor's event drain; a replacement spawn runs on its
 // own thread so the pump never blocks on a spawn or on the process-global
-// startup semaphore.
+// startup-permit queue (direction A: the queue is the Host-wired
+// StartupPermitCoordinator, shared with the deploy path).
 
 #include "host/generation_pool.h"
 
+#include "host/managed_admin_backend.h"
+#include "host/metrics.h"
+#include "host/structured_log.h"
 #include "host/worker_recovery.h"
 
 #include <algorithm>
@@ -15,7 +19,6 @@
 #include <cstdint>
 #include <deque>
 #include <limits>
-#include <set>
 #include <utility>
 
 namespace capsid::host {
@@ -25,8 +28,6 @@ namespace {
 using SteadyClock = std::chrono::steady_clock;
 
 constexpr std::uint64_t kNoDue = 0;
-constexpr std::size_t kMaxQueuedStartupPermits = 16;
-constexpr std::size_t kDefaultStartupPermitLimit = 4;
 
 std::uint64_t steady_ms() {
     return static_cast<std::uint64_t>(
@@ -35,36 +36,24 @@ std::uint64_t steady_ms() {
             .count());
 }
 
-}  // namespace
-
-// §8.3 global startup semaphore: a process-wide cap on concurrent worker
-// spawns (deploys and replacements share the lane; WP-05 enqueues deploys
-// through the same queue). Permits are granted under the mutex; a grant
-// records the granted ticket so the waiting spawn thread can prove it was
-// the grantee (the pure FairStartupPermitQueue API removes the granted
-// request from the queue, so queue membership is not proof).
-struct GenerationPool::StartupSemaphore {
-    std::mutex mutex;
-    std::condition_variable cv;
-    FairStartupPermitQueue queue;
-    std::size_t limit = kDefaultStartupPermitLimit;
-    std::size_t in_flight = 0;
-    std::set<std::uint64_t> granted_tickets;
-};
-
-namespace {
-// Ticket counter shared by every pool so tickets stay unique queue-wide
-// (the queue rejects duplicates).
-std::atomic<std::uint64_t> g_next_startup_ticket{1};
-}  // namespace
-
-// One semaphore per process; every GenerationPool and (later) every
-// Managed deploy shares it. The static member is the only entry into the
-// private nested type.
-GenerationPool::StartupSemaphore& GenerationPool::startup_semaphore() {
-    static StartupSemaphore semaphore;
-    return semaphore;
+// M2 item 7 (design §12.2): single write path for every pool event.
+// Null log (unit fixtures without the process-wide instance) is a no-op.
+void emit_log(StructuredLog* log, LogLane lane, LogFields fields) {
+    if (log != nullptr) {
+        log->log(lane, std::move(fields));
+    }
 }
+
+void count_event(MetricsRegistry* metrics,
+                 const std::string& event,
+                 const std::string& app,
+                 const std::string& generation) {
+    if (metrics != nullptr) {
+        metrics->count_worker_event(event, app, generation);
+    }
+}
+
+}  // namespace
 
 GenerationPool::GenerationPool(GenerationPoolOptions options)
     : options_(std::move(options)), policy_(options_.recovery) {
@@ -180,6 +169,10 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
         slot.executor = std::move(executor);
         slot.ready = true;
         pool->slots_.push_back(std::move(slot));
+        if (pool->options_.on_worker_started) {
+            pool->options_.on_worker_started(
+                pool->slots_.back().executor.get());
+        }
     }
     pool->replacement_due_ms_.assign(pool->slots_.size(), kNoDue);
     pool->state_ = State::kActive;
@@ -290,6 +283,10 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
         slot.executor = std::move(executor);
         slot.ready = true;
         pool->slots_.push_back(std::move(slot));
+        if (pool->options_.on_worker_started) {
+            pool->options_.on_worker_started(
+                pool->slots_.back().executor.get());
+        }
     }
     pool->replacement_due_ms_.assign(pool->slots_.size(), kNoDue);
     pool->state_ = State::kActive;
@@ -316,10 +313,9 @@ void GenerationPool::request_drain() {
             slot.executor->request_shutdown();
         }
     }
-    // The pump re-runs its drain sweep; permit waiters re-check the pool's
-    // active flag and abandon.
+    // The pump re-runs its drain sweep; startup-permit waiters re-check
+    // the pool's active flag (the abort predicate) and abandon.
     cv_.notify_all();
-    startup_semaphore().cv.notify_all();
 }
 
 void GenerationPool::stop_and_join() {
@@ -387,6 +383,149 @@ WorkerExecutor* GenerationPool::pick_worker() {
         }
     }
     return best;
+}
+
+WorkerExecutor* GenerationPool::current_worker() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (state_ != State::kActive) {
+        return nullptr;
+    }
+    for (Slot& slot : slots_) {
+        if (slot.ready && slot.executor->available()) {
+            return slot.executor.get();
+        }
+    }
+    return nullptr;
+}
+
+bool GenerationPool::recycle_worker(WorkerExecutor* target) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (state_ != State::kActive) {
+        return false;
+    }
+    std::size_t slot = slots_.size();
+    for (std::size_t index = 0; index < slots_.size(); ++index) {
+        if (slots_[index].executor.get() == target && slots_[index].ready) {
+            slot = index;
+            break;
+        }
+    }
+    if (slot == slots_.size()) {
+        return false;  // stale target: already removed or replaced
+    }
+    Slot& s = slots_[slot];
+    // The worker is still ALIVE: the recycle must retire it. The
+    // shutdown-issued marker makes its later EXIT an expected lifecycle
+    // event, so handle_executor_exit never records it a second time (the
+    // budget is charged exactly once, here). §8.3: the recycled worker
+    // leaves the READY set immediately — the controller decides on the
+    // capacity AFTER the removal, or a full fleet would never schedule a
+    // replacement (1 >= 1).
+    s.shutdown_issued = true;
+    s.ready = false;
+    const std::uint64_t now = steady_ms();
+    std::uint32_t ready_after = 0;
+    for (const Slot& other : slots_) {
+        if (other.ready) {
+            ++ready_after;
+        }
+    }
+    WorkerInstabilityObservation observation;
+    observation.kind = WorkerInstabilityKind::kHealthRecycle;
+    observation.worker_generation = options_.generation_digest;
+    observation.now_ms = now;
+    observation.ready_workers_after_removal = ready_after;
+    observation.target_ready_workers = options_.workers;
+    observation.replacements_in_flight_for_app =
+        static_cast<std::uint32_t>(replacements_scheduled_);
+    observation.chosen_jitter_basis_points = 0;  // deterministic v1
+    count_event(options_.metrics, "unhealthy", options_.application_id,
+                options_.generation_digest);
+    record_instability(slot, observation, "unhealthy");
+    // record_instability armed the replacement (or began quarantine,
+    // which requests every slot's shutdown); the target's shutdown is
+    // issued regardless so the alive-but-unhealthy worker exits to the
+    // reaper (the executor's worker thread owns the destroy).
+    s.executor->request_shutdown();
+    return true;
+}
+
+void GenerationPool::record_instability(
+    std::size_t slot, WorkerInstabilityObservation observation,
+    const char* reason) {
+    // Under the pool mutex.
+    const WorkerRecoveryDecision decision = record_worker_instability(
+        recovery_state_, policy_, lifecycle_, observation);
+    if (!decision.ok) {
+        // A malformed decision is an operator-facing failure, not a silent
+        // one: keep serving at N-1 (or 0) without a replacement.
+        std::fprintf(stderr,
+                     "capsid-host: generation pool %s: recovery controller "
+                     "rejected the instability record (%s)\n",
+                     options_.application_id.c_str(),
+                     decision.error.message.c_str());
+        return;
+    }
+    recovery_state_ = decision.state;
+    // §12.1 recovery family: the remaining instability budget after this
+    // counted event, and the backoff the decision chose.
+    if (options_.metrics != nullptr) {
+        const std::uint64_t remaining =
+            decision.events_in_window >= policy_.max_events
+                ? 0
+                : static_cast<std::uint64_t>(
+                      policy_.max_events - decision.events_in_window);
+        options_.metrics->set_recovery_instability_budget_remaining(
+            options_.application_id, remaining);
+        options_.metrics->set_recovery_backoff_ms(
+            options_.application_id, decision.replacement_delay_ms);
+    }
+    if (decision.begin_quarantine) {
+        begin_quarantine();
+        return;
+    }
+    if (decision.schedule_replacement) {
+        Slot& s = slots_[slot];
+        s.replacement_in_flight = true;
+        ++replacements_scheduled_;
+        s.replacement_reason = reason;
+        replacement_due_ms_[slot] =
+            observation.now_ms + decision.replacement_delay_ms;
+        cv_.notify_all();  // the pump re-evaluates its deadline wait
+    }
+}
+
+void GenerationPool::begin_quarantine() {
+    // Under the pool mutex.
+    LogFields fields;
+    fields.level = "error";
+    fields.event = log_events::kQuarantine;
+    fields.app = options_.application_id;
+    fields.generation = options_.generation_digest;
+    fields.result = "crash_budget_exceeded";
+    fields.message = "quarantined: crash budget exceeded";
+    emit_log(options_.log, LogLane::kControl, std::move(fields));
+    if (options_.metrics != nullptr) {
+        options_.metrics->count_recovery_quarantine(options_.application_id);
+    }
+    if (options_.on_quarantine) {
+        options_.on_quarantine();
+    }
+    // A quarantined generation never spawns again: drain the pool. The
+    // on_quarantine observer writes the durable tombstone BEFORE the
+    // drain signal, so a crash in the window between leaves a quarantined
+    // document, which boot recovery honors (kKeepQuarantined never
+    // resurrects).
+    for (Slot& slot : slots_) {
+        slot.shutdown_issued = true;
+        slot.executor->request_shutdown();
+    }
+    if (state_ == State::kActive) {
+        state_ = State::kDraining;
+        active_flag_.store(false, std::memory_order_relaxed);
+        stable_since_ms_ = 0;
+    }
+    cv_.notify_all();
 }
 
 void GenerationPool::set_event_sink(
@@ -501,27 +640,48 @@ void GenerationPool::pump_loop() {
         if (!events_pending_ &&
             !(state_ == State::kDraining && fleet_exited() &&
               replacements_in_flight_ == 0)) {
-            // The predicate must also cover drain completion: request_drain
+            // The predicates must also cover drain completion: request_drain
             // and the spawn threads notify cv_ without setting
             // events_pending_ (no new events), and the predicate is what
             // turns those notifies into a re-check instead of a lost wake.
             // It must read the LIVE state — a stale snapshot captured
             // before the wait would sleep through a completion notify.
+            //
+            // The no-deadline wait's predicate additionally covers "a
+            // replacement was scheduled" (any due now present): a schedule
+            // notify can arrive from another thread — the spawn thread's
+            // run_replacement failure path — when no deadline was being
+            // waited on, and without the due_pending clause that notify
+            // would find the predicate false and the wait would sleep
+            // through the new deadline forever (a timeout-less predicate
+            // wait re-sleeps instead of returning). With the clause, the
+            // wait returns, the loop recomputes next_due, and the
+            // deadline wait below sleeps until the replacement is due.
             const auto wake = [this] {
                 return events_pending_ ||
+                       due_pending_locked() ||
                        (state_ == State::kDraining && fleet_exited() &&
                         replacements_in_flight_ == 0);
             };
             if (next_due == std::numeric_limits<std::uint64_t>::max()) {
                 cv_.wait(lock, wake);
             } else {
+                // The deadline is the timeout: expiry returns even when the
+                // predicate is false, so no due_pending clause is needed
+                // here (and none may be — a permanently-true predicate
+                // would busy-loop the wait_until).
                 cv_.wait_until(
                     lock,
                     SteadyClock::time_point(
                         SteadyClock::duration(
                             static_cast<SteadyClock::duration::rep>(
                                 next_due))),
-                    wake);
+                    [this] {
+                        return events_pending_ ||
+                               (state_ == State::kDraining &&
+                                fleet_exited() &&
+                                replacements_in_flight_ == 0);
+                    });
             }
         }
         events_pending_ = false;
@@ -572,6 +732,20 @@ bool GenerationPool::fleet_exited() const {
     return true;
 }
 
+// Any replacement scheduled (a due present), regardless of whether its
+// deadline has elapsed. Called from the pump's wait predicate under the
+// pool mutex: it turns a schedule notify into a wake even when the pump
+// was sleeping on the no-deadline wait — the wait returns, the deadline
+// is recomputed, and the pump sleeps until the replacement is due.
+bool GenerationPool::due_pending_locked() const {
+    for (const std::uint64_t due : replacement_due_ms_) {
+        if (due != kNoDue) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void GenerationPool::handle_executor_exit(std::size_t slot) {
     // Under the pool mutex (pump thread).
     Slot& s = slots_[slot];
@@ -582,6 +756,16 @@ void GenerationPool::handle_executor_exit(std::size_t slot) {
     }
     s.ready = false;  // §8.3: EXIT removes the slot from the READY set now
     stable_since_ms_ = 0;
+    if (options_.on_worker_exited) {
+        options_.on_worker_exited(s.executor.get());
+    }
+    // A shutdown the pool itself requested is an expected lifecycle event:
+    // the health recycle already recorded its instability and scheduled
+    // the replacement, and the drain wants nothing — never recorded again
+    // (the budget is charged exactly once, by the single recovery engine).
+    if (s.shutdown_issued) {
+        return;
+    }
     const std::uint64_t now = steady_ms();
     std::uint32_t ready_after = 0;
     for (const Slot& other : slots_) {
@@ -590,11 +774,7 @@ void GenerationPool::handle_executor_exit(std::size_t slot) {
         }
     }
     WorkerInstabilityObservation observation;
-    // A shutdown the pool itself requested is an expected lifecycle event
-    // (no budget, no replacement); anything else is an unexpected exit.
-    observation.kind = s.shutdown_issued
-                           ? WorkerInstabilityKind::kNormalDrain
-                           : WorkerInstabilityKind::kUnexpectedExit;
+    observation.kind = WorkerInstabilityKind::kUnexpectedExit;
     observation.worker_generation = options_.generation_digest;
     observation.now_ms = now;
     observation.ready_workers_after_removal = ready_after;
@@ -602,35 +782,9 @@ void GenerationPool::handle_executor_exit(std::size_t slot) {
     observation.replacements_in_flight_for_app =
         static_cast<std::uint32_t>(replacements_scheduled_);
     observation.chosen_jitter_basis_points = 0;  // deterministic v1
-
-    const WorkerRecoveryDecision decision = record_worker_instability(
-        recovery_state_, policy_, lifecycle_, observation);
-    if (!decision.ok) {
-        // A malformed decision is an operator-facing failure, not a silent
-        // one: keep serving at N-1 (or 0) without a replacement.
-        std::fprintf(stderr,
-                     "capsid-host: generation pool %s: recovery controller "
-                     "rejected the instability record (%s)\n",
-                     options_.application_id.c_str(),
-                     decision.error.message.c_str());
-        return;
-    }
-    recovery_state_ = decision.state;
-    if (decision.begin_quarantine) {
-        // Crash budget exhausted (§8.3): no replacement; the pool serves
-        // at reduced capacity until the operator intervenes.
-        std::fprintf(stderr,
-                     "capsid-host: generation pool %s: crash budget "
-                     "exhausted, replacement suppressed (quarantine)\n",
-                     options_.application_id.c_str());
-        return;
-    }
-    if (decision.schedule_replacement) {
-        s.replacement_in_flight = true;
-        ++replacements_scheduled_;
-        replacement_due_ms_[slot] = now + decision.replacement_delay_ms;
-        cv_.notify_all();  // the pump re-evaluates its deadline wait
-    }
+    count_event(options_.metrics, "crash", options_.application_id,
+                options_.generation_digest);
+    record_instability(slot, observation, "crashed");
 }
 
 void GenerationPool::run_replacement(std::size_t slot) {
@@ -646,7 +800,6 @@ void GenerationPool::run_replacement(std::size_t slot) {
             --replacements_in_flight_;
             cv_.notify_all();
         }
-        startup_semaphore().cv.notify_all();
     };
 
     // §8.3: a generation that is no longer active never starts a
@@ -656,74 +809,35 @@ void GenerationPool::run_replacement(std::size_t slot) {
         return;
     }
 
-    StartupSemaphore& sem = startup_semaphore();
-    const std::uint64_t ticket =
-        g_next_startup_ticket.fetch_add(1, std::memory_order_relaxed);
-    StartupPermitRequest request;
-    request.ticket = ticket;
-    request.application = options_.application_id;
-    request.generation = options_.generation_digest;
-    request.lane = StartupPermitLane::kReplacement;
-    {
-        std::unique_lock<std::mutex> lock(sem.mutex);
-        const StartupPermitQueueResult queued = enqueue_startup_permit_request(
-            sem.queue, request, kMaxQueuedStartupPermits);
-        sem.queue = queued.queue;
-        if (!queued.ok) {
-            // Queue full or invalid: nothing was granted; the pool-side
-            // bookkeeping releases so the slot can be re-scheduled by the
-            // next exit event.
-            lock.unlock();
+    // Direction A: the replacement joins the process-global fair
+    // startup-permit queue (design §10.5.6) and holds its grant across
+    // the respawn, so a crash-looping App cannot persistently queue ahead
+    // of another App's deploy. The abort predicate abandons the wait when
+    // this pool's drain begins, so the pump's replacements_in_flight_ == 0
+    // wait can never deadlock behind a permit nobody will hand out.
+    bool grant_held = false;
+    if (options_.startup_permits != nullptr) {
+        StartupPermitRequest request;
+        request.application = options_.application_id;
+        request.generation = options_.generation_digest;
+        request.lane = StartupPermitLane::kReplacement;
+        const auto aborted = [this] {
+            return !active_flag_.load(std::memory_order_relaxed);
+        };
+        if (!options_.startup_permits->enqueue_and_wait(request, aborted)) {
+            // Queue full, singleflight, stop, or the drain aborted the
+            // wait: nothing was granted; the pool-side bookkeeping
+            // releases so the slot can be re-scheduled by the next exit
+            // event (or the drain completes — the wait() join reclaims
+            // this thread).
             abandon();
             return;
         }
-        if (queued.joined_existing) {
-            // Singleflight at the semaphore (the recovery controller's
-            // per-App gate already prevents this for one pool; the queue
-            // enforces it process-wide).
-            lock.unlock();
-            abandon();
-            return;
+        grant_held = true;
+        if (options_.metrics != nullptr) {
+            options_.metrics->count_recovery_startup_permit_grant(
+                options_.application_id);
         }
-        // A permit may already be free (in_flight < limit): grant this
-        // request now. Without this, the FIRST replacement of every
-        // generation waits forever — grant_next_startup_permit is only
-        // called by a *previous* spawn's release, and there is none.
-        if (sem.in_flight < sem.limit) {
-            const StartupPermitGrantResult grant =
-                grant_next_startup_permit(sem.queue, true);
-            if (grant.ok && grant.granted.has_value()) {
-                sem.queue = grant.queue;
-                ++sem.in_flight;
-                sem.granted_tickets.insert(grant.granted->ticket);
-            }
-        }
-        // The grant may have gone to a waiter (an older request from
-        // another App that this enqueue leapfrogged); wake it to re-check
-        // its ticket.
-        sem.cv.notify_all();
-        // Wait for the permit. The predicate also abandons when the pool
-        // drains mid-wait (generation no longer active).
-        sem.cv.wait(lock, [&] {
-            if (!active_flag_.load(std::memory_order_relaxed)) {
-                return true;  // wake to abandon
-            }
-            return sem.granted_tickets.count(ticket) != 0;
-        });
-        if (!active_flag_.load(std::memory_order_relaxed)) {
-            // The grant may have landed just before the drain flipped the
-            // active flag: the permit was counted in sem.in_flight and must
-            // be released back, or the slot leaks forever (each
-            // drain-vs-replacement race would permanently eat one permit).
-            if (sem.granted_tickets.erase(ticket) != 0 && sem.in_flight > 0) {
-                --sem.in_flight;
-            }
-            lock.unlock();
-            abandon();
-            return;
-        }
-        // I own the permit; consume the grant record.
-        sem.granted_tickets.erase(ticket);
     }
 
     // Spawn and READY through the same factory (same artifact, same
@@ -740,39 +854,26 @@ void GenerationPool::run_replacement(std::size_t slot) {
     });
     std::string spawn_error;
     const bool ready = replacement->start(options_.factory, &spawn_error);
-    {
-        // Release the permit whether the spawn succeeded or not.
-        std::unique_lock<std::mutex> lock(sem.mutex);
-        if (sem.in_flight > 0) {
-            --sem.in_flight;
-        }
-        // Grant the next waiting request (if any) now that a slot freed.
-        if (sem.in_flight < sem.limit && !sem.queue.queued.empty()) {
-            const StartupPermitGrantResult grant =
-                grant_next_startup_permit(sem.queue, true);
-            if (grant.ok && grant.granted.has_value()) {
-                sem.queue = grant.queue;
-                ++sem.in_flight;
-                sem.granted_tickets.insert(grant.granted->ticket);
-            }
-        }
+    if (grant_held) {
+        // The permit was consumed by this spawn/READY window; hand it to
+        // the next waiter regardless of the outcome.
+        options_.startup_permits->release_grant();
     }
-    sem.cv.notify_all();
 
     if (!ready) {
         // A failed replacement is an instability: record it (the crash
         // budget applies) and re-schedule with the next backoff step.
+        // The singleflight bookkeeping releases FIRST: the failure
+        // consumed the in-flight attempt, so the controller must see
+        // replacements_scheduled_ at its pre-attempt value or the next
+        // record trips the per-App singleflight check (1 >= 1) and the
+        // retry dies silently.
         std::fprintf(stderr,
                      "capsid-host: generation pool %s: replacement spawn "
                      "failed: %s\n",
                      options_.application_id.c_str(), spawn_error.c_str());
+        abandon();
         std::unique_lock<std::mutex> lock(mutex_);
-        Slot& s = slots_[slot];
-        s.replacement_in_flight = false;
-        if (replacements_scheduled_ > 0) {
-            --replacements_scheduled_;
-        }
-        --replacements_in_flight_;
         WorkerInstabilityObservation observation;
         observation.kind = WorkerInstabilityKind::kReplacementStartupFailure;
         observation.worker_generation = options_.generation_digest;
@@ -782,15 +883,11 @@ void GenerationPool::run_replacement(std::size_t slot) {
         observation.replacements_in_flight_for_app =
             static_cast<std::uint32_t>(replacements_scheduled_);
         observation.chosen_jitter_basis_points = 0;
-        const WorkerRecoveryDecision decision = record_worker_instability(
-            recovery_state_, policy_, lifecycle_, observation);
-        recovery_state_ = decision.state;
-        if (decision.ok && decision.schedule_replacement) {
-            s.replacement_in_flight = true;
-            ++replacements_scheduled_;
-            replacement_due_ms_[slot] =
-                steady_ms() + decision.replacement_delay_ms;
-        }
+        count_event(options_.metrics, "crash", options_.application_id,
+                    options_.generation_digest);
+        // A failed spawn is never installed, so the reason string is
+        // meaningless here; it only names a later install.
+        record_instability(slot, observation, "crashed");
         cv_.notify_all();
         return;
     }
@@ -800,6 +897,8 @@ void GenerationPool::run_replacement(std::size_t slot) {
 
 void GenerationPool::install_replacement(
     std::size_t slot, std::shared_ptr<WorkerExecutor> replacement) {
+    WorkerExecutor* installed = replacement.get();
+    std::string reason;
     {
         std::unique_lock<std::mutex> lock(mutex_);
         Slot& s = slots_[slot];
@@ -826,6 +925,8 @@ void GenerationPool::install_replacement(
             --replacements_scheduled_;
         }
         --replacements_in_flight_;
+        reason = std::move(s.replacement_reason);
+        s.replacement_reason.clear();
         if (ready_workers_locked() == options_.workers) {
             stable_since_ms_ = steady_ms();  // full-READY epoch base
         }
@@ -846,7 +947,24 @@ void GenerationPool::install_replacement(
         }
         cv_.notify_all();
     }
-    startup_semaphore().cv.notify_all();
+    // §12.2: a replacement publish is a process-lifecycle event (control
+    // lane, never dropped). The message distinguishes the instability
+    // kind that triggered the replacement (direction A: the pool is the
+    // only recovery engine, so the reason is pool-owned).
+    LogFields fields;
+    fields.event = log_events::kWorkerReplaced;
+    fields.app = options_.application_id;
+    fields.generation = options_.generation_digest;
+    fields.result = "replaced";
+    fields.message = (reason == "unhealthy")
+                         ? "replaced unhealthy worker"
+                         : "replaced crashed worker";
+    emit_log(options_.log, LogLane::kControl, std::move(fields));
+    count_event(options_.metrics, "replacement", options_.application_id,
+                options_.generation_digest);
+    if (options_.on_worker_started) {
+        options_.on_worker_started(installed);
+    }
 }
 
 void GenerationPool::finalize_drain() {
@@ -865,8 +983,6 @@ void GenerationPool::finalize_drain() {
         retired_.clear();
         cv_.notify_all();
     }
-    // Wake permit waiters: they see the pool inactive and abandon.
-    startup_semaphore().cv.notify_all();
     // §9.4: the reaper finished — the drained generation's capacity count
     // releases now. Outside the pool mutex (the callback must be able to
     // take its own locks), before the executor destructors join their

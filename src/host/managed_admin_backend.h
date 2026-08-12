@@ -178,6 +178,14 @@ inline constexpr std::string_view kStartupPermitProbeGeneration =
 // the operation settles).
 class StartupPermitCoordinator {
 public:
+    // Abort predicate for enqueue_and_wait (direction A): checked every
+    // poll slice while waiting. When it fires the wait is interrupted and
+    // the request withdrawn — the caller (GenerationPool) passes a check
+    // of its own active flag so a replacement thread never blocks forever
+    // on a permit once the pool's drain began (the pump waits for
+    // replacements_in_flight_ == 0 before finalizing).
+    using AbortPredicate = std::function<bool()>;
+
     StartupPermitCoordinator(const std::atomic<bool>* stop_requested,
                              std::size_t maximum_queued)
         : maximum_queued_(maximum_queued),
@@ -187,9 +195,11 @@ public:
     // first request while the queue is idle is granted immediately.
     // Returns false — and grants nothing — when the queue is full, the
     // request is invalid, an exact (App, generation) replacement is
-    // already queued (singleflight), or the stop signal fired while
-    // waiting (the request is withdrawn from the queue in that case).
-    bool enqueue_and_wait(const StartupPermitRequest& request) {
+    // already queued (singleflight), the stop signal fired while
+    // waiting, or the abort predicate fired (the request is withdrawn
+    // from the queue in both interrupt cases).
+    bool enqueue_and_wait(const StartupPermitRequest& request,
+                          const AbortPredicate& abort = {}) {
         std::unique_lock<std::mutex> lock(mutex_);
         StartupPermitRequest mine = request;
         mine.ticket = next_ticket_++;
@@ -215,9 +225,13 @@ public:
                 granted_ticket_ = granted.granted->ticket;
             }
         }
-        // Poll-stop wait: the process-wide stop signal has no attached
-        // condition variable, so the wait re-checks it every slice.
+        // Poll-stop wait: the process-wide stop signal and the caller's
+        // abort predicate have no attached condition variable, so the
+        // wait re-checks them every slice.
         while (granted_ticket_ != my_ticket) {
+            if (abort && abort()) {
+                break;
+            }
             if (stop_requested_ != nullptr &&
                 stop_requested_->load(std::memory_order_relaxed)) {
                 break;
@@ -225,8 +239,8 @@ public:
             condition_.wait_for(lock, std::chrono::milliseconds(100));
         }
         if (granted_ticket_ != my_ticket) {
-            // Stop fired while waiting: withdraw the request so the queue
-            // is not left holding a waiter nobody will service.
+            // Stop or abort fired while waiting: withdraw the request so
+            // the queue is not left holding a waiter nobody will service.
             queue_.queued.erase(
                 std::remove_if(
                     queue_.queued.begin(), queue_.queued.end(),

@@ -169,24 +169,39 @@ bool parse_duration_ms_text(const std::string& text, std::uint64_t* out) {
     return true;
 }
 
-// "jitter": plain decimal basis points, 0..10000 (the pool's contract).
+// "jitter": a percent text like "20%" (the design's contract, §5.1) or a
+// plain decimal basis-points text like "1000" (the pool's contract); both
+// resolve to basis points in 0..10000 ("20%" = 2000). A bare percent
+// (no digits) or a value over the range is rejected.
 bool parse_jitter_basis_points_text(const std::string& text,
                                     std::uint64_t* out) {
-    if (text.empty()) {
+    std::string::size_type digits_end = 0;
+    for (std::string::size_type index = 0; index < text.size(); ++index) {
+        const char c = text[index];
+        if (c < '0' || c > '9') {
+            break;
+        }
+        digits_end = index + 1;
+    }
+    if (digits_end == 0) {
         return false;
     }
-    for (const char c : text) {
-        if (c < '0' || c > '9') {
-            return false;
-        }
+    const std::string suffix = text.substr(digits_end);
+    if (suffix != "" && suffix != "%") {
+        return false;
     }
     char* end = nullptr;
     errno = 0;
-    const unsigned long long parsed = std::strtoull(text.c_str(), &end, 10);
-    if (errno != 0 || end == nullptr || *end != '\0' || parsed > 10000) {
+    const std::string numeric_text = text.substr(0, digits_end);
+    const unsigned long long parsed =
+        std::strtoull(numeric_text.c_str(), &end, 10);
+    const unsigned long long limit = suffix == "%" ? 100ULL : 10000ULL;
+    const unsigned long long multiplier = suffix == "%" ? 100ULL : 1ULL;
+    if (errno != 0 || end == nullptr || *end != '\0' || parsed > limit ||
+        parsed > std::numeric_limits<std::uint64_t>::max() / multiplier) {
         return false;
     }
-    *out = static_cast<std::uint64_t>(parsed);
+    *out = static_cast<std::uint64_t>(parsed) * multiplier;
     return true;
 }
 
@@ -648,8 +663,8 @@ bool parse_host_config(std::string_view json, ParsedHostConfig* out,
 ResolvedRecoveryPolicy resolve_recovery_policy(const RecoveryConfig& config) {
     // Host defaults: a zero (absent) field maps to the value the strict
     // GenerationPool::create_adopted validation expects for a running Host.
-    // The jitter text is decimal basis points; the schema validated the
-    // grammar, so an unparseable value here is a startup error.
+    // The jitter text is a percent or decimal-basis-points grammar; the
+    // schema validated it, so an unparseable value here is a startup error.
     ResolvedRecoveryPolicy out;
     out.policy.max_events =
         config.crash_budget.max_events > 0
@@ -674,16 +689,16 @@ ResolvedRecoveryPolicy resolve_recovery_policy(const RecoveryConfig& config) {
         out.error = "restart backoff maximum precedes its initial delay";
         return out;
     }
-    // "1000" basis points = 10%; absent/empty text takes the Host default.
+    // "20%" = 2000 basis points, "1000" = 1000 basis points (10%);
+    // absent/empty text takes the Host default. The schema validated the
+    // grammar, so an unparseable value here is a startup error.
     const std::string& jitter_text = config.restart_backoff.jitter;
     if (jitter_text.empty()) {
         out.policy.jitter_basis_points = 1000;
     } else {
-        char* end = nullptr;
-        const unsigned long parsed = std::strtoul(jitter_text.c_str(), &end, 10);
-        if (end == jitter_text.c_str() || *end != '\0' ||
-            parsed > std::numeric_limits<std::uint32_t>::max() ||
-            parsed > 10000) {
+        std::uint64_t parsed = 0;
+        if (!parse_jitter_basis_points_text(jitter_text, &parsed) ||
+            parsed > std::numeric_limits<std::uint32_t>::max()) {
             out.error = "invalid restart backoff jitter";
             return out;
         }

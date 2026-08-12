@@ -59,6 +59,10 @@
 
 namespace capsid::host {
 
+class StartupPermitCoordinator;
+class StructuredLog;
+class MetricsRegistry;
+
 struct GenerationPoolOptions {
     // Identity (the generation key; application_id must satisfy the
     // active-state identifier contract [a-z0-9][a-z0-9._-]{0,62},
@@ -112,6 +116,32 @@ struct GenerationPoolOptions {
     // non-blocking (the ledger release runs here); never take the pool
     // mutex from the callback.
     std::function<void()> on_drain_complete;
+    // Direction A (dual-engine resolution): the pool is the ONLY recovery
+    // engine, so it owns the process-global fair startup-permit queue for
+    // its replacement spawns (design §10.5.6). The Host wires one
+    // coordinator instance shared by every pool and every deploy path;
+    // null disables the queue (replacements start immediately).
+    StartupPermitCoordinator* startup_permits = nullptr;
+    // M2 item 7: the process-wide structured log and metrics registry
+    // (design §12). Null disables event logging/metrics on this path.
+    StructuredLog* log = nullptr;
+    MetricsRegistry* metrics = nullptr;
+    // Direction A lifecycle observers: the Host's worker map is a pure
+    // observer (it never destroys workers — the executor's worker thread
+    // is the sole reaper), so the pool reports worker identity changes
+    // through these callbacks instead of exposing ownership.
+    // on_worker_started fires when an executor became READY (create /
+    // create_adopted / install_replacement — pool thread or spawn
+    // thread, outside the pool mutex). on_worker_exited fires when an
+    // executor's kExit is processed (pump thread, under the pool mutex).
+    // on_quarantine fires when the crash budget is exhausted (pump or
+    // spawn thread): the Host writes the quarantine tombstone; the pool
+    // then requests its own shutdown (a quarantined generation never
+    // spawns again). All three must be cheap and must never take the pool
+    // mutex.
+    std::function<void(const WorkerExecutor*)> on_worker_started;
+    std::function<void(const WorkerExecutor*)> on_worker_exited;
+    std::function<void()> on_quarantine;
 };
 
 // See the file comment for the full contract.
@@ -165,6 +195,26 @@ public:
     // executor stays alive (pool pinning) even if its slot is replaced.
     WorkerExecutor* pick_worker();
 
+    // ---- direction A: active-health recycle -----------------------------
+
+    // The first READY slot's executor — the active-health probe target
+    // (v1 pools are single-worker; a multi-worker pool probes its lowest
+    // READY slot). nullptr when the generation is not kActive or no
+    // worker is READY. The returned executor stays pool-pinned.
+    WorkerExecutor* current_worker();
+    // M2 item 6 (§7.4) recycle entry: the supervisor probes the worker
+    // THROUGH its executor and calls this on consecutive failed verdicts.
+    // The pool records a kHealthRecycle instability (the shared budget —
+    // §10.5.2), and either begins quarantine (on_quarantine + self
+    // drain) or schedules a replacement AND requests the old worker's
+    // shutdown — the worker is still ALIVE, so only the pool may retire
+    // it (the executor's worker thread owns the destroy; the supervisor
+    // never holds a capsid_worker*). Returns true when the recycle was
+    // recorded (quarantine or replacement scheduled); false when the
+    // target is not a READY slot of this pool (stale — the caller
+    // re-syncs without counting).
+    bool recycle_worker(WorkerExecutor* target);
+
     // ---- §9.2 event bridge ----------------------------------------------
 
     // Installs the listener's event sink on this pool: a mutex-guarded
@@ -203,17 +253,25 @@ public:
 
 private:
     explicit GenerationPool(GenerationPoolOptions options);
-    // The process-global startup semaphore (§8.3). The struct is defined
-    // in the .cc; the static member is the only entry so the private
-    // nested type is never named outside the class.
-    struct StartupSemaphore;
-    static StartupSemaphore& startup_semaphore();
+    // Direction A: the crash budget ran out. Emit the quarantine log and
+    // metrics, fire the on_quarantine observer (the Host writes the
+    // tombstone), and request this pool's own drain — a quarantined
+    // generation never spawns again and its workers exit to the reaper.
+    void begin_quarantine();
+    // Record one instability through the recovery controller; on
+    // quarantine the pool drains itself, on schedule_replacement the slot
+    // is armed. Shared by handle_executor_exit and recycle_worker.
+    // Caller holds mutex_. `reason` names the replacement for the
+    // kWorkerReplaced log ("crashed" / "unhealthy").
+    void record_instability(std::size_t slot,
+                            WorkerInstabilityObservation observation,
+                            const char* reason);
 
     void pump_loop();
     // kExit on `slot`: remove from the READY set, run the recovery
     // controller, schedule a replacement when the budget allows.
     void handle_executor_exit(std::size_t slot);
-    // Spawns the replacement worker (semaphore permit → factory → READY →
+    // Spawns the replacement worker (startup permit → factory → READY →
     // slot swap). Runs on its own thread so the pump never blocks.
     void run_replacement(std::size_t slot);
     // Swap a READY replacement into `slot` (pump or replacement thread).
@@ -223,6 +281,9 @@ private:
     // pool mutex. Pump-only; called with the mutex released.
     void finalize_drain();
     bool fleet_exited() const;  // slots + retired, under mutex_
+    // Any replacement scheduled (a due present) — the pump's no-deadline
+    // wait predicate, under mutex_.
+    bool due_pending_locked() const;
 
     GenerationPoolOptions options_;
     WorkerRecoveryPolicy policy_;          // validated copy
@@ -239,6 +300,10 @@ private:
         // later EXIT is an expected lifecycle event (no crash budget, no
         // replacement) instead of an unexpected failure.
         bool shutdown_issued = false;
+        // Direction A: the last instability's replacement reason, read by
+        // install_replacement for the kWorkerReplaced message ("crashed"
+        // for an unexpected exit, "unhealthy" for a health recycle).
+        std::string replacement_reason;
     };
     std::vector<Slot> slots_;
     // Replaced (dead) executors with pinned requests: kept alive until
@@ -253,8 +318,11 @@ private:
     // Slot → spawn due time (monotonic ms) for the exponential backoff.
     std::vector<std::uint64_t> replacement_due_ms_;
     bool events_pending_ = false;
-    // Atomic mirror of "state_ == kActive" for the semaphore wait
-    // predicate, which must not take the pool mutex.
+    // Atomic mirror of "state_ == kActive" for the startup-permit wait
+    // abort predicate, which must not take the pool mutex (direction A:
+    // a replacement thread abandons its permit wait when the drain
+    // begins, so the pump's replacements_in_flight_ == 0 wait can never
+    // deadlock behind a permit nobody will hand out).
     std::atomic<bool> active_flag_ = true;
 
     State state_ = State::kPrepared;

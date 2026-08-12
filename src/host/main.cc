@@ -582,32 +582,21 @@ int run_managed(const std::string& host_config_path,
     // replacement factory is rejected (factory null) — §8.3 replacement is
     // not optional. The pool is not yet routed, so it has no in-flight
     // requests when the sink is installed.
-    // Active workers owned by this process: App -> worker. The supervisor
-    // observes the current worker through this map (the map is the single
-    // source of truth for "which worker is current"; a deploy or retire
-    // that races the observation wins). The pool's §8.3 replacement is
-    // pool-owned; the map tracks the pool's first slot (v1 pools are
-    // single-worker) so the supervisor can probe it and recycle it.
+    // Active workers owned by this process: App -> worker. Direction A:
+    // this map is a PURE OBSERVER — entries are overwritten and erased by
+    // the pool's lifecycle callbacks, but never destroyed here. The
+    // executor's worker thread is the sole reaper (destroying a worker
+    // here while its old pool executor still holds it is the dual-engine
+    // UAF); the map only mirrors the pool's fleet for the metrics
+    // snapshot (worker_pid).
     std::map<std::string, capsid_worker*> active_workers;
     std::mutex workers_mutex;
-    const auto activate_worker =
-        [&](const std::string& application, capsid_worker* worker) {
-            std::lock_guard<std::mutex> lock(workers_mutex);
-            const std::map<std::string, capsid_worker*>::iterator existing =
-                active_workers.find(application);
-            if (existing != active_workers.end() &&
-                existing->second != nullptr) {
-                // Activation replaces the previous worker.
-                capsid_worker_destroy(existing->second);
-            }
-            active_workers[application] = worker;
-            // M2 item 7 (§12.1): the render-time process snapshot reads
-            // the currently active worker's RSS.
-            worker_pid.store(worker != nullptr
-                                 ? static_cast<pid_t>(capsid_worker_pid(worker))
-                                 : 0);
-            return true;
-        };
+    // M2 item 5b: the process-global fair startup-permit queue (design
+    // §10.5.6). Both startup paths (deploy via the Admin backend,
+    // replacement via the generation pools) share this single instance;
+    // the queue decides order and fairness, capacity still decides
+    // concurrency. The bound matches the Admin pending-queue bound.
+    capsid::host::StartupPermitCoordinator startup_permits(&g_stop, 8);
     const auto adopt_generation =
         [&](const std::string& application,
             const std::vector<capsid_worker*>& workers,
@@ -629,6 +618,61 @@ int run_managed(const std::string& host_config_path,
                 static_cast<std::uint32_t>(workers.size());
             pool_options.factory = factory;
             pool_options.recovery = recovery_resolved.policy;
+            // Direction A: the pool is the only recovery engine, so it
+            // owns the shared fair startup-permit queue for its
+            // replacement spawns, and it reports fleet lifecycle changes
+            // (started/exited/quarantine) through callbacks — the worker
+            // map is a pure observer and never destroys a worker.
+            pool_options.startup_permits = &startup_permits;
+            pool_options.log = structured_log.get();
+            pool_options.metrics = metrics.get();
+            pool_options.on_worker_started =
+                [&, application](const capsid::host::WorkerExecutor* executor) {
+                    std::lock_guard<std::mutex> lock(workers_mutex);
+                    capsid_worker* worker = executor->worker();
+                    active_workers[application] = worker;
+                    // M2 item 7 (§12.1): the render-time process snapshot
+                    // reads the currently active worker's RSS.
+                    worker_pid.store(
+                        worker != nullptr
+                            ? static_cast<pid_t>(capsid_worker_pid(worker))
+                            : 0);
+                };
+            pool_options.on_worker_exited =
+                [&, application](const capsid::host::WorkerExecutor* executor) {
+                    std::lock_guard<std::mutex> lock(workers_mutex);
+                    const auto existing = active_workers.find(application);
+                    if (existing != active_workers.end() &&
+                        existing->second == executor->worker()) {
+                        active_workers.erase(existing);
+                        worker_pid.store(0);
+                    }
+                };
+            pool_options.on_quarantine = [&, application]() {
+                // The durable tombstone: write BEFORE the pool's drain
+                // signal (the pool issues it right after this callback),
+                // so a crash in the window leaves a quarantined document,
+                // which boot recovery honors (kKeepQuarantined never
+                // resurrects). A failed write is logged by the coordinator;
+                // the recovery is stopped either way.
+                capsid::host::ManagedHostOptions* target = nullptr;
+                for (capsid::host::ManagedHostOptions* options : app_options) {
+                    if (options->application == application) {
+                        target = options;
+                        break;
+                    }
+                }
+                if (target != nullptr) {
+                    capsid::host::OperationStatus status;
+                    (void)managed_quarantine(target, &status);
+                }
+                // The observer map is cleared without destroying anything:
+                // the pool's drain reaps the workers through their
+                // executors (the sole reaper).
+                std::lock_guard<std::mutex> lock(workers_mutex);
+                active_workers.erase(application);
+                worker_pid.store(0);
+            };
             const std::uint32_t pool_size = pool_options.workers;
             // §9.4: the reaper-finished instant releases the pool's
             // capacity count. The hook captures the size by value and
@@ -644,13 +688,6 @@ int run_managed(const std::string& host_config_path,
                     std::move(pool_options), workers, &pool_error);
             if (pool == nullptr) {
                 return nullptr;
-            }
-            // The supervisor's observation map tracks the pool's first
-            // slot (v1 pools are single-worker); the §8.3 replacement is
-            // pool-owned, but the supervisor needs the current worker to
-            // probe it (item 6) and recycle it through the item-5a chain.
-            if (!workers.empty()) {
-                activate_worker(application, workers[0]);
             }
             // The sink must be installed before the pool starts serving:
             // a request pinned before wiring would lose its response
@@ -811,25 +848,6 @@ int run_managed(const std::string& host_config_path,
             retired_apps.erase(plan->application);
         }
     };
-    // The supervisor destroys a dead worker ONLY when the map still names
-    // exactly that worker: a raced deploy's live worker is never destroyed
-    // by the supervisor.
-    const auto remove_if_current =
-        [&](const std::string& application, capsid_worker* worker) {
-            std::lock_guard<std::mutex> lock(workers_mutex);
-            const std::map<std::string, capsid_worker*>::iterator existing =
-                active_workers.find(application);
-            if (existing != active_workers.end() &&
-                existing->second == worker) {
-                capsid_worker_destroy(existing->second);
-                active_workers.erase(existing);
-            }
-        };
-    const auto discard_worker = [&](capsid_worker* worker) {
-        // A worker the supervisor itself spawned but could not publish:
-        // never visible in the map, destroyed directly.
-        capsid_worker_destroy(worker);
-    };
     const auto reclaim_workers = [&]() {
         std::vector<std::shared_ptr<capsid::host::GenerationPool>> all;
         {
@@ -923,38 +941,28 @@ int run_managed(const std::string& host_config_path,
             fail("cannot bind the data plane listener: " + listener_error);
         }
     }
-    // M2 item 5b: the process-global fair startup-permit queue (design
-    // §10.5.6). Both startup paths (deploy via the Admin backend,
-    // replacement via the supervisors) share this single instance; the
-    // queue decides order and fairness, capacity still decides
-    // concurrency. The bound matches the Admin pending-queue bound.
-    capsid::host::StartupPermitCoordinator startup_permits(&g_stop, 8);
-    // M2 item 5a: one supervisor thread per App owns the observation of
-    // the current worker's IPC stream and the replacement/quarantine
-    // decisions derived from it (design §10.5). Created after startup
-    // recovery so recovered workers anchor the recovery state; joined on
-    // shutdown after the worker reclaim closes the observed channels.
+    // M2 item 5a (direction A): one supervisor thread per App schedules
+    // the active-health probes against the App's generation pool. The
+    // pool is the only recovery engine; the supervisor only decides when
+    // to probe and when consecutive failures recycle the worker. Created
+    // after startup recovery so recovered pools exist; joined on shutdown
+    // after the worker reclaim.
     std::vector<std::unique_ptr<capsid::host::WorkerSupervisor>> supervisors;
     for (capsid::host::ManagedHostOptions* options : app_options) {
         capsid::host::WorkerSupervisorOptions supervisor_options;
         supervisor_options.managed_options = options;
         supervisor_options.policy = recovery_resolved.policy;
-        supervisor_options.current_worker =
-            [&](const std::string& application) -> capsid_worker* {
-                std::lock_guard<std::mutex> lock(workers_mutex);
-                const std::map<std::string, capsid_worker*>::const_iterator
-                    existing = active_workers.find(application);
-                return existing != active_workers.end() ? existing->second
-                                                        : nullptr;
+        supervisor_options.current_pool =
+            [&, application = options->application]()
+            -> capsid::host::GenerationPool* {
+                std::lock_guard<std::mutex> lock(pools_mutex);
+                const auto existing = active_pools.find(application);
+                return existing != active_pools.end() ? existing->second.get()
+                                                      : nullptr;
             };
-        supervisor_options.publish_worker = activate_worker;
-        supervisor_options.remove_if_current = remove_if_current;
-        supervisor_options.discard_worker = discard_worker;
         supervisor_options.stop_requested = &g_stop;
-        supervisor_options.startup_permits = &startup_permits;
-        // M2 item 7: the process-wide log/metrics (supervisor events are
-        // control-plane; the crash budget and quarantine counters feed
-        // §12.1).
+        // M2 item 7: the process-wide log/metrics (probe events are
+        // app-lane; the recycle verdicts feed §12.1).
         supervisor_options.log = structured_log.get();
         supervisor_options.metrics = metrics.get();
         // M2 item 6 (design §7.4): the active health probe schedule.

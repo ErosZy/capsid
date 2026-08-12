@@ -20,6 +20,11 @@ namespace {
 
 using SteadyClock = std::chrono::steady_clock;
 
+// M2 item 6 (design §7.4): the fixed small probe response cap. A probe
+// body beyond this fails the verdict regardless of status; bodies under
+// the worker's initial stream window flow without any credit grant.
+inline constexpr std::size_t kProbeResponseBodyCap = 4096;
+
 void write_stderr(std::string_view message) {
     std::fwrite(message.data(), 1, message.size(), stderr);
     std::fputc('\n', stderr);
@@ -143,6 +148,39 @@ void WorkerExecutor::submit(Command command) {
         }
     }
     cv_.notify_one();
+}
+
+void WorkerExecutor::submit_probe(const std::string& url) {
+    Command probe;
+    probe.type = CommandType::kProbeRequest;
+    probe.url = url;
+    probe.probe_id = next_probe_id_.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        // A fresh probe: any earlier verdict is stale (the supervisor
+        // consumed or cancelled it). The worker thread clears the rest on
+        // execute.
+        probe_in_flight_ = true;
+        probe_complete_ = false;
+    }
+    submit(std::move(probe));
+}
+
+void WorkerExecutor::cancel_probe() {
+    Command cancel;
+    cancel.type = CommandType::kProbeCancel;
+    submit(std::move(cancel));
+}
+
+ProbeState WorkerExecutor::probe_state() const {
+    std::unique_lock<std::mutex> lock(mutex_);
+    ProbeState state;
+    state.in_flight = probe_in_flight_;
+    state.complete = probe_complete_;
+    state.healthy = probe_healthy_;
+    state.status = probe_status_;
+    state.body_bytes = probe_body_bytes_;
+    return state;
 }
 
 void WorkerExecutor::mark_canceled(std::uint64_t request_id) {
@@ -290,6 +328,11 @@ worker_exit:
     {
         std::unique_lock<std::mutex> lock(mutex_);
         destroying_ = true;
+        // A worker that died mid-probe leaves no verdict: the supervisor
+        // sees in_flight=false/complete=false and treats the probe as
+        // failed (the pool owns the instability decision).
+        probe_in_flight_ = false;
+        probe_complete_ = false;
     }
     capsid_worker_destroy(worker_);
     {
@@ -348,7 +391,9 @@ bool WorkerExecutor::execute_command(Command command) {
     // the cancels still in flight.
     if (command.type != CommandType::kBeginRequest &&
         command.type != CommandType::kShutdown &&
-        command.type != CommandType::kCancel) {
+        command.type != CommandType::kCancel &&
+        command.type != CommandType::kProbeRequest &&
+        command.type != CommandType::kProbeCancel) {
         std::unique_lock<std::mutex> lock(mutex_);
         if (canceled_.count(command.request_id) != 0) {
             return true;
@@ -464,6 +509,53 @@ bool WorkerExecutor::execute_command(Command command) {
             shutdown_deadline_ = SteadyClock::now() + kShutdownGrace;
         }
         break;
+    case CommandType::kProbeRequest: {
+        // M2 item 6: one bodyless GET against the App's healthCheck path.
+        // The probe id is owner-allocated from the reserved high range, so
+        // it never collides with a data-plane id; the response events are
+        // folded into probe_state() in handle_worker_protocol_event and
+        // never reach the pool's event queue.
+        const capsid_result result = capsid_worker_begin_bodyless_request(
+            worker_, command.probe_id, "GET", command.url.c_str(), nullptr,
+            0);
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            probe_id_ = command.probe_id;
+            probe_in_flight_ = true;
+            probe_complete_ = false;
+            probe_status_ = 0;
+            probe_body_bytes_ = 0;
+        }
+        if (result != CAPSID_OK) {
+            // A failed probe delivery is a failed verdict (the supervisor
+            // sees complete=false with in_flight=false after the clear
+            // below). Never queue a kRequestFailure for the probe — it is
+            // not a data-plane request and the listener would reject it.
+            std::unique_lock<std::mutex> lock(mutex_);
+            probe_in_flight_ = false;
+            lock.unlock();
+            if (result == CAPSID_CLOSED) {
+                return false;  // the worker is gone; the exit path reaps it
+            }
+            write_stderr(std::string("capsid-host: worker probe failed: ") +
+                         capsid_result_string(result));
+        }
+        break;
+    }
+    case CommandType::kProbeCancel: {
+        std::unique_lock<std::mutex> lock(mutex_);
+        const bool outstanding = probe_in_flight_;
+        probe_in_flight_ = false;
+        probe_complete_ = false;
+        const std::uint64_t probe_id = probe_id_;
+        lock.unlock();
+        if (outstanding) {
+            // Best-effort: the Runtime may already have forgotten the
+            // probe (a terminal event raced the cancel).
+            (void)capsid_worker_cancel(worker_, probe_id);
+        }
+        break;
+    }
     }
     // Frames were queued; the caller (worker thread main loop) batches the
     // flush across all commands of this batch.
@@ -486,6 +578,43 @@ bool WorkerExecutor::batch_flush() {
 }
 
 bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
+    // M2 item 6: fold probe response events into probe_state() on the
+    // worker thread. The probe id is from the reserved high range, so no
+    // data-plane event can match it; a terminal verdict or the fixed body
+    // cap completes the probe without a data-plane event.
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (probe_in_flight_ && event.request_id == probe_id_) {
+            switch (event.type) {
+            case CAPSID_EVENT_RESPONSE_HEAD:
+                probe_status_ = static_cast<std::int32_t>(event.status);
+                break;
+            case CAPSID_EVENT_RESPONSE_BODY:
+                probe_body_bytes_ += event.payload.size;
+                if (probe_body_bytes_ > kProbeResponseBodyCap) {
+                    // §7.4: the fixed small response cap is a protocol
+                    // failure; the verdict fails and the supervisor
+                    // cancels the outstanding request.
+                    probe_complete_ = true;
+                    probe_healthy_ = false;
+                }
+                break;
+            case CAPSID_EVENT_RESPONSE_END:
+                probe_complete_ = true;
+                probe_healthy_ = probe_status_ >= 200 &&
+                                 probe_status_ <= 299 &&
+                                 probe_body_bytes_ <= kProbeResponseBodyCap;
+                break;
+            case CAPSID_EVENT_REQUEST_TIMEOUT:
+                probe_complete_ = true;
+                probe_healthy_ = false;
+                break;
+            default:
+                break;
+            }
+            return true;
+        }
+    }
     switch (event.type) {
     case CAPSID_EVENT_READY: {
         std::string payload(
