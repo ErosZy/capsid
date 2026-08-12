@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cerrno>
+#include <condition_variable>
 #include <cstdio>
 #include <memory>
 #include <mutex>
@@ -40,13 +41,30 @@ public:
             }
             return false;
         }
+        struct StartCompletion {
+            StaticPoolServerImpl* impl;
+            ~StartCompletion() { impl->finish_start(); }
+        } completion{this};
+        if (stop_requested_.load(std::memory_order_acquire)) {
+            if (error != nullptr) {
+                *error = "static pool stop was requested before start";
+            }
+            return false;
+        }
         if (options_.workers == 0) {
             if (error != nullptr) {
                 *error = "static pool requires at least one worker";
             }
             return false;
         }
-        shards_.reserve(options_.workers);
+        // TSan gate (PR-06): reserve writes the vector's begin/end pair,
+        // which request_stop() reads under shards_mutex_ — a concurrent
+        // stop during start would race the lockless reallocation. Every
+        // shards_ mutation holds the same mutex as every read.
+        {
+            std::lock_guard<std::mutex> lock(shards_mutex_);
+            shards_.reserve(options_.workers);
+        }
         // StaticPoolState wiring (E-4): register each worker under its
         // immutable owner shard BEFORE it is spawned, mark READY the
         // instant start() returns (barrier-mode start() completes
@@ -114,8 +132,28 @@ public:
             }
             std::unique_ptr<SingleWorkerServer> shard(
                 new SingleWorkerServer(std::move(shard_options)));
+            {
+                std::lock_guard<std::mutex> lock(shards_mutex_);
+                starting_shard_ = shard.get();
+            }
             std::string shard_error;
-            if (!shard->start(bundle, &shard_error)) {
+            bool shard_started = false;
+            try {
+                shard_started = shard->start(bundle, &shard_error);
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(shards_mutex_);
+                if (starting_shard_ == shard.get()) {
+                    starting_shard_ = nullptr;
+                }
+                throw;
+            }
+            {
+                std::lock_guard<std::mutex> lock(shards_mutex_);
+                if (starting_shard_ == shard.get()) {
+                    starting_shard_ = nullptr;
+                }
+            }
+            if (!shard_started) {
                 rollback(shards_.size(), error);
                 return false;
             }
@@ -126,7 +164,14 @@ public:
             if (index == 0) {
                 shared_port = shard->bound_port();
             }
-            shards_.push_back(std::move(shard));
+            {
+                std::lock_guard<std::mutex> lock(shards_mutex_);
+                shards_.push_back(std::move(shard));
+            }
+            if (stop_requested_.load(std::memory_order_acquire)) {
+                rollback(shards_.size(), error);
+                return false;
+            }
         }
         // Activation gate: every target worker registered and READY.
         // Nothing is armed before this holds.
@@ -145,6 +190,10 @@ public:
                 return false;
             }
         }
+        if (stop_requested_.load(std::memory_order_acquire)) {
+            rollback(shards_.size(), error);
+            return false;
+        }
         // Pool-level READY: exactly one canonical record, only after every
         // shard is READY AND accepting. A failed publication rolls the
         // whole pool back.
@@ -162,6 +211,10 @@ public:
         // Stop every shard in one pass, then wait() joins them: the
         // bounded per-shard shutdown windows run in parallel instead of
         // serially.
+        std::lock_guard<std::mutex> lock(shards_mutex_);
+        if (starting_shard_ != nullptr) {
+            starting_shard_->request_stop();
+        }
         for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
             shard->request_stop();
         }
@@ -174,6 +227,16 @@ public:
         // concurrent and later caller BLOCKS until they complete — a
         // concurrent caller never returns before the pool is actually
         // stopped, and a repeated caller observes the already-waited pool.
+        {
+            std::unique_lock<std::mutex> lock(lifecycle_mutex_);
+            if (!start_gate_.load(std::memory_order_acquire)) {
+                if (error != nullptr) {
+                    *error = "static pool was not started";
+                }
+                return false;
+            }
+            lifecycle_cv_.wait(lock, [this] { return start_finished_; });
+        }
         std::call_once(wait_once_, [this] {
             for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
                 std::string shard_error;
@@ -192,6 +255,7 @@ public:
     // event reaches the reactor.
     std::size_t active_workers() const {
         std::size_t count = 0;
+        std::lock_guard<std::mutex> lock(shards_mutex_);
         for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
             if (shard->worker_available()) {
                 ++count;
@@ -237,6 +301,14 @@ public:
     }
 
 private:
+    void finish_start() {
+        {
+            std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+            start_finished_ = true;
+        }
+        lifecycle_cv_.notify_all();
+    }
+
     // Stops and waits exactly the first `started` shards (the ones that
     // successfully started) and clears the pool state: atomic rollback of
     // a partial pool startup. The failed shard itself already unwound its
@@ -264,10 +336,18 @@ private:
             options_.worker_options.listen_address + "\",\"port\":" +
             std::to_string(shards_.empty() ? 0 : shards_[0]->bound_port()) +
             "}\n";
-        const ssize_t written = ::write(
-            options_.worker_options.ready_fd, line.data(), line.size());
-        if (written != static_cast<ssize_t>(line.size())) {
-            return false;
+        std::size_t offset = 0;
+        while (offset < line.size()) {
+            const ssize_t written = ::write(
+                options_.worker_options.ready_fd, line.data() + offset,
+                line.size() - offset);
+            if (written < 0 && errno == EINTR) {
+                continue;
+            }
+            if (written <= 0) {
+                return false;
+            }
+            offset += static_cast<std::size_t>(written);
         }
         return true;
     }
@@ -280,6 +360,11 @@ private:
     StaticPoolState state_;
     std::atomic<bool> start_gate_ = false;
     std::atomic<bool> stop_requested_ = false;
+    std::mutex lifecycle_mutex_;
+    std::condition_variable lifecycle_cv_;
+    bool start_finished_ = false;
+    mutable std::mutex shards_mutex_;
+    SingleWorkerServer* starting_shard_ = nullptr;
     std::once_flag wait_once_;
     std::vector<std::unique_ptr<SingleWorkerServer>> shards_;
 };

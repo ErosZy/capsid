@@ -55,6 +55,7 @@
 #include "client_ipc_metrics.h"
 #include "host/request_normalization.h"
 #include "host/worker_event_source.h"
+#include "host/worker_executor.h"
 
 namespace capsid::host {
 
@@ -65,8 +66,6 @@ using tcp = asio::ip::tcp;
 using SteadyClock = std::chrono::steady_clock;
 
 constexpr std::size_t kMaxRequestBodyBytes = 16u * 1024u * 1024u;
-constexpr auto kReadyTimeout = std::chrono::seconds(10);
-constexpr auto kShutdownGrace = std::chrono::seconds(2);
 
 // Early-credit window (host): frames are reimbursed on receive while
 // the per-request HTTP write queue is below this; beyond it credit
@@ -122,6 +121,35 @@ std::string ascii_lower(std::string_view text) {
     return lower;
 }
 
+bool is_event_stream_content_type(std::string_view value) {
+    std::size_t begin = 0;
+    while (begin < value.size() &&
+           (value[begin] == ' ' || value[begin] == '\t')) {
+        ++begin;
+    }
+    static constexpr std::string_view kEventStream = "text/event-stream";
+    if (value.size() - begin < kEventStream.size() ||
+        !std::equal(kEventStream.begin(), kEventStream.end(),
+                    value.begin() + static_cast<std::ptrdiff_t>(begin),
+                    [](unsigned char a, unsigned char b) {
+                        if (a >= 'A' && a <= 'Z') {
+                            a = static_cast<unsigned char>(a - 'A' + 'a');
+                        }
+                        if (b >= 'A' && b <= 'Z') {
+                            b = static_cast<unsigned char>(b - 'A' + 'a');
+                        }
+                        return a == b;
+                    })) {
+        return false;
+    }
+    std::size_t end = begin + kEventStream.size();
+    while (end < value.size() &&
+           (value[end] == ' ' || value[end] == '\t')) {
+        ++end;
+    }
+    return end == value.size() || value[end] == ';';
+}
+
 // Parses the comma-separated token list of a Connection header and collects
 // the (lowercased) nominated names. Returns false on an empty or non-token
 // nomination, which fails the response closed (RFC 7230 §6.1).
@@ -158,56 +186,16 @@ bool collect_connection_nominations(std::string_view value,
     return true;
 }
 
-enum class CommandType {
-    kBeginRequest,
-    kWriteRequest,
-    kEndRequest,
-    kCancel,
-    kGrantResponseCredit,
-    kShutdown,
-};
-
-// A command from the io thread to the worker thread. Strings are copied so
-// the worker thread never reads io-thread-owned buffers.
-struct Command {
-    CommandType type = CommandType::kBeginRequest;
-    std::uint64_t request_id = 0;
-    std::string method;
-    std::string url;
-    std::vector<NormalizedPublicRequestHeader> headers;
-    std::vector<std::uint8_t> body;
-    std::uint32_t credit = 0;
-    // kBeginRequest only: the request has no body, so the kRequestEnd frame
-    // is sent back-to-back with the head in the same flush. A separate end
-    // command could land in a different IPC read than its begin, letting the
-    // Runtime complete a synchronous handler response (and erase the request)
-    // before the end frame arrives — which it rejects as an invalid frame
-    // and kills the worker.
-    bool end_request = false;
-};
-
-struct WorkerEvent {
-    enum class Type {
-        kRequestCredit,
-        kResponseHead,
-        kResponseBody,
-        kResponseEnd,
-        kLog,
-        kError,
-        kExit,
-        kRequestTimeout,
-        kRequestFailure,
-    };
-    Type type = Type::kLog;
-    std::uint64_t request_id = 0;
-    std::uint32_t credit = 0;
-    std::uint16_t status = 0;
-    std::vector<std::pair<std::string, std::string>> headers;
-    std::vector<std::uint8_t> body;
-    std::string text;
-};
+// CommandType, Command and WorkerEvent live in worker_executor.h: the
+// executor owns the command queue and the event queue, so their element
+// types belong to its public contract (spec §8.1).
 
 class Session;
+
+struct QueuedResponseBody {
+    std::vector<std::uint8_t> bytes;
+    bool credit_returned_early = false;
+};
 
 // Request state owned by the io thread only.
 struct PendingRequest {
@@ -231,12 +219,23 @@ struct PendingRequest {
     // request is cancelled or fails before the write completes.
     std::shared_ptr<http::response<http::buffer_body>> response;
     std::shared_ptr<http::response_serializer<http::buffer_body>> serializer;
+    // Complete non-streamed responses up to the protocol's 4 KiB fixed-body
+    // bound are held until RESPONSE_END and emitted as one fixed-length Beast
+    // write. The Runtime supplies the exact size before any extra credit is
+    // granted, so this allocation cannot grow with a slow client.
+    std::shared_ptr<http::response<
+        http::vector_body<std::uint8_t>>> fixed_response;
+    std::shared_ptr<http::response_serializer<
+        http::vector_body<std::uint8_t>>> fixed_serializer;
+    std::size_t fixed_body_expected = 0;
+    std::size_t fixed_body_received = 0;
     std::vector<std::uint8_t> outgoing;
-    std::deque<std::vector<std::uint8_t>> body_queue;
+    std::deque<QueuedResponseBody> body_queue;
     // Total bytes currently queued for the HTTP write, so the early
     // credit window (performance loop v1) can stay bounded: a slow
     // client must not make the host buffer unboundedly.
-    size_t body_queue_bytes;
+    size_t body_queue_bytes = 0;
+    bool outgoing_credit_returned_early = false;
     bool head_sent = false;
     bool head_only = false;
     bool writing = false;
@@ -345,7 +344,20 @@ public:
           stream_idle_timeout_ms_(options.stream_idle_timeout_ms),
           write_timeout_ms_(options.write_timeout_ms),
           options_(std::move(options)),
-          signals_(ioc_) {}
+          signals_(ioc_),
+          executor_(std::make_unique<WorkerExecutor>()) {
+        // Events queued by the executor's worker thread wake this io thread
+        // through a weak post: the pending handler must never keep the Impl
+        // alive on its own — once the facade stopped and released it, a
+        // stale post is dropped with the dead weak.
+        executor_->set_event_notifier([this] {
+            io_post([weak = weak_from_this()] {
+                if (const std::shared_ptr<Impl> alive = weak.lock()) {
+                    alive->pump_events();
+                }
+            });
+        });
+    }
 
     ~Impl();
 
@@ -400,12 +412,6 @@ public:
     void drop_session(const std::shared_ptr<Session>& session);
     bool worker_dead() const { return worker_dead_; }
 
-    // Commands from io thread to worker thread.
-    void submit_command(Command command);
-
-    // Worker thread entry.
-    void worker_thread_main();
-
 private:
     friend class Session;
 
@@ -424,21 +430,15 @@ private:
     void pump_events();
     void handle_worker_event(WorkerEvent event);
     void advance_request_body(std::uint64_t request_id);
-    void write_body_block(std::uint64_t request_id, std::vector<std::uint8_t> bytes);
+    void write_body_block(std::uint64_t request_id,
+                          std::vector<std::uint8_t> bytes,
+                          bool credit_returned_early = false);
+    void write_fixed_response(std::uint64_t request_id);
     void write_end_block(std::uint64_t request_id);
     void io_post(std::function<void()> function);
-    bool wait_for_ready();
     bool bind_listener();
     void close_listener();
     bool write_ready_line();
-    bool execute_command(Command command);
-    bool batch_flush();
-    bool handle_worker_protocol_event(const capsid_event& event);
-    void queue_worker_event(WorkerEvent event);
-    void queue_worker_exit_event();
-    bool report_runtime_failure(std::uint64_t request_id,
-                                capsid_result result,
-                                const char* operation);
     bool sanitize_response_headers(
         std::vector<std::pair<std::string, std::string>>* headers);
     void reject_response_head(std::uint64_t request_id,
@@ -462,31 +462,25 @@ private:
     void disarm_write_timer(PendingRequest& pending);
     void on_write_timer(std::uint64_t request_id,
                         const beast::error_code ec);
-    void shutdown_worker_and_join();
+    void finish_start() {
+        {
+            std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+            start_finished_ = true;
+        }
+        lifecycle_cv_.notify_all();
+    }
 
     // Diagnostic IPC metrics (CAPSID_HOST_IPC_METRICS=1 only; zero overhead
     // in headline runs). Counters are reset after each write so the runner
-    // can sample per-profile-run deltas.
+    // can sample per-profile-run deltas. The worker-direction counters
+    // (commands/events/grants/queue depths) live on the WorkerExecutor's
+    // Metrics; write_metrics_line merges both sides.
     struct Metrics {
-        // Command direction (io → worker).
-        std::atomic<uint64_t> commands_submitted = 0;
-        std::atomic<uint64_t> command_batches = 0;   // wake-pipe writes
-        std::atomic<uint64_t> commands_executed = 0;
-        std::atomic<uint64_t> flush_calls = 0;
-        std::atomic<uint64_t> flush_eagain = 0;
-        // Event direction (worker → io).
-        std::atomic<uint64_t> events_queued = 0;
         std::atomic<uint64_t> asio_posts = 0;        // io_context::post calls
         std::atomic<uint64_t> response_heads = 0;
         std::atomic<uint64_t> response_body_frames = 0;
         std::atomic<uint64_t> response_ends = 0;
-        // Credit.
-        std::atomic<uint64_t> grant_commands = 0;
-        std::atomic<uint64_t> credit_bytes_granted = 0;
         std::atomic<uint64_t> credit_stall_count = 0;
-        // Worker-thread queue depths.
-        std::atomic<size_t> command_queue_high_water = 0;
-        std::atomic<size_t> event_queue_high_water = 0;
     };
     Metrics metrics_;
     bool metrics_enabled_ = false;
@@ -552,14 +546,17 @@ private:
 
     // Controllable lifecycle (M2). start_gate_ rejects a second start
     // (success or failure); stop_requested_ makes request_stop idempotent;
-    // shutdown_sent_ guarantees the Runtime shutdown frame is queued at
-    // most once (repeated stops can never trigger a double shutdown);
-    // io_running_ tells request_stop whether the event-loop thread exists,
-    // so the shutdown path never posts into a dead io_context.
+    // the Runtime shutdown frame itself is queued at most once by the
+    // WorkerExecutor (request_shutdown), so repeated stops can never
+    // trigger a double shutdown; io_running_ tells request_stop whether the
+    // event-loop thread exists, so the shutdown path never posts into a
+    // dead io_context.
     std::atomic<bool> start_gate_ = false;
     std::atomic<bool> stop_requested_ = false;
-    std::atomic<bool> shutdown_sent_ = false;
     std::atomic<bool> io_running_ = false;
+    std::mutex lifecycle_mutex_;
+    std::condition_variable lifecycle_cv_;
+    bool start_finished_ = false;
     std::thread io_thread_;
     // Pool barrier: while defer_accept is pending, the work guard pins the
     // event loop alive (there is no accept work yet); activate_accept()
@@ -582,20 +579,14 @@ private:
     // Concurrent-wait guard: the first wait() call owns the joins.
     std::once_flag wait_once_;
 
-    // Bridge between the io thread and the worker thread.
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    std::deque<Command> commands_;
-    std::deque<WorkerEvent> events_;
-    std::set<std::uint64_t> canceled_;
-    bool ready_ = false;
-    bool ready_match_ = false;
-    bool exited_ = false;
-    bool exit_event_queued_ = false;
-    capsid_worker* worker_ = nullptr;
-    WorkerEventSource source_;
-    std::optional<SteadyClock::time_point> shutdown_deadline_;
-    std::thread worker_thread_;
+    // The WorkerExecutor owns everything that talks to the worker process:
+    // the capsid_worker handle, the WorkerEventSource, the command queue,
+    // the event queue and the worker thread (spec §8.1). Declared after
+    // ioc_ so it is destroyed BEFORE the io_context: the executor's
+    // notifier posts into ioc_, and its destructor joins the worker thread,
+    // so no post can outlive ioc_ as long as the executor is destroyed
+    // first.
+    std::unique_ptr<WorkerExecutor> executor_;
     // M2 §7.5 bounded drain state and report. The io thread owns the
     // deadline timer and the completion transitions; the atomics let any
     // thread begin a drain and snapshot the report.
@@ -800,19 +791,15 @@ void Session::send_simple(http::status status,
 Impl::~Impl() {
     // A running object is torn down with a bounded stop: request_stop is
     // idempotent, the event-loop thread drains through on_signal, and the
-    // worker thread's bounded terminate backstop forces the blocking
-    // destroy to finish promptly. Never std::terminate, never a leak.
+    // executor's bounded terminate backstop forces the blocking destroy to
+    // finish promptly. capsid_worker_destroy stays exclusively on the
+    // executor's reaper thread (spec §8.1). Never std::terminate, never a
+    // leak.
     request_stop();
     if (io_thread_.joinable()) {
         io_thread_.join();
     }
-    if (worker_thread_.joinable()) {
-        worker_thread_.join();
-    }
-    if (worker_) {
-        capsid_worker_destroy(worker_);
-        worker_ = nullptr;
-    }
+    executor_->stop_and_join();
 }
 
 bool Impl::start(const std::vector<std::uint8_t>& bundle,
@@ -820,6 +807,22 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     if (start_gate_.exchange(true)) {
         if (error != nullptr) {
             *error = "server already started";
+        }
+        return false;
+    }
+    struct StartCompletion {
+        Impl* impl;
+        ~StartCompletion() { impl->finish_start(); }
+    } completion{this};
+    if (stop_requested_.load(std::memory_order_acquire)) {
+        if (error != nullptr) {
+            *error = "server stop was requested before start";
+        }
+        return false;
+    }
+    if (max_inflight_ > std::numeric_limits<std::uint32_t>::max()) {
+        if (error != nullptr) {
+            *error = "max_inflight_per_worker exceeds the worker limit";
         }
         return false;
     }
@@ -837,8 +840,10 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         return false;
     }
     // ---- 1. spawn / load / flush (the same two-phase prepare as the
-    // legacy run path). Every failure below recycles what it created
-    // before returning false.
+    // legacy run path), now inside the executor's factory. The factory
+    // recycles what it created on failure; from the executor's start()
+    // onward, capsid_worker_destroy runs exclusively on the executor's
+    // reaper thread.
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = options_.worker_path.c_str();
@@ -853,62 +858,28 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     // egress_policy and capability_policy stay NULL: every outbound Fetch
     // is denied by the Runtime default.
 
-    capsid_worker* worker = nullptr;
-    const capsid_result spawn_result =
-        capsid_worker_spawn(&config, &worker);
-    if (spawn_result != CAPSID_OK) {
-        if (error != nullptr) {
-            *error = "worker spawn failed: " +
-                     std::string(capsid_result_string(spawn_result));
-        }
-        return false;
-    }
-    worker_ = worker;
-    source_.set_worker(worker);
-
-    const capsid_result load_result = capsid_worker_load_bundle_named(
-        worker_, bundle.data(), bundle.size(), options_.source_name.c_str());
-    if (load_result != CAPSID_OK) {
-        if (error != nullptr) {
-            *error = "bundle load failed: " +
-                     std::string(capsid_result_string(load_result));
-        }
-        capsid_worker_destroy(worker_);
-        worker_ = nullptr;
-        return false;
-    }
-    // load_bundle_named only queues the frame; the worker must receive it
-    // before it loads the application and emits READY.
-    const capsid_result flush_result = capsid_worker_flush(worker_);
-    if (flush_result != CAPSID_OK) {
-        if (error != nullptr) {
-            *error = "bundle flush failed: " +
-                     std::string(capsid_result_string(flush_result));
-        }
-        capsid_worker_destroy(worker_);
-        worker_ = nullptr;
-        return false;
-    }
-
     // Diagnostic IPC metrics: CAPSID_HOST_IPC_METRICS=1 enables counters
     // with zero overhead in headline runs (branch is off by default).
     const char* metrics_env = std::getenv("CAPSID_HOST_IPC_METRICS");
     if (metrics_env != nullptr && std::strcmp(metrics_env, "1") == 0) {
         metrics_enabled_ = true;
     }
-    // Enable the client-side IPC metrics when the host-side ones are on,
-    // so both sides produce matching counter sets (the client metrics are
-    // already instrumented in client.cc behind the same env variable).
-    if (metrics_enabled_) {
-        client_ipc_metrics_enable(worker_, true);
-    }
+    executor_->set_metrics_enabled(metrics_enabled_);
+
     // Credit aggregation threshold: grant only when pending ≥ threshold.
     const char* credit_env = std::getenv("CAPSID_CREDIT_GRANT_THRESHOLD");
     if (credit_env != nullptr) {
         std::uint64_t val = 0;
         for (const char* p = credit_env; *p != '\0'; ++p) {
             if (*p >= '0' && *p <= '9') {
-                val = val * 10 + static_cast<std::uint64_t>(*p - '0');
+                const std::uint64_t digit =
+                    static_cast<std::uint64_t>(*p - '0');
+                if (val >
+                    (std::numeric_limits<std::uint64_t>::max() - digit) / 10) {
+                    val = 0;
+                    break;
+                }
+                val = val * 10 + digit;
             } else { val = 0; break; }
         }
         if (val > 0 && val <= std::numeric_limits<std::uint32_t>::max()) {
@@ -924,19 +895,55 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
                      "capsid-host: bodyless request fusion disabled\n");
     }
 
-    // The worker thread takes exclusive ownership of every further Runtime
-    // API call (READY arrives through next_event).
-    worker_thread_ = std::thread([this] { worker_thread_main(); });
-
-    // Every failure after the worker thread has started must tear it down
-    // before returning: the shutdown command wakes the blocking wait, the
-    // bounded terminate backstop in the worker loop forces destroy() to
-    // finish promptly, and only then is the thread joined.
-    if (!wait_for_ready()) {
-        shutdown_worker_and_join();
-        if (error != nullptr) {
-            *error = "worker did not become READY";
+    WorkerExecutor::WorkerFactory factory =
+        [this, &config, &bundle](capsid_worker** out,
+                                 std::string* factory_error) -> bool {
+        capsid_worker* worker = nullptr;
+        const capsid_result spawn_result =
+            capsid_worker_spawn(&config, &worker);
+        if (spawn_result != CAPSID_OK) {
+            if (factory_error != nullptr) {
+                *factory_error = "worker spawn failed: " +
+                                 std::string(capsid_result_string(spawn_result));
+            }
+            return false;
         }
+        const capsid_result load_result = capsid_worker_load_bundle_named(
+            worker, bundle.data(), bundle.size(),
+            options_.source_name.c_str());
+        if (load_result != CAPSID_OK) {
+            if (factory_error != nullptr) {
+                *factory_error = "bundle load failed: " +
+                                 std::string(capsid_result_string(load_result));
+            }
+            capsid_worker_destroy(worker);
+            return false;
+        }
+        // load_bundle_named only queues the frame; the worker must receive
+        // it before it loads the application and emits READY.
+        const capsid_result flush_result = capsid_worker_flush(worker);
+        if (flush_result != CAPSID_OK) {
+            if (factory_error != nullptr) {
+                *factory_error = "bundle flush failed: " +
+                                 std::string(capsid_result_string(flush_result));
+            }
+            capsid_worker_destroy(worker);
+            return false;
+        }
+        // Enable the client-side IPC metrics when the host-side ones are on,
+        // so both sides produce matching counter sets (the client metrics
+        // are already instrumented in client.cc behind the same env var).
+        if (metrics_enabled_) {
+            client_ipc_metrics_enable(worker, true);
+        }
+        *out = worker;
+        return true;
+    };
+
+    // The executor's worker thread takes exclusive ownership of every
+    // further Runtime API call (READY arrives through next_event). On
+    // failure start() leaves the executor stopped: no thread, no worker.
+    if (!executor_->start(factory, error)) {
         return false;
     }
     worker_available_ = true;
@@ -946,7 +953,7 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         // reset here so a failed start never leaves the port occupied.
         worker_available_ = false;
         close_listener();
-        shutdown_worker_and_join();
+        executor_->stop_and_join();
         if (error != nullptr) {
             *error = "listener bind failed";
         }
@@ -958,7 +965,7 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         // keeps the object alive (StaticPoolServer retry) can rebind.
         worker_available_ = false;
         close_listener();
-        shutdown_worker_and_join();
+        executor_->stop_and_join();
         if (error != nullptr) {
             *error = "failed to write the READY record";
         }
@@ -997,6 +1004,21 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         ioc_.run();
         io_running_ = false;
     });
+    if (stop_requested_.load(std::memory_order_acquire)) {
+        io_post([weak = weak_from_this()] {
+            if (const std::shared_ptr<Impl> alive = weak.lock()) {
+                alive->on_signal(0);
+            }
+        });
+        executor_->stop_and_join();
+        if (io_thread_.joinable()) {
+            io_thread_.join();
+        }
+        if (error != nullptr) {
+            *error = "server stop was requested during start";
+        }
+        return false;
+    }
     return true;
 }
 
@@ -1075,14 +1097,9 @@ void Impl::request_stop() {
         return;  // idempotent: nothing is touched again
     }
     // The Runtime shutdown frame is queued at most once regardless of how
-    // many stop sources fire (request_stop, SIGTERM, destructor).
-    {
-        Command shutdown;
-        shutdown.type = CommandType::kShutdown;
-        if (!shutdown_sent_.exchange(true)) {
-            submit_command(std::move(shutdown));
-        }
-    }
+    // many stop sources fire (request_stop, SIGTERM, destructor): the
+    // executor's request_shutdown owns the exactly-once gate.
+    executor_->request_shutdown();
     // When the event-loop thread exists, the acceptor/session teardown
     // runs on it (the only thread allowed to touch Beast objects). The
     // weak capture is safe even from the destructor: if the loop already
@@ -1105,13 +1122,21 @@ bool Impl::wait(std::string* error) {
     // first caller own the joins while concurrent/later callers BLOCK
     // until they complete, so no caller returns before the server is
     // actually stopped.
+    {
+        std::unique_lock<std::mutex> lock(lifecycle_mutex_);
+        if (!start_gate_.load(std::memory_order_acquire)) {
+            if (error != nullptr) {
+                *error = "server was not started";
+            }
+            return false;
+        }
+        lifecycle_cv_.wait(lock, [this] { return start_finished_; });
+    }
     std::call_once(wait_once_, [this] {
         if (io_thread_.joinable()) {
             io_thread_.join();
         }
-        if (worker_thread_.joinable()) {
-            worker_thread_.join();
-        }
+        executor_->stop_and_join();
     });
     if (error != nullptr) {
         *error = "server stopped";
@@ -1180,12 +1205,8 @@ void Impl::on_signal(int) {
     }
     // The shutdown frame is queued at most once even when several stop
     // sources fire (SIGTERM, request_stop, destructor): a duplicate would
-    // trigger a Runtime double shutdown.
-    Command shutdown;
-    shutdown.type = CommandType::kShutdown;
-    if (!shutdown_sent_.exchange(true)) {
-        submit_command(std::move(shutdown));
-    }
+    // trigger a Runtime double shutdown; the executor owns the gate.
+    executor_->request_shutdown();
     // No ioc_.stop() here: every cancelled handler (signal wait, accept,
     // sessions) completes on the io thread and releases its captures, so
     // the loop drains naturally and run() returns with an empty queue. A
@@ -1338,11 +1359,7 @@ std::uint64_t Impl::steady_ms() {
 }
 
 void Impl::pump_events() {
-    std::deque<WorkerEvent> local;
-    {
-        std::unique_lock<std::mutex> lock(mutex_);
-        local.swap(events_);
-    }
+    std::deque<WorkerEvent> local = executor_->drain_events();
     for (WorkerEvent& event : local) {
         handle_worker_event(std::move(event));
     }
@@ -1401,13 +1418,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
                             })) {
                 continue;
             }
-            static constexpr std::string_view kEventStream =
-                "text/event-stream";
-            if (value.size() >= kEventStream.size() &&
-                std::equal(kEventStream.begin(), kEventStream.end(),
-                           value.begin(), [](unsigned char a, unsigned char b) {
-                               return std::tolower(a) == std::tolower(b);
-                           })) {
+            if (is_event_stream_content_type(value)) {
                 is_sse = true;
             }
             break;
@@ -1418,6 +1429,59 @@ void Impl::handle_worker_event(WorkerEvent event) {
                                  "streaming capacity exhausted");
             return;
         }
+        pending.head_only = pending.method == "HEAD";
+        if (event.fixed_body) {
+            pending.fixed_response = std::make_shared<http::response<
+                http::vector_body<std::uint8_t>>>();
+            pending.fixed_response->result(
+                static_cast<http::status>(event.status));
+            pending.fixed_response->version(pending.version);
+            pending.fixed_response->keep_alive(pending.keep_alive);
+            for (const auto& [name, value] : event.headers) {
+                pending.fixed_response->base().insert(name, value);
+            }
+            const auto content_length_field =
+                pending.fixed_response->base().find(
+                    http::field::content_length);
+            if (content_length_field !=
+                pending.fixed_response->base().end()) {
+                std::uint64_t value = 0;
+                bool valid = true;
+                const std::string_view text(
+                    content_length_field->value());
+                if (text.empty()) {
+                    valid = false;
+                }
+                for (const char c : text) {
+                    if (c < '0' || c > '9') {
+                        valid = false;
+                        break;
+                    }
+                    const std::uint64_t digit =
+                        static_cast<std::uint64_t>(c - '0');
+                    if (value >
+                        (std::numeric_limits<std::uint64_t>::max() -
+                         digit) / 10) {
+                        valid = false;
+                        break;
+                    }
+                    value = value * 10 + digit;
+                }
+                if (!valid || value != event.fixed_body_size) {
+                    reject_response_head(
+                        event.request_id,
+                        "fixed response Content-Length mismatch");
+                    return;
+                }
+            }
+            pending.fixed_body_expected = event.fixed_body_size;
+            pending.fixed_body_received = 0;
+            if (!pending.head_only) {
+                pending.fixed_response->body().reserve(
+                    pending.fixed_body_expected);
+            }
+            return;
+        }
         pending.response =
             std::make_shared<http::response<http::buffer_body>>();
         pending.response->result(static_cast<http::status>(event.status));
@@ -1425,10 +1489,6 @@ void Impl::handle_worker_event(WorkerEvent event) {
         pending.response->keep_alive(pending.keep_alive);
         for (const auto& [name, value] : event.headers) {
             pending.response->base().insert(name, value);
-        }
-        if (!pending.response->has_content_length() &&
-            !pending.response->chunked()) {
-            pending.response->chunked(true);
         }
         const auto content_length_field =
             pending.response->base().find(http::field::content_length);
@@ -1444,17 +1504,32 @@ void Impl::handle_worker_event(WorkerEvent event) {
                     valid = false;
                     break;
                 }
-                value = value * 10 + static_cast<std::uint64_t>(c - '0');
+                const std::uint64_t digit =
+                    static_cast<std::uint64_t>(c - '0');
+                if (value >
+                    (std::numeric_limits<std::uint64_t>::max() - digit) / 10) {
+                    valid = false;
+                    break;
+                }
+                value = value * 10 + digit;
             }
-            if (valid) {
-                pending.cl_known = true;
-                pending.cl_remaining = static_cast<std::size_t>(value);
+            if (!valid ||
+                value > static_cast<std::uint64_t>(
+                             std::numeric_limits<std::size_t>::max())) {
+                reject_response_head(event.request_id,
+                                     "invalid worker Content-Length");
+                return;
             }
+            pending.cl_known = true;
+            pending.cl_remaining = static_cast<std::size_t>(value);
+        }
+        if (!pending.response->has_content_length() &&
+            !pending.response->chunked()) {
+            pending.response->chunked(true);
         }
         pending.serializer = std::make_shared<
             http::response_serializer<http::buffer_body>>(
             *pending.response);
-        pending.head_only = pending.method == "HEAD";
         pending.writing = true;
         // E-3 §9.2: the head write has a deadline; a client that stops
         // reading while the head is in flight is torn down.
@@ -1493,10 +1568,13 @@ void Impl::handle_worker_event(WorkerEvent event) {
                 if (!pending.body_queue.empty()) {
                     // Body events that arrived while the head was being
                     // written are queued here and flushed in order.
-                    std::vector<std::uint8_t> queued =
+                    QueuedResponseBody queued =
                         std::move(pending.body_queue.front());
                     pending.body_queue.pop_front();
-                    self->write_body_block(request_id, std::move(queued));
+                    pending.body_queue_bytes -= queued.bytes.size();
+                    self->write_body_block(
+                        request_id, std::move(queued.bytes),
+                        queued.credit_returned_early);
                 } else if (pending.end_seen) {
                     if (pending.head_only) {
                         self->finalize_request(request_id, pending.session);
@@ -1520,6 +1598,23 @@ void Impl::handle_worker_event(WorkerEvent event) {
             // Heartbeat (§9.3): any body frame keeps the stream alive.
             arm_stream_idle_timer(event.request_id, pending);
         }
+        if (pending.fixed_response) {
+            if (pending.fixed_body_received >
+                    pending.fixed_body_expected ||
+                event.body.size() >
+                pending.fixed_body_expected -
+                    pending.fixed_body_received) {
+                fail_request(event.request_id, pending.session);
+                return;
+            }
+            pending.fixed_body_received += event.body.size();
+            if (!pending.head_only) {
+                pending.fixed_response->body().insert(
+                    pending.fixed_response->body().end(),
+                    event.body.begin(), event.body.end());
+            }
+            return;
+        }
         // Performance loop v1: return credit as soon as the frame is
         // received, not after the client write completes, while the
         // per-request write queue stays shallow. This removes one host
@@ -1527,7 +1622,9 @@ void Impl::handle_worker_event(WorkerEvent event) {
         // wakeup). Beyond the window the credit falls back to
         // write-completion, so a slow client cannot make the host
         // buffer unboundedly.
-        if (pending.body_queue_bytes < kEarlyCreditWindow) {
+        const bool credit_returned_early =
+            pending.body_queue_bytes < kEarlyCreditWindow;
+        if (credit_returned_early) {
             pending.pending_response_credit +=
                 static_cast<std::uint32_t>(event.body.size());
             flush_pending_credit(event.request_id, pending, false);
@@ -1538,10 +1635,13 @@ void Impl::handle_worker_event(WorkerEvent event) {
         }
         if (pending.writing) {
             pending.body_queue_bytes += event.body.size();
-            pending.body_queue.push_back(std::move(event.body));
+            pending.body_queue.push_back(
+                QueuedResponseBody{std::move(event.body),
+                                   credit_returned_early});
             return;
         }
-        write_body_block(event.request_id, std::move(event.body));
+        write_body_block(event.request_id, std::move(event.body),
+                         credit_returned_early);
         return;
     }
     case WorkerEvent::Type::kResponseEnd: {
@@ -1563,14 +1663,20 @@ void Impl::handle_worker_event(WorkerEvent event) {
         // the worker. Tombstone the id; the kCancel marker below is a no-op
         // at the Runtime (the id is already gone) and removes the tombstone
         // once the stale commands have drained, keeping the set bounded.
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            canceled_.insert(event.request_id);
-        }
+        executor_->mark_canceled(event.request_id);
         Command cancel;
         cancel.type = CommandType::kCancel;
         cancel.request_id = event.request_id;
-        submit_command(std::move(cancel));
+        executor_->submit(std::move(cancel));
+        if (pending.fixed_response) {
+            if (pending.fixed_body_received !=
+                pending.fixed_body_expected) {
+                fail_request(event.request_id, pending.session);
+                return;
+            }
+            write_fixed_response(event.request_id);
+            return;
+        }
         if (pending.head_only) {
             if (!pending.writing) {
                 finalize_request(event.request_id, pending.session);
@@ -1731,7 +1837,7 @@ void Impl::advance_request_body(std::uint64_t request_id) {
         command.body.assign(
             pending.request_body.data() + pending.request_body_offset,
             pending.request_body.data() + pending.request_body_offset + chunk);
-        submit_command(std::move(command));
+        executor_->submit(std::move(command));
         pending.request_credit -= chunk;
         pending.request_body_offset += chunk;
     }
@@ -1746,13 +1852,14 @@ void Impl::advance_request_body(std::uint64_t request_id) {
             Command command;
             command.type = CommandType::kEndRequest;
             command.request_id = request_id;
-            submit_command(std::move(command));
+            executor_->submit(std::move(command));
         }
     }
 }
 
 void Impl::write_body_block(std::uint64_t request_id,
-                            std::vector<std::uint8_t> bytes) {
+                            std::vector<std::uint8_t> bytes,
+                            bool credit_returned_early) {
     auto it = requests_.find(request_id);
     if (it == requests_.end()) {
         return;
@@ -1769,6 +1876,7 @@ void Impl::write_body_block(std::uint64_t request_id,
         pending.cl_remaining -= bytes.size();
     }
     pending.outgoing = std::move(bytes);
+    pending.outgoing_credit_returned_early = credit_returned_early;
     pending.writing = true;
     // The serializer and the response share one object; the response body
     // view is updated directly for each block.
@@ -1809,22 +1917,74 @@ void Impl::write_body_block(std::uint64_t request_id,
             // the response already ended, the Runtime erased the request and
             // the credit is moot; submitting the frame would only be
             // rejected, so it is skipped.
-            if (!pending.end_seen) {
+            if (!pending.end_seen &&
+                !pending.outgoing_credit_returned_early) {
                 pending.pending_response_credit +=
                     static_cast<std::uint32_t>(pending.outgoing.size());
                 self->flush_pending_credit(request_id, pending, false);
             }
+            pending.outgoing_credit_returned_early = false;
             pending.outgoing.clear();
             if (!pending.body_queue.empty()) {
-                std::vector<std::uint8_t> queued =
+                QueuedResponseBody queued =
                     std::move(pending.body_queue.front());
                 pending.body_queue.pop_front();
-                pending.body_queue_bytes -= queued.size();
-                self->write_body_block(request_id, std::move(queued));
+                pending.body_queue_bytes -= queued.bytes.size();
+                self->write_body_block(
+                    request_id, std::move(queued.bytes),
+                    queued.credit_returned_early);
             } else if (pending.end_seen) {
                 self->write_end_block(request_id);
             }
         });
+}
+
+void Impl::write_fixed_response(std::uint64_t request_id) {
+    auto it = requests_.find(request_id);
+    if (it == requests_.end()) {
+        return;
+    }
+    PendingRequest& pending = it->second;
+    pending.fixed_response->content_length(
+        pending.fixed_body_expected);
+    pending.fixed_serializer = std::make_shared<http::response_serializer<
+        http::vector_body<std::uint8_t>>>(*pending.fixed_response);
+    pending.writing = true;
+    arm_write_timer(request_id, pending);
+    const auto completion =
+        [self = shared_from_this(),
+         response = pending.fixed_response,
+         serializer = pending.fixed_serializer,
+         session = pending.session,
+         request_id](beast::error_code ec, std::size_t) {
+            (void)response;
+            (void)serializer;
+            (void)session;
+            auto it = self->requests_.find(request_id);
+            if (it == self->requests_.end()) {
+                return;
+            }
+            PendingRequest& pending = it->second;
+            pending.writing = false;
+            self->disarm_write_timer(pending);
+            if (ec) {
+                self->fail_request(request_id, pending.session);
+                return;
+            }
+            pending.head_sent = true;
+            self->finalize_request(request_id, pending.session);
+        };
+    if (pending.head_only) {
+        http::async_write_header(
+            pending.session->stream(),
+            *pending.fixed_serializer,
+            completion);
+    } else {
+        http::async_write(
+            pending.session->stream(),
+            *pending.fixed_serializer,
+            completion);
+    }
 }
 
 void Impl::write_end_block(std::uint64_t request_id) {
@@ -2077,7 +2237,7 @@ void Impl::begin_request(
     begin.headers = normalized.headers;
     begin.end_request = bodyless_enabled_ && !has_body;
     requests_[request_id] = std::move(pending);
-    submit_command(std::move(begin));
+    executor_->submit(std::move(begin));
 
     // The fused path marks the request ended locally because the worker
     // already observed EOF via the RequestEnd flag; the unfused path leaves
@@ -2100,17 +2260,14 @@ void Impl::cancel_request(std::uint64_t request_id) {
     // worker exit) returns the streaming permit exactly once.
     release_streaming_permit(it->second);
     requests_.erase(it);
-    {
-        // The tombstone drops late commands for this request; it is removed
-        // again when the matching cancel reaches the worker thread, so the
-        // set stays bounded by the cancels still in flight.
-        std::unique_lock<std::mutex> lock(mutex_);
-        canceled_.insert(request_id);
-    }
+    // The tombstone drops late commands for this request; it is removed
+    // again when the matching cancel reaches the worker thread, so the
+    // set stays bounded by the cancels still in flight.
+    executor_->mark_canceled(request_id);
     Command cancel;
     cancel.type = CommandType::kCancel;
     cancel.request_id = request_id;
-    submit_command(std::move(cancel));
+    executor_->submit(std::move(cancel));
     // An inflight slot just freed: admit the next parked request (E-1).
     pump_queue();
     // §7.5 row 3: a cleared request may complete a drain.
@@ -2158,62 +2315,11 @@ void Impl::drop_session(const std::shared_ptr<Session>& session) {
     }
 }
 
-void Impl::submit_command(Command command) {
-    if (metrics_enabled_) {
-        metrics_.commands_submitted.fetch_add(1, std::memory_order_relaxed);
-    }
-    std::unique_lock<std::mutex> lock(mutex_);
-    const bool was_empty = commands_.empty();
-    commands_.push_back(std::move(command));
-    if (was_empty) {
-        if (metrics_enabled_) {
-            metrics_.command_batches.fetch_add(1, std::memory_order_relaxed);
-        }
-        // Wake the worker thread out of its blocking wait. The byte is
-        // written on the empty→non-empty transition only: a push into a
-        // non-empty queue is already covered by an outstanding byte (or the
-        // worker is draining), so the wake pipe cannot fill.
-        source_.wake();
-    }
-    if (metrics_enabled_) {
-        {
-            const size_t size = commands_.size();
-            size_t hw = metrics_.command_queue_high_water.load(
-                std::memory_order_relaxed);
-            while (hw < size &&
-                   !metrics_.command_queue_high_water.compare_exchange_weak(
-                       hw, size, std::memory_order_relaxed)) {
-            }
-        }
-    }
-    cv_.notify_one();
-}
-
 void Impl::io_post(std::function<void()> function) {
     if (metrics_enabled_) {
         metrics_.asio_posts.fetch_add(1, std::memory_order_relaxed);
     }
     asio::post(ioc_, std::move(function));
-}
-
-bool Impl::wait_for_ready() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    const bool notified = cv_.wait_for(lock, kReadyTimeout, [this] {
-        return ready_ || exited_;
-    });
-    if (!notified) {
-        write_stderr("capsid-host: worker did not become READY in time");
-        return false;
-    }
-    if (exited_) {
-        write_stderr("capsid-host: worker exited before READY");
-        return false;
-    }
-    if (!ready_match_) {
-        write_stderr("capsid-host: worker compatibility ID mismatch");
-        return false;
-    }
-    return true;
 }
 
 bool Impl::bind_listener() {
@@ -2296,469 +2402,32 @@ bool Impl::write_ready_line() {
         "{\"schema\":\"capsid-host-ready-v1\",\"app\":\"" +
         options_.application + "\",\"address\":\"" + bound_address_ +
         "\",\"port\":" + std::to_string(bound_port_) + "}\n";
-    const ssize_t written =
-        ::write(options_.ready_fd, line.data(), line.size());
-    if (written != static_cast<ssize_t>(line.size())) {
+    std::size_t offset = 0;
+    while (offset < line.size()) {
+        const ssize_t written = ::write(options_.ready_fd,
+                                        line.data() + offset,
+                                        line.size() - offset);
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        if (written <= 0) {
+            write_stderr("capsid-host: failed to write the READY record");
+            return false;
+        }
+        offset += static_cast<std::size_t>(written);
+    }
+    if (offset != line.size()) {
         write_stderr("capsid-host: failed to write the READY record");
         return false;
     }
     return true;
 }
 
-void Impl::worker_thread_main() {
-    for (;;) {
-        // Drain command wake bytes before swapping: a command pushed before
-        // this drain is either already in the queue (the swap picks it up)
-        // or was pushed after the swap (its wake byte is still in the pipe
-        // and wakes the poll below). Draining first keeps both orderings
-        // safe.
-        source_.drain_wake_bytes();
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            std::deque<Command> local;
-            local.swap(commands_);
-            if (shutdown_deadline_.has_value() &&
-                SteadyClock::now() >= *shutdown_deadline_) {
-                if (worker_) {
-                    capsid_worker_terminate(worker_);
-                }
-            }
-            lock.unlock();
-            for (Command& command : local) {
-                if (!execute_command(std::move(command))) {
-                    // A closed or wedged worker: fail every pending request
-                    // on the io thread and reap below.
-                    queue_worker_exit_event();
-                    goto worker_exit;
-                }
-            }
-            // Batch flush: every queued frame reaches the worker in one
-            // write syscall instead of one per command.
-            if (!batch_flush()) {
-                queue_worker_exit_event();
-                goto worker_exit;
-            }
-        }
+// The worker machinery that used to live between write_ready_line() and
+// flush_pending_credit() moved to worker_executor.cc (spec §8.1): the
+// executor owns the worker thread, the command/event queues and the
+// protocol decoder; the io thread only submits commands and drains events.
 
-        // Drain every pending event; next_event returns WOULD_BLOCK when the
-        // IPC channel is idle.
-        bool worker_exited = false;
-        for (;;) {
-            // struct_size is the size-negotiation contract of the Runtime
-            // API: a value-uninitialized capsid_event reads as garbage and
-            // next_event rejects it, so zero the struct and state its size.
-            capsid_event event = {};
-            event.struct_size = sizeof(event);
-            const capsid_result result =
-                capsid_worker_next_event(worker_, &event);
-            if (result == CAPSID_OK) {
-                if (!handle_worker_protocol_event(event)) {
-                    worker_exited = true;
-                    break;
-                }
-                continue;
-            }
-            if (result == CAPSID_WOULD_BLOCK) {
-                break;
-            }
-            // The IPC channel is closed or corrupt: the worker is gone.
-            queue_worker_exit_event();
-            worker_exited = true;
-            break;
-        }
-        if (worker_exited) {
-            goto worker_exit;
-        }
-
-        // Block until the worker IPC descriptor is readable, a command wake
-        // arrives, or the shutdown deadline passes. The io thread's wake
-        // byte keeps command pickup latency at poll latency instead of a
-        // polling period; the worker thread never busy-polls.
-        std::optional<SteadyClock::time_point> until;
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            if (shutdown_deadline_.has_value()) {
-                until = shutdown_deadline_;
-            }
-        }
-        if (!source_.wait(until)) {
-            queue_worker_exit_event();
-            goto worker_exit;
-        }
-    }
-
-worker_exit:
-    // The worker thread remains the sole owner up to and including the
-    // blocking destroy.
-    capsid_worker_destroy(worker_);
-    worker_ = nullptr;
-    {
-        std::unique_lock<std::mutex> lock(mutex_);
-        exited_ = true;
-    }
-    cv_.notify_all();
-}
-
-// A Runtime call failed for a reason other than a full queue: the Host and
-// the Runtime disagree about the request's state (WOULD_BLOCK on admission,
-// INVALID_ARGUMENT for a frame the Runtime no longer accepts). The request
-// fails closed on the client side instead of leaving the Host and the
-// Runtime silently out of sync. Returns false when the worker itself is
-// gone, which takes the exit path and fails every pending request.
-bool Impl::report_runtime_failure(std::uint64_t request_id,
-                                  capsid_result result,
-                                  const char* operation) {
-    if (result == CAPSID_CLOSED) {
-        return false;
-    }
-    write_stderr(std::string("capsid-host: worker ") + operation +
-                 " failed: " + capsid_result_string(result) + " (request " +
-                 std::to_string(request_id) + ")");
-    WorkerEvent failure;
-    failure.type = WorkerEvent::Type::kRequestFailure;
-    failure.request_id = request_id;
-    queue_worker_event(std::move(failure));
-    return true;
-}
-
-bool Impl::execute_command(Command command) {
-    if (metrics_enabled_) {
-        metrics_.commands_executed.fetch_add(1, std::memory_order_relaxed);
-    }
-    // Commands for a cancelled request are dropped before execution: the
-    // worker may have already expired the request (and erased its state), so
-    // a late write/end/grant frame would be rejected as an invalid IPC frame
-    // and kill the worker. The tombstone entry is removed again when the
-    // matching cancel reaches the worker thread, so the set stays bounded by
-    // the cancels still in flight.
-    if (command.type != CommandType::kBeginRequest &&
-        command.type != CommandType::kShutdown &&
-        command.type != CommandType::kCancel) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (canceled_.count(command.request_id) != 0) {
-            return true;
-        }
-    }
-    switch (command.type) {
-    case CommandType::kBeginRequest: {
-        std::vector<capsid_header> headers;
-        headers.reserve(command.headers.size());
-        for (const auto& header : command.headers) {
-            headers.push_back(capsid_header{
-                {reinterpret_cast<const std::uint8_t*>(header.name.data()),
-                 header.name.size()},
-                {reinterpret_cast<const std::uint8_t*>(header.value.data()),
-                 header.value.size()},
-            });
-        }
-        const capsid_header* header_ptr =
-            headers.empty() ? nullptr : headers.data();
-        capsid_result result;
-        if (command.end_request) {
-            result = capsid_worker_begin_bodyless_request(
-                worker_, command.request_id, command.method.c_str(),
-                command.url.c_str(), header_ptr, headers.size());
-        } else {
-            result = capsid_worker_begin_request(
-                worker_, command.request_id, command.method.c_str(),
-                command.url.c_str(), header_ptr, headers.size());
-        }
-        if (result != CAPSID_OK) {
-            return report_runtime_failure(command.request_id, result,
-                                          "begin_request");
-        }
-        break;
-        if (result != CAPSID_OK) {
-            return report_runtime_failure(command.request_id, result,
-                                          "begin_request");
-        }
-        break;
-    }
-    case CommandType::kWriteRequest: {
-        const capsid_result result = capsid_worker_write_request(
-            worker_, command.request_id, command.body.data(),
-            command.body.size());
-        if (result == CAPSID_WOULD_BLOCK) {
-            // The Runtime did not consume the chunk (credit or write queue
-            // full); retry the same chunk before any later request-body
-            // chunk. Nothing was queued, so no flush is needed.
-            std::unique_lock<std::mutex> lock(mutex_);
-            commands_.push_front(std::move(command));
-            return true;
-        }
-        if (result != CAPSID_OK) {
-            return report_runtime_failure(command.request_id, result,
-                                          "write_request");
-        }
-        break;
-    }
-    case CommandType::kEndRequest: {
-        const capsid_result result =
-            capsid_worker_end_request(worker_, command.request_id);
-        if (result != CAPSID_OK) {
-            return report_runtime_failure(command.request_id, result,
-                                          "end_request");
-        }
-        break;
-    }
-    case CommandType::kCancel: {
-        const capsid_result result =
-            capsid_worker_cancel(worker_, command.request_id);
-        if (result == CAPSID_CLOSED) {
-            return false;
-        }
-        if (result != CAPSID_OK) {
-            // Cancel is best-effort: the Runtime already forgot the request
-            // or the channel is wedged. Log and continue; the request is
-            // gone from the Host either way.
-            write_stderr(std::string("capsid-host: worker cancel failed: ") +
-                         capsid_result_string(result) + " (request " +
-                         std::to_string(command.request_id) + ")");
-        } else {
-            // The cancel reached the worker: the Runtime has forgotten this
-            // request, so no further frame for it can be valid. The tombstone
-            // entry is no longer needed; dropping it here bounds the set to
-            // the cancels still in flight.
-            std::unique_lock<std::mutex> lock(mutex_);
-            canceled_.erase(command.request_id);
-        }
-        break;
-    }
-    case CommandType::kGrantResponseCredit: {
-        if (metrics_enabled_) {
-            metrics_.grant_commands.fetch_add(1, std::memory_order_relaxed);
-            metrics_.credit_bytes_granted.fetch_add(
-                command.credit, std::memory_order_relaxed);
-        }
-        const capsid_result result = capsid_worker_grant_response_credit(
-            worker_, command.request_id, command.credit);
-        if (result == CAPSID_WOULD_BLOCK) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            commands_.push_front(std::move(command));
-            return true;
-        }
-        if (result != CAPSID_OK) {
-            // Grants are only submitted for requests whose response has not
-            // ended (see the write completion guard) and dropped by the
-            // tombstone once a request ends or is cancelled, so any other
-            // rejection is a genuine Host/Runtime state mismatch.
-            return report_runtime_failure(command.request_id, result,
-                                          "grant_response_credit");
-        }
-        break;
-    }
-    case CommandType::kShutdown:
-        capsid_worker_shutdown(worker_);
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            shutdown_deadline_ = SteadyClock::now() + kShutdownGrace;
-        }
-        break;
-    }
-    // Frames were queued; the caller (worker thread main loop) batches the
-    // flush across all commands of this batch.
-    return true;
-}
-
-// batch_flush sends every queued frame that the current command batch
-// produced. It is called once per command drain, not per command, so a
-// batch of N GET requests produces one write syscall instead of N.
-bool Impl::batch_flush() {
-    const capsid_result result = capsid_worker_flush(worker_);
-    if (result == CAPSID_OK || result == CAPSID_WOULD_BLOCK) {
-        // WOULD_BLOCK is fine — the frames are in the worker's input buffer;
-        // the next batch's poll/wait will drain and flush more.
-        return true;
-    }
-    write_stderr(std::string("capsid-host: worker batch flush failed: ") +
-                 capsid_result_string(result));
-    return false;
-}
-
-bool Impl::handle_worker_protocol_event(const capsid_event& event) {
-    switch (event.type) {
-    case CAPSID_EVENT_READY: {
-        std::string payload(
-            reinterpret_cast<const char*>(event.payload.data),
-            event.payload.size);
-        capsid_build_info info;
-        capsid_build_info_init(&info);
-        const capsid_result result = capsid_runtime_build_info(&info);
-        bool match = false;
-        if (result == CAPSID_OK && info.compatibility_id != nullptr) {
-            match = payload == info.compatibility_id;
-        }
-        std::unique_lock<std::mutex> lock(mutex_);
-        ready_ = true;
-        ready_match_ = match;
-        cv_.notify_all();
-        return true;
-    }
-    case CAPSID_EVENT_REQUEST_CREDIT: {
-        WorkerEvent worker_event;
-        worker_event.type = WorkerEvent::Type::kRequestCredit;
-        worker_event.request_id = event.request_id;
-        worker_event.credit = event.credit;
-        queue_worker_event(std::move(worker_event));
-        return true;
-    }
-    case CAPSID_EVENT_RESPONSE_HEAD: {
-        WorkerEvent worker_event;
-        worker_event.type = WorkerEvent::Type::kResponseHead;
-        worker_event.request_id = event.request_id;
-        worker_event.status = static_cast<std::uint16_t>(event.status);
-        std::size_t count = 0;
-        if (capsid_response_header_count(&event, &count) == CAPSID_OK) {
-            worker_event.headers.reserve(count);
-            for (std::size_t index = 0; index < count; ++index) {
-                capsid_header header;
-                if (capsid_response_header_at(&event, index, &header) !=
-                    CAPSID_OK) {
-                    continue;
-                }
-                worker_event.headers.emplace_back(
-                    std::string(reinterpret_cast<const char*>(
-                                    header.name.data),
-                                header.name.size),
-                    std::string(reinterpret_cast<const char*>(
-                                    header.value.data),
-                                header.value.size));
-            }
-        }
-        queue_worker_event(std::move(worker_event));
-        return true;
-    }
-    case CAPSID_EVENT_RESPONSE_BODY: {
-        WorkerEvent worker_event;
-        worker_event.type = WorkerEvent::Type::kResponseBody;
-        worker_event.request_id = event.request_id;
-        worker_event.body.assign(event.payload.data,
-                                 event.payload.data + event.payload.size);
-        queue_worker_event(std::move(worker_event));
-        return true;
-    }
-    case CAPSID_EVENT_RESPONSE_END: {
-        // The Runtime erased this request when it sent RESPONSE_END, so any
-        // command still queued for it (a response-credit grant most likely)
-        // would be rejected by the Runtime ABI as an invalid frame and logged
-        // as an internal state error. Mark the request terminal here, on the
-        // worker thread, before the event is handed to the io thread: the
-        // drop check in execute_command then covers the window until the io
-        // thread's kResponseEnd handler inserts the same tombstone and the
-        // kCancel marker removes it again.
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            canceled_.insert(event.request_id);
-        }
-        WorkerEvent worker_event;
-        worker_event.type = WorkerEvent::Type::kResponseEnd;
-        worker_event.request_id = event.request_id;
-        queue_worker_event(std::move(worker_event));
-        return true;
-    }
-    case CAPSID_EVENT_LOG: {
-        WorkerEvent worker_event;
-        worker_event.type = WorkerEvent::Type::kLog;
-        worker_event.text.assign(
-            reinterpret_cast<const char*>(event.payload.data),
-            event.payload.size);
-        queue_worker_event(std::move(worker_event));
-        return true;
-    }
-    case CAPSID_EVENT_ERROR: {
-        WorkerEvent worker_event;
-        worker_event.type = WorkerEvent::Type::kError;
-        worker_event.request_id = event.request_id;
-        worker_event.text.assign(
-            reinterpret_cast<const char*>(event.payload.data),
-            event.payload.size);
-        queue_worker_event(std::move(worker_event));
-        return true;
-    }
-    case CAPSID_EVENT_REQUEST_TIMEOUT: {
-        // Mark the request cancelled on the worker thread before the timeout
-        // event is delivered: the worker has already erased the request, so
-        // any late command for it must be dropped before it reaches the IPC
-        // channel or the worker rejects it as an invalid frame.
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            canceled_.insert(event.request_id);
-        }
-        WorkerEvent worker_event;
-        worker_event.type = WorkerEvent::Type::kRequestTimeout;
-        worker_event.request_id = event.request_id;
-        queue_worker_event(std::move(worker_event));
-        return true;
-    }
-    case CAPSID_EVENT_EXIT:
-        queue_worker_exit_event();
-        return false;
-    default:
-        // AUDIT and MEMORY_METRICS are not part of the M1A data plane.
-        return true;
-    }
-}
-
-void Impl::queue_worker_event(WorkerEvent event) {
-    bool need_post = false;
-    {
-        // The event-queue size must be read under the mutex: this function
-        // runs on both the io thread and the worker thread, and the other
-        // side may be mutating events_ concurrently.
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (metrics_enabled_) {
-            metrics_.events_queued.fetch_add(1, std::memory_order_relaxed);
-            {
-                const size_t size = events_.size() + 1;
-                size_t hw = metrics_.event_queue_high_water.load(
-                    std::memory_order_relaxed);
-                while (hw < size &&
-                       !metrics_.event_queue_high_water.compare_exchange_weak(
-                           hw, size, std::memory_order_relaxed)) {
-                }
-            }
-        }
-        need_post = events_.empty();
-        events_.push_back(std::move(event));
-    }
-    // Only post when the queue was empty — pump_events drains everything
-    // in one call. New events that arrive while pump_events is running
-    // will see the (now-empty) queue and schedule their own post. The
-    // weak capture guarantees a late post can never keep the Impl alive:
-    // once the facade stopped and released it, a stale event is dropped.
-    if (need_post) {
-        io_post([weak = weak_from_this()] {
-            if (const std::shared_ptr<Impl> alive = weak.lock()) {
-                alive->pump_events();
-            }
-        });
-    }
-}
-
-void Impl::queue_worker_exit_event() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (!exit_event_queued_) {
-        WorkerEvent exit_event;
-        exit_event.type = WorkerEvent::Type::kExit;
-        events_.push_back(std::move(exit_event));
-        exit_event_queued_ = true;
-        // The exit event is always the last one, so a post is needed even if
-        // the queue was non-empty — pump_events may already be running on
-        // earlier queued events and won't see this one without a post. The
-        // weak capture mirrors queue_worker_event: a post that outlives the
-        // facade's stop is dropped, never a self-retaining handler.
-        io_post([weak = weak_from_this()] {
-            if (const std::shared_ptr<Impl> alive = weak.lock()) {
-                alive->pump_events();
-            }
-        });
-    }
-}
-
-// Stops the worker thread on the failure paths that run after it started:
-// the shutdown command wakes the blocking wait, and the bounded terminate
-// backstop in the worker loop forces the blocking destroy to finish
-// promptly. Callers return without leaving a joinable thread behind.
 void Impl::flush_pending_credit(std::uint64_t request_id,
                               PendingRequest& pending,
                               bool force) {
@@ -2775,21 +2444,7 @@ void Impl::flush_pending_credit(std::uint64_t request_id,
     grant.request_id = request_id;
     grant.credit = pending.pending_response_credit;
     pending.pending_response_credit = 0;
-    submit_command(std::move(grant));
-}
-
-void Impl::shutdown_worker_and_join() {
-    // Shares the exactly-once Runtime shutdown gate with request_stop,
-    // SIGTERM and the destructor: a start-failure path can never race a
-    // concurrent stop into a double shutdown frame.
-    Command shutdown;
-    shutdown.type = CommandType::kShutdown;
-    if (!shutdown_sent_.exchange(true)) {
-        submit_command(std::move(shutdown));
-    }
-    if (worker_thread_.joinable()) {
-        worker_thread_.join();
-    }
+    executor_->submit(std::move(grant));
 }
 
 // Fails a response whose worker head was rejected before any byte reached
@@ -3023,32 +2678,50 @@ void Impl::write_metrics_line() {
     if (!metrics_enabled_) {
         return;
     }
-    // Delta snapshot: exchange() reads and zeroes each host counter in one
+    // Delta snapshot: exchange() reads and zeroes each counter in one
     // atomic step, so a line is the delta since the previous line and a
     // concurrent increment (worker thread) is never torn or lost. The
-    // client-side snapshot is a delta for the same reason.
+    // worker-direction counters live in the executor (spec §8.1); the
+    // io-direction counters live here. The client-side snapshot is a
+    // delta for the same reason.
+    WorkerExecutor::Metrics& em = executor_->metrics();
+    const auto commands_submitted =
+        em.commands_submitted.exchange(0, std::memory_order_relaxed);
+    const auto command_batches =
+        em.command_batches.exchange(0, std::memory_order_relaxed);
+    const auto commands_executed =
+        em.commands_executed.exchange(0, std::memory_order_relaxed);
+    const auto flush_calls =
+        em.flush_calls.exchange(0, std::memory_order_relaxed);
+    const auto flush_eagain =
+        em.flush_eagain.exchange(0, std::memory_order_relaxed);
+    const auto events_queued =
+        em.events_queued.exchange(0, std::memory_order_relaxed);
+    const auto grant_commands =
+        em.grant_commands.exchange(0, std::memory_order_relaxed);
+    const auto credit_bytes_granted =
+        em.credit_bytes_granted.exchange(0, std::memory_order_relaxed);
+    const auto command_queue_high_water =
+        em.command_queue_high_water.exchange(0, std::memory_order_relaxed);
+    const auto event_queue_high_water =
+        em.event_queue_high_water.exchange(0, std::memory_order_relaxed);
 #define CAPSID_METRIC_EXCHANGE(field) \
     const auto field = \
         metrics_.field.exchange(0, std::memory_order_relaxed)
-    CAPSID_METRIC_EXCHANGE(commands_submitted);
-    CAPSID_METRIC_EXCHANGE(command_batches);
-    CAPSID_METRIC_EXCHANGE(commands_executed);
-    CAPSID_METRIC_EXCHANGE(flush_calls);
-    CAPSID_METRIC_EXCHANGE(flush_eagain);
-    CAPSID_METRIC_EXCHANGE(events_queued);
     CAPSID_METRIC_EXCHANGE(asio_posts);
     CAPSID_METRIC_EXCHANGE(response_heads);
     CAPSID_METRIC_EXCHANGE(response_body_frames);
     CAPSID_METRIC_EXCHANGE(response_ends);
-    CAPSID_METRIC_EXCHANGE(grant_commands);
-    CAPSID_METRIC_EXCHANGE(credit_bytes_granted);
     CAPSID_METRIC_EXCHANGE(credit_stall_count);
-    CAPSID_METRIC_EXCHANGE(command_queue_high_water);
-    CAPSID_METRIC_EXCHANGE(event_queue_high_water);
 #undef CAPSID_METRIC_EXCHANGE
 
     capsid::ClientIpcMetrics client_metrics;
-    client_ipc_metrics_snapshot(worker_, &client_metrics);
+    // The worker may already be destroyed (exited) when the final metrics
+    // line is written; snapshot nothing then — the client block prints
+    // zeroed fields. Ownership of the handle always stays with the executor.
+    if (capsid_worker* live = executor_->worker()) {
+        client_ipc_metrics_snapshot(live, &client_metrics);
+    }
     // Write one compact JSON line to stderr; the runner captures it.
     std::fprintf(stderr,
         "{"

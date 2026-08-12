@@ -6,8 +6,17 @@ Capsid 是给 HTTP 网关、应用服务器和 worker pool 嵌入的进程隔离
 
 Capsid **不是** Node/Deno 替代品，也不是一个直接运行 `.js` 文件的命令行
 服务器。`libcapsid_runtime` 不监听端口、不终止 TLS，也不管理路由或 worker pool；
-部署方可以自行嵌入它。仓库中的第一方 C++ Host 正在实现这些宿主职责，但目前只有
-M0 核心契约与测试，尚没有可运行的 `capsid-host` 服务。
+部署方可以自行嵌入它。
+
+仓库中的第一方 C++ Host（`capsid-host`）实现了这些宿主职责，支持三种运行模式：
+
+- `--mode single-worker`：一个 worker 进程，单 listener，用于嵌入与开发；
+- `--mode static-pool`：固定大小 worker 池（1/2/4/6/8），SO_REUSEPORT 共享端口，
+  每个 shard 独立 reactor 线程，线性扩展；
+- `--mode managed`：生产部署闭环 —— host.json 权威配置、Admin API
+  （Unix socket + peer 凭据授权）、容量配额、durable active-state 持久化、
+  崩溃恢复（SIGKILL 矩阵验证）、背压 admission gates（429/503/504）、
+  SSE 流式 permit 与 slow-client write deadline。
 
 ```text
 客户端
@@ -64,9 +73,14 @@ cmake --build build-release --parallel
 主要产物是：
 
 - `build-release/capsid-worker`：隔离的 JavaScript 子进程；
+- `build-release/capsid-host`：第一方 C++ Host（single-worker / static-pool /
+  managed 三种模式，`--mode` 选择）；
 - `build-release/libcapsid_runtime.a`：宿主链接的静态库；
 - `include/capsid/runtime.h`：C ABI；
 - `include/capsid/runtime.hpp`：C++11 RAII 和策略构造器。
+
+`capsid-host` 依赖系统 Boost.Asio/Beast（`libboost-system-dev`）；无 Boost 的
+平台跳过 host 目标但保留 worker 与库。
 
 安装到独立目录：
 

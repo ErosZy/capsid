@@ -282,6 +282,34 @@ try {
     assert.equal(fixed.body.length, 1024);
     assert.ok(fixed.body.every((byte) => byte === 0x78));
 
+    const fixedString = await request(correctness.port, {
+        target: '/@capsid/orders/fixed-string',
+    });
+    assert.equal(fixedString.status, 200);
+    assert.equal(fixedString.body.length, 1024);
+    assert.ok(fixedString.body.every((byte) => byte === 0x78));
+    assert.equal(fixedString.headers['content-length'], '1024');
+    assert.equal(fixedString.headers['transfer-encoding'], undefined);
+
+    const fixedString16k = await request(correctness.port, {
+        target: '/@capsid/orders/fixed-string-16k',
+    });
+    assert.equal(fixedString16k.status, 200);
+    assert.equal(fixedString16k.body.length, 16 * 1024);
+    assert.ok(fixedString16k.body.every((byte) => byte === 0x79));
+    assert.equal(fixedString16k.headers['content-length'], undefined);
+    assert.equal(fixedString16k.headers['transfer-encoding'], 'chunked');
+
+    // The JS-side hint uses UTF-16 code units. Native must still reject the
+    // fixed path when exact UTF-8 encoding expands beyond the 4 KiB bound.
+    const fixedStringUtf8Overflow = await request(correctness.port, {
+        target: '/@capsid/orders/fixed-string-utf8-overflow',
+    });
+    assert.equal(fixedStringUtf8Overflow.status, 200);
+    assert.equal(fixedStringUtf8Overflow.body.length, 3 * 2048);
+    assert.equal(fixedStringUtf8Overflow.headers['content-length'], undefined);
+    assert.equal(fixedStringUtf8Overflow.headers['transfer-encoding'], 'chunked');
+
     const parallel = await Promise.all(Array.from({ length: 16 }, () =>
         request(correctness.port, { target: '/@capsid/orders/fixed' })));
     const parallelBad = parallel.filter((response) =>
@@ -312,10 +340,11 @@ try {
 
     const head = await request(correctness.port, {
         method: 'HEAD',
-        target: '/@capsid/orders/fixed',
+        target: '/@capsid/orders/fixed-string',
     });
     assert.equal(head.status, 200);
     assert.equal(head.body.length, 0, 'HEAD exposed the worker response body');
+    assert.equal(head.headers['content-length'], '1024');
 
     const routeMiss = await request(correctness.port, { target: '/outside' });
     assert.equal(routeMiss.status, 404);

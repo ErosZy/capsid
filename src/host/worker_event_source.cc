@@ -4,10 +4,13 @@
 
 #include "host/worker_event_source.h"
 
+#include "host/poll_limits.h"
+
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <limits>
 #include <poll.h>
 #include <unistd.h>
 
@@ -96,7 +99,8 @@ WorkerEventSource::PollResult WorkerEventSource::poll_worker(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 *until - std::chrono::steady_clock::now())
                 .count();
-        timeout_ms = static_cast<int>(std::max<std::int64_t>(0, remaining));
+        timeout_ms = poll_timeout_ms(
+            static_cast<std::uint64_t>(std::max<std::int64_t>(0, remaining)));
     }
     for (;;) {
         const int result = ::poll(descriptors, 2, timeout_ms);

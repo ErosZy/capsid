@@ -5,6 +5,7 @@
 #include <openssl/evp.h>
 
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <set>
 #include <sstream>
@@ -377,6 +378,11 @@ PolicyCompileResult compile_policy(
     if (host.max_requests_per_worker != 0 &&
         app.requests_per_worker > host.max_requests_per_worker) {
         result.error = "request rate exceeds the Host maximum";
+        return result;
+    }
+    if (app.requests_per_worker >
+        static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
+        result.error = "request rate exceeds the worker limit";
         return result;
     }
     result.effective.requests_per_worker = app.requests_per_worker;

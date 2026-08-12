@@ -790,6 +790,101 @@ void test_partial_write_high_water(const char *worker_path,
     capsid_worker_destroy(worker);
 }
 
+// #15/#16: the untouched-string final shortcut is an internal detail.
+// Once application code observes or replaces Response.body, bootstrap must
+// use the normal stream path and preserve the application-visible bytes.
+void test_accessed_string_body_falls_back(const char *worker_path,
+                                          const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 64u * 1024u, 16384, 2000);
+    require_result(
+        capsid_worker_begin_request(
+            worker, 114, "GET",
+            "https://example.test/string-body-accessed", NULL, 0),
+        "begin accessed string body");
+    require_result(
+        capsid_worker_end_request(worker, 114),
+        "end accessed string body");
+    Collector collector = drive(worker, { 114 }, GrantMode::kImmediate, 3);
+    const auto it = collector.outcomes.find(114);
+    require(it != collector.outcomes.end() && it->second.ended,
+            "accessed string response completed");
+    require(it->second.body == "accessed-ok",
+            "accessed string body preserved");
+    capsid_worker_destroy(worker);
+}
+
+void test_replaced_string_body_falls_back(const char *worker_path,
+                                          const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 64u * 1024u, 16384, 2000);
+    require_result(
+        capsid_worker_begin_request(
+            worker, 115, "GET",
+            "https://example.test/string-body-replaced", NULL, 0),
+        "begin replaced string body");
+    require_result(
+        capsid_worker_end_request(worker, 115),
+        "end replaced string body");
+    Collector collector = drive(worker, { 115 }, GrantMode::kImmediate, 3);
+    const auto it = collector.outcomes.find(115);
+    require(it != collector.outcomes.end() && it->second.ended,
+            "replaced string response completed");
+    require(it->second.body == "replacement-ok",
+            "replacement stream body preserved");
+    capsid_worker_destroy(worker);
+}
+
+// #17: untouched strings take the native final path without changing the
+// Encoding Standard's UTF-8 semantics. In particular, isolated UTF-16
+// surrogates become U+FFFD, valid pairs remain one scalar, and embedded NUL
+// bytes are length-delimited rather than truncated.
+void test_native_string_final_utf8(const char *worker_path,
+                                   const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 64u * 1024u, 16384, 2000);
+    struct Probe {
+        uint64_t id;
+        const char *path;
+        std::string expected;
+    };
+    const Probe probes[] = {
+        { 116, "/string-native-ascii", "ascii-fast" },
+        { 117, "/string-native-unicode",
+          std::string("A\xc3\xa9\xe4\xb8\xad\xf0\x9f\x98\x80Z", 11) },
+        { 118, "/string-native-surrogates",
+          std::string("\xef\xbf\xbd" "A" "\xef\xbf\xbd"
+                      "\xf0\x9f\x98\x80", 11) },
+        { 119, "/string-native-nul", std::string("a\0b", 3) },
+        { 120, "/string-materialized-surrogates",
+          std::string("\xef\xbf\xbd" "A" "\xef\xbf\xbd"
+                      "\xf0\x9f\x98\x80", 11) },
+    };
+    std::vector<uint64_t> ids;
+    for (const Probe &probe : probes) {
+        const std::string url =
+            std::string("https://example.test") + probe.path;
+        require_result(
+            capsid_worker_begin_request(
+                worker, probe.id, "GET", url.c_str(), NULL, 0),
+            "begin native string probe");
+        require_result(
+            capsid_worker_end_request(worker, probe.id),
+            "end native string probe");
+        ids.push_back(probe.id);
+    }
+    Collector collector = drive(worker, ids, GrantMode::kImmediate, 3);
+    for (const Probe &probe : probes) {
+        const auto it = collector.outcomes.find(probe.id);
+        require(it != collector.outcomes.end() && it->second.ended,
+                "native string response completed");
+        require(!it->second.errored, "native string response not errored");
+        require(it->second.body == probe.expected,
+                "native string UTF-8 bytes preserved");
+    }
+    capsid_worker_destroy(worker);
+}
+
 }  // namespace
 
 // Optional argv[3]: run only the numbered test (1..8). Without it the
@@ -825,6 +920,9 @@ int main(int argc, char **argv) {
     run_sel(only, argv[1], bundle, 12, test_small_completes_first);
     run_sel(only, argv[1], bundle, 13, test_pending_mutation_snapshot);
     run_sel(only, argv[1], bundle, 14, test_partial_write_high_water);
+    run_sel(only, argv[1], bundle, 15, test_accessed_string_body_falls_back);
+    run_sel(only, argv[1], bundle, 16, test_replaced_string_body_falls_back);
+    run_sel(only, argv[1], bundle, 17, test_native_string_final_utf8);
     std::printf("all queue-saturation RED tests passed\n");
     return 0;
 }

@@ -17,7 +17,11 @@ import './file.js';
 import 'txiki-polyfills/form-data.js';
 import 'txiki-polyfills/abort-controller.js';
 import 'txiki-polyfills/fetch/polyfill.js';
-import { configureFetchLimits } from './fetch.js';
+import {
+    configureFetchLimits,
+    createIncomingRequest,
+    getFastResponseBody,
+} from './fetch.js';
 import 'txiki-polyfills/crypto/crypto.js';
 import { CryptoKey } from 'txiki-polyfills/crypto/crypto-key.js';
 import { SubtleCrypto } from 'txiki-polyfills/crypto/subtle.js';
@@ -33,6 +37,7 @@ configureFetchLimits(
     core.capsidFetchRequestBodyLimit(),
     core.capsidFetchResponseBodyLimit(),
 );
+const fixedResponseBodyLimit = Number(core.capsidFixedResponseBodyLimit());
 
 const nativeCrypto = globalThis.crypto;
 let cryptoObject;
@@ -443,7 +448,7 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
         });
     }
 
-    const request = new Request(url, {
+    const request = createIncomingRequest(url, {
         method,
         headers: headerEntries,
         body,
@@ -451,15 +456,10 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
         signal: abortController.signal,
     });
 
+    // WP-02 §6.2: request identity rides the job-context token captured at
+    // enqueue; no JS-side enter/leave is needed (or trusted) anymore.
     Promise.resolve()
-        .then(() => {
-            core.capsidEnterRequest(id);
-            try {
-                return handler.call(handlerThis, request);
-            } finally {
-                core.capsidLeaveRequest(id);
-            }
-        })
+        .then(() => handler.call(handlerThis, request))
         .then(async response => {
             if (state.cancelled) {
                 if (response instanceof Response && response.body) {
@@ -489,6 +489,28 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
             // response (head + body + end) in one native call, avoiding
             // two JS round-trips per request. Streamed bodies keep the
             // incremental path below.
+            const fastBody = getFastResponseBody(response);
+            if (fastBody !== null) {
+                if (fastBody.length <= fixedResponseBodyLimit) {
+                    core.capsidResponseFixed(
+                        id,
+                        response.status,
+                        response.statusText,
+                        headers,
+                        fastBody,
+                    );
+                } else {
+                    core.capsidResponseFinal(
+                        id,
+                        response.status,
+                        response.statusText,
+                        headers,
+                        fastBody,
+                    );
+                }
+                return;
+            }
+
             const body = response.body;
             if (body && !(body instanceof ReadableStream)) {
                 let bytes = null;
@@ -504,13 +526,26 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
                     bytes = null;
                 }
                 if (bytes !== null) {
-                    core.capsidResponseFinal(
-                        id,
-                        response.status,
-                        response.statusText,
-                        headers,
-                        bytes,
-                    );
+                    const fixedCandidate = typeof bytes === 'string'
+                        ? bytes.length <= fixedResponseBodyLimit
+                        : bytes.byteLength <= fixedResponseBodyLimit;
+                    if (fixedCandidate) {
+                        core.capsidResponseFixed(
+                            id,
+                            response.status,
+                            response.statusText,
+                            headers,
+                            bytes,
+                        );
+                    } else {
+                        core.capsidResponseFinal(
+                            id,
+                            response.status,
+                            response.statusText,
+                            headers,
+                            bytes,
+                        );
+                    }
                     return;
                 }
             }
@@ -551,6 +586,10 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
         .finally(() => {
             if (requests.get(id) === state) {
                 requests.delete(id);
+                // WP-02 §6.4: settled signal — the last lifecycle bridge.
+                // Native marks the token terminal; the post-drain reclaim
+                // drops it (or poisons the worker on surviving refs).
+                core.capsidRequestSettled(id);
             }
         });
 };

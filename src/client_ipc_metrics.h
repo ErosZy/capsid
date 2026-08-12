@@ -20,20 +20,23 @@ namespace capsid {
  * increment is never torn or lost.
  */
 struct ClientIpcMetrics {
-    std::atomic<uint64_t> queued_frames;
-    std::atomic<uint64_t> queued_wire_bytes;
-    std::atomic<uint64_t> queue_would_block;
-    std::atomic<uint64_t> flush_calls;
-    std::atomic<uint64_t> socket_write_calls;
-    std::atomic<uint64_t> socket_write_bytes;
-    std::atomic<uint64_t> socket_write_eagain;
-    std::atomic<uint64_t> next_event_calls;
-    std::atomic<uint64_t> parsed_frames;
-    std::atomic<uint64_t> parser_payload_copied_bytes;
-    std::atomic<uint64_t> socket_read_calls;
-    std::atomic<uint64_t> socket_read_bytes;
-    std::atomic<uint64_t> socket_read_eagain;
-    std::atomic<size_t> queued_bytes_high_water;
+    // A snapshot target can outlive the worker handle it was meant to
+    // sample.  Keep the default state deterministic so a skipped snapshot
+    // produces a zero block instead of reading indeterminate atomics.
+    std::atomic<uint64_t> queued_frames{0};
+    std::atomic<uint64_t> queued_wire_bytes{0};
+    std::atomic<uint64_t> queue_would_block{0};
+    std::atomic<uint64_t> flush_calls{0};
+    std::atomic<uint64_t> socket_write_calls{0};
+    std::atomic<uint64_t> socket_write_bytes{0};
+    std::atomic<uint64_t> socket_write_eagain{0};
+    std::atomic<uint64_t> next_event_calls{0};
+    std::atomic<uint64_t> parsed_frames{0};
+    std::atomic<uint64_t> parser_payload_copied_bytes{0};
+    std::atomic<uint64_t> socket_read_calls{0};
+    std::atomic<uint64_t> socket_read_bytes{0};
+    std::atomic<uint64_t> socket_read_eagain{0};
+    std::atomic<size_t> queued_bytes_high_water{0};
 
     ClientIpcMetrics();
 };

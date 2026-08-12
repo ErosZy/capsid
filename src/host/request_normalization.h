@@ -85,6 +85,13 @@ struct RequestNormalizationResult {
 // --public-authority fails the argument phase, not the post-spawn bind phase.
 bool is_valid_public_authority(std::string_view value);
 
+// Validates the policy the listener adapter would route with, without doing
+// any normalization. error is optional (null is allowed when only the boolean
+// is wanted). The adapter calls this before binding so a malformed policy
+// fails startup closed.
+bool is_valid_routing_policy(const RequestRoutingPolicy& policy,
+                             RequestNormalizationError* error);
+
 // Builds the complete worker-observable request identity from an already
 // parsed HTTP/1 request. This function validates URL/header semantics, routes
 // the App, and strips unsafe fields; it deliberately does not decide HTTP

@@ -250,8 +250,15 @@ SafeReadResult safe_read_regular_file(int root_fd,
             return fail_result(SafeReadErrorCode::kNotRegularFile,
                                "deployment path contains a symlink");
         }
-        if (errno == ENXIO) {
-            // open(2) refuses unix-socket nodes with ENXIO.
+        // Socket nodes: Linux open(2) refuses them with ENXIO, but macOS
+        // (BSD) reports a different errno for the same node type. Classify
+        // by probing the node type instead of trusting either errno, so
+        // the mapping is platform-independent (§13.5). The probe is
+        // diagnostic only: open already failed, so either way the deploy
+        // is rejected fail-closed.
+        struct stat node = {};
+        if (fstatat(root_fd, path.c_str(), &node, AT_SYMLINK_NOFOLLOW) == 0 &&
+            S_ISSOCK(node.st_mode)) {
             return fail_result(SafeReadErrorCode::kNotRegularFile,
                                "deployment path is not a regular file");
         }

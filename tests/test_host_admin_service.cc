@@ -31,6 +31,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -296,6 +297,111 @@ int main(int argc, char** argv) {
                 "Admin shutdown unlinked a pathname it did not create");
         std::cout << "PASS" << std::endl;
         return 0;
+    }
+
+    if (mode == "host_admin_service_double_start_rejected") {
+        // Lifecycle hardening: start() must be idempotence-bounded. A second
+        // start while the service owns its listener and accept thread must
+        // fail immediately (the start gate), never leak the second listener
+        // or race the accept loop onto a second thread.
+        ServiceFixture fixture;
+        fixture.start();
+        std::string error;
+        require(!fixture.service.start(&error),
+                "Admin service accepted a duplicate start");
+        require(!error.empty(), "duplicate start produced no error text");
+        // The first instance is still fully functional after the rejected
+        // duplicate start.
+        round_trip(fixture.path, deploy_request("v1"));
+        require(fixture.backend.deploy_calls.load() == 1,
+                "Admin service broke after a rejected duplicate start");
+        fixture.stop_and_wait();
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_service_stop_before_start_rejected") {
+        // Lifecycle hardening: request_stop() before start() must not leave
+        // the service in a state where start() binds a listener and then
+        // leaks it (the stop-requested gate fails start synchronously with
+        // every resource unwound).
+        ServiceFixture fixture;
+        fixture.service.request_stop();
+        std::string error;
+        require(!fixture.service.start(&error),
+                "Admin service started after a prior stop request");
+        require(!error.empty(), "stop-before-start produced no error text");
+        struct stat metadata = {};
+        require(lstat(fixture.path.c_str(), &metadata) != 0 && errno == ENOENT,
+                "stop-before-start left a socket pathname behind");
+        // A stopped-before-start service must still wait cleanly (the wait
+        // path must not block on a thread that never started).
+        fixture.service.request_stop();
+        require(fixture.service.wait(&error),
+                "stopped-before-start service did not wait cleanly: " +
+                    error);
+        fixture.joined = true;
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_service_start_stop_race") {
+        // Lifecycle hardening: a stop that arrives while start() is between
+        // binding and publishing the stop pipe must not leave the accept
+        // loop asleep forever (the pipe is published before the loop starts,
+        // and a post-start stop always writes the wake byte). Repeated in a
+        // fork so a wedge shows as a bounded-timeout failure instead of a
+        // suite hang.
+        const pid_t child = fork();
+        require(child >= 0, "cannot fork Admin start/stop race probe");
+        if (child == 0) {
+            for (int round = 0; round < 50; ++round) {
+                ServiceFixture fixture;
+                // Stop fires concurrently with start from the parent
+                // perspective; the child interleaves the two as tightly as
+                // the API allows.
+                std::thread racer([&]() {
+                    usleep(static_cast<useconds_t>(round % 5) * 100U);
+                    fixture.service.request_stop();
+                });
+                std::string error;
+                const bool started = fixture.service.start(&error);
+                racer.join();
+                // Both outcomes are legal (start won and must stop, or stop
+                // won and start failed); the invariant is that wait() always
+                // completes and the socket path never outlives the service.
+                fixture.service.request_stop();
+                require(fixture.service.wait(&error),
+                        "start/stop race wedged Admin service wait: " +
+                            error);
+                fixture.joined = true;
+                struct stat stray = {};
+                require(lstat(fixture.path.c_str(), &stray) != 0 &&
+                            errno == ENOENT,
+                        "start/stop race left the socket pathname behind");
+                (void)started;
+            }
+            _exit(0);
+        }
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(30);
+        int status = 0;
+        for (;;) {
+            const pid_t waited = waitpid(child, &status, WNOHANG);
+            require(waited >= 0, "cannot wait for Admin start/stop probe");
+            if (waited == child) {
+                require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+                        "Admin start/stop race probe failed");
+                std::cout << "PASS" << std::endl;
+                return 0;
+            }
+            if (std::chrono::steady_clock::now() >= deadline) {
+                (void)kill(child, SIGKILL);
+                (void)waitpid(child, &status, 0);
+                fail("Admin start/stop race never converged");
+            }
+            usleep(1000);
+        }
     }
 
     if (mode == "host_admin_service_stop_burst_is_nonblocking") {

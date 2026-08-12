@@ -29,6 +29,10 @@ struct Response {
     Response() : status(0) {}
 };
 
+// Set from the --collect-events driver flag; gates EVENTS emission after
+// each RESULT/CANCELED/CANCELED_UPLOAD line. Collection always happens.
+bool collect_events = false;
+
 std::string hex(const uint8_t *data, size_t size) {
     static const char digits[] = "0123456789abcdef";
     if (size == 0) {
@@ -47,6 +51,100 @@ std::string hex(const std::string &value) {
     return hex(
         reinterpret_cast<const uint8_t *>(value.data()),
         value.size());
+}
+
+std::string bytes(const capsid_bytes &value) {
+    return value.size == 0
+        ? std::string()
+        : std::string(reinterpret_cast<const char *>(value.data), value.size);
+}
+
+std::string log_message(const capsid_event &event) {
+    if (event.payload.size < 2) {
+        return std::string();
+    }
+    const size_t stream_size = event.payload.data[0] |
+                               (static_cast<size_t>(event.payload.data[1]) << 8);
+    if (stream_size > event.payload.size - 2) {
+        return std::string();
+    }
+    const char *data = reinterpret_cast<const char *>(event.payload.data);
+    return std::string(data + 2 + stream_size,
+                       event.payload.size - 2 - stream_size);
+}
+
+// One native event observed on the wire while a request was in flight.
+// For LOG events `text` is the message; for AUDIT events `text` is the
+// capability, `resource` the resource, and `record_id` the request id
+// embedded in the decoded audit record.
+struct NativeEvent {
+    bool audit;
+    uint64_t request_id;
+    uint64_t record_id;
+    std::string text;
+    std::string resource;
+
+    NativeEvent()
+        : audit(false), request_id(0), record_id(0) {}
+};
+
+typedef std::vector<NativeEvent> NativeEvents;
+
+void collect_native_event(const capsid_event &event, NativeEvents *events) {
+    if (event.type == CAPSID_EVENT_LOG) {
+        NativeEvent item;
+        item.audit = false;
+        item.request_id = event.request_id;
+        item.record_id = 0;
+        item.text = log_message(event);
+        item.resource.clear();
+        events->push_back(item);
+        return;
+    }
+    if (event.type == CAPSID_EVENT_AUDIT) {
+        capsid_audit_record audit;
+        capsid_audit_record_init(&audit);
+        if (capsid_audit_record_decode(&event, &audit) != CAPSID_OK) {
+            return;
+        }
+        NativeEvent item;
+        item.audit = true;
+        item.request_id = event.request_id;
+        item.record_id = audit.request_id;
+        item.text = bytes(audit.capability);
+        item.resource = bytes(audit.resource);
+        events->push_back(item);
+        return;
+    }
+}
+
+// Emitted only when --collect-events is on. Foreign events (request_id 0 or
+// any id that is not the owning request's) are attached to the first block
+// that asks for them so they always surface and never get dropped.
+void emit_events_block(uint64_t request_id, const NativeEvents &events) {
+    if (!collect_events) {
+        return;
+    }
+    std::vector<const NativeEvent *> block;
+    for (size_t index = 0; index < events.size(); ++index) {
+        if (events[index].request_id == request_id ||
+            events[index].request_id == 0) {
+            block.push_back(&events[index]);
+        }
+    }
+    std::cout << "EVENTS " << request_id << " " << block.size() << std::endl;
+    for (size_t index = 0; index < block.size(); ++index) {
+        const NativeEvent &item = *block[index];
+        if (!item.audit) {
+            std::cout << "LOG " << item.request_id << " "
+                      << hex(item.text) << std::endl;
+        } else {
+            std::cout << "AUDIT " << item.request_id << " "
+                      << item.record_id << " "
+                      << hex(item.text) << " "
+                      << hex(item.resource) << std::endl;
+        }
+    }
 }
 
 int hex_digit(char value) {
@@ -302,6 +400,7 @@ bool run_request(capsid_worker *worker,
                  const std::vector<uint8_t> &body,
                  size_t requested_chunk_size,
                  Response *response,
+                 NativeEvents *events,
                  std::string *fatal) {
     std::vector<capsid_header> native_headers(headers.size());
     for (size_t index = 0; index < headers.size(); ++index) {
@@ -439,6 +538,11 @@ bool run_request(capsid_worker *worker,
                 }
                 continue;
             }
+            if (event.type == CAPSID_EVENT_LOG ||
+                event.type == CAPSID_EVENT_AUDIT) {
+                collect_native_event(event, events);
+                continue;
+            }
             if (event.type == CAPSID_EVENT_RESPONSE_END &&
                 event.request_id == request_id) {
                 if (!received_head) {
@@ -475,6 +579,7 @@ bool run_cancel(capsid_worker *worker,
                 uint64_t request_id,
                 const std::string &url,
                 const std::string &mode,
+                NativeEvents *events,
                 std::string *fatal) {
     capsid_result result = capsid_worker_begin_request(
         worker, request_id, "GET", url.c_str(), NULL, 0);
@@ -512,6 +617,11 @@ bool run_cancel(capsid_worker *worker,
                 *fatal = std::string("cancel event: ") +
                     capsid_result_string(result);
                 return false;
+            }
+            if (event.type == CAPSID_EVENT_LOG ||
+                event.type == CAPSID_EVENT_AUDIT) {
+                collect_native_event(event, events);
+                continue;
             }
             if (event.request_id == request_id &&
                 mode == "started" &&
@@ -577,6 +687,11 @@ bool run_cancel(capsid_worker *worker,
                     capsid_result_string(result);
                 return false;
             }
+            if (event.type == CAPSID_EVENT_LOG ||
+                event.type == CAPSID_EVENT_AUDIT) {
+                collect_native_event(event, events);
+                continue;
+            }
             if (event.type == CAPSID_EVENT_EXIT) {
                 *fatal = "worker exited after cancellation";
                 return false;
@@ -590,6 +705,7 @@ bool run_cancel(capsid_worker *worker,
 bool run_cancel_upload(capsid_worker *worker,
                        uint64_t request_id,
                        const std::string &url,
+                       NativeEvents *events,
                        std::string *fatal) {
     capsid_result result = capsid_worker_begin_request(
         worker, request_id, "POST", url.c_str(), NULL, 0);
@@ -658,6 +774,11 @@ bool run_cancel_upload(capsid_worker *worker,
                 *fatal = "upload request completed before cancellation";
                 return false;
             }
+            if (event.type == CAPSID_EVENT_LOG ||
+                event.type == CAPSID_EVENT_AUDIT) {
+                collect_native_event(event, events);
+                continue;
+            }
             if (event.type == CAPSID_EVENT_EXIT) {
                 *fatal = "worker exited before upload cancellation";
                 return false;
@@ -702,6 +823,11 @@ bool run_cancel_upload(capsid_worker *worker,
                     capsid_result_string(result);
                 return false;
             }
+            if (event.type == CAPSID_EVENT_LOG ||
+                event.type == CAPSID_EVENT_AUDIT) {
+                collect_native_event(event, events);
+                continue;
+            }
             if (event.type == CAPSID_EVENT_EXIT) {
                 *fatal = "worker exited after upload cancellation";
                 return false;
@@ -712,6 +838,151 @@ bool run_cancel_upload(capsid_worker *worker,
     return true;
 }
 
+// Cancels a request whose handler schedules a detached native continuation
+// (identified by the `marker` log message). After the cancel the worker
+// must never run that continuation: a LOG carrying the marker during the
+// settle window is a fatal failure (the pre-poison bridge runs it with
+// request_id 0). The fixed implementation is expected to poison the worker
+// instead, which is reported back as `exited`.
+bool run_cancel_continuation(capsid_worker *worker,
+                             uint64_t request_id,
+                             const std::string &url,
+                             const std::string &marker,
+                             NativeEvents *events,
+                             bool *exited,
+                             std::string *fatal) {
+    capsid_result result = capsid_worker_begin_request(
+        worker, request_id, "GET", url.c_str(), NULL, 0);
+    if (result != CAPSID_OK) {
+        *fatal = std::string("begin cancel-continuation request: ") +
+            capsid_result_string(result);
+        return false;
+    }
+    result = capsid_worker_end_request(worker, request_id);
+    if (result != CAPSID_OK) {
+        *fatal = std::string("end cancel-continuation request: ") +
+            capsid_result_string(result);
+        return false;
+    }
+
+    bool trigger_seen = false;
+    std::chrono::steady_clock::time_point trigger_time;
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline) {
+        const capsid_result flush = capsid_worker_flush(worker);
+        if (!acceptable_flush(flush)) {
+            *fatal = std::string("cancel-continuation flush: ") +
+                capsid_result_string(flush);
+            return false;
+        }
+        for (;;) {
+            capsid_event event = {};
+            event.struct_size = sizeof(event);
+            result = capsid_worker_next_event(worker, &event);
+            if (result == CAPSID_WOULD_BLOCK) {
+                break;
+            }
+            if (result != CAPSID_OK) {
+                *fatal = std::string("cancel-continuation event: ") +
+                    capsid_result_string(result);
+                return false;
+            }
+            if (event.type == CAPSID_EVENT_LOG ||
+                event.type == CAPSID_EVENT_AUDIT) {
+                collect_native_event(event, events);
+                continue;
+            }
+            if (event.request_id == request_id &&
+                event.type == CAPSID_EVENT_REQUEST_CREDIT &&
+                !trigger_seen) {
+                trigger_seen = true;
+                trigger_time =
+                    std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(20);
+            }
+            if ((event.type == CAPSID_EVENT_ERROR ||
+                 event.type == CAPSID_EVENT_REQUEST_TIMEOUT) &&
+                event.request_id == request_id) {
+                *fatal = "request failed before cancel-continuation trigger";
+                return false;
+            }
+            if (event.type == CAPSID_EVENT_EXIT) {
+                *fatal = "worker exited before cancel-continuation trigger";
+                return false;
+            }
+        }
+        if (trigger_seen &&
+            std::chrono::steady_clock::now() >= trigger_time) {
+            result = capsid_worker_cancel(worker, request_id);
+            if (result != CAPSID_OK) {
+                *fatal = std::string("cancel continuation request: ") +
+                    capsid_result_string(result);
+                return false;
+            }
+            break;
+        }
+        poll_worker(worker, flush);
+    }
+    if (!trigger_seen) {
+        *fatal = "cancel-continuation trigger timeout";
+        return false;
+    }
+
+    // The detached continuation is scheduled 80ms after the handler ran;
+    // settle long enough for it to fire on the broken implementation.
+    *exited = false;
+    const std::chrono::steady_clock::time_point settle_deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    while (std::chrono::steady_clock::now() < settle_deadline) {
+        const capsid_result flush = capsid_worker_flush(worker);
+        if (!acceptable_flush(flush)) {
+            *fatal = std::string("cancel-continuation settle flush: ") +
+                capsid_result_string(flush);
+            return false;
+        }
+        for (;;) {
+            capsid_event event = {};
+            event.struct_size = sizeof(event);
+            result = capsid_worker_next_event(worker, &event);
+            if (result == CAPSID_WOULD_BLOCK) {
+                break;
+            }
+            if (result != CAPSID_OK) {
+                *fatal = std::string("cancel-continuation settle event: ") +
+                    capsid_result_string(result);
+                return false;
+            }
+            if (event.type == CAPSID_EVENT_LOG ||
+                event.type == CAPSID_EVENT_AUDIT) {
+                if (event.type == CAPSID_EVENT_LOG &&
+                    log_message(event) == marker) {
+                    *fatal = "terminal continuation produced native event '" +
+                        marker + "' with request_id " +
+                        std::to_string(event.request_id);
+                    return false;
+                }
+                collect_native_event(event, events);
+                continue;
+            }
+            if (event.type == CAPSID_EVENT_EXIT) {
+                *exited = true;
+                return true;
+            }
+            if (event.type == CAPSID_EVENT_ERROR ||
+                event.type == CAPSID_EVENT_REQUEST_TIMEOUT) {
+                // Terminalization of the canceled request is expected;
+                // keep settling for the poison EXIT.
+                continue;
+            }
+        }
+        poll_worker(worker, flush);
+    }
+    // The continuation never ran but the worker also did not poison
+    // itself. The test decides whether that satisfies the contract.
+    return true;
+}
+
 bool run_concurrent(capsid_worker *worker,
                     uint64_t first_id,
                     const std::string &first_url,
@@ -719,6 +990,7 @@ bool run_concurrent(capsid_worker *worker,
                     const std::string &second_url,
                     Response *first,
                     Response *second,
+                    NativeEvents *events,
                     std::string *fatal) {
     const uint64_t ids[] = { first_id, second_id };
     const std::string urls[] = { first_url, second_url };
@@ -816,6 +1088,10 @@ bool run_concurrent(capsid_worker *worker,
                 event.type == CAPSID_EVENT_RESPONSE_END) {
                 ended[index] = true;
             } else if (
+                event.type == CAPSID_EVENT_LOG ||
+                event.type == CAPSID_EVENT_AUDIT) {
+                collect_native_event(event, events);
+            } else if (
                 event.type == CAPSID_EVENT_ERROR ||
                 event.type == CAPSID_EVENT_REQUEST_TIMEOUT) {
                 *fatal = "concurrent framework request failed";
@@ -883,6 +1159,8 @@ int main(int argc, char **argv) {
         const std::string option(argv[index]);
         if (option == "--timeout-ms" && parsed != 0) {
             config.request_timeout_ms = parsed;
+        } else if (option == "--collect-events") {
+            collect_events = parsed != 0;
         } else if (
             option == "--loopback-port" &&
             parsed != 0 &&
@@ -935,6 +1213,41 @@ int main(int argc, char **argv) {
             capsid_worker_destroy(worker);
             return 0;
         }
+        if (fields.size() == 4 && fields[0] == "CANCEL_CONTINUATION") {
+            char *end = NULL;
+            const unsigned long long parsed_id =
+                std::strtoull(fields[1].c_str(), &end, 10);
+            std::string url;
+            std::string marker;
+            if (!end || *end != '\0' || parsed_id == 0 ||
+                !unhex_string(fields[2], &url) ||
+                !unhex_string(fields[3], &marker)) {
+                emit_fatal("invalid framework cancel-continuation command");
+                capsid_worker_destroy(worker);
+                return 1;
+            }
+            NativeEvents events;
+            bool exited = false;
+            std::string fatal;
+            if (!run_cancel_continuation(
+                    worker,
+                    static_cast<uint64_t>(parsed_id),
+                    url,
+                    marker,
+                    &events,
+                    &exited,
+                    &fatal)) {
+                emit_fatal(fatal);
+                capsid_worker_destroy(worker);
+                return 1;
+            }
+            std::cout << "CANCELED " << parsed_id << std::endl;
+            if (exited) {
+                std::cout << "EXITED " << parsed_id << std::endl;
+            }
+            emit_events_block(static_cast<uint64_t>(parsed_id), events);
+            continue;
+        }
         if (fields.size() == 4 && fields[0] == "CANCEL") {
             char *end = NULL;
             const unsigned long long parsed_id =
@@ -947,18 +1260,21 @@ int main(int argc, char **argv) {
                 capsid_worker_destroy(worker);
                 return 1;
             }
+            NativeEvents events;
             std::string fatal;
             if (!run_cancel(
                     worker,
                     static_cast<uint64_t>(parsed_id),
                     url,
                     fields[3],
+                    &events,
                     &fatal)) {
                 emit_fatal(fatal);
                 capsid_worker_destroy(worker);
                 return 1;
             }
             std::cout << "CANCELED " << parsed_id << std::endl;
+            emit_events_block(static_cast<uint64_t>(parsed_id), events);
             continue;
         }
         if (fields.size() == 3 && fields[0] == "CANCEL_UPLOAD") {
@@ -972,17 +1288,20 @@ int main(int argc, char **argv) {
                 capsid_worker_destroy(worker);
                 return 1;
             }
+            NativeEvents events;
             std::string fatal;
             if (!run_cancel_upload(
                     worker,
                     static_cast<uint64_t>(parsed_id),
                     url,
+                    &events,
                     &fatal)) {
                 emit_fatal(fatal);
                 capsid_worker_destroy(worker);
                 return 1;
             }
             std::cout << "CANCELED_UPLOAD " << parsed_id << std::endl;
+            emit_events_block(static_cast<uint64_t>(parsed_id), events);
             continue;
         }
         if (fields.size() == 5 && fields[0] == "CONCURRENT") {
@@ -1006,6 +1325,7 @@ int main(int argc, char **argv) {
             }
             Response first;
             Response second;
+            NativeEvents events;
             std::string fatal;
             if (!run_concurrent(
                     worker,
@@ -1015,6 +1335,7 @@ int main(int argc, char **argv) {
                     second_url,
                     &first,
                     &second,
+                    &events,
                     &fatal)) {
                 emit_fatal(fatal);
                 capsid_worker_destroy(worker);
@@ -1022,6 +1343,8 @@ int main(int argc, char **argv) {
             }
             emit_result(static_cast<uint64_t>(first_id), first);
             emit_result(static_cast<uint64_t>(second_id), second);
+            emit_events_block(static_cast<uint64_t>(first_id), events);
+            emit_events_block(static_cast<uint64_t>(second_id), events);
             continue;
         }
         if (fields.size() != 7 || fields[0] != "REQUEST") {
@@ -1061,6 +1384,7 @@ int main(int argc, char **argv) {
         }
 
         Response response;
+        NativeEvents events;
         std::string fatal;
         if (!run_request(
                 worker,
@@ -1071,12 +1395,14 @@ int main(int argc, char **argv) {
                 body,
                 static_cast<size_t>(parsed_chunk_size),
                 &response,
+                &events,
                 &fatal)) {
             emit_fatal(fatal);
             capsid_worker_destroy(worker);
             return 1;
         }
         emit_result(static_cast<uint64_t>(parsed_id), response);
+        emit_events_block(static_cast<uint64_t>(parsed_id), events);
     }
 
     capsid_worker_destroy(worker);

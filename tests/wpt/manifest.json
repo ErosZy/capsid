@@ -101,6 +101,96 @@
       "path": "webmessaging/MessagePort_initial_disabled.any.js",
       "subtest": "Untitled test",
       "deviation": "CAPSID-D010"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 19",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 20",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 21",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 22",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 23",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 24",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 25",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 26",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 27",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 28",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 29",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 30",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 31",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 32",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 33",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 34",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 35",
+      "deviation": "CAPSID-D011"
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
+      "subtest": "gb18030 decoder: GB18030-2022 36",
+      "deviation": "CAPSID-D011"
     }
   ],
   "tests": [

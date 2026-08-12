@@ -7,6 +7,7 @@
 #include <sys/types.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -40,6 +41,13 @@ public:
 
 private:
     void accept_loop();
+    void finish_start() {
+        {
+            std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+            start_finished_ = true;
+        }
+        lifecycle_cv_.notify_all();
+    }
 
     AdminServiceOptions options_;
     AdminBackend* backend_;
@@ -50,7 +58,11 @@ private:
     // never race a close+reuse of the descriptor number.
     std::mutex active_mutex_;
     int active_fd_ = -1;
+    std::mutex lifecycle_mutex_;
     std::atomic<bool> stopping_{false};
+    std::atomic<bool> start_gate_{false};
+    std::condition_variable lifecycle_cv_;
+    bool start_finished_ = false;
     // One-shot gate: the stop pipe is written at most once.
     std::atomic<bool> stop_written_{false};
     std::thread thread_;

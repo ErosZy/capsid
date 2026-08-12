@@ -14,7 +14,9 @@
 #include "host/policy_compiler.h"
 
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string>
 
 namespace {
@@ -167,6 +169,18 @@ int main() {
         memory.memory_bytes = 512U * 1024U * 1024U;
         require(!compile_policy(default_host(), memory, {}).ok,
                 "memory overreach accepted");
+        capsid::host::AppRequest oversized_window = legal_app();
+        oversized_window.requests_per_worker =
+            static_cast<std::uint64_t>(
+                std::numeric_limits<std::uint32_t>::max()) + 1;
+        oversized_window.env.clear();
+        capsid::host::HostPolicy unlimited_request_host = default_host();
+        unlimited_request_host.max_requests_per_worker = 0;
+        const PolicyCompileResult oversized_result =
+            compile_policy(unlimited_request_host, oversized_window, {});
+        require(!oversized_result.ok &&
+                    oversized_result.error.find("worker") != std::string::npos,
+                "request window above the Runtime limit accepted");
     }
 
     // 7b. E-1 admission queue (pool.queue*, §10.3): the App queue must not

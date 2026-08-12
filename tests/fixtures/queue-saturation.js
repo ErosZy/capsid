@@ -90,6 +90,36 @@ export default {
                     },
                 }));
             }
+            case '/string-body-accessed': {
+                const response = new Response('accessed-ok');
+                if (!(response.body instanceof ReadableStream)) {
+                    throw new Error('string body did not materialize as a stream');
+                }
+                return response;
+            }
+            case '/string-body-replaced': {
+                const response = new Response('original');
+                response.body = new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(new TextEncoder().encode('replacement-ok'));
+                        controller.close();
+                    },
+                });
+                return response;
+            }
+            case '/string-native-ascii':
+                return new Response('ascii-fast');
+            case '/string-native-unicode':
+                return new Response('Aé中😀Z');
+            case '/string-native-surrogates':
+                return new Response('\ud800A\udc00\ud83d\ude00');
+            case '/string-native-nul':
+                return new Response('a\0b');
+            case '/string-materialized-surrogates': {
+                const response = new Response('\ud800A\udc00\ud83d\ude00');
+                void response.body;
+                return response;
+            }
             default:
                 return new Response('unknown', { status: 404 });
         }

@@ -1,0 +1,19 @@
+diff --git a/deps/libwebsockets/CMakeLists.txt b/deps/libwebsockets/CMakeLists.txt
+index b524b41ec..4528d6572 100644
+--- a/deps/libwebsockets/CMakeLists.txt
++++ b/deps/libwebsockets/CMakeLists.txt
+@@ -1525,5 +1525,12 @@ add_custom_target(dist COMMAND "${CMAKE_MAKE_PROGRAM}" package_source)
+ 
+ 
+ 
+-# This must always be last!
+-include(CPack)
++# Capsid embeds libwebsockets as a subproject (build_worker.cmake). A
++# subproject include(CPack) would take over the parent project's `package`
++# target and silently produce a libwebsockets-*.tar.gz instead of the
++# Capsid archive (remediation spec 12.1). Only generate the lws package
++# when libwebsockets is the top-level project.
++if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
++    # This must always be last!
++    include(CPack)
++endif()

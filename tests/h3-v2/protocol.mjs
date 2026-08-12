@@ -107,13 +107,19 @@ export class FrameworkWorker {
     #lines;
     #exitPromise;
     #state = 'created';
+    #collectEvents = false;
 
     constructor({
         driverPath,
         workerPath,
         bundlePath,
         flags = [],
+        collectEvents = false,
     }) {
+        if (collectEvents) {
+            flags = [ ...flags, '--collect-events', '1' ];
+        }
+        this.#collectEvents = collectEvents;
         this.#child = spawn(
             driverPath,
             [ workerPath, bundlePath, ...flags ],
@@ -150,6 +156,42 @@ export class FrameworkWorker {
         this.#child.stdin.write(`${command}\n`);
     }
 
+    async #consumeEvents(expectedId) {
+        if (!this.#collectEvents) {
+            return [];
+        }
+        const line = await this.#nextLine();
+        const fields = line.split(' ');
+        assert.equal(
+            fields[0],
+            'EVENTS',
+            `expected events block for ${expectedId}`,
+        );
+        assert.equal(Number(fields[1]), expectedId);
+        const count = Number(fields[2]);
+        const events = [];
+        for (let index = 0; index < count; ++index) {
+            const parts = (await this.#nextLine()).split(' ');
+            if (parts[0] === 'LOG') {
+                events.push({
+                    kind: 'LOG',
+                    requestId: parts[1],
+                    text: parts[2],
+                });
+            } else {
+                assert.equal(parts[0], 'AUDIT');
+                events.push({
+                    kind: 'AUDIT',
+                    requestId: parts[1],
+                    recordId: parts[2],
+                    text: parts[3],
+                    resource: parts[4],
+                });
+            }
+        }
+        return events;
+    }
+
     async start() {
         assert.equal(await this.#nextLine(), 'READY', 'worker readiness');
         this.#state = 'ready';
@@ -174,6 +216,7 @@ export class FrameworkWorker {
             chunkSize,
         ].join(' '));
         const result = parseResult(await this.#nextLine(), id);
+        result.events = await this.#consumeEvents(id);
         this.#state = 'ready';
         return result;
     }
@@ -194,6 +237,8 @@ export class FrameworkWorker {
         ].join(' '));
         const first = parseResult(await this.#nextLine(), firstId);
         const second = parseResult(await this.#nextLine(), secondId);
+        first.events = await this.#consumeEvents(firstId);
+        second.events = await this.#consumeEvents(secondId);
         this.#state = 'ready';
         return [ first, second ];
     }
@@ -207,6 +252,7 @@ export class FrameworkWorker {
             mode,
         ].join(' '));
         assert.equal(await this.#nextLine(), `CANCELED ${id}`);
+        await this.#consumeEvents(id);
         this.#state = 'ready';
     }
 
@@ -218,7 +264,30 @@ export class FrameworkWorker {
             hex(encoder.encode(url)),
         ].join(' '));
         assert.equal(await this.#nextLine(), `CANCELED_UPLOAD ${id}`);
+        await this.#consumeEvents(id);
         this.#state = 'ready';
+    }
+
+    // Cancels a request whose handler scheduled a detached native
+    // continuation. The continuation must never run and the worker must
+    // poison itself; returns the settled events for assertion.
+    async cancelContinuation({ id, url, marker }) {
+        this.#state = `cancel-continuation:${id}`;
+        this.#send([
+            'CANCEL_CONTINUATION',
+            id,
+            hex(encoder.encode(url)),
+            hex(encoder.encode(marker)),
+        ].join(' '));
+        assert.equal(await this.#nextLine(), `CANCELED ${id}`);
+        assert.equal(
+            await this.#nextLine(),
+            `EXITED ${id}`,
+            'canceled request must end the worker (poison)',
+        );
+        const events = await this.#consumeEvents(id);
+        this.#state = 'ready';
+        return events;
     }
 
     async stop() {

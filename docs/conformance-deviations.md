@@ -19,6 +19,7 @@
 | CAPSID-D008 | WebAssembly shared memory/threads | 接受的 profile 排除 | `WAMR_BUILD_SHARED_MEMORY=0`；shared Memory 不具备合规 grow 语义，对应精确 WPT 为 expected failure。 | Wasm thread/shared linear memory 应用不受支持；非 shared 行为已通过选定 corpus。 | 启用 WAMR shared memory 和宿主原语，移除 expected failure 并通过固定测试。 |
 | CAPSID-D009 | QuickJS Proxy constructor probe | 暂定引擎偏差 | 即使 target 可构造，QuickJS 也会拒绝标准 Proxy-based `IsConstructor` 探针；Encoding IDL harness 使用等价 `Reflect.construct` 并继续检查全部 interface constructor。 | 依赖该 Proxy constructibility pattern 的用户代码观察到非标准行为。 | 修复/升级 QuickJS，恢复原探针并通过固定 IDL harness。 |
 | CAPSID-D010 | `MessagePort_initial_disabled` WPT 陈旧 | 接受的 WPT 上游分歧 | 该文件断言新建端口初始 stopped，与当前 WHATWG 规范相反；文件自身也标记可能是未维护重复用例。 | 单个子测试 `Untitled test` 为 expected failure，不影响 profile 能力。 | WPT 上游修正并重新发布后移除 expected-failure 项。 |
+| CAPSID-D011 | GB18030-2022 新增码位 | 暂定引擎偏差 | QuickJS/txiki 的 `TextDecoder` 编码表基于 GB18030-2005；GB18030-2022 标准新增的 18 个码位（U+9FB4–U+9FBB 汉字及 U+FE10–U+FE19 竖排标点对应映射）解码结果与 WPT 期望不符。`gb18030-decoder.any.js` 的 18 个子测试（`GB18030-2022 19`–`GB18030-2022 36`）为 expected failure。 | 依赖 GB18030-2022 新增码位解密的文本会得到替代映射字符；GB18030-2005 既有码位全部正确。 | 升级/修复 QuickJS 编码表至 GB18030-2022，移除 expected-failure 项并通过固定 WPT。 |
 
 ## 部署资源策略
 

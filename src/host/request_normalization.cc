@@ -165,8 +165,8 @@ bool parse_authority(std::string_view value, ParsedAuthority *out) {
     return true;
 }
 
-bool validate_policy(const RequestRoutingPolicy &policy,
-                     RequestNormalizationError &error) {
+static bool validate_policy(const RequestRoutingPolicy &policy,
+                            RequestNormalizationError &error) {
     if (policy.public_scheme != "http" && policy.public_scheme != "https") {
         set_error(error, ErrorCode::kInvalidListenerPolicy,
                   "/listener/publicScheme",
@@ -357,6 +357,18 @@ bool is_forwarding(std::string_view name) {
 bool is_valid_public_authority(std::string_view value) {
     ParsedAuthority parsed;
     return parse_authority(value, &parsed);
+}
+
+// Exported policy validation with an optional error slot. The listener
+// adapter (PR-09b) uses this before binding so startup fails closed on a
+// malformed policy; callers that only want the boolean may pass null.
+bool is_valid_routing_policy(const RequestRoutingPolicy &policy,
+                             RequestNormalizationError *error) {
+    RequestNormalizationError local;
+    if (error == nullptr) {
+        error = &local;
+    }
+    return validate_policy(policy, *error);
 }
 
 RequestNormalizationResult normalize_public_request(

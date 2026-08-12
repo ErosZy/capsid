@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 
+#include <sys/wait.h>
+
 namespace {
 
 [[noreturn]] void fail(const std::string& message) {
@@ -471,6 +473,81 @@ void test_atomic_start_failure(const char* worker_path) {
             "zero-worker static pool reported an active shard");
 }
 
+// Lifecycle hardening: request_stop() before start() must fail start
+// synchronously with every resource unwound — no listener, no shards, and
+// wait() must still complete without a thread that never started.
+void test_stop_before_start(const char* worker_path) {
+    int ready[2];
+    require(pipe(ready) == 0, "cannot create static-pool READY pipe");
+    capsid::host::StaticPoolServer pool(make_options(worker_path, ready[1], 2));
+    pool.request_stop();
+    std::string error;
+    require(!pool.start(fixture_bundle(), &error),
+            "static pool started after a prior stop request");
+    require(!error.empty(), "stop-before-start produced no error text");
+    require(pool.active_workers() == 0,
+            "stop-before-start pool retained worker shards");
+    pool.request_stop();
+    require(pool.wait(&error),
+            "stop-before-start pool did not wait cleanly: " + error);
+    close(ready[0]);
+    close(ready[1]);
+}
+
+// Lifecycle hardening: a stop that arrives while start() is mid-shard must
+// never leave a partial pool running. The stop gate fails start, and the
+// starting shard is reclaimed by the atomic rollback (starting_shard_
+// publication) rather than leaked into a live pool.
+void test_start_stop_race(const char* worker_path) {
+    const pid_t child = fork();
+    require(child >= 0, "cannot fork static-pool start/stop race probe");
+    if (child == 0) {
+        // Eight rounds of one shard: each round spawns and tears down a
+        // real worker process, so the probe stays inside its bounded
+        // window while still interleaving stop across every start phase.
+        for (int round = 0; round < 8; ++round) {
+            int ready[2];
+            require(pipe(ready) == 0, "cannot create race READY pipe");
+            capsid::host::StaticPoolServer pool(
+                make_options(worker_path, ready[1], 1));
+            std::thread racer([&]() {
+                usleep(static_cast<useconds_t>(round % 3) * 200U);
+                pool.request_stop();
+            });
+            std::string error;
+            const bool started = pool.start(fixture_bundle(), &error);
+            racer.join();
+            pool.request_stop();
+            require(pool.wait(&error),
+                    "start/stop race wedged pool wait: " + error);
+            require(pool.active_workers() == 0,
+                    "start/stop race leaked worker shards");
+            close(ready[0]);
+            close(ready[1]);
+            (void)started;
+        }
+        _exit(0);
+    }
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(30);
+    int status = 0;
+    for (;;) {
+        const pid_t waited = waitpid(child, &status, WNOHANG);
+        require(waited >= 0, "cannot wait for static-pool race probe");
+        if (waited == child) {
+            require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+                    "static-pool start/stop race probe failed");
+            return;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            (void)kill(child, SIGKILL);
+            (void)waitpid(child, &status, 0);
+            fail("static-pool start/stop race never converged");
+        }
+        usleep(1000);
+    }
+}
+
 #endif  // CAPSID_HAS_STATIC_POOL_SERVER
 
 }  // namespace
@@ -492,6 +569,10 @@ int main(int argc, char** argv) {
         test_drain_deadline_forces(argv[2]);
     } else if (mode == "drain-idle-exits") {
         test_drain_idle_exits(argv[2]);
+    } else if (mode == "stop-before-start") {
+        test_stop_before_start(argv[2]);
+    } else if (mode == "start-stop-race") {
+        test_start_stop_race(argv[2]);
     } else {
         fail("unknown static-pool server mode");
     }

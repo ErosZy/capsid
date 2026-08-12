@@ -116,6 +116,39 @@ const std::vector<std::uint8_t>& sse_open_bundle() {
     return bundle;
 }
 
+// MIME type matching is case-insensitive (RFC 2045 §5.1): an
+// uppercase "Text/Event-Stream" must acquire the permit exactly like the
+// canonical lowercase form. Without case folding the stream would slip
+// onto the ordinary inflight path and a second SSE request would no longer
+// 503 under a 1-slot permit.
+const std::vector<std::uint8_t>& sse_uppercase_bundle() {
+    static const std::string source =
+        "export default { fetch: () => { "
+        "  const stream = new ReadableStream({ start(controller) { "
+        "    controller.enqueue(new TextEncoder().encode('data: hello\\n\\n')); "
+        "    controller.close(); } }); "
+        "  return new Response(stream, "
+        "    { headers: { 'content-type': 'Text/Event-Stream' } }); } };";
+    static const std::vector<std::uint8_t> bundle(source.begin(),
+                                                  source.end());
+    return bundle;
+}
+
+// A parameterized event-stream type ("text/event-stream; charset=utf-8")
+// must also acquire the permit: the semicolon terminates the type token.
+const std::vector<std::uint8_t>& sse_parameterized_bundle() {
+    static const std::string source =
+        "export default { fetch: () => { "
+        "  const stream = new ReadableStream({ start(controller) { "
+        "    controller.enqueue(new TextEncoder().encode('data: hello\\n\\n')); "
+        "    controller.close(); } }); "
+        "  return new Response(stream, "
+        "    { headers: { 'content-type': 'text/event-stream; charset=utf-8' } }); } };";
+    static const std::vector<std::uint8_t> bundle(source.begin(),
+                                                  source.end());
+    return bundle;
+}
+
 // A plain chunked response (no Content-Length, no SSE type): must never
 // hold the streaming permit.
 const std::vector<std::uint8_t>& plain_chunked_bundle() {
@@ -482,6 +515,44 @@ void test_plain_chunked_does_not_hold_permit(const char* worker_path) {
     require(server.wait(&error), "SSE server wait failed: " + error);
 }
 
+// Case-insensitive and parameterized Content-Type matching: with a
+// 1-slot permit and an open stream holding it, a second request must 503
+// even when the first stream's type is "Text/Event-Stream" or carries
+// parameters. The type token match drives the permit; anything else would
+// let a second SSE stream start under a 1-slot permit.
+void test_mime_matching_holds_permit(const char* worker_path,
+                                     const std::vector<std::uint8_t>& bundle) {
+    int ready[2];
+    require(pipe(ready) == 0, "cannot create SSE READY pipe");
+    capsid::host::SingleWorkerServerOptions options =
+        make_options(worker_path, ready[1]);
+    options.max_inflight_per_worker = 2;
+    options.max_streaming_inflight_per_worker = 1;
+    capsid::host::SingleWorkerServer server(std::move(options));
+    std::string error;
+    require(server.start(bundle, &error),
+            "cannot start SSE server: " + error);
+    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
+
+    // The first stream holds the only permit and never ends.
+    const int first = connect_to(port);
+    send_request(first, "/@capsid/orders/stream", true);
+    const int second = connect_to(port);
+    send_request(second, "/@capsid/orders/stream", true);
+    const unsigned first_status = read_head(first);
+    const unsigned second_status = read_head(second);
+    require(first_status == 200,
+            "first SSE request failed: " + std::to_string(first_status));
+    require(second_status == 503,
+            "non-canonical event-stream type must still hold the permit, "
+            "got " + std::to_string(second_status));
+    close(first);
+    close(second);
+
+    server.request_stop();
+    require(server.wait(&error), "SSE server wait failed: " + error);
+}
+
 // The documented 1/1 boundary: maxInflightPerWorker == 1 with
 // maxStreamingInflightPerWorker == 1 starts and serves (no concurrency
 // reservation).
@@ -527,6 +598,10 @@ int main(int argc, char** argv) {
         test_plain_chunked_does_not_hold_permit(argv[2]);
     } else if (mode == "max-inflight-one-boundary") {
         test_max_inflight_one_boundary(argv[2]);
+    } else if (mode == "uppercase-content-type-holds-permit") {
+        test_mime_matching_holds_permit(argv[2], sse_uppercase_bundle());
+    } else if (mode == "parameterized-content-type-holds-permit") {
+        test_mime_matching_holds_permit(argv[2], sse_parameterized_bundle());
     } else {
         fail("unknown SSE permit mode");
     }

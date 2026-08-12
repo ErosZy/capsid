@@ -17,6 +17,7 @@
 
 #include "host/admin_api.h"
 #include "host/managed_host.h"
+#include "host/worker_executor.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>

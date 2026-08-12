@@ -10,6 +10,8 @@
 
 #include "host/admin_http.h"
 
+#include "host/poll_limits.h"
+
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 
@@ -21,6 +23,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <limits>
 #include <string>
 
 namespace capsid::host {
@@ -76,8 +79,12 @@ int wait_fd(int fd, short events, std::uint32_t timeout_ms) {
     struct pollfd descriptor = {};
     descriptor.fd = fd;
     descriptor.events = events;
+    // poll() takes a signed int timeout while the public Admin options use
+    // uint32_t. Saturate rather than wrapping large, valid option values into
+    // a negative timeout (which poll interprets as "wait forever").
+    const int poll_timeout = poll_timeout_ms(timeout_ms);
     for (;;) {
-        const int result = poll(&descriptor, 1, static_cast<int>(timeout_ms));
+        const int result = poll(&descriptor, 1, poll_timeout);
         if (result >= 0) {
             return result;
         }

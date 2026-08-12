@@ -61,7 +61,7 @@ struct MemberPair {
 };
 
 struct Schema {
-    enum class Kind { kObject, kString, kInteger, kArray, kDynamicMap };
+    enum class Kind { kObject, kString, kInteger, kArray, kDynamicMap, kBoolean };
 
     Kind kind;
     // kObject only: the allowed member table. An empty table is a strict
@@ -97,6 +97,7 @@ struct Schema {
 
 constexpr Schema kStringSchema{Schema::Kind::kString};
 constexpr Schema kIntegerSchema{Schema::Kind::kInteger};
+constexpr Schema kBooleanSchema{Schema::Kind::kBoolean};
 constexpr Schema kPositiveIntegerSchema{
     Schema::Kind::kInteger, {}, false, {}, 1};
 
@@ -143,6 +144,7 @@ constexpr std::array kListenerMembers{
     Member{"tcp", &kStringSchema, false},
     Member{"publicScheme", &kStringSchema, false},
     Member{"publicAuthority", &kStringSchema, false},
+    Member{"trusted", &kBooleanSchema, false},
     Member{"routing", &kRoutingSchema, false},
     Member{"limits", &kListenerLimitSchema, false},
 };
@@ -231,6 +233,9 @@ constexpr Schema kTierSchema{
 
 constexpr std::array kCapacityMembers{
     Member{"workersTotal", &kPositiveIntegerSchema, false},
+    // §9.4: non-negative (0 = default); the surge budget is optional and
+    // absence means zero-downtime replaces are refused.
+    Member{"activationSurgeWorkers", &kIntegerSchema, false},
     Member{"startupsConcurrent", &kIntegerSchema, false},
     Member{"queuedRequestsTotal", &kIntegerSchema, false},
     Member{"queuedHeaderBytesTotal", &kStringSchema, false},
@@ -588,7 +593,8 @@ bool check_unknown_fields(const Schema& schema,
         return true;
     case Schema::Kind::kString:
     case Schema::Kind::kInteger:
-        return true;
+    case Schema::Kind::kBoolean:
+        return true;  // leaves: type-checked in phase 2
     }
     return true;
 }
@@ -790,6 +796,14 @@ bool validate_values(const Schema& schema,
             error.code = ConfigErrorCode::kInvalidValue;
             error.path = path;
             error.message = "value below minimum";
+            return false;
+        }
+        return true;
+    case Schema::Kind::kBoolean:
+        if (!json_is_boolean(node)) {
+            error.code = ConfigErrorCode::kInvalidValue;
+            error.path = path;
+            error.message = "expected a JSON boolean";
             return false;
         }
         return true;

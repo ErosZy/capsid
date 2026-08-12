@@ -9,7 +9,9 @@
 
 #include <jansson.h>
 
+#include <arpa/inet.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -148,15 +150,21 @@ struct Fixture {
                 "cannot make blocking worker fixture executable");
     }
 
-    void create_application(const std::string& application) {
+    // The fetch_body parameter lets a multi-App E2E give each App a
+    // distinct response so cross-App routing bleed is observable.
+    void create_application(
+        const std::string& application,
+        const std::string& fetch_body = "managed-executable-ok") {
         const std::string app = applications_root + "/" + application;
         require(mkdir(app.c_str(), 0700) == 0,
                 "cannot create managed executable App fixture");
-        create_version(application, "v1");
+        create_version(application, "v1", fetch_body);
     }
 
     void create_version(const std::string& application,
-                        const std::string& version_id) {
+                        const std::string& version_id,
+                        const std::string& fetch_body =
+                            "managed-executable-ok") {
         const std::string version = applications_root + "/" + application +
                                     "/" + version_id;
         require(mkdir(version.c_str(), 0700) == 0,
@@ -166,7 +174,8 @@ struct Fixture {
             R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1}})json");
         write_file(
             version + "/bundle.mjs",
-            "export default { fetch: () => new Response('managed-executable-ok') };");
+            "export default { fetch: () => new Response('" + fetch_body +
+                "') };");
     }
 
     void replace_host_text(const std::string& old_text,
@@ -251,9 +260,26 @@ void wait_for_socket(const Fixture& fixture) {
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::seconds(5);
     for (;;) {
-        struct stat metadata = {};
-        if (lstat(fixture.socket_path.c_str(), &metadata) == 0 &&
-            S_ISSOCK(metadata.st_mode)) {
+        // Readiness means "the Admin listener accepts connections", not "a
+        // socket pathname exists". Crash-injection phases SIGKILL the host
+        // and leave its socket file behind; the next start_host() phase
+        // removes the stale pathname under the evidence rule and rebinds,
+        // so waiting on the bare pathname would connect to a dead listener
+        // (ECONNREFUSED) in the window before the new host's bind+listen.
+        // Probe with connect(): only a live listener returns success.
+        require(fixture.socket_path.size() < sizeof(sockaddr_un{}.sun_path),
+                "managed Admin socket path is too long");
+        const int probe = socket(AF_UNIX, SOCK_STREAM, 0);
+        require(probe >= 0, "cannot create managed Admin readiness probe");
+        struct sockaddr_un address = {};
+        address.sun_family = AF_UNIX;
+        std::memcpy(address.sun_path, fixture.socket_path.c_str(),
+                    fixture.socket_path.size() + 1);
+        const int probe_result =
+            connect(probe, reinterpret_cast<const struct sockaddr*>(&address),
+                    sizeof(address));
+        close(probe);
+        if (probe_result == 0) {
             return;
         }
         int status = 0;
@@ -468,6 +494,192 @@ void kill_host() {
 bool path_exists(const std::string& path) {
     struct stat metadata = {};
     return stat(path.c_str(), &metadata) == 0;
+}
+
+// Picks a likely-free loopback port by binding :0 and closing. The
+// listener sets SO_REUSEADDR, so the small race is harmless.
+int pick_port() {
+    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    require(fd >= 0, "cannot create the TCP port probe");
+    struct sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    require(bind(fd, reinterpret_cast<const struct sockaddr*>(&address),
+                 sizeof(address)) == 0,
+            "cannot bind the TCP port probe");
+    socklen_t length = sizeof(address);
+    require(getsockname(fd, reinterpret_cast<struct sockaddr*>(&address),
+                        &length) == 0,
+            "cannot read the probed TCP port");
+    const int port = ntohs(address.sin_port);
+    close(fd);
+    require(port > 0, "the TCP port probe returned an invalid port");
+    return port;
+}
+
+// Inserts `count` path-mode public listener entries before the capacity
+// block. count > 1 models the §9.2 fail-closed gate (the v1 data plane is
+// exactly one listener), which must reject startup before any bind.
+void add_public_listener(Fixture& fixture, int port,
+                         unsigned count = 1) {
+    std::string fragment = "\"listeners\":[";
+    for (unsigned index = 0; index < count; ++index) {
+        if (index > 0) {
+            fragment += ",";
+        }
+        fragment +=
+            "{\"name\":\"public-" + std::to_string(index) +
+            "\",\"tcp\":\"127.0.0.1:" + std::to_string(port) +
+            "\",\"publicScheme\":\"http\",\"publicAuthority\":\"localhost\","
+            "\"trusted\":false,\"routing\":{\"mode\":\"path\"}}";
+    }
+    fragment += "],";
+    fixture.replace_host_text("\"capacity\":", fragment + "\"capacity\":");
+}
+
+// One raw HTTP/1.1 exchange against the TCP data-plane listener; reads
+// until a Content-Length body, a chunked body's terminal 0-chunk, or the
+// connection close. Mirrors the listener contract harness's framing.
+struct HttpResponse {
+    int status = 0;
+    std::string body;
+};
+
+HttpResponse http_exchange_tcp(int port, const std::string& request) {
+    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    require(fd >= 0, "cannot create the data-plane HTTP socket");
+    const struct timeval timeout = {10, 0};
+    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                       sizeof(timeout)) == 0,
+            "cannot set the data-plane receive timeout");
+    struct sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(static_cast<std::uint16_t>(port));
+    require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
+            "cannot build the loopback data-plane address");
+    require(connect(fd, reinterpret_cast<const struct sockaddr*>(&address),
+                    sizeof(address)) == 0,
+            "cannot connect to the data-plane listener");
+    std::size_t sent = 0;
+    while (sent < request.size()) {
+        const ssize_t count = send(fd, request.data() + sent,
+                                   request.size() - sent, 0);
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        require(count > 0, "cannot write the data-plane request");
+        sent += static_cast<std::size_t>(count);
+    }
+    std::string wire;
+    char buffer[4096];
+    bool done = false;
+    bool chunked = false;
+    std::string chunked_body;
+    while (!done) {
+        const ssize_t count = recv(fd, buffer, sizeof(buffer), 0);
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        require(count >= 0, "data-plane HTTP exchange failed or timed out");
+        if (count == 0) {
+            break;  // connection closed: everything received is the body
+        }
+        wire.append(buffer, static_cast<std::size_t>(count));
+        const std::string::size_type head_end = wire.find("\r\n\r\n");
+        if (head_end == std::string::npos) {
+            continue;
+        }
+        const std::string head = wire.substr(0, head_end);
+        std::string::size_type offset = head.find("Content-Length:");
+        if (offset == std::string::npos) {
+            offset = head.find("content-length:");
+        }
+        if (offset != std::string::npos) {
+            offset += std::string("content-length:").size();
+            while (offset < head.size() && head[offset] == ' ') {
+                ++offset;
+            }
+            const std::string::size_type end = head.find("\r\n", offset);
+            const std::size_t length = static_cast<std::size_t>(
+                std::strtoull(head.substr(offset, end - offset).c_str(),
+                              nullptr, 10));
+            if (wire.size() >= head_end + 4 + length) {
+                wire = wire.substr(0, head_end + 4 + length);
+                done = true;
+            }
+            continue;
+        }
+        offset = head.find("Transfer-Encoding:");
+        if (offset == std::string::npos) {
+            offset = head.find("transfer-encoding:");
+        }
+        if (offset != std::string::npos &&
+            head.find("chunked", offset) != std::string::npos) {
+            chunked = true;
+            std::string::size_type pos = head_end + 4;
+            chunked_body.clear();
+            for (;;) {
+                const std::string::size_type line_end =
+                    wire.find("\r\n", pos);
+                if (line_end == std::string::npos) {
+                    break;  // need more bytes
+                }
+                const std::string size_field =
+                    wire.substr(pos, line_end - pos);
+                const std::string::size_type extension = size_field.find(';');
+                const std::uint64_t size = std::strtoull(
+                    size_field.substr(0, extension).c_str(), nullptr, 16);
+                if (size == 0) {
+                    if (wire.size() < line_end + 4) {
+                        break;  // the terminal chunk is not complete yet
+                    }
+                    done = true;
+                    break;
+                }
+                if (wire.size() < line_end + 2 + size + 2) {
+                    break;  // need more bytes
+                }
+                chunked_body.append(wire, line_end + 2, size);
+                pos = line_end + 2 + size + 2;
+            }
+        }
+    }
+    close(fd);
+    HttpResponse response;
+    const std::string::size_type code_start = wire.find(' ');
+    if (code_start != std::string::npos) {
+        response.status = std::atoi(wire.c_str() + code_start + 1);
+    }
+    const std::string::size_type head_end = wire.find("\r\n\r\n");
+    if (head_end != std::string::npos) {
+        response.body = chunked ? chunked_body : wire.substr(head_end + 4);
+    }
+    return response;
+}
+
+// The data-plane equivalent of require(): a status+body assertion whose
+// message carries both observed values.
+void require_http(const HttpResponse& response, int status,
+                  const std::string& body, const std::string& context) {
+    require(response.status == status && response.body == body,
+            context + " (status " + std::to_string(response.status) +
+                ", body '" + response.body + "')");
+}
+
+std::string retire(const Fixture& fixture,
+                   const std::string& application) {
+    const std::string request =
+        "POST /v1/apps/" + application +
+        "/retire HTTP/1.1\r\nHost: local\r\nContent-Length: 0\r\n\r\n";
+    json_t* response = parse_response(
+        http_request(fixture.socket_path, request), 202);
+    json_t* id = json_object_get(response, "operationId");
+    require(json_is_string(id),
+            "managed retire omitted its operation ID");
+    const std::string operation = json_string_value(id);
+    json_decref(response);
+    return operation;
 }
 
 // The generation digest the deployed active.json references.
@@ -804,6 +1016,52 @@ int main(int argc, char** argv) {
         wait_for_socket(fixture);
         (void)deploy(fixture);
         stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_active_state_validation_fail_closed") {
+        // Release hardening: the durable active pointer is read through a
+        // verified descriptor (O_NONBLOCK + fstat: regular file, owned by
+        // the Host euid, bounded size). A directory, a foreign-owned file or
+        // an oversized document at active.json must make recovery fail
+        // closed — the Host refuses to start rather than parse unverified
+        // bytes or silently drop a durable active pointer. Run once per
+        // corruption class; each class must reject startup.
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        wait_active(fixture, operation);
+        stop_host(fixture);
+
+        const std::string active_path =
+            fixture.state_root + "/apps/orders/active.json";
+        require(remove(active_path.c_str()) == 0,
+                "cannot detach the active state document");
+
+        // Corruption class 1: a directory at active.json.
+        require(mkdir(active_path.c_str(), 0700) == 0,
+                "cannot plant a directory at active.json");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(5));
+
+        // Corruption class 2: an oversized active document (> 16 KiB).
+        require(rmdir(active_path.c_str()) == 0,
+                "cannot remove the directory active-state fixture");
+        write_file(active_path, std::string(17U * 1024U, 'x'));
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(5));
+
+        // Corruption class 3: a foreign-owned active document. The Host
+        // (running as euid) must reject a file it does not own even when
+        // the contents are parseable.
+        require(remove(active_path.c_str()) == 0,
+                "cannot detach the oversized active-state fixture");
+        write_file(active_path, "{}");
+        require(chown(active_path.c_str(), 65534, 65534) == 0,
+                "cannot chown active.json to a foreign uid");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(5));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1507,6 +1765,83 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_executable_rejects_negative_workers_total") {
+        // Release hardening: a negative capacity.workersTotal must fail
+        // startup (the unsigned cast would otherwise turn -1 into
+        // UINT64_MAX and grant absurd capacity).
+        fixture.replace_host_text("\"workersTotal\":1",
+                                  "\"workersTotal\":-1");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(1));
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_rejects_oversized_workers_total") {
+        // Release hardening: capacity.workersTotal beyond INT_MAX must fail
+        // startup (the value is narrowed to int for the capacity permit;
+        // without the ceiling the narrow wraps negative).
+        fixture.replace_host_text("\"workersTotal\":1",
+                                  "\"workersTotal\":2147483648");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(1));
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_rejects_negative_max_inflight") {
+        // Release hardening: a negative maximums.request.maxInflightPerWorker
+        // must fail startup (the unsigned cast would otherwise accept it).
+        fixture.replace_host_text(
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000}}",
+            "\"maximums\":{\"request\":{\"maxInflightPerWorker\":-5}}");
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(1));
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_rejects_zero_or_negative_pool_bounds") {
+        // Release hardening: capsid.json pool bounds below 1 must fail the
+        // deploy, never spin up a zero/negative worker pool or overflow into
+        // the uint32 cast.
+        fixture.create_version("orders", "v2");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":0,"maxWorkers":1}})json");
+        const std::string zero_min = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, zero_min) == "failed",
+                "pool.minReady=0 deployed active");
+
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":-2,"maxWorkers":1}})json");
+        const std::string negative_min = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, negative_min) == "failed",
+                "pool.minReady=-2 deployed active");
+
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":0}})json");
+        const std::string zero_max = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, zero_max) == "failed",
+                "pool.maxWorkers=0 deployed active");
+
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":-3}})json");
+        const std::string negative_max = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, negative_max) == "failed",
+                "pool.maxWorkers=-3 deployed active");
+
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_enforces_global_worker_capacity") {
         fixture.create_application("payments");
         start_host(fixture, argv[2], argv[3]);
@@ -1524,6 +1859,13 @@ int main(int argc, char** argv) {
     }
 
     if (mode == "host_managed_executable_redeploys_with_capacity_one") {
+        // §9.4: workersTotal=1 is the steady budget; a zero-downtime
+        // replacement overlaps the old and new pools, so the fixture
+        // grants one surge slot.
+        fixture.replace_host_text(
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}",
+            "\"capacity\":{\"workersTotal\":1,\"activationSurgeWorkers\":1,"
+            "\"startupsConcurrent\":1}");
         fixture.create_version("orders", "v2");
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);
@@ -1556,6 +1898,140 @@ int main(int argc, char** argv) {
                 "recovered worker did not consume global Host capacity");
         require_active_app(fixture, "orders", "v1");
         stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_http_e2e_multi_app") {
+        // §9.6 E2E through the real TCP data plane: listener-routed deploy,
+        // multi-App isolation (item 7), in-place replacement (item 4), and
+        // the retire tombstone — new requests get 404 (item 6) while the
+        // surviving App keeps serving.
+        const int port = pick_port();
+        add_public_listener(fixture, port);
+        // Two Apps each hold a 1-worker pool; the fixture's default
+        // workersTotal of 1 must grow to fit both (§9.6-7). §9.4: the
+        // in-place replacement below overlaps the old and new generations,
+        // so one surge slot is granted.
+        fixture.replace_host_text(
+            "\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}",
+            "\"capacity\":{\"workersTotal\":4,\"activationSurgeWorkers\":1,"
+            "\"startupsConcurrent\":1}");
+        fixture.create_application("payments", "payments-executable-ok");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+
+        const std::string first = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, first) == "active",
+                "the E2E App did not reach active state");
+        require_http(http_exchange_tcp(port, "GET /@capsid/orders/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     200, "managed-executable-ok",
+                     "a configured listener did not reach the deployed App "
+                     "(§9.6-1)");
+
+        // A path that never names an App stays the router's 404.
+        require_http(http_exchange_tcp(port, "GET /admin HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     404, "path routing requires the /@capsid/{app} prefix",
+                     "a non-App path did not map to 404");
+
+        // Second App: real multi-App routing without cross-App bleed (§9.6-7).
+        const std::string second = deploy(fixture, "payments", "v1");
+        require(wait_terminal_state(fixture, second) == "active",
+                "the second App did not reach active state");
+        require_http(http_exchange_tcp(port, "GET /@capsid/payments/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     200, "payments-executable-ok",
+                     "the payments App did not serve its own response");
+        require_http(http_exchange_tcp(port, "GET /@capsid/orders/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     200, "managed-executable-ok",
+                     "the payments deploy bled into orders (§9.6-7)");
+
+        // In-place replacement: new requests only reach the new generation
+        // (§9.6-4); the other App is untouched.
+        fixture.create_version("orders", "v2", "orders-v2-ok");
+        const std::string replacement = deploy(fixture, "orders", "v2");
+        require(wait_terminal_state(fixture, replacement) == "active",
+                "the orders replacement did not reach active state");
+        require_http(http_exchange_tcp(port, "GET /@capsid/orders/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     200, "orders-v2-ok",
+                     "new requests did not move to the replacement "
+                     "generation (§9.6-4)");
+        require_http(http_exchange_tcp(port, "GET /@capsid/payments/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     200, "payments-executable-ok",
+                     "the orders replacement bled into payments");
+
+        // Retire: the route becomes a tombstone — new requests are 404
+        // (§9.6-6), while the live App keeps serving.
+        const std::string retired = retire(fixture, "payments");
+        require(wait_terminal_state(fixture, retired) == "active",
+                "the payments retire did not complete");
+        require_http(http_exchange_tcp(port, "GET /@capsid/payments/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     404, "app retired",
+                     "a retired App did not map to 404 (§9.6-6)");
+        require_http(http_exchange_tcp(port, "GET /@capsid/orders/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     200, "orders-v2-ok",
+                     "the retire bled into a live App");
+
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_http_restart_recovers_route") {
+        // §9.6-3: after a restart the recovered generation serves over the
+        // real listener again — the durable active document, not the
+        // upload, is the recovery source.
+        const int port = pick_port();
+        add_public_listener(fixture, port);
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string first = deploy(fixture, "orders", "v1");
+        require(wait_terminal_state(fixture, first) == "active",
+                "the restart E2E App did not reach active state");
+        require_http(http_exchange_tcp(port, "GET /@capsid/orders/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     200, "managed-executable-ok",
+                     "the pre-restart listener did not serve the App");
+        stop_host(fixture);
+
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        require_active_app(fixture, "orders", "v1");
+        require_http(http_exchange_tcp(port, "GET /@capsid/orders/ HTTP/1.1\r\n"
+                                          "Host: localhost\r\n"
+                                          "Connection: close\r\n\r\n"),
+                     200, "managed-executable-ok",
+                     "the recovered generation did not serve over the "
+                     "listener (§9.6-3)");
+        stop_host(fixture);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_http_rejects_multiple_listeners") {
+        // §9.2 all-or-fail / v1 single-consumer event sink: two configured
+        // listeners fail startup closed instead of serving with a broken
+        // response fan-out.
+        const int port = pick_port();
+        add_public_listener(fixture, port, 2);
+        start_host(fixture, argv[2], argv[3]);
+        require_startup_rejected(fixture, std::chrono::seconds(1));
         std::cout << "PASS" << std::endl;
         return 0;
     }

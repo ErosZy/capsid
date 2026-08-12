@@ -46,6 +46,10 @@ function perfUsable() {
         const probe = spawn('perf', [ 'stat', '-e', 'task-clock', 'true' ],
             { stdio: 'ignore' });
         probe.on('exit', (code) => resolve(code === 0));
+        // A missing perf binary fires 'error' (ENOENT), not 'exit'; without
+        // this the promise never settles and the gate times out instead of
+        // skipping (77).
+        probe.on('error', () => resolve(false));
     });
 }
 
@@ -98,6 +102,28 @@ const requiredFiles = [
     'candidate-worker.perf.data',
     'report.md',
 ];
+
+// ---- GREEN: the documented quick-run flag skips every perf artifact while
+// preserving the headline/correctness evidence contract. ----
+{
+    const result = await runnerOutput(args, {
+        extraArgs: [ '--no-profile' ],
+        env: { CAPSID_BENCH_TEST_MODE: '1' },
+    });
+    assert.equal(result.code, 0,
+        `runner rejected --no-profile evidence: ${result.stderr}`);
+    for (const file of [ 'manifest.json', 'samples.jsonl',
+        'correctness.json', 'report.md' ]) {
+        const full = path.join(result.out, file);
+        assert.ok(fs.statSync(full).size > 0, `missing or empty ${file}`);
+    }
+    for (const file of [ 'baseline-gateway.pprof',
+        'baseline-worker.perf.data', 'candidate-host.perf.data',
+        'candidate-worker.perf.data' ]) {
+        assert.ok(!fs.existsSync(path.join(result.out, file)),
+            `--no-profile unexpectedly created ${file}`);
+    }
+}
 
 // ---- GREEN: fake components produce complete evidence. The working tree
 // is dirty during development, so the test exempts the dirty-tree check

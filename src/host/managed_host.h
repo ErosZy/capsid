@@ -3,14 +3,19 @@
 
 struct capsid_worker;
 
+#include "host/activation_transaction.h"
 #include "host/bytecode_attestation.h"
 #include "host/policy_compiler.h"
 #include "host/service_lifecycle.h"
+#include "host/worker_capacity_ledger.h"
+#include "host/worker_executor.h"
 #include "host/worker_recovery.h"
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,6 +28,35 @@ namespace capsid::host {
 // secrets, stage, fdatasync, COMPLETE, rename to the generation, fsync,
 // write the immutable version mapping, spawn the worker, load, wait for
 // READY, persist active.json, fsync, publish routing, drain the old worker.
+
+// Declared BEFORE ManagedHostOptions: the §9.3 transaction callback fields
+// use it in their std::function signatures, and std::function instantiated
+// with an incomplete parameter type cannot be called once the type is
+// completed (GCC 13).
+struct DeployOutcome {
+    bool ok = false;
+    std::string operation_id;
+    std::string error;  // static text
+    // The whole owning pool: every warmed worker (READY + compatibility
+    // verified), all owned by the caller after a successful deploy; the
+    // caller wires the data plane and drains the previous pool. The pool
+    // is atomic — on any failure it is empty and no worker escapes.
+    std::vector<capsid_worker*> workers;
+    // Legacy single-worker entry. Only valid when workers.size() == 1,
+    // where it aliases workers[0]; null for any other pool size, so an
+    // old consumer can never be handed just one worker of a bigger pool.
+    capsid_worker* worker = nullptr;
+    // PR-09c (§8.3/§9.3) generation handoff: the §8.3 replacement factory
+    // plus the generation identity. A data-plane pool adopted over
+    // `workers` spawns replacements through this factory — same artifact,
+    // same effective config, no re-read of the upload directory — and the
+    // pool's application/version/digest identity comes from these fields.
+    // Set on every successful warm (deploy, idempotent redeploy, recovery);
+    // always null on failure.
+    WorkerExecutor::WorkerFactory generation_factory;
+    std::string version;
+    std::string generation_digest;
+};
 
 struct ManagedHostOptions {
     // Pre-opened directory descriptors (safe-read boundary).
@@ -47,6 +81,33 @@ struct ManagedHostOptions {
     // decides against. Populated by the Host from recovery.*; the pure
     // decision functions fail closed on an invalid policy.
     WorkerRecoveryPolicy recovery_policy;
+    // §9.3 activation transaction (PR-10). The three activation callbacks
+    // must be configured together (or none): the coordinator runs prepare
+    // BEFORE the active-state persist (may fail — a failed prepare must
+    // already have destroyed the warmed workers it was handed), commit
+    // after a successful persist (must never fail: atomic publication +
+    // drain signal only, see activation_transaction.h), and abort when
+    // the persist failed. On the transactional path the coordinator owns
+    // no workers after prepare: the plan does.
+    std::function<std::unique_ptr<ActivationPlan>(
+        const std::string& application, const DeployOutcome& prepared,
+        std::string* error)>
+        prepare_activation;
+    std::function<void(ActivationPlan* plan)> commit_activation;  // noexcept
+    std::function<void(ActivationPlan* plan)> abort_activation;   // noexcept
+    // §9.3 retire transaction: prepare_retire before the tombstone
+    // persist (may fail), commit_retire after it (noexcept — drain
+    // signal + ledger category switch), abort_retire when it failed.
+    std::function<std::unique_ptr<RetirePlan>(
+        const std::string& application, std::string* error)>
+        prepare_retire;
+    std::function<void(RetirePlan* plan)> commit_retire;  // noexcept
+    std::function<void(RetirePlan* plan)> abort_retire;   // noexcept
+    // §9.4 process-global weighted capacity ledger (one object shared by
+    // every App's options). The coordinator reserves the target pool
+    // count before ANY spawn and settles the reserve on the transaction
+    // commit; null disables the gate.
+    WorkerCapacityLedger* ledger = nullptr;
 };
 
 enum class OperationState {
@@ -63,21 +124,6 @@ struct OperationStatus {
     OperationState state = OperationState::kValidating;
     std::string version;
     std::string error;  // static text; never secret values or paths
-};
-
-struct DeployOutcome {
-    bool ok = false;
-    std::string operation_id;
-    std::string error;  // static text
-    // The whole owning pool: every warmed worker (READY + compatibility
-    // verified), all owned by the caller after a successful deploy; the
-    // caller wires the data plane and drains the previous pool. The pool
-    // is atomic — on any failure it is empty and no worker escapes.
-    std::vector<capsid_worker*> workers;
-    // Legacy single-worker entry. Only valid when workers.size() == 1,
-    // where it aliases workers[0]; null for any other pool size, so an
-    // old consumer can never be handed just one worker of a bigger pool.
-    capsid_worker* worker = nullptr;
 };
 
 enum class DeployErrorCode {

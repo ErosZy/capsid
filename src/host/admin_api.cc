@@ -443,12 +443,6 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     address.sun_family = AF_UNIX;
     std::strncpy(address.sun_path, options.path.c_str(),
                  sizeof(address.sun_path) - 1);
-    // The socket inode's mode is fixed at bind time as 0777 & ~umask (a
-    // Linux fchmod on a socket fd is a silent no-op), so the creating
-    // umask is narrowed to the exact requested mode for the bind window
-    // and restored immediately after. fchmod is kept as the exact-mode
-    // pass for platforms where it does apply (macOS). The window is tiny
-    // and the Admin listener is created once at startup.
     // The socket inode's mode is fixed at bind time as 0777 & ~umask, so
     // the creating umask is narrowed to the exact requested mode for the
     // bind window and restored immediately after (a Linux fchmod on a
@@ -500,9 +494,19 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
         !options.group_gid.has_value() ||
         fchownat(parent_fd, socket_name.c_str(), static_cast<uid_t>(-1),
                  *options.group_gid, AT_SYMLINK_NOFOLLOW) == 0;
-    const bool mode_ok =
+    // The exact-mode pass. On virtiofs (Lima/Docker Desktop on macOS)
+    // every chmod variant fails a socket inode with EINVAL and even the
+    // bind-time umask is ignored (the inode is created 0755 by the
+    // host-side daemon). The socket's connect gate is the write bit, so
+    // when the mode is unenforceable the recheck below accepts a mode
+    // that grants group/other no write access — the verified owner-only
+    // parent directory keeps the socket reachable only by the Host owner,
+    // and the Admin API additionally authenticates peers by credential.
+    const bool mode_exact =
         fchmodat(parent_fd, socket_name.c_str(), options.mode,
                  AT_SYMLINK_NOFOLLOW) == 0;
+    const bool mode_unenforceable =
+        !mode_exact && errno == EINVAL;
     struct stat recheck = {};
     const bool recheck_ok =
         fstatat(parent_fd, socket_name.c_str(), &recheck,
@@ -510,10 +514,20 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
         S_ISSOCK(recheck.st_mode) && recheck.st_uid == geteuid() &&
         (!options.group_gid.has_value() ||
          recheck.st_gid == *options.group_gid) &&
-        (recheck.st_mode & 0777) == options.mode;
+        (mode_exact
+             ? (recheck.st_mode & 0777) == options.mode
+             : (mode_unenforceable &&
+                (recheck.st_mode & (S_IWGRP | S_IWOTH)) == 0));
+    if (mode_unenforceable) {
+        std::fprintf(stderr,
+                     "admin: filesystem cannot chmod socket inodes; "
+                     "relying on the owner-only parent directory "
+                     "(effective mode %03o)\n",
+                     recheck_ok ? (recheck.st_mode & 0777) : 0);
+    }
     close(parent_fd);
-    if (!group_ok || !mode_ok || !recheck_ok ||
-        listen(fd, options.backlog) != 0) {
+    if (!group_ok || (!mode_exact && !mode_unenforceable) ||
+        !recheck_ok || listen(fd, options.backlog) != 0) {
         // Remove the half-created socket ONLY when it is still the one
         // this call created (device/inode re-checked before the unlink).
         struct stat before = {};

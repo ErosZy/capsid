@@ -31,27 +31,17 @@ struct AsyncAdminBackendOptions {
     // worker loop stops taking new work; a running managed deploy
     // observes it through the coordinator's own stop_requested field.
     const std::atomic<bool>* external_stop = nullptr;
-    // Explicit worker ownership handoff. When a managed deploy succeeds
-    // with a non-null worker, activate_worker(application, worker) is
-    // called with the owning pointer. A true return transfers ownership to
-    // the callback (the Async backend must neither destroy nor leak it); a
-    // missing callback, a false return or an exception destroys the
-    // unclaimed worker and marks the public operation as a redacted
-    // Failed. retire_worker(application) is invoked after a successful
-    // retire so the owner can reclaim and destroy the drained worker.
-    std::function<bool(const std::string&, capsid_worker*)> activate_worker;
-    // Atomic POOL ownership handoff. A deploy of a fixed N>1 pool warms
-    // the whole pool before Active is reported; activate_pool(application,
-    // workers) then receives the entire owning pool. A true return
-    // transfers ownership of every worker to the callback (the Async
-    // backend must neither destroy nor leak any of them); a missing
-    // callback, a false return or an exception destroys the whole pool and
-    // marks the public operation as a redacted Failed. A multi-worker pool
-    // NEVER falls back to the legacy activate_worker: an old single-worker
-    // callback would claim just one process of a bigger pool.
-    std::function<bool(const std::string&,
-                       std::vector<capsid_worker*>)> activate_pool;
-    std::function<void(const std::string&)> retire_worker;
+    // PR-10 (§9.3): worker ownership no longer hands off through this
+    // layer. The activation/retire transactions live on the coordinator
+    // (ManagedHostOptions prepare/commit/abort), which publishes the
+    // routing and drains the old generation INSIDE the deploy/retire
+    // operation. The Async backend is purely the bounded executor: a
+    // successful deploy/retire is Active, period. A successful deploy
+    // whose outcome still carries workers means the coordinator was
+    // configured WITHOUT the transaction callbacks (only the legacy
+    // direct-call path can produce it); there is no publisher here, so
+    // the Async backend recycles the unclaimed pool and fails the public
+    // operation closed rather than leak it.
 };
 
 // Bounded background executor between the Admin HTTP layer and a blocking
@@ -94,10 +84,6 @@ private:
 
     AdminBackend* inner_;
     std::size_t max_pending_;
-    std::function<bool(const std::string&, capsid_worker*)> activate_worker_;
-    std::function<bool(const std::string&,
-                       std::vector<capsid_worker*>)> activate_pool_;
-    std::function<void(const std::string&)> retire_worker_;
     const std::atomic<bool>* external_stop_;
     std::mutex mutex_;
     std::condition_variable condition_;

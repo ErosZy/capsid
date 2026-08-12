@@ -16,6 +16,7 @@ static const size_t kHeaderSize = 24;
 static const size_t kHelloLegacyFixedPayloadSize = 106;
 static const size_t kHelloFixedPayloadSize = 108;
 static const uint32_t kMaxPayloadSize = 64u * 1024u;
+static const uint32_t kMaxFixedBodySize = 4u * 1024u;
 static const size_t kMaxBufferedBytes = 4u * 1024u * 1024u;
 static const uint32_t kFlagStart = 1u;
 static const uint32_t kFlagEnd = 2u;
@@ -25,6 +26,12 @@ static const uint32_t kFlagTrustedBytecode = 8u;
 // initial request-direction credit and marks request_ended immediately,
 // saving one frame per bodyless request.
 static const uint32_t kFlagRequestEnd = 16u;
+// ResponseHead flag: js_response_final knows a small complete body already
+// covered by the request's response credit and records its exact byte length
+// in the four bytes after the status code. Hosts reserve at most
+// kMaxFixedBodySize and use one fixed-length HTTP write; larger, credit-bound,
+// or streamed responses keep flags == 0 and the original pipelined sequence.
+static const uint32_t kFlagResponseFixedBody = 1u;
 static const uint32_t kErrorFlagTimeout = 1u;
 static const uint32_t kReadySandboxFeatureMask = (1u << 10) - 1u;
 
