@@ -973,6 +973,7 @@ int run_managed(const std::string& host_config_path,
     // gated by the §9.4 ledger inside the coordinator (see run_deploy_operation);
     // the queue only decides ORDER and fairness across Apps.
     managed.startup_permits = &startup_permits;
+    managed.metrics = metrics.get();
     capsid::host::AsyncAdminBackendOptions async_options;
     // Fixed bounded queue; startupsConcurrent is not the Admin ceiling.
     async_options.max_pending_operations = 8;

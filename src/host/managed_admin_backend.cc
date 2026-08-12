@@ -2,6 +2,8 @@
 
 #include "host/managed_admin_backend.h"
 
+#include "host/metrics.h"
+
 #include "capsid/runtime.h"
 
 #include <atomic>
@@ -307,6 +309,10 @@ DeployOutcome ManagedAdminBackend::deploy(const std::string& application,
             return outcome;
         }
         grant_held = true;
+        // M2 item 7 (§12.1): count the grant into the recovery family.
+        if (metrics != nullptr) {
+            metrics->count_recovery_startup_permit_grant(application);
+        }
     }
     DeployOutcome outcome = managed_deploy(options, version, status);
     if (grant_held) {

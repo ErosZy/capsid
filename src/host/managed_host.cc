@@ -78,6 +78,19 @@ void count_event(MetricsRegistry* metrics, const std::string& event,
     }
 }
 
+// M2 item 7 (design §12.1): refresh the log-drop gauge at every terminal
+// operation state so the log family is always present for a served App
+// (drops are counted globally; in the single-App managed Host the value is
+// exact).
+void refresh_log_dropped(MetricsRegistry* metrics, StructuredLog* log,
+                         const std::string& app) {
+    if (metrics != nullptr) {
+        metrics->set_log_dropped(app,
+                                 log != nullptr ? log->dropped_app_events()
+                                                : 0);
+    }
+}
+
 std::string sha256_hex(const std::string& data) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_size = 0;
@@ -3499,6 +3512,8 @@ DeployOutcome managed_deploy(ManagedHostOptions* options,
         const bool ok = status->state == OperationState::kActive;
         options->metrics->count_deploy_operation(ok ? "ok" : "fail",
                                                  options->application);
+        refresh_log_dropped(options->metrics, options->log,
+                            options->application);
     }
     return outcome;
 }
@@ -3598,6 +3613,8 @@ DeployOutcome run_retire_operation(ManagedHostOptions* options,
     // decision, recorded only when the tombstone is durable.
     if (options->metrics != nullptr) {
         options->metrics->count_recovery_retire(options->application);
+        refresh_log_dropped(options->metrics, options->log,
+                            options->application);
     }
     emit_log(options->log, LogLane::kControl,
              {.event = log_events::kRetire, .app = options->application,
@@ -3690,6 +3707,8 @@ DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
     // (crash-budget tombstone) mirrors the supervisor-level one.
     if (options->metrics != nullptr) {
         options->metrics->count_recovery_quarantine(options->application);
+        refresh_log_dropped(options->metrics, options->log,
+                            options->application);
     }
     emit_log(options->log, LogLane::kControl,
              {.event = log_events::kQuarantine, .app = options->application,

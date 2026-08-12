@@ -276,6 +276,8 @@ private:
 // managed_* coordinator functions (managed_deploy / managed_retire /
 // managed_operation_status / managed_app_status). An unknown App fails
 // closed with a static error.
+class MetricsRegistry;
+
 class ManagedAdminBackend final : public AdminBackend {
 public:
     explicit ManagedAdminBackend(
@@ -306,6 +308,10 @@ public:
     // and holds its grant across the whole pipeline. Null disables the
     // queue (deploys start immediately).
     StartupPermitCoordinator* startup_permits = nullptr;
+    // M2 item 7 (§12.1): every successful startup-permit grant is counted
+    // into the recovery metric family (recovery_startup_permits_total).
+    // Null disables the counter.
+    MetricsRegistry* metrics = nullptr;
 };
 
 }  // namespace capsid::host

@@ -160,7 +160,9 @@ std::string MetricsRegistry::render_counters(
         if (name != current_name) {
             current_name = name;
             const bool is_counter = name.find("_total") != std::string::npos;
-            out += "# TYPE " + name + " " +
+            // The TYPE line must carry the same capsid_ prefix as the
+            // series lines below, or the family name diverges.
+            out += "# TYPE capsid_" + name + " " +
                    (is_counter ? "counter" : "gauge") + "\n";
         }
         out += "capsid_" + key + " " + std::to_string(value) + "\n";

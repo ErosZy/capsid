@@ -91,7 +91,9 @@ void StructuredLog::writer_run() {
                     std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::system_clock::now().time_since_epoch())
                         .count());
-            sink_(encode_log_line(fields, timestamp_ms));
+            // §12.2: the newline is part of the output contract (one JSON
+            // object per line); the sink receives a terminated line.
+            sink_(encode_log_line(fields, timestamp_ms) + "\n");
         }
     }
 }
@@ -106,7 +108,7 @@ void StructuredLog::write_through(LogFields fields) {
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch())
                 .count());
-    sink_(encode_log_line(fields, timestamp_ms));
+    sink_(encode_log_line(fields, timestamp_ms) + "\n");
 }
 
 void StructuredLog::log(LogLane lane, LogFields fields) {
@@ -170,6 +172,10 @@ std::string encode_log_line(const LogFields& fields,
     line += std::to_string(fields.duration_ms);
     line += ",\"message\":\"";
     line += json_escape(fields.message);
+    // encode_log_line is pure single-line serialization; the trailing
+    // newline belongs to the OUTPUT contract (§12.2: one JSON object per
+    // line, consumers parse line by line) and is appended at the sink
+    // call sites, not here.
     line += "\"}";
     return line;
 }
