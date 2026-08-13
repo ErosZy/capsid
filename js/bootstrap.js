@@ -20,6 +20,7 @@ import 'txiki-polyfills/fetch/polyfill.js';
 import {
     configureFetchLimits,
     createIncomingRequest,
+    bridgeHeaderPairs,
     getFastResponseBody,
 } from './fetch.js';
 import 'txiki-polyfills/crypto/crypto.js';
@@ -475,15 +476,7 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
                 throw new TypeError('application fetch handler must return a Response');
             }
 
-            const headers = [];
-            response.headers.forEach((value, name) => {
-                if (name !== 'set-cookie') {
-                    headers.push([ name, value ]);
-                }
-            });
-            for (const value of response.headers.getSetCookie()) {
-                headers.push([ 'set-cookie', value ]);
-            }
+            const headers = bridgeHeaderPairs(response.headers);
 
             // Fast path: a non-streamed body completes the whole
             // response (head + body + end) in one native call, avoiding

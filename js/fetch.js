@@ -311,6 +311,39 @@ function normalizeBody(body) {
 // Accessing or replacing `response.body` disables the shortcut:
 // application-visible stream consumption must retain the normal Fetch
 // semantics.
+// Bridge-only header extraction: one pass over the internal list, no
+// sort, no iterator objects, no forEach callback, no getSetCookie slice.
+// Order is list-insertion order with set-cookie emitted last — the same
+// observable sequence the bootstrap's previous forEach+getSetCookie
+// construction produced (frozen by test_host_single_worker.mjs).
+export function bridgeHeaderPairs(headers) {
+    const list = headerLists.get(headers);
+    if (list === undefined) {
+        // Foreign (native) Headers instance: fall back to the public
+        // iterator construction.
+        const pairs = [];
+        headers.forEach((value, name) => {
+            if (name !== 'set-cookie') {
+                pairs.push([ name, value ]);
+            }
+        });
+        for (const value of headers.getSetCookie()) {
+            pairs.push([ 'set-cookie', value ]);
+        }
+        return pairs;
+    }
+    const pairs = [];
+    for (const name of list.keys()) {
+        if (name !== 'set-cookie') {
+            pairs.push([ name, list.get(name) ]);
+        }
+    }
+    for (const value of setCookieLists.get(headers)) {
+        pairs.push([ 'set-cookie', value ]);
+    }
+    return pairs;
+}
+
 export function getFastResponseBody(response) {
     const record = fastResponseBodies.get(response);
 
