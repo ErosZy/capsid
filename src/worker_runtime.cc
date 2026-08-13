@@ -1782,42 +1782,37 @@ private:
             return JS_UNDEFINED;
         }
 
-        // Contract #3: pressure must never raise RangeError. The promise
-        // stays pending while the bytes await credit / wire space, and
-        // resolves once the whole chunk has been accepted.
+        // Contract #3: pressure must never raise RangeError. The blocked
+        // path returns a promise that stays pending while the bytes await
+        // credit / wire space and resolves once the whole chunk has been
+        // accepted. The unblocked path returns undefined: the chunk was
+        // accepted synchronously, so the bootstrap skips the promise
+        // capability, the resolve call and the await hop entirely
+        // (E13a — the common case pays no promise machinery per chunk).
+        size_t fast_sent = 0;
+        const EnqueueResult result = g_worker->queue_response_bytes_fast(
+            id, bytes, size, &state->second, &fast_sent);
+        if (result == EnqueueResult::kQueued) {
+            return JS_UNDEFINED;
+        }
+        if (result == EnqueueResult::kFatal) {
+            return JS_ThrowInternalError(ctx, "response output is wedged");
+        }
+        // kWouldBlock: the promise capability is created only here, then
+        // snapshot the bytes in the JS heap (design §3.2) so the
+        // application mutating the source array while the promise is
+        // pending cannot change the response bytes; the snapshot also
+        // keeps the data alive without GC pressure on the caller's
+        // buffer. The pump advances segments from the snapshot.
+        // Snapshot only the unsent remainder (call-time copy): the
+        // fast path already accepted the first `fast_sent` bytes into
+        // the wire queue, and copying the rest once is cheaper than a
+        // JS API call per pump advance.
         JSValue resolving[2];
         JSValue promise = JS_NewPromiseCapability(ctx, resolving);
         if (JS_IsException(promise)) {
             return promise;
         }
-        size_t fast_sent = 0;
-        const EnqueueResult result = g_worker->queue_response_bytes_fast(
-            id, bytes, size, &state->second, &fast_sent);
-        if (result == EnqueueResult::kQueued) {
-            JSValue resolve_result =
-                JS_Call(ctx, resolving[0], JS_UNDEFINED, 0, NULL);
-            if (JS_IsException(resolve_result)) {
-                JS_FreeValue(ctx, JS_GetException(ctx));
-            }
-            JS_FreeValue(ctx, resolve_result);
-            JS_FreeValue(ctx, resolving[0]);
-            JS_FreeValue(ctx, resolving[1]);
-            return promise;
-        }
-        if (result == EnqueueResult::kFatal) {
-            JS_FreeValue(ctx, resolving[0]);
-            JS_FreeValue(ctx, resolving[1]);
-            return JS_ThrowInternalError(ctx, "response output is wedged");
-        }
-        // kWouldBlock: snapshot the bytes in the JS heap (design §3.2)
-        // so the application mutating the source array while the
-        // promise is pending cannot change the response bytes; the
-        // snapshot also keeps the data alive without GC pressure on the
-        // caller's buffer. The pump advances segments from the snapshot.
-        // Snapshot only the unsent remainder (call-time copy): the
-        // fast path already accepted the first `fast_sent` bytes into
-        // the wire queue, and copying the rest once is cheaper than a
-        // JS API call per pump advance.
         PendingWrite pending;
         pending.data.assign(bytes + fast_sent, bytes + size);
         pending.offset = 0;

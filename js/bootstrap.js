@@ -559,7 +559,16 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
                         if (result.done || state.cancelled) {
                             break;
                         }
-                        await core.capsidResponseWrite(id, result.value);
+                        // E13a: unblocked writes complete synchronously and
+                        // return undefined; only credit-blocked writes
+                        // return a promise to await.
+                        const pending = core.capsidResponseWrite(
+                            id,
+                            result.value,
+                        );
+                        if (pending !== undefined) {
+                            await pending;
+                        }
                     }
                 } finally {
                     if (state.responseReader === reader) {
