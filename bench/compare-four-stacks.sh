@@ -21,9 +21,13 @@ BUNDLE=${BUNDLE:-/tmp/hono-bench-bundle.mjs}
 LOADGEN=${LOADGEN:-/capsid/bench/bin/loadgen}
 LOADGEN_CORE=${LOADGEN_CORE:-3}
 PY_TARGET=${PY_TARGET:?need PY_TARGET (e.g. http://172.17.0.3:8000)}
-RUBY_TARGET=${RUBY_TARGET:?need RUBY_TARGET (e.g. http://172.17.0.4:9292)}
+RUBY_TARGET=${RUBY_TARGET:-}
 PHP_TARGET=${PHP_TARGET:-http://php-web:80}
 CAPSID_TARGET=http://127.0.0.1:18102
+# STACKS 环境变量可限制只跑某几个栈（如 STACKS=capsid 重测被污染的格子）
+STACKS=${STACKS:-capsid php python ruby}
+# WORKLOADS 环境变量可换负载阶梯（如 1k/4k/16k/32k/64k）
+WORKLOADS=${WORKLOADS:-json json16k json64k}
 
 echo "targets: capsid=$CAPSID_TARGET php=$PHP_TARGET python=$PY_TARGET ruby=$RUBY_TARGET"
 sha256sum "$HOST_BIN" "$WORKER" "$BUNDLE" "$LOADGEN" | tee "$OUT/identity.sha256"
@@ -34,7 +38,7 @@ sha256sum "$HOST_BIN" "$WORKER" "$BUNDLE" "$LOADGEN" | tee "$OUT/identity.sha256
     --source-name "file://$BUNDLE" \
     --application orders --listen 127.0.0.1:18102 --routing path \
     --public-scheme http --public-authority public.example \
-    --request-timeout-ms 10000 --initial-stream-window 16384 \
+    --request-timeout-ms 10000 --initial-stream-window 65536 \
     --strict-sandbox off --ready-fd 1 >/dev/null 2>&1 &
 HOST_PID=$!
 for _ in $(seq 1 60); do
@@ -43,9 +47,11 @@ for _ in $(seq 1 60); do
 done
 echo "capsid host pid=$HOST_PID"
 
-# 其它三栈就绪检查
+# 其它栈就绪检查（仅限 STACKS 声明的栈；RUBY_TARGET 未设则跳过 ruby）
 for pair in "php:$PHP_TARGET" "python:$PY_TARGET" "ruby:$RUBY_TARGET"; do
     name="${pair%%:*}"; tgt="${pair#*:}"
+    [[ -n "$tgt" ]] || continue
+    case " $STACKS " in *" $name "*) ;; *) continue ;; esac
     if ! curl -s -o /dev/null "$tgt/@capsid/orders/bench/json"; then
         echo "FAIL: $name target $tgt not responding" >&2
         kill "$HOST_PID" 2>/dev/null || true
@@ -77,13 +83,11 @@ declare -A TARGET=(
 )
 
 # workload 间轮转起始栈，conn 64 先行、1 后行。
-# STACKS 环境变量可限制只跑某几个栈（如 STACKS=capsid 重测被污染的格子）。
-STACKS=${STACKS:-capsid php python ruby}
 read -r -a STACK_ORDER <<< "$STACKS"
 workload_i=0
-for workload in json json16k json64k; do
+for workload in $WORKLOADS; do
     for conns in 64 1; do
-        for offset in 0 1 2 3; do
+        for offset in $(seq 0 $((${#STACK_ORDER[@]} - 1))); do
             side="${STACK_ORDER[$(((workload_i + offset) % ${#STACK_ORDER[@]}))]}"
             run_loadgen "${TARGET[$side]}" "$workload" "$side" "$workload_i" "$conns"
         done
