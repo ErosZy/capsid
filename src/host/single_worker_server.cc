@@ -53,6 +53,7 @@
 
 #include "capsid/runtime.h"
 #include "client_ipc_metrics.h"
+#include "host/credit_limits.h"
 #include "host/request_normalization.h"
 #include "host/worker_event_source.h"
 #include "host/worker_executor.h"
@@ -470,8 +471,11 @@ private:
     // Credit aggregation (CAPSID_CREDIT_GRANT_THRESHOLD env var; 0 = off).
     // When non-zero, response credit is accumulated per-request and only
     // submitted in batches of at least this many bytes, reducing WINDOW_UPDATE
-    // frames on the command channel.
-    std::uint32_t credit_grant_threshold_ = 0;
+    // frames on the command channel. Default 16384: the E11 stream-64k A/B
+    // (4 interleaved rounds, 0 errors) measured +3.0% QPS with neutral p99;
+    // the value is clamped to window/4 at startup so aggregation can never
+    // starve a long-lived stream (see host/credit_limits.h).
+    std::uint32_t credit_grant_threshold_ = 16384;
     void flush_pending_credit(std::uint64_t request_id,
                               PendingRequest& pending,
                               bool force);
@@ -857,6 +861,10 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
             credit_grant_threshold_ = static_cast<std::uint32_t>(val);
         }
     }
+    // Clamp the (possibly defaulted) threshold to the response window so
+    // aggregation can never exceed what a stream could actually regain.
+    credit_grant_threshold_ = clamp_credit_grant_threshold(
+        credit_grant_threshold_, config.initial_stream_window);
     // Bodyless fusion toggle: only the exact value "0" disables it (same
     // convention as CAPSID_TCP_NODELAY).
     const char* bodyless_env = std::getenv("CAPSID_BODYLESS");
