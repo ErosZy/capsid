@@ -200,16 +200,22 @@ jobs:
           - name: asan
             cmake_flag: CAPSID_ENABLE_ASAN
             build_host: 1
+            ctest_parallel: 2
             ctest_exclude: >-
               ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_package_.*)$
           - name: ubsan
             cmake_flag: CAPSID_ENABLE_UBSAN
             build_host: 1
+            ctest_parallel: 2
             ctest_exclude: '^(wpt_conformance_not_configured|worker_package_.*)$'
           - name: tsan
             cmake_flag: CAPSID_ENABLE_TSAN
             compiler: clang
             build_host: 1
+            # TSan's shadow allocator runs out of mmap space under
+            # -j2 (observed: "ThreadSanitizer: out of memory ... Failed
+            # to mmap" on the hosted runner); the matrix runs serially.
+            ctest_parallel: 1
             ctest_exclude: >-
               ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_package_.*)$
 
@@ -298,7 +304,7 @@ jobs:
           ctest --test-dir "build-${{ matrix.name }}" \
             --output-on-failure \
             --output-junit "${{ matrix.name }}-junit.xml" \
-            --parallel 2 \
+            --parallel ${{ matrix.ctest_parallel }} \
             -E '${{ matrix.ctest_exclude }}'
 
       - name: Save sanitizer evidence
