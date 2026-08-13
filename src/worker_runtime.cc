@@ -2,6 +2,7 @@
 
 #include "build_identity.h"
 #include "capability_policy.h"
+#include <array>
 #include <cstdint>
 
 #include "egress_policy.h"
@@ -4878,12 +4879,24 @@ private:
     struct WriterOpaque {
         int fd;
         uint64_t calls;
+        // Diag-only: write syscalls per frame type. Indexed by the
+        // frame type from the frame header at the write cursor; a
+        // resume after EAGAIN points mid-frame and is skipped.
+        bool diag;
+        std::array<uint64_t, 32> frame_types{};
     };
 
     static ssize_t socket_writer(const uint8_t *data, size_t size,
                                  void *opaque) {
         WriterOpaque *state = static_cast<WriterOpaque *>(opaque);
         state->calls += 1;
+        if (state->diag && size >= capsid::protocol::kHeaderSize) {
+            const uint16_t type = static_cast<uint16_t>(data[6]) |
+                                  static_cast<uint16_t>(data[7] << 8);
+            if (type < state->frame_types.size()) {
+                state->frame_types[type] += 1;
+            }
+        }
         for (;;) {
             const ssize_t count = write_socket(state->fd, data, size);
             if (count >= 0) {
@@ -4903,6 +4916,8 @@ private:
         PhaseGuard guard(this, WorkerPhase::kFlush);
         writer_opaque_.fd = fd_;
         writer_opaque_.calls = 0;
+        writer_opaque_.diag = diag_enabled_;
+        writer_opaque_.frame_types.fill(0);
         if (!outbound_.flush(socket_writer, &writer_opaque_)) {
             shutdown();
             return;
@@ -4910,13 +4925,27 @@ private:
         if (diag_enabled_ && writer_opaque_.calls > 0) {
             flush_syscall_samples_ += 1;
             flush_syscall_total_ += writer_opaque_.calls;
+            for (size_t i = 0; i < writer_opaque_.frame_types.size(); ++i) {
+                flush_type_total_[i] += writer_opaque_.frame_types[i];
+            }
             if (flush_syscall_samples_ % 200 == 0) {
+                const uint64_t named = flush_type_total_[capsid::protocol::kResponseHead] +
+                                       flush_type_total_[capsid::protocol::kResponseBody] +
+                                       flush_type_total_[capsid::protocol::kResponseEnd] +
+                                       flush_type_total_[capsid::protocol::kWindowUpdate];
                 std::fprintf(stderr,
-                             "FLUSH syscalls=%llu samples=%llu avg=%.2f\n",
+                             "FLUSH syscalls=%llu samples=%llu avg=%.2f"
+                             " types(head=%llu body=%llu end=%llu"
+                             " win=%llu other=%llu)\n",
                              static_cast<unsigned long long>(flush_syscall_total_),
                              static_cast<unsigned long long>(flush_syscall_samples_),
                              static_cast<double>(flush_syscall_total_) /
-                                 flush_syscall_samples_);
+                                 flush_syscall_samples_,
+                             static_cast<unsigned long long>(flush_type_total_[capsid::protocol::kResponseHead]),
+                             static_cast<unsigned long long>(flush_type_total_[capsid::protocol::kResponseBody]),
+                             static_cast<unsigned long long>(flush_type_total_[capsid::protocol::kResponseEnd]),
+                             static_cast<unsigned long long>(flush_type_total_[capsid::protocol::kWindowUpdate]),
+                             static_cast<unsigned long long>(flush_syscall_total_ - named));
             }
         }
         if (outbound_.drained()) {
@@ -4986,6 +5015,7 @@ private:
     uint64_t diag_samples_;
     uint64_t flush_syscall_samples_;
     uint64_t flush_syscall_total_;
+    std::array<uint64_t, 32> flush_type_total_{};
     uint64_t bridge_calls_;
     uint64_t bridge_us_;
     bool diag_enabled_;
