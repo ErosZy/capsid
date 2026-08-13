@@ -1136,9 +1136,15 @@ int main(int argc, char** argv) {
     options.request_timeout_ms =
         parse_positive_integer(require("request-timeout-ms"),
                                "request-timeout-ms");
+    // Default 64 KiB: the four-stack matrix (2026-08-13, 64K vs 16K) showed
+    // the response window must cover a full 64 KiB response without a
+    // mid-stream credit round trip; larger windows show no further gain
+    // (E14 scan) and only widen the per-connection buffering bound.
+    const auto window_it = values.find("initial-stream-window");
     const std::uint64_t window =
-        parse_positive_integer(require("initial-stream-window"),
-                               "initial-stream-window");
+        parse_positive_integer(
+            window_it == values.end() ? "65536" : window_it->second,
+            "initial-stream-window");
     if (window > std::numeric_limits<std::uint32_t>::max()) {
         fail("--initial-stream-window exceeds uint32");
     }
