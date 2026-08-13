@@ -320,6 +320,36 @@ if(BUILD_TESTING)
             set_tests_properties(
                 host_poll_limits_saturation PROPERTIES TIMEOUT 10)
 
+            # Credit aggregation threshold clamp: a threshold at or above
+            # the response window could never be reached by a long-lived
+            # stream (pending credit is bounded by the window), so the
+            # effective threshold must clamp to window/4 (unit test, no
+            # sockets or sleeps).
+            add_executable(
+                test-host-credit-limits
+                tests/test_host_credit_limits.cc)
+            target_include_directories(
+                test-host-credit-limits PRIVATE include src)
+            target_link_libraries(test-host-credit-limits PRIVATE
+                capsid_host_core
+                Boost::system
+                Threads::Threads
+                capsid_sanitizers)
+            set_target_properties(test-host-credit-limits PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                target_compile_options(
+                    test-host-credit-limits PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+            add_test(
+                NAME host_credit_limits_clamp
+                COMMAND test-host-credit-limits)
+            set_tests_properties(
+                host_credit_limits_clamp PROPERTIES TIMEOUT 10)
+
             # The one-connection transport above is intentionally not a
             # daemon lifecycle. This suite freezes the owning long-lived
             # service: repeated accepts, bounded stop from idle/slow-client

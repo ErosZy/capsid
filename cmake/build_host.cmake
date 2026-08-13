@@ -101,6 +101,19 @@ if(CAPSID_BUILD_HOST)
     # the frozen integration test registration only references the target
     # when CAPSID_BUILD_WORKER is enabled, which requires the Linux toolchain.
     find_package(Boost 1.74 QUIET COMPONENTS system)
+    if(NOT Boost_FOUND)
+        # Boost >= 1.87 ships Boost.System as header-only and no longer
+        # provides the `system` component; the config package still works
+        # without components. Recover Boost_FOUND and synthesize the
+        # Boost::system target from header-only Boost::headers so every
+        # link site keeps a single target name on both eras.
+        find_package(Boost 1.74 QUIET)
+        if(Boost_FOUND AND NOT TARGET Boost::system)
+            add_library(Boost::system INTERFACE IMPORTED)
+            set_target_properties(Boost::system PROPERTIES
+                INTERFACE_LINK_LIBRARIES Boost::headers)
+        endif()
+    endif()
     if(Boost_FOUND)
         # M1A design gate (design review §4.3): only the WorkerEventSource
         # adapter may call capsid_worker_fd(); every other Host module

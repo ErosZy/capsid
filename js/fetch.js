@@ -311,6 +311,39 @@ function normalizeBody(body) {
 // Accessing or replacing `response.body` disables the shortcut:
 // application-visible stream consumption must retain the normal Fetch
 // semantics.
+// Bridge-only header extraction: one pass over the internal list, no
+// sort, no iterator objects, no forEach callback, no getSetCookie slice.
+// Order is list-insertion order with set-cookie emitted last — the same
+// observable sequence the bootstrap's previous forEach+getSetCookie
+// construction produced (frozen by test_host_single_worker.mjs).
+export function bridgeHeaderPairs(headers) {
+    const list = headerLists.get(headers);
+    if (list === undefined) {
+        // Foreign (native) Headers instance: fall back to the public
+        // iterator construction.
+        const pairs = [];
+        headers.forEach((value, name) => {
+            if (name !== 'set-cookie') {
+                pairs.push([ name, value ]);
+            }
+        });
+        for (const value of headers.getSetCookie()) {
+            pairs.push([ 'set-cookie', value ]);
+        }
+        return pairs;
+    }
+    const pairs = [];
+    for (const name of list.keys()) {
+        if (name !== 'set-cookie') {
+            pairs.push([ name, list.get(name) ]);
+        }
+    }
+    for (const value of setCookieLists.get(headers)) {
+        pairs.push([ 'set-cookie', value ]);
+    }
+    return pairs;
+}
+
 export function getFastResponseBody(response) {
     const record = fastResponseBodies.get(response);
 
@@ -384,28 +417,26 @@ function normalizeInit(init) {
 }
 
 function normalizeIncomingInit(init) {
-    const normalized = { ...init };
-    const source = normalized.headers;
-
+    // The incoming brand means bootstrap owns this init exclusively (it is
+    // not caller-visible), so the fields are normalized in place: no spread
+    // copy, no intermediate entries array, no per-pair arrays. The public
+    // normalizeInit path keeps the spec-required non-mutating copy.
+    const source = init.headers;
     if (source !== undefined) {
         // bootstrap owns this array-of-pairs shape. Normalize each field once
         // without constructing an intermediate Headers object whose iterator
         // repeatedly sorts/materializes the whole list; NativeRequest still
         // receives ordinary canonical header entries below.
-        const entries = new Array(source.length);
         for (let i = 0; i < source.length; i++) {
             const pair = source[i];
-            entries[i] = [
-                normalizeName(pair[0]),
-                normalizeValue(pair[1]),
-            ];
+            pair[0] = normalizeName(pair[0]);
+            pair[1] = normalizeValue(pair[1]);
         }
-        normalized.headers = entries;
     }
-    if (Object.prototype.hasOwnProperty.call(normalized, 'body')) {
-        normalized.body = normalizeBody(normalized.body);
+    if (Object.prototype.hasOwnProperty.call(init, 'body')) {
+        init.body = normalizeBody(init.body);
     }
-    return normalized;
+    return init;
 }
 
 function isNullBodyStatus(status) {
