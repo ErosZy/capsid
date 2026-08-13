@@ -2822,8 +2822,8 @@ void Impl::write_metrics_line() {
         (unsigned long)grant_commands,
         (unsigned long)credit_bytes_granted,
         (unsigned long)credit_stall_count,
-        command_queue_high_water,
-        event_queue_high_water,
+        (size_t)command_queue_high_water,
+        (size_t)event_queue_high_water,
         // client
         (unsigned long)client_metrics.queued_frames,
         (unsigned long)client_metrics.queued_wire_bytes,

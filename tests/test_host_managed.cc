@@ -297,9 +297,9 @@ struct TransactionHarness {
 void wire_admin_transactions(capsid::host::ManagedHostOptions* options,
                              TransactionHarness* harness) {
     options->prepare_activation =
-        [harness](const std::string& application,
-                  const capsid::host::DeployOutcome& prepared,
-                  std::string* error)
+        [](const std::string& application,
+           const capsid::host::DeployOutcome& prepared,
+           std::string* error)
         -> std::unique_ptr<capsid::host::ActivationPlan> {
             auto plan = std::make_unique<capsid::host::ActivationPlan>();
             plan->application = application;
