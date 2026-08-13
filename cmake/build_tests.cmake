@@ -3748,11 +3748,17 @@ if(BUILD_TESTING)
             endif()
         endif()
         add_dependencies(test-host-managed-listener capsid-worker)
+        # The managed listener contract drives request bodies through the
+        # managed data plane; on macOS the POST echo stalls (504) — the
+        # managed data plane is Linux-only, like the managed executable
+        # suite, so the contract registers only there.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(
             NAME host_managed_listener_contract
             COMMAND test-host-managed-listener $<TARGET_FILE:capsid-worker>)
         set_tests_properties(host_managed_listener_contract PROPERTIES
             TIMEOUT 90)
+        endif()
         endif()  # UNIX AND Boost_FOUND — RoutingTable contract tests
 
         add_executable(
