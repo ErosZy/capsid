@@ -7,7 +7,9 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -110,7 +112,26 @@ def vendor_evidence(root: Path, build: Path) -> dict[str, Any]:
     # same directory in order and freezes the count in its header comment.
     if len(patches) != 16:
         raise RuntimeError(f"expected 16 patches, found {len(patches)}")
-    run(["git", "apply", "--check", *map(str, patches)], cwd=vendor)
+    # Mirror the build's own application semantics (PrepareTxiki.cmake):
+    # the patch series is sequential — later patches depend on earlier
+    # ones' edits — and applied with patch -p1 --forward --batch on a
+    # fresh copy of the vendor. Hunks the pinned revision already carries
+    # are skipped, never fatal. Checking each patch in isolation against
+    # the pristine vendor (git apply --check, or a per-patch --dry-run)
+    # breaks on both counts: it contradicts --forward and it loses the
+    # sequential context for shared files like quickjs.c.
+    with tempfile.TemporaryDirectory(prefix="capsid-patch-check-") as tmp:
+        overlay = Path(tmp) / "txiki.js"
+        shutil.copytree(
+            vendor,
+            overlay,
+            ignore=shutil.ignore_patterns("node_modules", ".git"),
+        )
+        for patch in patches:
+            run(
+                ["patch", "-p1", "--forward", "--batch", "-i", str(patch)],
+                cwd=overlay,
+            )
 
     stamp_path = build / "vendor-overlay/txiki.js/.capsid-overlay-key"
     stamp_lines = stamp_path.read_text(encoding="utf-8").splitlines()

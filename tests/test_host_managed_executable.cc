@@ -19,6 +19,17 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+// TSan slows worker startup and host boot by an order of magnitude. The
+// hosted tsan matrix keeps the fixed deadlines scaled so the tests verify
+// the mechanism, not the clock (the scaling is compile-time: release,
+// asan and ubsan builds keep the original deadlines).
+#if defined(__SANITIZE_THREAD__) || \
+    (defined(__has_feature) && __has_feature(thread_sanitizer))
+constexpr int kTestWaitScale = 8;
+#else
+constexpr int kTestWaitScale = 1;
+#endif
+
 
 #include <chrono>
 #include <cerrno>
@@ -258,7 +269,7 @@ void require_startup_rejected(const Fixture& fixture,
 
 void wait_for_socket(const Fixture& fixture) {
     const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(5);
+                          std::chrono::seconds(5 * kTestWaitScale);
     for (;;) {
         // Readiness means "the Admin listener accepts connections", not "a
         // socket pathname exists". Crash-injection phases SIGKILL the host
@@ -388,7 +399,7 @@ std::string deploy(const Fixture& fixture,
 std::string wait_terminal_state(const Fixture& fixture,
                                 const std::string& operation) {
     const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(20);
+                          std::chrono::seconds(20 * kTestWaitScale);
     for (;;) {
         const std::string request =
             "GET /v1/operations/" + operation +
@@ -411,7 +422,7 @@ std::string wait_terminal_state(const Fixture& fixture,
 
 void wait_active(const Fixture& fixture, const std::string& operation) {
     const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(20);
+                          std::chrono::seconds(20 * kTestWaitScale);
     for (;;) {
         const std::string request =
             "GET /v1/operations/" + operation +
@@ -456,7 +467,7 @@ void stop_host(const Fixture& fixture) {
     require(kill(child_process, SIGTERM) == 0,
             "cannot signal managed Host");
     const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(8);
+                          std::chrono::seconds(8 * kTestWaitScale);
     int status = 0;
     for (;;) {
         const pid_t waited = waitpid(child_process, &status, WNOHANG);
@@ -748,7 +759,7 @@ long current_worker_pid() {
 // diagnostics if no replacement arrives (the item-5a wiring is absent).
 long wait_replacement(const Fixture& fixture, long exited) {
     const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(20);
+                          std::chrono::seconds(20 * kTestWaitScale);
     while (std::chrono::steady_clock::now() < deadline) {
         for (const long pid : live_worker_children()) {
             if (pid != exited) {
@@ -769,7 +780,7 @@ void require_quarantined(const Fixture& fixture) {
     const std::string tombstone =
         fixture.state_root + "/apps/orders/active.json";
     const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(10);
+                          std::chrono::seconds(10 * kTestWaitScale);
     bool published = false;
     while (std::chrono::steady_clock::now() < deadline) {
         json_t* root = json_loads(read_file(tombstone).c_str(),
@@ -805,7 +816,7 @@ void require_quarantined(const Fixture& fixture) {
     // before destroying the worker, and a slow ASan teardown can take
     // hundreds of milliseconds): first drain it, then verify the window.
     const auto drain = std::chrono::steady_clock::now() +
-                       std::chrono::seconds(10);
+                       std::chrono::seconds(10 * kTestWaitScale);
     while (!live_worker_children().empty() &&
            std::chrono::steady_clock::now() < drain) {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -816,7 +827,7 @@ void require_quarantined(const Fixture& fixture) {
     // The quarantine stops automatic replacement: a window strictly longer
     // than the replacement backoff must stay worker-less.
     const auto quiet = std::chrono::steady_clock::now() +
-                       std::chrono::seconds(3);
+                       std::chrono::seconds(3 * kTestWaitScale);
     while (std::chrono::steady_clock::now() < quiet) {
         require(live_worker_children().empty(),
                 "Host spawned a worker after quarantine; live pids: " +
@@ -1059,14 +1070,14 @@ int main(int argc, char** argv) {
         require(mkdir(active_path.c_str(), 0700) == 0,
                 "cannot plant a directory at active.json");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(5));
+        require_startup_rejected(fixture, std::chrono::seconds(5 * kTestWaitScale));
 
         // Corruption class 2: an oversized active document (> 16 KiB).
         require(rmdir(active_path.c_str()) == 0,
                 "cannot remove the directory active-state fixture");
         write_file(active_path, std::string(17U * 1024U, 'x'));
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(5));
+        require_startup_rejected(fixture, std::chrono::seconds(5 * kTestWaitScale));
 
         // Corruption class 3: a foreign-owned active document. The Host
         // (running as euid) must reject a file it does not own even when
@@ -1077,7 +1088,7 @@ int main(int argc, char** argv) {
         require(chown(active_path.c_str(), 65534, 65534) == 0,
                 "cannot chown active.json to a foreign uid");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(5));
+        require_startup_rejected(fixture, std::chrono::seconds(5 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1142,7 +1153,7 @@ int main(int argc, char** argv) {
         json_decref(root);
 
         const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(20);
+                              std::chrono::seconds(20 * kTestWaitScale);
         for (;;) {
             const std::string operation_request =
                 "GET /v1/operations/" + operation +
@@ -1225,7 +1236,7 @@ int main(int argc, char** argv) {
         const std::string operation = json_string_value(id);
         json_decref(root);
         const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(20);
+                              std::chrono::seconds(20 * kTestWaitScale);
         for (;;) {
             const std::string operation_request =
                 "GET /v1/operations/" + operation +
@@ -1306,7 +1317,7 @@ int main(int argc, char** argv) {
         const std::string operation = json_string_value(id);
         json_decref(root);
         const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(20);
+                              std::chrono::seconds(20 * kTestWaitScale);
         for (;;) {
             const std::string operation_request =
                 "GET /v1/operations/" + operation +
@@ -1429,7 +1440,7 @@ int main(int argc, char** argv) {
         const std::string mapping = fixture.state_root +
                                     "/apps/orders/versions/v2.json";
         const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(5);
+                              std::chrono::seconds(5 * kTestWaitScale);
         bool published = false;
         while (std::chrono::steady_clock::now() < deadline) {
             for (const auto& entry :
@@ -1774,7 +1785,7 @@ int main(int argc, char** argv) {
         // The orders replacement still arrives: the fair queue slows a
         // crash-looping App but never starves it.
         const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(10);
+                              std::chrono::seconds(10 * kTestWaitScale);
         while (live_worker_children().size() < 2 &&
                std::chrono::steady_clock::now() < deadline) {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -1880,7 +1891,7 @@ int main(int argc, char** argv) {
                 "no live worker before the healthy probe window");
         // ~16 probe cycles at 250ms; the worker must survive them all.
         const auto window = std::chrono::steady_clock::now() +
-                            std::chrono::seconds(4);
+                            std::chrono::seconds(4 * kTestWaitScale);
         while (std::chrono::steady_clock::now() < window) {
             require(current_worker_pid() == initial,
                     "healthy worker was recycled by the active health "
@@ -1899,7 +1910,7 @@ int main(int argc, char** argv) {
                     mkfifo(fixture.host_config.c_str(), 0600) == 0,
                 "cannot create host.json FIFO fixture");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1910,7 +1921,7 @@ int main(int argc, char** argv) {
                     symlink(target.c_str(), fixture.host_config.c_str()) == 0,
                 "cannot create host.json symlink fixture");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1920,7 +1931,7 @@ int main(int argc, char** argv) {
             fixture.socket_path,
             fixture.socket_path + "\\u0000ignored");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1929,7 +1940,7 @@ int main(int argc, char** argv) {
         fixture.replace_host_text("/{application}\"",
                                   "/{application}/ignored\"");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1941,7 +1952,7 @@ int main(int argc, char** argv) {
         fixture.replace_host_text("\"mode\":\"0600\"",
                                   "\"mode\":\"0666\"");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1953,7 +1964,7 @@ int main(int argc, char** argv) {
         fixture.replace_host_text("\"workersTotal\":1",
                                   "\"workersTotal\":-1");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1965,7 +1976,7 @@ int main(int argc, char** argv) {
         fixture.replace_host_text("\"workersTotal\":1",
                                   "\"workersTotal\":2147483648");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1977,7 +1988,7 @@ int main(int argc, char** argv) {
             "\"maximums\":{\"request\":{\"maxInflightPerWorker\":10000}}",
             "\"maximums\":{\"request\":{\"maxInflightPerWorker\":-5}}");
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -2212,7 +2223,7 @@ int main(int argc, char** argv) {
         const int port = pick_port();
         add_public_listener(fixture, port, 2);
         start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(1));
+        require_startup_rejected(fixture, std::chrono::seconds(1 * kTestWaitScale));
         std::cout << "PASS" << std::endl;
         return 0;
     }

@@ -23,6 +23,17 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+// TSan slows worker startup and host boot by an order of magnitude. The
+// hosted tsan matrix keeps the fixed deadlines scaled so the tests verify
+// the mechanism, not the clock (the scaling is compile-time: release,
+// asan and ubsan builds keep the original deadlines).
+#if defined(__SANITIZE_THREAD__) || \
+    (defined(__has_feature) && __has_feature(thread_sanitizer))
+constexpr int kTestWaitScale = 8;
+#else
+constexpr int kTestWaitScale = 1;
+#endif
+
 
 #include <chrono>
 #include <barrier>
@@ -375,7 +386,7 @@ capsid::host::OperationStatus wait_admin_operation(
     capsid::host::AsyncAdminBackend* backend,
     const std::string& operation_id) {
     const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(20);
+                          std::chrono::seconds(20 * kTestWaitScale);
     for (;;) {
         const capsid::host::OperationStatus status =
             backend->operation_status(operation_id);
@@ -483,7 +494,7 @@ std::string run_request(capsid_worker* worker) {
     bool head = false;
     std::string body;
     const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        std::chrono::steady_clock::now() + std::chrono::seconds(10 * kTestWaitScale);
     for (;;) {
         capsid_worker_flush(worker);
         capsid_event event = {};
@@ -587,7 +598,7 @@ void generation_round_trip(capsid::host::GenerationPool& pool,
     grant.credit = 4096;  // covers the whole response body upfront
     worker->submit(std::move(grant));
     require(wait_for([&] { return pool.inflight() == 0; },
-                     std::chrono::seconds(15)),
+                     std::chrono::seconds(15 * kTestWaitScale)),
             "generation round trip did not complete within 15s");
 }
 
@@ -1027,7 +1038,7 @@ int main(int argc, char** argv) {
         // to full READY capacity.
         generation_kill_worker_child();
         require(wait_for([&] { return pool->ready_workers() == 3; },
-                         std::chrono::seconds(20)),
+                         std::chrono::seconds(20 * kTestWaitScale)),
                 "replacement through the generation factory did not restore "
                 "full READY capacity");
         generation_round_trip(*pool, 1002);  // the replacement serves
@@ -1231,7 +1242,7 @@ int main(int argc, char** argv) {
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
             require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2),
+                        lock, std::chrono::seconds(2 * kTestWaitScale),
                         [&]() { return harness.activated; }),
                     "Admin deploy did not commit the whole pool");
             committed = harness.active_pool;
@@ -1257,7 +1268,7 @@ int main(int argc, char** argv) {
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
             require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2),
+                        lock, std::chrono::seconds(2 * kTestWaitScale),
                         [&]() { return harness.retired; }),
                     "Admin retire did not run the retire transaction");
         }
@@ -1299,7 +1310,7 @@ int main(int argc, char** argv) {
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
             require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2),
+                        lock, std::chrono::seconds(2 * kTestWaitScale),
                         [&]() { return harness.activated; }),
                     "active Admin worker was discarded instead of adopted");
             committed = harness.active_pool;
@@ -1323,7 +1334,7 @@ int main(int argc, char** argv) {
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
             require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2),
+                        lock, std::chrono::seconds(2 * kTestWaitScale),
                         [&]() { return harness.retired; }),
                     "retire did not run the retire transaction");
         }
@@ -1911,7 +1922,7 @@ int main(int argc, char** argv) {
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
             require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2),
+                        lock, std::chrono::seconds(2 * kTestWaitScale),
                         [&]() { return harness.activated; }),
                     "v1 deploy did not commit its pool");
             v1_pool = harness.active_pool;
