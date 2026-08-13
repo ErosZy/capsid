@@ -1149,6 +1149,9 @@ if(BUILD_TESTING)
                 NAME host_admission_worker_death_returns_503
                 COMMAND test-host-admission worker-death-503
                     $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_admission_worker_death_returns_503 PROPERTIES
+                TIMEOUT 30 LABELS "host;integration;m2")
             endif()
             add_test(
                 NAME host_admission_pool_forwards_options
@@ -1158,7 +1161,6 @@ if(BUILD_TESTING)
                 host_admission_inflight_full_rejects
                 host_admission_queue_full_rejects
                 host_admission_queue_timeout_returns_504
-                host_admission_worker_death_returns_503
                 host_admission_pool_forwards_options PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)

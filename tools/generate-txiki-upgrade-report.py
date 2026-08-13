@@ -190,6 +190,10 @@ def run_cmake_audits(
             "-DCAPSID_TXIKI_PREPARE_SCRIPT="
             f"{root / 'cmake/PrepareTxiki.cmake'}"
         ),
+        # The audit applies the patch series to a fresh copy in this
+        # scratch dir (mirroring the test registration, which passes
+        # Testing/txiki-patch-probe).
+        f"-DCAPSID_TXIKI_PROBE_DIR={build / 'Testing/txiki-upgrade-probe'}",
         "-P",
         str(root / "cmake/AuditTxikiVendor.cmake"),
     ]
