@@ -35,6 +35,7 @@ struct WriterState {
 };
 
 ssize_t short_writer(const uint8_t *data, size_t size, void *opaque) {
+    (void)data;
     WriterState *state = static_cast<WriterState *>(opaque);
     if (state->max_write == 0) {
         return 0;  // stall
