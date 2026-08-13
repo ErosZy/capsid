@@ -417,28 +417,26 @@ function normalizeInit(init) {
 }
 
 function normalizeIncomingInit(init) {
-    const normalized = { ...init };
-    const source = normalized.headers;
-
+    // The incoming brand means bootstrap owns this init exclusively (it is
+    // not caller-visible), so the fields are normalized in place: no spread
+    // copy, no intermediate entries array, no per-pair arrays. The public
+    // normalizeInit path keeps the spec-required non-mutating copy.
+    const source = init.headers;
     if (source !== undefined) {
         // bootstrap owns this array-of-pairs shape. Normalize each field once
         // without constructing an intermediate Headers object whose iterator
         // repeatedly sorts/materializes the whole list; NativeRequest still
         // receives ordinary canonical header entries below.
-        const entries = new Array(source.length);
         for (let i = 0; i < source.length; i++) {
             const pair = source[i];
-            entries[i] = [
-                normalizeName(pair[0]),
-                normalizeValue(pair[1]),
-            ];
+            pair[0] = normalizeName(pair[0]);
+            pair[1] = normalizeValue(pair[1]);
         }
-        normalized.headers = entries;
     }
-    if (Object.prototype.hasOwnProperty.call(normalized, 'body')) {
-        normalized.body = normalizeBody(normalized.body);
+    if (Object.prototype.hasOwnProperty.call(init, 'body')) {
+        init.body = normalizeBody(init.body);
     }
-    return normalized;
+    return init;
 }
 
 function isNullBodyStatus(status) {
