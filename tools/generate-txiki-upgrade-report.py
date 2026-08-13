@@ -122,10 +122,14 @@ def vendor_evidence(root: Path, build: Path) -> dict[str, Any]:
     # sequential context for shared files like quickjs.c.
     with tempfile.TemporaryDirectory(prefix="capsid-patch-check-") as tmp:
         overlay = Path(tmp) / "txiki.js"
+        # minimal-examples carries a self-referential symlink tree inside
+        # libwebsockets that copytree descends into forever; the Capsid
+        # patch series never touches those trees.
         shutil.copytree(
             vendor,
             overlay,
-            ignore=shutil.ignore_patterns("node_modules", ".git"),
+            ignore=shutil.ignore_patterns(
+                "node_modules", ".git", "minimal-examples"),
         )
         for patch in patches:
             run(

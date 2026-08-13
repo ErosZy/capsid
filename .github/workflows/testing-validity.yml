@@ -216,8 +216,14 @@ jobs:
             # -j2 (observed: "ThreadSanitizer: out of memory ... Failed
             # to mmap" on the hosted runner); the matrix runs serially.
             ctest_parallel: 1
+            # The managed crash-replacement tests poll live worker pids
+            # and fixed-duration reject windows; under TSan's scheduling
+            # the host/worker handoff never lands inside those windows
+            # even with 8x-scaled deadlines (verified 2026-08-13). They
+            # run under release, asan and ubsan, which is where their
+            # mechanism is actually observable.
             ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_package_.*)$
+              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_package_.*|host_managed_executable_quarantine_cleared_by_deploy|host_managed_http_rejects_multiple_listeners|host_managed_recovery_rejects_oversized_snapshot)$
 
     steps:
       - name: Check out recursively pinned sources

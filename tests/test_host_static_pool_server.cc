@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
 #include <sys/socket.h>
 
 // macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
