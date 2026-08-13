@@ -2838,6 +2838,15 @@ if(BUILD_TESTING)
         set_tests_properties(
             worker_incoming_request_invalid_header_value PROPERTIES TIMEOUT 20)
         add_test(
+            NAME worker_header_scan_semantics
+            COMMAND test-worker-integration
+                $<TARGET_FILE:capsid-worker>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/header-scan-semantics.js"
+                header-scan-semantics
+        )
+        set_tests_properties(
+            worker_header_scan_semantics PROPERTIES TIMEOUT 20)
+        add_test(
             NAME worker_wasm_minimal
             COMMAND test-worker-integration
                 $<TARGET_FILE:capsid-worker>
