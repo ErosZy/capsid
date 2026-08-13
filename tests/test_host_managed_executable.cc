@@ -355,7 +355,9 @@ std::string http_request(const std::string& path,
         if (count < 0 && errno == EINTR) {
             continue;
         }
-        require(count >= 0, "managed Admin response timed out");
+        require(count >= 0,
+                (std::string("managed Admin response failed: ") +
+                 std::strerror(errno)).c_str());
         if (count == 0) {
             break;
         }
