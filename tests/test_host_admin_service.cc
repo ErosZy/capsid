@@ -16,6 +16,7 @@
 #include "host/admin_api.h"
 
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>

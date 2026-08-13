@@ -1617,6 +1617,12 @@ if(BUILD_TESTING)
     target_link_libraries(test-cpp-header PRIVATE capsid_runtime)
     add_test(NAME cpp_header COMMAND test-cpp-header)
 
+    # The ABI guard deliberately defines its own operator new/delete to
+    # audit the exported allocator surface; under TSan the clang tsan_cxx
+    # runtime defines the same operators and the link fails with multiple
+    # definitions. The guard's contract is allocator-ABI only — it is not
+    # a TSan target — so it is not built in the tsan matrix.
+    if(NOT CAPSID_ENABLE_TSAN)
     add_executable(test-abi-guard tests/test_abi_guard.cc)
     target_link_libraries(test-abi-guard PRIVATE capsid_runtime)
     if(TARGET capsid-worker)
@@ -1625,6 +1631,7 @@ if(BUILD_TESTING)
             COMMAND test-abi-guard $<TARGET_FILE:capsid-worker>)
     else()
         add_test(NAME abi_guard_oom_countdown COMMAND test-abi-guard)
+    endif()
     endif()
 
     add_executable(test-abi-guard-c tests/test_abi_guard_c.c)
