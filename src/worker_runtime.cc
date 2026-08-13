@@ -4951,8 +4951,15 @@ private:
 
     void flush_blocking() {
         // Startup path: the descriptor is still in blocking mode, so
-        // the writer's single call sends everything buffered.
-        outbound_.flush(socket_writer, &fd_);
+        // the writer's single call sends everything buffered. The writer
+        // reads the full WriterOpaque — handing it the bare fd pointer
+        // aliases past an int and trips UBSan's invalid-bool load on the
+        // diag flag.
+        WriterOpaque opaque;
+        opaque.fd = fd_;
+        opaque.calls = 0;
+        opaque.diag = false;
+        outbound_.flush(socket_writer, &opaque);
     }
 
     void update_poll() {

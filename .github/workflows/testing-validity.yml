@@ -48,6 +48,10 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y ninja-build libboost-system-dev
+          # The vendor audit's expected tag must match cmake/build_tests.cmake
+          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
+          git -C vendor/txiki.js fetch --depth=1 origin \
+            refs/tags/v26.6.0:refs/tags/v26.6.0
           for directory in \
             vendor/txiki.js \
             examples/hono-reference \
@@ -236,6 +240,10 @@ jobs:
           # included, arch-suffixed) that the clang-based tsan matrix entry
           # links against.
           sudo apt-get install -y ninja-build libboost-system-dev libclang-rt-dev
+          # The vendor audit's expected tag must match cmake/build_tests.cmake
+          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
+          git -C vendor/txiki.js fetch --depth=1 origin \
+            refs/tags/v26.6.0:refs/tags/v26.6.0
           for directory in \
             vendor/txiki.js \
             examples/hono-reference \
@@ -382,6 +390,10 @@ jobs:
           do
             npm ci --ignore-scripts --prefix "${directory}"
           done
+          # The vendor audit's expected tag must match cmake/build_tests.cmake
+          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
+          git -C vendor/txiki.js fetch --depth=1 origin \
+            refs/tags/v26.6.0:refs/tags/v26.6.0
 
       # §12.5 macOS row: Host units plus the non-strict worker contracts.
       # Linux-only strict-sandbox and managed-suite tests are not registered
