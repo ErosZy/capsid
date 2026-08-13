@@ -432,7 +432,11 @@ if(BUILD_TESTING)
                     "${CAPSID_MANAGED_ADMIN_TEST_ID}" PROPERTIES TIMEOUT 10)
             endforeach()
 
-            if(UNIX AND Boost_FOUND AND TARGET capsid-host)
+            # The managed executable suite (deploys, crash replacement,
+            # quarantine, health probe) exercises the Linux worker spawn
+            # and /proc pid scans; it is not registered on macOS — the
+            # POSIX host matrix covers the pure host units there.
+            if(UNIX AND NOT APPLE AND Boost_FOUND AND TARGET capsid-host)
                 # The production process closure: unlike the M1A benchmark
                 # fixture, managed mode consumes host.json, owns the Admin
                 # service and warmed worker, and shuts both down on SIGTERM.
@@ -1140,10 +1144,12 @@ if(BUILD_TESTING)
                 NAME host_admission_queue_timeout_returns_504
                 COMMAND test-host-admission queue-timeout-504
                     $<TARGET_FILE:capsid-worker>)
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(
                 NAME host_admission_worker_death_returns_503
                 COMMAND test-host-admission worker-death-503
                     $<TARGET_FILE:capsid-worker>)
+            endif()
             add_test(
                 NAME host_admission_pool_forwards_options
                 COMMAND test-host-admission pool-forwards-admission
@@ -3495,12 +3501,14 @@ if(BUILD_TESTING)
                 $<TARGET_FILE:capsid-worker>
                 --stdio
         )
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(
             NAME worker_fs_module_contract
             COMMAND test-permissions-integration
                 $<TARGET_FILE:capsid-worker>
                 --fs
         )
+        endif()
         set_tests_properties(
             worker_permissions_contract
             worker_utility_modules_contract
@@ -3508,7 +3516,6 @@ if(BUILD_TESTING)
             worker_system_module_contract
             worker_storage_module_contract
             worker_stdio_module_contract
-            worker_fs_module_contract
             PROPERTIES TIMEOUT 45 LABELS "capability;sandbox"
         )
         add_test(
@@ -3535,6 +3542,9 @@ if(BUILD_TESTING)
         if(CAPSID_ENABLE_LTO AND CAPSID_IPO_SUPPORTED)
             set(CAPSID_RESTRICTED_AUDIT_EXPECT_LTO ON)
         endif()
+        # The binary audit drives GNU nm/ar/objcopy/strip semantics that
+        # do not exist on the macOS toolchain; it is Linux-only.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(
             NAME worker_binary_audit
             COMMAND "${CMAKE_COMMAND}"
@@ -3546,10 +3556,12 @@ if(BUILD_TESTING)
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AuditRestrictedWorker.cmake"
         )
         set_tests_properties(worker_binary_audit PROPERTIES TIMEOUT 120)
+        endif()
         set(CAPSID_RESTRICTED_AUDIT_CAN_INJECT OFF)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_OBJCOPY)
             set(CAPSID_RESTRICTED_AUDIT_CAN_INJECT ON)
         endif()
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(
             NAME worker_binary_audit_negative_controls
             COMMAND "${CMAKE_COMMAND}"
@@ -3567,6 +3579,7 @@ if(BUILD_TESTING)
         )
         set_tests_properties(
             worker_binary_audit_negative_controls PROPERTIES TIMEOUT 120)
+        endif()
 
         add_executable(test-p0-integration tests/test_p0_integration.cc)
         target_link_libraries(test-p0-integration PRIVATE capsid_runtime)

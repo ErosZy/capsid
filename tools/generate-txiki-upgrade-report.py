@@ -224,7 +224,6 @@ def source_configuration(
         "BUILD_TJS_RESTRICTED_CORE": "ON",
         "BUILD_WITH_FFI": "OFF",
         "BUILD_WITH_SQLITE": "OFF",
-        "CAPSID_BUILD_SQLITE_BENCHMARK": "OFF",
         "CAPSID_ENABLE_LTO": "ON",
         "CAPSID_USE_MIMALLOC": "OFF",
     }
