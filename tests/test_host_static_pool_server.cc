@@ -13,6 +13,12 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
+
+// macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
+// on the test paths, so a plain socket type is the portable fallback.
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 0
+#endif
 #include <sys/time.h>
 #include <unistd.h>
 

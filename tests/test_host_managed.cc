@@ -27,8 +27,11 @@
 // hosted tsan matrix keeps the fixed deadlines scaled so the tests verify
 // the mechanism, not the clock (the scaling is compile-time: release,
 // asan and ubsan builds keep the original deadlines).
-#if defined(__SANITIZE_THREAD__) || \
-    (defined(__has_feature) && __has_feature(thread_sanitizer))
+// Both GCC (-fsanitize=thread) and Clang define __SANITIZE_THREAD__ for
+// the TSan build, so the gate needs no compiler-specific __has_feature
+// spelling (GCC errors on the function-like macro even in the dead
+// branch of the #if expression).
+#if defined(__SANITIZE_THREAD__)
 constexpr int kTestWaitScale = 8;
 #else
 constexpr int kTestWaitScale = 1;
