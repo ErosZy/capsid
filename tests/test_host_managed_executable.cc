@@ -1036,6 +1036,22 @@ int main(int argc, char** argv) {
 
         const std::string active_path =
             fixture.state_root + "/apps/orders/active.json";
+
+        // Corruption class 3 needs the privilege to transfer file
+        // ownership. Unprivileged runners (GitHub hosted) cannot chown to
+        // a foreign uid; probe once and skip the whole mode (77) instead
+        // of failing the class-3 setup.
+        const std::string probe_path =
+            fixture.state_root + "/active-state-chown-probe";
+        write_file(probe_path, "{}");
+        if (chown(probe_path.c_str(), 65534, 65534) != 0) {
+            remove(probe_path.c_str());
+            std::cout << "SKIP (chown to a foreign uid is not permitted)"
+                      << std::endl;
+            return 77;
+        }
+        remove(probe_path.c_str());
+
         require(remove(active_path.c_str()) == 0,
                 "cannot detach the active state document");
 

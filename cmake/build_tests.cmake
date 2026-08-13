@@ -499,7 +499,7 @@ if(BUILD_TESTING)
                             $<TARGET_FILE:capsid-worker>)
                     set_tests_properties(
                         "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
-                        PROPERTIES TIMEOUT 40)
+                        PROPERTIES TIMEOUT 40 SKIP_RETURN_CODE 77)
                 endforeach()
                 # The item-5a crash matrix drives repeated real worker
                 # replacements (SIGKILL + backoff + spawn/READY) and, in

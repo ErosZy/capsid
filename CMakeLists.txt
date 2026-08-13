@@ -141,9 +141,13 @@ if(CAPSID_ENABLE_TSAN)
             ERROR_QUIET
             RESULT_VARIABLE CAPSID_CLANG_RUNTIME_RESULT
         )
+        # Distro layouts suffix the runtime with the target triple
+        # (Ubuntu: libclang_rt.tsan_cxx-x86_64.a); the linker resolves the
+        # suffixed form automatically, so accept either spelling.
+        file(GLOB CAPSID_CLANG_TSAN_RUNTIMES
+             "${CAPSID_CLANG_RUNTIME_DIR}/libclang_rt.tsan_cxx*.a")
         if(NOT CAPSID_CLANG_RUNTIME_RESULT EQUAL 0 OR
-           NOT EXISTS
-               "${CAPSID_CLANG_RUNTIME_DIR}/libclang_rt.tsan_cxx.a")
+           NOT CAPSID_CLANG_TSAN_RUNTIMES)
             message(FATAL_ERROR
                 "Clang TSan runtime is not installed (Alpine/musl ships no "
                 "libclang_rt.tsan_cxx.a). Configure with GCC instead: "
