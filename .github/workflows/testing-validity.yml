@@ -24,6 +24,9 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
+          # The txiki vendor audit derives the pinned tag via git describe;
+          # submodule checkouts must carry the tag refs.
+          fetch-tags: true
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -75,6 +78,10 @@ jobs:
       - name: Build OpenSSL 3.5 for Release
         run: |
           set -euo pipefail
+          # Built in the runner temp dir: extracting the tarball inside the
+          # workspace dirties the checkout and trips the Release
+          # clean-worktree identity gate.
+          cd "${RUNNER_TEMP}"
           echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
           curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
           sha256sum -c openssl.sha256
@@ -207,6 +214,9 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
+          # The txiki vendor audit derives the pinned tag via git describe;
+          # submodule checkouts must carry the tag refs.
+          fetch-tags: true
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -222,7 +232,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y ninja-build libboost-system-dev
+          # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
+          # included, arch-suffixed) that the clang-based tsan matrix entry
+          # links against.
+          sudo apt-get install -y ninja-build libboost-system-dev libclang-rt-dev
           for directory in \
             vendor/txiki.js \
             examples/hono-reference \
@@ -238,6 +251,10 @@ jobs:
       - name: Build OpenSSL 3.5 for sanitizer targets
         run: |
           set -euo pipefail
+          # Built in the runner temp dir: extracting the tarball inside the
+          # workspace dirties the checkout and trips the build-identity
+          # clean-worktree gate.
+          cd "${RUNNER_TEMP}"
           echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
           curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
           sha256sum -c openssl.sha256
@@ -293,6 +310,9 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
+          # The txiki vendor audit derives the pinned tag via git describe;
+          # submodule checkouts must carry the tag refs.
+          fetch-tags: true
 
       - name: Install Clang and Ninja
         run: |
@@ -337,6 +357,9 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
+          # The txiki vendor audit derives the pinned tag via git describe;
+          # submodule checkouts must carry the tag refs.
+          fetch-tags: true
 
       # Keep the POSIX gate honest for the complete M1D Admin surface.  The
       # transport and long-lived service are intentionally conditional on
@@ -344,6 +367,21 @@ jobs:
       # compilation (and miss Linux-only APIs in otherwise POSIX sources).
       - name: Install macOS Host dependencies
         run: brew install boost openssl@3.5
+
+      # The worker bootstrap bundles via esbuild from the locked txiki.js
+      # node_modules; without this the macOS configure fails with
+      # "esbuild is missing".
+      - name: Install locked JavaScript dependencies
+        run: |
+          set -euo pipefail
+          for directory in \
+            vendor/txiki.js \
+            examples/hono-reference \
+            examples/itty-router-reference \
+            examples/h3-v2-reference
+          do
+            npm ci --ignore-scripts --prefix "${directory}"
+          done
 
       # §12.5 macOS row: Host units plus the non-strict worker contracts.
       # Linux-only strict-sandbox and managed-suite tests are not registered
