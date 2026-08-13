@@ -123,6 +123,17 @@ jobs:
         # package smoke consumes it, and a second fresh build must reproduce
         # the identity and manifest.
 
+      # The ordinary matrix runs unprivileged, so the sandbox tests skip
+      # (exit 77: namespaces/cgroups need privileges). Run them again under
+      # root so they execute instead of skipping — cgroup v2 and network
+      # namespace additionally run inside the delegated-sandbox container
+      # below, this step covers the native namespace probe.
+      - name: Run the privileged sandbox matrix
+        run: |
+          sudo ctest --test-dir build-validity \
+            --output-on-failure \
+            -L sandbox
+
       - name: Record package evidence (build ID, compatibility ID, package and SBOM hashes)
         run: |
           set -euo pipefail
