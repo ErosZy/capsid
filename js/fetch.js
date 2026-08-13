@@ -38,29 +38,10 @@ function toByteString(value) {
     return string;
 }
 
-function isHeaderNameByte(code) {
-    return (code >= 0x30 && code <= 0x39) ||  // 0-9
-        (code >= 0x41 && code <= 0x5a) ||     // A-Z
-        (code >= 0x61 && code <= 0x7a) ||     // a-z
-        code === 0x21 || code === 0x23 || code === 0x24 || code === 0x25 ||
-        code === 0x26 || code === 0x27 || code === 0x2a || code === 0x2b ||
-        code === 0x2d || code === 0x2e || code === 0x5e || code === 0x5f ||
-        code === 0x60 || code === 0x7c || code === 0x7e;
-}
-
-// Byte scanners replace the regex implementations: the inbound request path
-// runs these on every header pair, and QuickJS regex dispatch (lre) cost
-// showed up as 2.6-5.8% of worker CPU. Semantics are frozen byte-identical
-// by tests/fixtures/header-scan-semantics.js and the poisoned-RegExp probe
-// in tests/fixtures/incoming-request-fast-path.js.
 function normalizeName(value) {
     const name = toByteString(value);
 
-    let valid = name.length > 0;
-    for (let i = 0; valid && i < name.length; i++) {
-        valid = isHeaderNameByte(name.charCodeAt(i));
-    }
-    if (!valid) {
+    if (name === '' || /[^!#$%&'*+.^_`|~0-9A-Za-z-]/.test(name)) {
         throw new TypeError(`Invalid character in header field name: "${name}"`);
     }
 
@@ -70,26 +51,11 @@ function normalizeName(value) {
 function normalizeValue(value) {
     const string = toByteString(value);
 
-    for (let i = 0; i < string.length; i++) {
-        const code = string.charCodeAt(i);
-        if (code === 0x00 || code === 0x0a || code === 0x0d) {
-            throw new TypeError('Invalid character in header field value');
-        }
+    if (/[\0\r\n]/.test(string)) {
+        throw new TypeError('Invalid character in header field value');
     }
 
-    let start = 0;
-    let end = string.length;
-    while (start < end && (string.charCodeAt(start) === 0x09 ||
-                           string.charCodeAt(start) === 0x20)) {
-        start++;
-    }
-    while (end > start && (string.charCodeAt(end - 1) === 0x09 ||
-                           string.charCodeAt(end - 1) === 0x20)) {
-        end--;
-    }
-    return start === 0 && end === string.length
-        ? string
-        : string.slice(start, end);
+    return string.replace(/^[\t ]+|[\t ]+$/g, '');
 }
 
 function requireHeaders(value) {

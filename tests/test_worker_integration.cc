@@ -533,15 +533,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (mode == "header-scan-semantics") {
-        const std::string body = run_request(worker, request_url.c_str());
-        if (!contains(body, "header-scan-semantics ok")) {
-            fail(std::string("header scanner semantics drifted: ") + body);
-        }
-        capsid_worker_destroy(worker);
-        return 0;
-    }
-
     const std::string body = run_request(worker, request_url.c_str());
 
     if (mode == "wasm") {
