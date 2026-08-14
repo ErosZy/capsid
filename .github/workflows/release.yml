@@ -131,17 +131,15 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          # --verify-tag makes concurrent matrix jobs idempotent: the first
-          # creates the release, later ones only verify the tag exists.
-          if ! gh release create "${tag}" \
-              --title "capsid ${tag}" \
-              --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
-              --verify-tag 2>&1 | tee /tmp/publish.log; then
-            tail -30 /tmp/publish.log | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
-            exit 1
-          fi
+          # --verify-tag does NOT make create idempotent: once the release
+          # exists it fails with HTTP 422 (tag_name already exists), which
+          # is exactly what happens for every concurrent job that arrives
+          # after the first one. Tolerate that specific race; upload is the
+          # real gate and fails loudly on anything else.
+          gh release create "${tag}" \
+            --title "capsid ${tag}" \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --verify-tag || true
           gh release upload "${tag}" \
             build/capsid-*.tar.gz \
             build/capsid-*.tar.gz.sha256
@@ -183,14 +181,10 @@ jobs:
               make install_sw
               echo "== npm ci"
               cd /src
-              for directory in \
-                vendor/txiki.js \
-                examples/hono-reference \
-                examples/itty-router-reference \
-                examples/h3-v2-reference
-              do
-                npm ci --ignore-scripts --prefix "${directory}"
-              done
+              # Only the txiki tree feeds the Release build; the examples
+              # trees are benchmark fixtures (and their npm ci failed under
+              # the container's node 22).
+              npm ci --ignore-scripts --prefix vendor/txiki.js
               echo "== cmake configure"
               cmake -S . -B build-musl -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
@@ -223,15 +217,15 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          if ! gh release create "${tag}" \
-              --title "capsid ${tag}" \
-              --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
-              --verify-tag 2>&1 | tee /tmp/publish.log; then
-            tail -30 /tmp/publish.log | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
-            exit 1
-          fi
+          # --verify-tag does NOT make create idempotent: once the release
+          # exists it fails with HTTP 422 (tag_name already exists), which
+          # is exactly what happens for every concurrent job that arrives
+          # after the first one. Tolerate that specific race; upload is the
+          # real gate and fails loudly on anything else.
+          gh release create "${tag}" \
+            --title "capsid ${tag}" \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --verify-tag || true
           gh release upload "${tag}" \
             build-musl/capsid-*.tar.gz \
             build-musl/capsid-*.tar.gz.sha256
