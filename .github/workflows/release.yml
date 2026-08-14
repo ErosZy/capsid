@@ -232,6 +232,12 @@ jobs:
             --title "capsid ${tag}" \
             --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
             --verify-tag || true
-          gh release upload --clobber "${tag}" \
-            build-musl/capsid-*.tar.gz \
-            build-musl/capsid-*.tar.gz.sha256
+          echo "musl artifacts:"; ls -la build-musl/
+          if ! gh release upload --clobber "${tag}" \
+              build-musl/capsid-*.tar.gz \
+              build-musl/capsid-*.tar.gz.sha256 2>&1 | tee /tmp/upload.log; then
+            tail -30 /tmp/upload.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
