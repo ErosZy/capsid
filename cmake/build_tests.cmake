@@ -3632,6 +3632,10 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_p0_contract PROPERTIES TIMEOUT 20)
 
+        # These contracts require the optional Host core. Do not create a
+        # plain `-lcapsid_host_core` link item in worker-only builds where
+        # the CMake target does not exist.
+        if(TARGET capsid_host_core)
         # WP-04 PR-06 (spec §8.1/§8.4): the WorkerExecutor ownership
         # contract — startup failure, factory/adopted lifecycle and
         # exactly-once reap. RED gate for the extraction: the header does
@@ -3710,6 +3714,7 @@ if(BUILD_TESTING)
             COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker>)
         set_tests_properties(host_generation_pool_contract PROPERTIES
             TIMEOUT 90)
+        endif()  # TARGET capsid_host_core
 
         # WP-05 PR-09 §9.2: RoutingSnapshot / RoutingTable + the adopt-create
         # pool entry (pre-warmed fleet, no respawn). RED gate: the snapshot
@@ -4501,6 +4506,7 @@ if(BUILD_TESTING)
                     "${CAPSID_MBEDTLS_TEST_DATA}/server2-sha256.crt"
                     "${CAPSID_MBEDTLS_TEST_DATA}/server2.key"
                     "${CAPSID_MBEDTLS_TEST_DATA}/test-ca-sha256.crt"
+                    --strict
                     --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}"
             )
             set_tests_properties(

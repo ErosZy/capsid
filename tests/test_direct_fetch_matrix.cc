@@ -910,17 +910,26 @@ int main(int argc, char **argv) {
     capsid_egress_policy_init(&host_only);
     host_only.rules = &host_only_rule;
     host_only.rule_count = 1;
-    const Result rebinding_denied = run_policy_probe(
+    const Result hostname_allowed = run_policy_probe(
         argv[1],
         bundle,
         &host_only,
         std::string("http://localhost:") +
             std::to_string(primary.port()) + "/headers");
     require(
-        rebinding_denied.body.find("\"allowed\":false") !=
+        hostname_allowed.status == 200 &&
+            hostname_allowed.body.find("\"allowed\":true") !=
             std::string::npos &&
-            primary.requests() == before_default_deny,
-        "hostname allow bypassed resolved loopback check");
+            primary.requests() == before_default_deny + 1,
+        "hostname allow did not authorize its resolved loopback address");
+
+    const Result hostname_rule_does_not_allow_ip_literal = run_policy_probe(
+        argv[1], bundle, &host_only, primary.base_url() + "/headers");
+    require(
+        hostname_rule_does_not_allow_ip_literal.body.find(
+            "\"allowed\":false") != std::string::npos &&
+            primary.requests() == before_default_deny + 1,
+        "hostname allow also authorized a direct IP-literal request");
 
     capsid_egress_rule allow_primary;
     capsid_egress_rule_init(&allow_primary);
@@ -941,7 +950,7 @@ int main(int argc, char **argv) {
         explicit_allow.status == 200 &&
             explicit_allow.body.find("\"allowed\":true") !=
                 std::string::npos &&
-            primary.requests() == before_default_deny + 1,
+            primary.requests() == before_default_deny + 2,
         "explicit loopback CIDR/port allow failed");
 
     capsid_egress_rule redirect_rules[2];

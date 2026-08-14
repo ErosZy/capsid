@@ -59,6 +59,41 @@ ctest --test-dir build-wpt --output-on-failure
 
 WPT 根目录的 `HEAD` 必须等于 `tests/wpt/manifest.json` 中的 commit。
 
+### Egress 与 TLS 定向回归
+
+域名 egress 规则授权该域名实际解析出的地址，包括 private、loopback、
+link-local 和其他 protected range；显式 IP/CIDR deny 仍优先。该授权只属于以
+域名发起的请求，不会把同一地址变成可直接请求的 IP literal。策略单测和真实
+worker 回归分别由 `egress_policy`、
+`worker_fetch_hostname_authorizes_resolved_loopback`、
+`worker_fetch_host_deny_diagnostic`、
+`worker_fetch_protected_deny_diagnostic`、
+`worker_fetch_explicit_deny_diagnostic` 与
+`worker_direct_fetch_http_matrix` 覆盖。最终授权语义和三类诊断文本见
+[宿主能力策略](capability-policy.md)。
+
+固定的 mbedTLS 版本曾在混合 TLS 1.2/1.3 客户端配置下出现签名算法检查不一致：
+`mbedtls_ssl_get_pk_type_and_md_alg_from_sig_alg()` 能解析 TLS signature scheme
+`0x0804`（`rsa_pss_rsae_sha256`），但 TLS 1.2 的旧式 hash/signature byte-pair
+检查把高字节 `0x08` 当作未知 hash 并拒绝 ServerKeyExchange。客户端已经在
+ClientHello 中声明该 scheme，TLS 1.2 服务端选择它也是合法行为，因此这不是服务端
+或应用配置问题。
+
+`patches/txiki/0009-lws-vendor.patch` 只在 TLS 1.2 客户端解析
+ServerKeyExchange 的失败分支兼容 `rsa_pss_rsae_sha256/384/512`：每个分支仍受
+对应 hash 与 PKCS#1 v2.1 编译能力约束，后续“服务端选择的 scheme 必须由客户端
+实际 offered”检查保持不变。修复没有放宽通用 TLS 1.2 helper，也没有通过强制
+TLS 1.2-only 来规避协商。
+
+`worker_direct_fetch_https_tls12_rsa_pss` 启动本地 OpenSSL `s_server`，强制
+`-tls1_2 -sigalgs rsa_pss_rsae_sha256`，然后让真实 worker 完成受信任 HTTPS
+请求；测试带 `--strict`，同时要求请求成功和 worker 干净退出。定向复现命令：
+
+```sh
+ctest --test-dir build --output-on-failure \
+  -R '^(egress_policy|worker_fetch_.*diagnostic|worker_fetch_hostname_authorizes_resolved_loopback|worker_direct_fetch_http_matrix|worker_direct_fetch_https_tls12_rsa_pss)$'
+```
+
 ASan 示例：
 
 ```sh

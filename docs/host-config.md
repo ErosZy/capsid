@@ -253,7 +253,26 @@ curl --unix-socket /run/capsid/admin.sock http://localhost/metrics
 
 ## 请求路由
 
-listener 使用 `routing.mode = "path"` 时，请求路径必须带
-`/@capsid/<app>/` 前缀（与 CLI 的 `--routing path` 同一契约）；`suffix`
-与 `publicAuthority` 等字段共同决定 worker 可观察的绝对 URL。外部反向代理
-（nginx/Caddy/Envoy）负责 TLS/H2 终止与对外路径映射。
+`routing` 对象当前定义并读取的字段只有 `mode` 和 `suffix`；`mode` 支持三种值：
+
+| mode | App 来源 | 约束 |
+| --- | --- | --- |
+| `path` | URL 的 `/@capsid/<app>/` 前缀 | 去掉路由前缀后再把路径交给 worker |
+| `subdomain` | Host 中位于 `suffix` 前的单个 DNS label | `suffix` 必须是无端口、以点开头的合法域名，如 `.apps.example.com` |
+| `header` | 唯一的 `Capsid-App` 请求头 | listener 必须显式设置 `trusted: true`；重复或非法 App ID 会被拒绝 |
+
+每种模式都要求且只允许一个合法 Host header。`path` 和 `header` 使用 listener
+同级的 `publicScheme`、`publicAuthority` 构造 worker 可观察的绝对 URL；
+`subdomain` 使用 `publicScheme`、提取出的 App 和 `suffix` 构造 URL。`suffix` 仅对
+`subdomain` 有效，header 名固定为 `Capsid-App`，不能用它自定义。HTTP method
+不是 App 路由选择条件。
+
+`trusted: true` 是对 listener 前置安全边界的显式声明，不是 Capsid 自动建立的
+TLS、身份认证或防火墙。启用 header routing 前，部署者必须保证只有受控反向代理
+或可信来源能连接该 listener，并由代理删除或覆盖外部请求携带的 `Capsid-App`。
+典型做法是绑定 loopback/受控内网地址并配合网络 ACL；直接把 listener 暴露公网后
+仅设置 `trusted: true` 并不安全。`trusted: false` 的 header listener 会在 bind 前
+fail closed；path 和 subdomain routing 不需要该声明。
+
+外部反向代理（nginx/Caddy/Envoy）负责 TLS/H2 终止与对外路径、Host 或 header
+映射。`path` 模式与 CLI 的 `--routing path` 使用同一契约。
