@@ -70,7 +70,7 @@ jobs:
 
       - name: Build OpenSSL 3.5.7 for Release
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           # Same pinned provider source as the sanitizer Host build in
           # testing-validity; built outside the workspace so the checkout
           # stays clean for the Release identity gate.
@@ -86,17 +86,22 @@ jobs:
 
       - name: Configure Release/LTO
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCAPSID_BUILD_HOST=ON \
             -DCMAKE_PREFIX_PATH=/opt/openssl35
 
       - name: Build
-        run: cmake --build build --parallel 2
+        run: |
+          set -euxo pipefail
+          cmake --build build --parallel 2
 
       - name: Package (CPack TGZ + SHA256)
-        run: cmake --build build --target package
+        run: |
+          set -euxo pipefail
+          cmake --build build --target package
+          ls -la build/capsid-*
 
       - name: Publish package to GitHub Release
         env:
@@ -133,18 +138,23 @@ jobs:
           docker run --rm \
             -v "${GITHUB_WORKSPACE}:/src" \
             -w /src \
-            alpine:3.24 sh -eu -c '
+            alpine:3.24 sh -eux -c '
+              echo "== apk add"
               apk add --no-cache build-base cmake ninja linux-headers \
                 nodejs npm git perl boost-dev
+              echo "== openssl fetch"
               cd /tmp
               echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
               wget -q https://www.openssl.org/source/openssl-3.5.7.tar.gz
               sha256sum -c openssl.sha256
               tar xzf openssl-3.5.7.tar.gz
               cd openssl-3.5.7
+              echo "== openssl config"
               ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
+              echo "== openssl make"
               make -j2
               make install_sw
+              echo "== npm ci"
               cd /src
               for directory in \
                 vendor/txiki.js \
@@ -154,11 +164,14 @@ jobs:
               do
                 npm ci --ignore-scripts --prefix "${directory}"
               done
+              echo "== cmake configure"
               cmake -S . -B build-musl -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCAPSID_BUILD_HOST=ON \
                 -DCMAKE_PREFIX_PATH=/opt/openssl35
+              echo "== cmake build"
               cmake --build build-musl --parallel 2
+              echo "== package"
               cmake --build build-musl --target package
             '
           # The CPack basename only carries system/arch, so the musl package
