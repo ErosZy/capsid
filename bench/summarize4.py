@@ -37,10 +37,13 @@ for key, samples in sorted(rows.items()):
 
 print()
 print("QPS ranking (per workload × conn):")
-for workload in ("json", "json16k", "json64k"):
-    for conn in (64, 1):
-        ranked = sorted(((summary[(s, workload, conn)][0], s) for s in
-                         ("capsid", "php", "python", "ruby")),
+workloads = sorted({w for (_, w, _) in summary})
+conns = sorted({c for (_, _, c) in summary})
+stacks = sorted({s for (s, _, _) in summary})
+for workload in workloads:
+    for conn in conns:
+        ranked = sorted(((summary[(s, workload, conn)][0], s) for s in stacks
+                         if (s, workload, conn) in summary),
                         reverse=True)
         desc = " | ".join(f"{s}: {qps:.0f}" for qps, s in ranked)
         print(f"  {workload:8s} c{conn:<3d} {desc}")

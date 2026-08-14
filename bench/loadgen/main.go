@@ -19,12 +19,17 @@
 //	json          GET /@capsid/orders/bench/json  -> JSON document
 //	bytes         GET /@capsid/orders/bench/bytes -> 1024 bytes
 //	stream        GET /@capsid/orders/bench/stream -> 1024 streamed bytes
+//	json8k/16k/32k, bytes8k/16k/32k, stream8k/16k/32k -> 8/16/32 KiB variants
+//	  (bytes 0x61, streamed 0x62; json has no length assertion)
 //	json16k       GET /@capsid/orders/bench/json16k -> ~16 KiB JSON
 //	bytes16k      GET /@capsid/orders/bench/bytes16k -> 16384 bytes
 //	stream16k     GET /@capsid/orders/bench/stream16k -> 16384 streamed bytes
 //	json64k       GET /@capsid/orders/bench/json64k -> ~64 KiB JSON
 //	bytes64k      GET /@capsid/orders/bench/bytes64k -> 65536 bytes
 //	stream64k     GET /@capsid/orders/bench/stream64k -> 65536 streamed bytes
+//	matrix-<kind>-<label> GET /@capsid/orders/bench/matrix-<kind>-<label>
+//	  kind in {json,bytes,stream}, label in {1k,4k,16k,32k,64k}: exact-size
+//	  payloads; bytes are 0x62, streamed 0x73, json is `{"data":"x…x"}`.
 package main
 
 import (
@@ -146,6 +151,17 @@ func main() {
 			path = "/@capsid/orders/bench/stream"
 			expectedLen = 1024
 			expectedByte = byte(0x62)
+		case "json8k":
+			path = "/@capsid/orders/bench/json8k"
+			expectedLen = -1
+		case "bytes8k":
+			path = "/@capsid/orders/bench/bytes8k"
+			expectedLen = 8192
+			expectedByte = byte(0x61)
+		case "stream8k":
+			path = "/@capsid/orders/bench/stream8k"
+			expectedLen = 8192
+			expectedByte = byte(0x62)
 		case "json16k":
 			path = "/@capsid/orders/bench/json16k"
 			expectedLen = -1
@@ -156,6 +172,17 @@ func main() {
 		case "stream16k":
 			path = "/@capsid/orders/bench/stream16k"
 			expectedLen = 16384
+			expectedByte = byte(0x62)
+		case "json32k":
+			path = "/@capsid/orders/bench/json32k"
+			expectedLen = -1
+		case "bytes32k":
+			path = "/@capsid/orders/bench/bytes32k"
+			expectedLen = 32768
+			expectedByte = byte(0x61)
+		case "stream32k":
+			path = "/@capsid/orders/bench/stream32k"
+			expectedLen = 32768
 			expectedByte = byte(0x62)
 		case "json64k":
 			path = "/@capsid/orders/bench/json64k"
@@ -269,13 +296,27 @@ func main() {
 			// 1024 streamed bytes: b*341 c*341 d*342.
 			return len(body) == 1024 && body[0] == 0x62 &&
 				body[341] == 0x63 && body[1023] == 0x64
+		case "json8k":
+			// ~8 KiB JSON document with the status marker.
+			return len(body) > 8000 && body[0] == '{' && jsonMarker(body)
 		case "json16k":
 			// ~16 KiB JSON document with the status marker.
 			return len(body) > 16000 && body[0] == '{' && jsonMarker(body)
+		case "json32k":
+			// ~32 KiB JSON document with the status marker.
+			return len(body) > 32000 && body[0] == '{' && jsonMarker(body)
+		case "stream8k":
+			// 8192 streamed bytes: b*2730 c*2730 d*2732.
+			return len(body) == 8192 && body[0] == 0x62 &&
+				body[2730] == 0x63 && body[8191] == 0x64
 		case "stream16k":
 			// 16384 streamed bytes: b*5462 c*5461 d*5461.
 			return len(body) == 16384 && body[0] == 0x62 &&
 				body[5462] == 0x63 && body[16383] == 0x64
+		case "stream32k":
+			// 32768 streamed bytes: b*10922 c*10922 d*10924.
+			return len(body) == 32768 && body[0] == 0x62 &&
+				body[10922] == 0x63 && body[32767] == 0x64
 		case "json64k", "json64k-pre", "json64k-bytes", "json64k-octet":
 			return len(body) > 64000 && body[0] == '{' && jsonMarker(body)
 		case "bare":
