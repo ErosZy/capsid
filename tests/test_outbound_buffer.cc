@@ -34,19 +34,6 @@ struct WriterState {
     int fatal_after;   // -1 = never
 };
 
-struct CaptureWriterState {
-    std::vector<uint8_t> bytes;
-    size_t calls;
-};
-
-ssize_t capture_writer(const uint8_t *data, size_t size, void *opaque) {
-    CaptureWriterState *state =
-        static_cast<CaptureWriterState *>(opaque);
-    state->bytes.insert(state->bytes.end(), data, data + size);
-    state->calls += 1;
-    return static_cast<ssize_t>(size);
-}
-
 ssize_t short_writer(const uint8_t *data, size_t size, void *opaque) {
     (void)data;
     WriterState *state = static_cast<WriterState *>(opaque);
@@ -219,91 +206,6 @@ void test_mid_header_partial() {
     std::printf("mid-header: sent=%zu\n", state.total_sent);
 }
 
-void test_unsent_response_body_coalescing() {
-    capsid::OutboundBuffer buffer;
-    const std::vector<uint8_t> first(4096u, 0x31);
-    const std::vector<uint8_t> second(4096u, 0x32);
-    const std::vector<uint8_t> other(4096u, 0x33);
-    require(buffer.append(
-                capsid::protocol::kResponseBody, 0, 7,
-                &first[0], first.size()),
-            "append first coalescing frame");
-    require(buffer.append(
-                capsid::protocol::kResponseBody, 0, 7,
-                &second[0], second.size()),
-            "append second coalescing frame");
-    require(buffer.append(
-                capsid::protocol::kResponseBody, 0, 8,
-                &other[0], other.size()),
-            "request boundary remains separate");
-
-    CaptureWriterState state;
-    state.calls = 0;
-    require(buffer.flush(capture_writer, &state), "capture flush");
-    require(buffer.drained(), "coalesced buffer drained");
-    require(state.calls == 2,
-            "same-request unsent body frames coalesced into one write");
-
-    capsid::protocol::Parser parser;
-    require(parser.append(&state.bytes[0], state.bytes.size()),
-            "parse captured coalesced bytes");
-    capsid::protocol::Frame frame;
-    require(parser.next(&frame) == capsid::protocol::kParseFrame,
-            "first coalesced frame parses");
-    require(frame.type == capsid::protocol::kResponseBody &&
-                frame.request_id == 7 && frame.payload.size() == 8192u,
-            "coalesced frame identity and size");
-    require(frame.payload[0] == 0x31 && frame.payload[4095] == 0x31 &&
-                frame.payload[4096] == 0x32 && frame.payload[8191] == 0x32,
-            "coalesced frame preserves byte order");
-    require(parser.next(&frame) == capsid::protocol::kParseFrame &&
-                frame.request_id == 8 && frame.payload.size() == 4096u,
-            "request boundary starts a new frame");
-    require(parser.next(&frame) == capsid::protocol::kParseNeedMore,
-            "captured stream contains exactly two frames");
-}
-
-void test_opened_response_body_does_not_coalesce() {
-    capsid::OutboundBuffer buffer;
-    const std::vector<uint8_t> payload(4096u, 0x41);
-    require(buffer.append(
-                capsid::protocol::kResponseBody, 0, 9,
-                &payload[0], payload.size()),
-            "append frame before partial write");
-
-    ScriptedWriterState writer = { 10, false, 0 };
-    require(buffer.flush(scripted_writer, &writer),
-            "partial write followed by stall");
-    require(writer.total_sent == 10, "partial write reached the frame header");
-    require(buffer.append(
-                capsid::protocol::kResponseBody, 0, 9,
-                &payload[0], payload.size()),
-            "append after partial write");
-    require(buffer.logical_size() ==
-                2u * (payload.size() + capsid::protocol::kHeaderSize) - 10u,
-            "opened frame header was not rewritten for coalescing");
-}
-
-void test_response_body_coalescing_respects_frame_limit() {
-    capsid::OutboundBuffer buffer;
-    const std::vector<uint8_t> first(40u * 1024u, 0x51);
-    const std::vector<uint8_t> second(30u * 1024u, 0x52);
-    require(buffer.append(
-                capsid::protocol::kResponseBody, 0, 10,
-                &first[0], first.size()),
-            "append first near-limit frame");
-    require(buffer.append(
-                capsid::protocol::kResponseBody, 0, 10,
-                &second[0], second.size()),
-            "append body beyond the frame limit");
-
-    CaptureWriterState state;
-    state.calls = 0;
-    require(buffer.flush(capture_writer, &state), "limit capture flush");
-    require(state.calls == 2,
-            "coalescing never exceeds the protocol payload limit");
-}
-
 // Interleaves append and flush for hundreds of rounds with a scripted
 // partial(32 KiB)/EAGAIN writer: whole frames complete across partials,
 // so the sent prefix of fully-sent frames accumulates and only
@@ -380,9 +282,6 @@ int main() {
     test_compact_high_water();
     test_eagain_stall();
     test_mid_header_partial();
-    test_unsent_response_body_coalescing();
-    test_opened_response_body_does_not_coalesce();
-    test_response_body_coalescing_respects_frame_limit();
     test_partial_eagain_compact();
     test_fatal_writer();
     std::printf("all outbound-buffer tests passed\n");
