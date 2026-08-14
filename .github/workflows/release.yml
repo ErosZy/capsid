@@ -174,12 +174,21 @@ jobs:
               # bindings), so the container reuses it instead of running
               # npm ci under apk node 22, whose npm chokes on the txiki
               # lockfile.
-              test -d vendor/txiki.js/node_modules
+              if ! test -d vendor/txiki.js/node_modules; then
+                echo "== node_modules MISSING in container"
+                ls -la vendor/txiki.js/ | head -20
+                exit 1
+              fi
               echo "== cmake configure"
-              cmake -S . -B build-musl -G Ninja \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCAPSID_BUILD_HOST=ON \
-                -DCMAKE_PREFIX_PATH=/opt/openssl35
+              if ! cmake -S . -B build-musl -G Ninja \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DCAPSID_BUILD_HOST=ON \
+                  -DCMAKE_PREFIX_PATH=/opt/openssl35 \
+                  > /tmp/configure.log 2>&1; then
+                echo "== CONFIGURE FAILED"
+                tail -40 /tmp/configure.log
+                exit 1
+              fi
               echo "== cmake build"
               cmake --build build-musl --parallel 2
               echo "== package"
