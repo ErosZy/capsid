@@ -748,7 +748,7 @@
          JS_FreeValue(ctx, h->this_val);
          h->this_val = JS_UNDEFINED;
 +        if (connect_result == -2 || has_reason) {
-+            return JS_ThrowTypeError(ctx,
++            return JS_ThrowTypeError(ctx, "%s",
 +                                     has_reason
 +                                         ? egress_reason
 +                                         : "Network request denied by egress policy");
