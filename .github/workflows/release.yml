@@ -144,20 +144,8 @@ jobs:
             build/capsid-*.tar.gz \
             build/capsid-*.tar.gz.sha256
 
-  package-musl:
-    # Alpine container on the ubuntu runner: musl libc, the same toolchain
-    # family as the primary development environment.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.ref_name }}
-          submodules: recursive
-
-      - name: Build and package in Alpine (musl)
+      - name: Build and package in Alpine (musl, ubuntu runner only)
+        if: matrix.os == 'ubuntu-24.04'
         run: |
           set -euo pipefail
           if ! docker run --rm \
@@ -181,9 +169,6 @@ jobs:
               make install_sw
               echo "== npm ci"
               cd /src
-              # Only the txiki tree feeds the Release build; the examples
-              # trees are benchmark fixtures (and their npm ci failed under
-              # the container's node 22).
               npm ci --ignore-scripts --prefix vendor/txiki.js
               echo "== cmake configure"
               cmake -S . -B build-musl -G Ninja \
@@ -195,16 +180,11 @@ jobs:
               echo "== package"
               cmake --build build-musl --target package
             ' 2>&1 | tee /tmp/musl-build.log; then
-            # Surface the failing lines as workflow annotations (visible on
-            # the run page without auth).
             tail -40 /tmp/musl-build.log | while IFS= read -r line; do
               echo "::error::${line}"
             done
             exit 1
           fi
-          # The CPack basename only carries system/arch, so the musl package
-          # would collide with the glibc one; disambiguate and regenerate
-          # the checksum file under the new name before upload.
           if ! pkg=$(ls build-musl/capsid-*.tar.gz 2>/dev/null); then
             echo "::error::no TGZ in build-musl; dir listing:"
             ls -la build-musl/ | tail -20 | while IFS= read -r line; do
@@ -217,21 +197,13 @@ jobs:
           (cd build-musl && sha256sum "$(basename "${musl_pkg}")" > "$(basename "${musl_pkg}").sha256")
           rm -f "${pkg}.sha256"
 
-      - name: Publish package to GitHub Release
+      - name: Publish musl package to GitHub Release
+        if: matrix.os == 'ubuntu-24.04'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          # --verify-tag does NOT make create idempotent: once the release
-          # exists it fails with HTTP 422 (tag_name already exists), which
-          # is exactly what happens for every concurrent job that arrives
-          # after the first one. Tolerate that specific race; upload is the
-          # real gate and fails loudly on anything else.
-          gh release create "${tag}" \
-            --title "capsid ${tag}" \
-            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
-            --verify-tag || true
           echo "musl artifacts:"; ls -la build-musl/
           if ! gh release upload --clobber "${tag}" \
               build-musl/capsid-*.tar.gz \
