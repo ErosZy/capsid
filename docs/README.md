@@ -25,6 +25,10 @@ workflow artifact）。事实发生冲突时，优先级如下：
 
 - [宿主嵌入与集成规范](host-integration.md)：C ABI 生命周期、线程与事件循环、
   请求/credit 背压、SSE/streaming、取消与关闭、ABI 版本策略与上线清单
+- [host.json 与 capsid.json 配置参考](host-config.md)：managed 模式两层
+  JSON 配置的字段速查、目录布局、secret 文件与 Admin API
+- [capsid.json 怎么写（教程）](capsid-json.md)：从最小配置逐步到完整
+  配置的手把手教程，含字段值域、常见错误表与部署三步
 - [宿主能力策略](capability-policy.md)：三层门禁、可用模块、环境快照、
   storage/stdio/fs 契约、审计事件与逃逸级能力门禁
 - [JavaScript 模块与权限参考](module-permissions.md)：bundle 可导入的模块、

@@ -96,6 +96,15 @@ curl http://127.0.0.1:8080/@capsid/orders/
 C++11 RAII 封装），自己管理 listener、worker 池与生命周期。见
 [在宿主中使用](#在宿主中使用)与[宿主嵌入与集成规范](docs/host-integration.md)。
 
+### 5. managed 模式：JSON 配置驱动
+
+`capsid-host --mode managed --host-config /etc/capsid/host.json` 由
+`host.json` 权威配置驱动：整机（listener、全局权限上限、容量、恢复策略）
+与每个应用版本目录下的 `capsid.json`（权限申请、worker 资源、池大小）两层
+取交集，部署经 Unix socket Admin API（`POST /v1/deploy`）蓝绿发布。完整字段
+说明、目录布局、secret 文件与运维命令见
+[host.json 与 capsid.json 配置参考](docs/host-config.md)。
+
 ## 编写和打包应用
 
 框架必须和依赖一起打包进 bundle。bundle 不应包含 Node/Bun/Deno server
@@ -172,24 +181,39 @@ begin_request
 
 ## 权限配置
 
-Capsid 的权限由宿主在 worker 启动时给出，JavaScript 不能弹出提示、申请权限
-或动态扩大策略。授权依次经过三道门：
+部署时，权限在 `capsid.json`（每个应用版本）里声明，沙箱在 `host.json`
+（整机）里声明，两边取交集生效——App 申请不能扩大 Host 上限。JavaScript
+不能弹出提示、申请权限或动态扩大策略。授权依次经过三道门：
 
 1. 能力是否实际构建进 restricted runtime；
 2. 模块是否列入 `allowed_modules`；
 3. 当前操作和资源是否命中 allow rule，且没有命中 deny rule。
 
-策略在 `capsid_worker_spawn()` 返回前完成校验和深复制。策略、bundle 或安全配置
-变化时应创建新 worker，不能原地修改。
+最简权限配置（capsid.json；`apiVersion` 与 `pool` 是必需项，其余字段可选）：
+
+```json
+{
+  "apiVersion": "capsid/app-v1",
+  "pool": { "minReady": 2, "maxWorkers": 2 },
+  "permissions": {
+    "modules": ["capsid:env", "capsid:fs", "capsid:storage", "capsid:stdio"],
+    "env": { "APP_MODE": { "value": "production" } },
+    "fs": { "read": { "allow": ["/srv/capsid/config"] } },
+    "fetch": { "allow": ["api.example.com:443"] },
+    "storage": { "namespaces": ["session"] },
+    "stdio": ["stdout", "stderr"]
+  }
+}
+```
 
 ### `tjs:*` 不能通过配置开放
 
 应用的公共模块命名空间只有 `capsid:*`。任意 `tjs:*` 和
 `tjs:internal/*` 都是永久禁止项，不是可填写到 `allowed_modules` 的权限名称：
 
-```cpp
-capability.allow_module("tjs:assert");    // 错误：worker 启动失败
-capability.allow_module("capsid:assert"); // 正确：只开放 Capsid 公共包装
+```json
+{ "permissions": { "modules": ["tjs:assert"] } }    // 错误：部署失败
+{ "permissions": { "modules": ["capsid:assert"] } } // 正确：只开放公共包装
 ```
 
 `capsid:assert`、`capsid:getopts`、`capsid:hashing`、`capsid:ipaddr`、
@@ -214,70 +238,13 @@ WebSocket、产品 SQLite、readline、文件写入/监听、FFI、raw socket、
 或 HTTP server。权威清单是
 [`docs/capability-manifest.json`](docs/capability-manifest.json)。
 
-全局 `fetch()` 是特例：它不需要 `capsid:net` 模块，而是使用
-`capsid_egress_policy` 和 capability `net_policy`。普通
-`capsid_permission_rule` 不能填写 `CAPSID_PERMISSION_NET`。
-
-完整的 module specifier 判定、txiki.js 公共映射、每个 JavaScript API 对应的
-C 枚举、resource 字符串和 `permissions.query()` descriptor，见
-[JavaScript 模块与权限参考](docs/module-permissions.md)。
-
-### 权限和出站网络示例
-
-下面的 C++11 配置只开放一个环境变量、一棵只读目录、stdout，以及
-`api.example.com:443`。rule ID 应由宿主稳定分配，便于关联审计：
-
-```cpp
-#include <capsid/runtime.hpp>
-
-capsid_egress_rule egress_rule;
-capsid_egress_rule_init(&egress_rule);
-egress_rule.action = CAPSID_EGRESS_ALLOW;
-egress_rule.target = "api.example.com";
-egress_rule.port_start = 443;
-egress_rule.port_end = 443;
-egress_rule.rule_id = 2001;
-
-capsid_egress_policy egress;
-capsid_egress_policy_init(&egress);
-egress.rules = &egress_rule;
-egress.rule_count = 1;
-
-capsid::CapabilityPolicyBuilder capability;
-capability
-    .application_identity("orders-api")
-    .allow_module("capsid:env")
-    .allow_module("capsid:fs")
-    .allow_module("capsid:stdio")
-    .environment("APP_MODE", "production")
-    .allow(CAPSID_PERMISSION_ENV, "APP_MODE", 1001)
-    .allow(CAPSID_PERMISSION_READ, "/srv/capsid/orders/config", 1002)
-    .allow(CAPSID_PERMISSION_STDIO, "stdout", 1003)
-    .net(CAPSID_EGRESS_ALLOW, "api.example.com", 443, 443, 2001);
-
-const capsid_capability_policy &capability_descriptor =
-    capability.descriptor();
-
-capsid_worker_config config;
-capsid_worker_config_init(&config);
-config.worker_path = "/opt/capsid/bin/capsid-worker";
-config.capability_policy = &capability_descriptor;
-config.egress_policy = &egress;
-
-capsid::Worker worker(config);
-```
-
-这里故意同时配置两层网络策略：
-
-- `config.egress_policy` 是宿主直接出站边界；为 `NULL` 时全部拒绝；
-- `capability_policy.net_policy` 是应用能力边界；
-- 两者同时存在时取交集，不是并集；
-- hostname、DNS 解析结果和每次 redirect 都会重新检查；
-- 访问 loopback、私网、link-local 或其他受保护地址时，还必须显式允许对应
-  IP/CIDR，只有 hostname allow 不够。
-
-因此不要把 `default_action` 改成 allow 来图省事。按目标域名、端口和必要 CIDR
-建立白名单，并让宿主网络 namespace/firewall 再做一层限制。
+全局 `fetch()` 是特例：它不需要 `capsid:net` 模块，而是通过
+`permissions.fetch.allow` 声明目标（宿主侧上限是 host.json 的
+`permissions.fetchTargets`）。hostname、DNS 解析后的每个地址和每次
+redirect 都会重新检查；访问 loopback、私网、link-local 或其他受保护地址
+时，还必须显式允许对应 IP/CIDR，只有 hostname allow 不够。不要把默认策略
+改成 allow 来图省事，按目标域名、端口和必要 CIDR 建立白名单，并让宿主
+网络 namespace/firewall 再做一层限制。
 
 应用侧只能使用已授权内容：
 
@@ -290,7 +257,7 @@ export default {
   async fetch() {
     const mode = env.get("APP_MODE");
     const config = JSON.parse(
-      fs.readText("/srv/capsid/orders/config/app.json"),
+      fs.readText("/srv/capsid/config/app.json"),
     );
     stdio.write("stdout", `mode=${mode}`);
 
@@ -300,9 +267,16 @@ export default {
 };
 ```
 
-worker 不继承宿主环境变量。只有显式传入 `capsid_env_entry` 且同时被环境规则
-允许的键才能读取。`capsid:fs` 不跟随 symlink，只接受规范化绝对路径；strict
-sandbox 下授权根必须已经存在且自身不能是 symlink。
+worker 不继承宿主环境变量：只有 capsid.json `permissions.env` 显式给出且
+被环境规则允许的键才能读取。`capsid:fs` 不跟随 symlink，只接受规范化绝对
+路径；strict sandbox 下授权根必须已经存在且自身不能是 symlink。
+
+从最小配置开始逐步加字段、secret 用法与常见错误，见
+[capsid.json 怎么写（教程）](docs/capsid-json.md)。完整的 module specifier
+判定、API→权限映射与 `permissions.query()` descriptor，见
+[JavaScript 模块与权限参考](docs/module-permissions.md)。嵌入宿主直接用
+C/C++ 构造 `capsid_capability_policy`（含 egress policy 与 `net_policy`
+交集语义）见[宿主能力策略](docs/capability-policy.md)。
 
 ## 生产安全配置
 
@@ -311,45 +285,40 @@ sandbox 下授权根必须已经存在且自身不能是 symlink。
 `strict_sandbox` 默认是关闭的，所以默认配置只适合受信任开发和功能验证，
 不能直接作为执行不可信代码的生产隔离方案。
 
-Linux x86-64/AArch64 生产环境应显式配置。下面字段应继续填写到上一节的同一个
-`config`，并保留已经设置的 capability 和 egress policy；不要再次调用
-`capsid_worker_config_init()` 把策略清掉：
+Linux x86-64/AArch64 生产环境用 host.json 显式声明隔离与整机上限（这里只
+展示沙箱相关字段；`applicationsRoot`、`stateRoot`、`secretRootTemplate` 与
+`admin` 是必需项，完整示例见 [host.json 参考](docs/host-config.md)）：
 
-```cpp
-capsid_resource_limits limits;
-capsid_resource_limits_init(&limits);
-limits.enabled_fields =
-    CAPSID_RESOURCE_LIMIT_FILE_DESCRIPTORS |
-    CAPSID_RESOURCE_LIMIT_CGROUP_CPU_MAX |
-    CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_HIGH |
-    CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_MAX |
-    CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_SWAP_MAX |
-    CAPSID_RESOURCE_LIMIT_CGROUP_PIDS_MAX;
-limits.file_descriptors = 64;
-limits.cgroup_cpu_quota_us = 100000;   // 每 100 ms 最多使用 100 ms CPU
-limits.cgroup_cpu_period_us = 100000;
-limits.cgroup_memory_high_bytes = 256ULL * 1024 * 1024;
-limits.cgroup_memory_max_bytes = 320ULL * 1024 * 1024;
-limits.cgroup_memory_swap_max_bytes = 0;
-limits.cgroup_pids_max = 8;
+```json
+{
+  "apiVersion": "capsid/host-v1",
+  "applicationsRoot": "/srv/capsid/applications",
+  "stateRoot": "/srv/capsid/state",
+  "secretRootTemplate": "/srv/capsid/secrets/{application}",
+  "admin": { "unix": "/run/capsid/admin.sock", "mode": "0600" },
 
-config.worker_path = "/opt/capsid/bin/capsid-worker";
-config.strict_sandbox = 1;
-config.sandbox_required_features =
-    CAPSID_SANDBOX_FEATURE_CGROUP_V2;
-config.sandbox_cgroup_path =
-    "/sys/fs/cgroup/capsid/orders-api/worker-01";
-config.resource_limits = &limits;
+  "isolation": {
+    "mode": "strict",
+    "required": ["cgroup-v2"],
+    "cgroupRoot": "/sys/fs/cgroup/capsid"
+  },
 
-config.js_heap_limit = 64ULL * 1024 * 1024;
-config.process_memory_limit = 256ULL * 1024 * 1024;
-config.request_timeout_ms = 5000;
-config.max_inflight_requests = 64;
-config.max_header_bytes = 32 * 1024;
-config.max_queued_bytes = 2 * 1024 * 1024;
-config.initial_stream_window = 64 * 1024;
-config.max_fetch_request_body_bytes = 1ULL * 1024 * 1024;
-config.max_fetch_response_body_bytes = 8ULL * 1024 * 1024;
+  "permissions": {
+    "modules": ["capsid:env", "capsid:fs", "capsid:storage", "capsid:stdio"],
+    "environmentNames": ["APP_MODE"],
+    "fsReadRoots": ["/srv/capsid/config"],
+    "fetchTargets": ["api.example.com:443"],
+    "storageNamespaces": ["session"],
+    "stdioStreams": ["stdout", "stderr"]
+  },
+
+  "capacity": { "workersTotal": 16 },
+
+  "maximums": {
+    "worker": { "memoryMax": "512MiB" },
+    "request": { "maxInflightPerWorker": 128 }
+  }
+}
 ```
 
 这些值是配置示例，不是所有 workload 的通用最优值。上线前应根据 bundle、
@@ -357,13 +326,13 @@ config.max_fetch_response_body_bytes = 8ULL * 1024 * 1024;
 
 需要注意：
 
-- `strict_sandbox = 1` 会要求 rlimit、`no_new_privs`、Landlock 和 seccomp
-  全部安装成功；缺任一项就启动失败；
+- `isolation.mode: "strict"` 会要求 rlimit、`no_new_privs`、Landlock 和
+  seccomp 全部安装成功；缺任一项就启动失败；
 - cgroup 目录必须由宿主预先创建并委派，父 cgroup 还要启用所需 controller；
   Capsid 不替宿主修改 `cgroup.subtree_control`；
 - 可进一步要求 user、mount、IPC、UTS namespace；network namespace 必须由
   宿主配置路由和 firewall 后，通过已打开的 fd 传入；
-- `process_memory_limit` 是进程地址空间边界，cgroup memory 是实际资源边界，
+- `worker.memoryMax` 是进程地址空间边界，cgroup memory 是实际资源边界，
   两者用途不同；
 - 出站 Fetch body 限制默认值 `0` 表示不增加总量上限，生产配置应显式填写；
 - 入站请求总大小、客户端 deadline、连接数和网关缓冲仍由宿主限制；
@@ -374,8 +343,12 @@ config.max_fetch_response_body_bytes = 8ULL * 1024 * 1024;
 strict sandbox 会关闭 worker 的真实 stdin/stdout/stderr。应用日志应通过获准的
 `capsid:stdio` 形成 `CAPSID_EVENT_LOG`，由宿主执行脱敏、限速和落盘。
 
-更完整的 Linux 配置、cgroup 回滚语义和 namespace 前置条件见
-[Linux 严格沙箱](docs/linux-sandbox.md)。
+capsid.json 的 `worker`/`request` 字段、secret 与部署三步见
+[capsid.json 怎么写（教程）](docs/capsid-json.md)；host.json 完整字段与
+Admin API 见 [host.json 与 capsid.json 配置参考](docs/host-config.md)。
+嵌入宿主以 C API 设置 `strict_sandbox`、`capsid_resource_limits` 与
+`CAPSID_SANDBOX_FEATURE_*` 时，完整 Linux 配置、cgroup 回滚语义和
+namespace 前置条件见 [Linux 严格沙箱](docs/linux-sandbox.md)。
 
 ## 审计与故障处理
 
