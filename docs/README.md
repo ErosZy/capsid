@@ -65,6 +65,12 @@ App/pool、多 worker 与安全部署闭环（M1D）继续实现中。里程碑�
   的背压/terminal 保证状态机设计（64 KiB 边界缺陷的正确性修复）
 - [2026-08 性能瓶颈归因与分阶段计划](performance-plan-2026-08.md)：profile
   会话证据、E1-E14 实验记分板与收敛判定（2026-08-13 循环）
+- [2026-08-14 完成度审计与性能报告](performance-profile-report-2026-08-14.md)：
+  Host/Worker 完成度审计、响应块合并定向门与全矩阵证据
+- [三栈对比基准](three-stack-bench-2026-08.md)：capsid+hono vs php-fpm+nginx+slim
+  vs python+flask+gunicorn 在固定 payload 矩阵下的双进程协议对比
+- [三栈极限调优对比](three-stack-extreme-tune-2026-08.md)：三栈基准的第二阶段 —
+  极端参数扫描与调优结论
 
 txiki.js 升级报告由 CI 生成并作为 workflow artifact 保存；仓库只保留构建身份所需的
 [`txiki-upgrade-baseline.json`](txiki-upgrade-baseline.json)，不提交会过期的报告副本。
