@@ -117,6 +117,12 @@ if(CAPSID_BUILD_WORKER)
     set(BUILD_WITH_FFI OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_SQLITE OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_MIMALLOC ${CAPSID_USE_MIMALLOC} CACHE BOOL "" FORCE)
+    # txiki's QuickJS allocator (vendor/txiki.js/src/mem.c) calls mi_*
+    # directly, so the heap benefit does not need mimalloc's global malloc
+    # override. Keeping the override off avoids its ~4GiB virtual reserve
+    # colliding with the worker's address-space limit (std::bad_alloc in
+    # static builds) and leaves libuv/libstdc++ on the system malloc.
+    set(MI_OVERRIDE OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_ASAN OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_UBSAN OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_WASM ON CACHE BOOL "" FORCE)
