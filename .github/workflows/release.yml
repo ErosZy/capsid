@@ -167,9 +167,14 @@ jobs:
               echo "== openssl make"
               make -j2
               make install_sw
-              echo "== npm ci"
+              echo "== reuse node_modules"
               cd /src
-              npm ci --ignore-scripts --prefix vendor/txiki.js
+              # The txiki node_modules tree was installed by the ubuntu
+              # leg above (node 24, --ignore-scripts: pure JS, no native
+              # bindings), so the container reuses it instead of running
+              # npm ci under apk node 22, whose npm chokes on the txiki
+              # lockfile.
+              test -d vendor/txiki.js/node_modules
               echo "== cmake configure"
               cmake -S . -B build-musl -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
