@@ -97,13 +97,15 @@ endif()
 if(CAPSID_PACKAGE_SYSTEM STREQUAL "linux")
     include(CheckCSourceCompiles)
     set(CMAKE_REQUIRED_QUIET TRUE)
+    # glibc always defines __GLIBC__; musl does not (and older musl lacks
+    # __MUSL__), so detect glibc and default the rest to musl.
     check_c_source_compiles(
-        "#include <features.h>\n#if !defined(__MUSL__)\n#error not musl\n#endif\nint main(void){return 0;}"
-        CAPSID_LIBC_IS_MUSL)
-    if(CAPSID_LIBC_IS_MUSL)
-        set(CAPSID_PACKAGE_LIBC "musl")
-    else()
+        "#include <features.h>\n#ifndef __GLIBC__\n#error not glibc\n#endif\nint main(void){return 0;}"
+        CAPSID_LIBC_IS_GLIBC)
+    if(CAPSID_LIBC_IS_GLIBC)
         set(CAPSID_PACKAGE_LIBC "gnu")
+    else()
+        set(CAPSID_PACKAGE_LIBC "musl")
     endif()
     set(CAPSID_PACKAGE_BASENAME
         "capsid-${PROJECT_VERSION}-${CAPSID_PACKAGE_SYSTEM}-${CAPSID_PACKAGE_LIBC}")
