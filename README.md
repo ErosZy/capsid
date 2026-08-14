@@ -397,29 +397,32 @@ worker 出现协议错误、`CAPSID_EVENT_EXIT` 或同步 CPU timeout 后，不�
 capsid+hono 与 PHP 8+Slim、Python 3+Flask 的三栈对照。环境：Ryzen 3300X
 4C/8T、Alpine v3.24（WSL2）；SUT taskset 0-3 / loadgen 4-7、双进程
 （capsid 2 workers / gunicorn 2 / php-fpm max_children=2）、conns=64、
-12 种负载 × 3 轮、payload 逐字节对齐，36/36 格满足结论门槛（CV≤7%、
-0 错误）。版本：PHP 8.5.8 + Slim 4.15.2 + nginx 1.26.3；Python 3.14.5 +
-Flask 3.1.3 + Gunicorn 26.0.0。QPS 如下：
+12 种负载 × 3 轮、payload 逐字节对齐，33/36 格满足结论门槛（CV≤7%、
+0 错误；3 格 CV 超标按观察样本记录）。capsid 侧为产品默认
+initial-stream-window 64K。版本：PHP 8.5.8 + Slim 4.15.2 + nginx
+1.26.3；Python 3.14.5 + Flask 3.1.3 + Gunicorn 26.0.0。QPS 如下：
 
 | workload | capsid + hono | PHP 8 + Slim | Python 3 + Flask |
 |---|---:|---:|---:|
-| json 1k | **6354** | 1776 | 4648 |
-| json 8k | **5025** | 1642 | 4423 |
-| json 16k | **4664** | 1607 | 4313 |
-| json 32k | **3914** | 1529 | 3788 |
-| bytes 1k | **4852** | 1794 | 4735 |
-| bytes 8k | 4473 | 1690 | **4554** |
-| bytes 16k | 4114 | 1653 | **4399** |
-| bytes 32k | 3234 | 1619 | **3920** |
-| stream 1k | **4620** | 1782 | 4479 |
-| stream 8k | **4046** | 1717 | 3635 |
-| stream 16k | **3685** | 1671 | 3533 |
-| stream 32k | 3123 | 1573 | **3957** |
+| json 1k | **6820** | 1826 | 4625 |
+| json 8k | **5213** | 1727 | 4683 |
+| json 16k | **5304** | 1679 | 4495 |
+| json 32k | **4558** | 1592 | 3865 |
+| bytes 1k | **4591** | 1727 | 4510 |
+| bytes 8k | **4405** | 1641 | 4375 |
+| bytes 16k | 3971 | 1557 | **4252** |
+| bytes 32k | 3414 | 1572 | **3908** |
+| stream 1k | **4593** | 1745 | 4442 |
+| stream 8k | **3952** | 1708 | 3570 |
+| stream 16k | **3501** | 1652 | 3377 |
+| stream 32k | 2886 | 1592 | **3756** |
 
-形态：常规 JSON 全胜（json 1k 为 Python 3 栈的 1.37×、PHP 8 栈的 3.58×）；
-大字节流载荷（bytes ≥8k、stream 32k）Python 3 栈反超（成因待查；本矩阵
-capsid 侧窗口为 bench 强制 16K，产品默认 64K）。完整方法、样本与结论
-见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
+形态：常规 JSON 全胜（json 1k 为 Python 3 栈的 1.47×、PHP 8 栈的
+3.74×）；大字节流载荷（bytes ≥16k、stream 32k）Python 3 栈反超，
+stream 32k 成因待查（64K 下与 16K 版同样掉队，与窗口无关）。资源形态
+（空闲稳态，PSS 中位数）：capsid 3 进程 12.3MB，为 Python 3 栈 62.6MB
+的 1/5；PHP 8 栈 RSS 124MB（docker 跨用户 PSS 不可读，口径含 nginx）。
+完整方法、样本与结论见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
 
 冷启动对照（同一 4 核 cpuset，中位数，ms；fixture 为真实形态 JS 源码，
 三端加载同一函数体、仅入口不同）：

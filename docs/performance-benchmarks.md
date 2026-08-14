@@ -64,36 +64,38 @@ commit 的结果，以及只提交汇总数字而没有原始样本的变更。
 | Python 3 + Flask | Python 3.14.5 + Flask 3.1.3 + Gunicorn 26.0.0（2 workers） |
 | 冷启动附加 | Node v24.18.0、Deno 2.9.3 |
 
-## 3. 三栈全矩阵（4C，2026-08-14，c64）
+## 3. 三栈全矩阵（4C，2026-08-14，c64，64K 窗口）
 
-payload 逐字节对齐、0 errors/0 timeouts、**36/36 格结论级（CV ≤ 7%）**。
-实现语言与服务器模型不同，**不是胜负榜**，只用于确认量级。原始样本：
-`bench/results/three-stack-20260814T162308/`。注意：capsid 侧
-`--initial-stream-window 16384` 是 bench 脚本强制值（`compare-three-stacks.sh`
-默认覆写），**产品默认是 65536**——本矩阵反映 16K 窗口下的形态。
+payload 逐字节对齐、0 errors/0 timeouts、**33/36 格结论级（CV ≤ 7%）**；
+php bytes16k、capsid stream32k、python stream32k 三格 CV 超标，按观察
+样本记录（表内不标注，原始样本可查）。实现语言与服务器模型不同，
+**不是胜负榜**，只用于确认量级。capsid 侧使用产品默认
+`--initial-stream-window 65536`（本矩阵与 16K 版窗口差异见形态节）。
+原始样本：`bench/results/three-stack-20260814T172510/`。
 
 | workload | capsid + hono | PHP 8 + Slim | Python 3 + Flask |
 |---|---:|---:|---:|
-| json 1k | **6354** | 1776 | 4648 |
-| json 8k | **5025** | 1642 | 4423 |
-| json 16k | **4664** | 1607 | 4313 |
-| json 32k | **3914** | 1529 | 3788 |
-| bytes 1k | **4852** | 1794 | 4735 |
-| bytes 8k | 4473 | 1690 | **4554** |
-| bytes 16k | 4114 | 1653 | **4399** |
-| bytes 32k | 3234 | 1619 | **3920** |
-| stream 1k | **4620** | 1782 | 4479 |
-| stream 8k | **4046** | 1717 | 3635 |
-| stream 16k | **3685** | 1671 | 3533 |
-| stream 32k | 3123 | 1573 | **3957** |
+| json 1k | **6820** | 1826 | 4625 |
+| json 8k | **5213** | 1727 | 4683 |
+| json 16k | **5304** | 1679 | 4495 |
+| json 32k | **4558** | 1592 | 3865 |
+| bytes 1k | **4591** | 1727 | 4510 |
+| bytes 8k | **4405** | 1641 | 4375 |
+| bytes 16k | 3971 | 1557 | **4252** |
+| bytes 32k | 3414 | 1572 | **3908** |
+| stream 1k | **4593** | 1745 | 4442 |
+| stream 8k | **3952** | 1708 | 3570 |
+| stream 16k | **3501** | 1652 | 3377 |
+| stream 32k | 2886 | 1592 | **3756** |
 
-**形态**：常规 JSON（1-16k）全胜，小载荷优势最大（json 1k 为 Python 3
-栈的 1.37×、PHP 8 栈的 3.58×）；字节流大载荷（bytes ≥8k、stream 32k）
-Python 3 栈反超，其中 stream 32k（3123 vs 3957）差距最大。曾归因于
-16K 窗口的 credit 往返——单轮 64K 对照（同样本协议，stream32k ≈3120
-QPS）不掉队也不反超，故该归因不成立，成因待查。PHP 8 栈全矩阵垫底
-（约为 capsid 的 0.26-0.40×），CV 最优（≤3.2%）。QuickJS 解释器（无
-JIT）仍是单 worker 延迟主导；JIT 是 vendor 级变更，属独立评估项目。
+**形态**：常规 JSON 全胜，小载荷优势最大（json 1k 为 Python 3 栈的
+1.47×、PHP 8 栈的 3.74×）；大字节流载荷（bytes ≥16k、stream 32k）
+Python 3 栈反超。与 16K 窗口版（旧矩阵，`three-stack-20260814T162308/`）
+对比：json32k/bytes32k 在 64K 下分别 +16%/+6%（32k 响应在 16K 窗口下
+被 credit 往返压制，64K 恢复）；stream32k 反而略降（3123→2886），
+确认其掉队与窗口无关，成因待查。PHP 8 栈全矩阵垫底（约为 capsid 的
+0.26-0.40×），CV 最优。QuickJS 解释器（无 JIT）仍是单 worker 延迟
+主导；JIT 是 vendor 级变更，属独立评估项目。
 
 ## 4. 冷启动对照（4C，2026-08-14，中位数 ms）
 
@@ -136,3 +138,26 @@ Node 97/97/137、Deno 31/32/45。
 - 语义说明：capsid 首响应走进程内 IPC，Node/Deno 走本地 HTTP curl；
   "就绪后首个请求完成"对齐，请求路径实现不同（ready→total 差：
   capsid ≈0.4ms、Deno ≈8ms、Node ≈13ms），不构成同构比较。
+
+## 5. 资源形态（4C，2026-08-14，进程数/PSS/RSS）
+
+三栈常驻（双进程协议，空闲）时由 `bench/sample-sut-memory.sh` 每 15s
+采样进程树 PSS（`smaps_rollup`）与 RSS，8 个空闲 tick 取中位数；负载
+轮（json c64）2 个 tick 仅观察。原始样本：
+`bench/results/sut-memory-20260814T173000/`。
+
+| 栈 | 进程数 | 空闲 PSS | 空闲 RSS | json 负载 PSS |
+|---|---|---:|---:|---:|
+| capsid + hono | 3（host + 2 workers） | **12.3 MB** | 21.8 MB | 13.5 MB |
+| PHP 8 + Slim | 12（php-fpm + nginx） | —* | 124.1 MB | —* |
+| Python 3 + Flask | 3（gunicorn + 2 workers） | 62.6 MB | 89.4 MB | 62.6 MB |
+
+*php 容器进程跨用户，非 root 读不到 `smaps_rollup`，PSS 不可得；其 RSS
+含 nginx master+workers，与其余两栈的"应用进程树"口径不同。
+
+- 空闲 PSS capsid 为 Python 3 栈的 **1/5**（12.3 vs 62.6 MB）；RSS 为
+  PHP 8 栈的 1/5.7（21.8 vs 124.1 MB，后者口径偏大见上注）。
+- 负载增量：capsid json c64 时 PSS +1.2 MB（QuickJS 堆随请求涨落），
+  Python/PHP 侧无可见增量（2 tick 观察，样本少）。
+- 采样器为本次补建（`bench/sample-sut-memory.sh`）；三栈主 runner 目前
+  不采内存，后续应把该采样并入 `compare-three-stacks.sh` 每格采一次。
