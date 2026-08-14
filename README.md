@@ -23,8 +23,14 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 Ja
 - **最小权限能力面**：模块、文件、环境变量、存储、stdio 和出站网络均显式授权。
 - **宿主拥有数据面**：C ABI、C++11 RAII、非阻塞 IPC、credit 背压、取消、
   streaming 与审计事件可接入现有 reactor。
+- **高吞吐 Fetch 执行**：4 核、2 workers 的对照中，JSON 1 KiB 达到
+  **6,820 QPS**，同时保留完整 correctness 与背压路径。
+- **低常驻资源**：同一环境下，Host + 2 workers 空闲 PSS 为 **12.3 MB**，
+  适合需要进程隔离又关注部署密度的场景。
+- **快速冷启动**：约 10 kB bundle 从源码到首响应为 **9.5 ms**，可信字节码为
+  **8.2 ms**；约 1 MB bundle 使用可信字节码为 **42 ms**。
 - **可复核的正确性**：固定 WPT revision、框架差分、sanitizer、fuzz、沙箱门禁
-  和带身份的 benchmark artifact。
+  和带身份的 benchmark artifact。测试环境、对照组和限制见[性能概览](#性能概览)。
 
 ```text
 客户端 ──HTTP/TLS──▶ 宿主网关 / capsid-host
