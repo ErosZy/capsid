@@ -140,7 +140,7 @@ jobs:
             --title "capsid ${tag}" \
             --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
             --verify-tag || true
-          gh release upload "${tag}" \
+          gh release upload --clobber "${tag}" \
             build/capsid-*.tar.gz \
             build/capsid-*.tar.gz.sha256
 
@@ -205,7 +205,13 @@ jobs:
           # The CPack basename only carries system/arch, so the musl package
           # would collide with the glibc one; disambiguate and regenerate
           # the checksum file under the new name before upload.
-          pkg=$(ls build-musl/capsid-*.tar.gz)
+          if ! pkg=$(ls build-musl/capsid-*.tar.gz 2>/dev/null); then
+            echo "::error::no TGZ in build-musl; dir listing:"
+            ls -la build-musl/ | tail -20 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
           musl_pkg="${pkg%.tar.gz}-musl.tar.gz"
           mv "${pkg}" "${musl_pkg}"
           (cd build-musl && sha256sum "$(basename "${musl_pkg}")" > "$(basename "${musl_pkg}").sha256")
@@ -226,6 +232,6 @@ jobs:
             --title "capsid ${tag}" \
             --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
             --verify-tag || true
-          gh release upload "${tag}" \
+          gh release upload --clobber "${tag}" \
             build-musl/capsid-*.tar.gz \
             build-musl/capsid-*.tar.gz.sha256
