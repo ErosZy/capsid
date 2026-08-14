@@ -186,7 +186,7 @@ jobs:
                   -DCMAKE_PREFIX_PATH=/opt/openssl35 \
                   > /tmp/configure.log 2>&1; then
                 echo "== CONFIGURE FAILED"
-                tail -40 /tmp/configure.log
+                tail -8 /tmp/configure.log
                 exit 1
               fi
               echo "== cmake build"
@@ -194,7 +194,7 @@ jobs:
               echo "== package"
               cmake --build build-musl --target package
             ' 2>&1 | tee /tmp/musl-build.log; then
-            tail -40 /tmp/musl-build.log | while IFS= read -r line; do
+            tail -8 /tmp/musl-build.log | while IFS= read -r line; do
               echo "::error::${line}"
             done
             exit 1
