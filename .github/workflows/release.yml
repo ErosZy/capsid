@@ -70,37 +70,59 @@ jobs:
 
       - name: Build OpenSSL 3.5.7 for Release
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           # Same pinned provider source as the sanitizer Host build in
           # testing-validity; built outside the workspace so the checkout
           # stays clean for the Release identity gate.
           cd "${RUNNER_TEMP}"
           echo "${OPENSSL_SHA256}  openssl-3.5.7.tar.gz" > openssl.sha256
-          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-          sha256sum -c openssl.sha256
-          tar xzf openssl-3.5.7.tar.gz
-          cd openssl-3.5.7
-          ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
-          make -j2
-          sudo make install_sw
+          if ! {
+            curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
+            sha256sum -c openssl.sha256
+            tar xzf openssl-3.5.7.tar.gz
+            cd openssl-3.5.7
+            ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
+            make -j2
+            sudo make install_sw
+          } 2>&1 | tee /tmp/openssl.log; then
+            tail -40 /tmp/openssl.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
 
       - name: Configure Release/LTO
         run: |
-          set -euxo pipefail
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCAPSID_BUILD_HOST=ON \
-            -DCMAKE_PREFIX_PATH=/opt/openssl35
+          set -euo pipefail
+          if ! cmake -S . -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCAPSID_BUILD_HOST=ON \
+              -DCMAKE_PREFIX_PATH=/opt/openssl35 2>&1 | tee /tmp/configure.log; then
+            tail -50 /tmp/configure.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
 
       - name: Build
         run: |
-          set -euxo pipefail
-          cmake --build build --parallel 2
+          set -euo pipefail
+          if ! cmake --build build --parallel 2 2>&1 | tee /tmp/build.log; then
+            tail -50 /tmp/build.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
 
       - name: Package (CPack TGZ + SHA256)
         run: |
-          set -euxo pipefail
-          cmake --build build --target package
+          set -euo pipefail
+          if ! cmake --build build --target package 2>&1 | tee /tmp/package.log; then
+            tail -50 /tmp/package.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
           ls -la build/capsid-*
 
       - name: Publish package to GitHub Release
@@ -111,10 +133,15 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           # --verify-tag makes concurrent matrix jobs idempotent: the first
           # creates the release, later ones only verify the tag exists.
-          gh release create "${tag}" \
-            --title "capsid ${tag}" \
-            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
-            --verify-tag
+          if ! gh release create "${tag}" \
+              --title "capsid ${tag}" \
+              --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+              --verify-tag 2>&1 | tee /tmp/publish.log; then
+            tail -30 /tmp/publish.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
           gh release upload "${tag}" \
             build/capsid-*.tar.gz \
             build/capsid-*.tar.gz.sha256
@@ -174,10 +201,11 @@ jobs:
               echo "== package"
               cmake --build build-musl --target package
             ' 2>&1 | tee /tmp/musl-build.log; then
-            {
-              echo "MUSL BUILD FAILED; tail of container output:"
-              tail -60 /tmp/musl-build.log
-            } >> "${GITHUB_STEP_SUMMARY}"
+            # Surface the failing lines as workflow annotations (visible on
+            # the run page without auth).
+            tail -40 /tmp/musl-build.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
             exit 1
           fi
           # The CPack basename only carries system/arch, so the musl package
@@ -195,10 +223,15 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          gh release create "${tag}" \
-            --title "capsid ${tag}" \
-            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
-            --verify-tag
+          if ! gh release create "${tag}" \
+              --title "capsid ${tag}" \
+              --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+              --verify-tag 2>&1 | tee /tmp/publish.log; then
+            tail -30 /tmp/publish.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
           gh release upload "${tag}" \
             build-musl/capsid-*.tar.gz \
             build-musl/capsid-*.tar.gz.sha256
