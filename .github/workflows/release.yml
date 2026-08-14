@@ -135,7 +135,7 @@ jobs:
       - name: Build and package in Alpine (musl)
         run: |
           set -euo pipefail
-          docker run --rm \
+          if ! docker run --rm \
             -v "${GITHUB_WORKSPACE}:/src" \
             -w /src \
             alpine:3.24 sh -eux -c '
@@ -173,7 +173,13 @@ jobs:
               cmake --build build-musl --parallel 2
               echo "== package"
               cmake --build build-musl --target package
-            '
+            ' 2>&1 | tee /tmp/musl-build.log; then
+            {
+              echo "MUSL BUILD FAILED; tail of container output:"
+              tail -60 /tmp/musl-build.log
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
           # The CPack basename only carries system/arch, so the musl package
           # would collide with the glibc one; disambiguate and regenerate
           # the checksum file under the new name before upload.
