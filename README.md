@@ -419,10 +419,8 @@ initial-stream-window 64K。版本：PHP 8.5.8 + Slim 4.15.2 + nginx
 
 形态：常规 JSON 全胜（json 1k 为 Python 3 栈的 1.47×、PHP 8 栈的
 3.74×）；大字节流载荷（bytes ≥16k、stream 32k）Python 3 栈反超，
-stream 32k 掉队成因待查。资源形态
-（空闲稳态，PSS 中位数）：capsid 3 进程 12.3MB，为 Python 3 栈 62.6MB
-的 1/5；PHP 8 栈 RSS 124MB（docker 跨用户 PSS 不可读，口径含 nginx）。
-完整方法、样本与结论见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
+stream 32k 掉队成因待查。完整方法、样本与结论见[性能：证据规则与
+当前形态](docs/performance-benchmarks.md)。
 
 冷启动对照（同一 4 核 cpuset，中位数，ms；fixture 为真实形态 JS 源码，
 三端加载同一函数体、仅入口不同）：
@@ -438,6 +436,20 @@ stream 32k 掉队成因待查。资源形态
 1M 总耗时降到 42ms（比 Deno 快 21%、比 Node 快 3.6×）。小 bundle 则
 启动基数主导：10k 时 capsid 源码 9.5ms，是 Deno 的 1/4、Node 的 1/11。
 方法细节见性能文档冷启动节。
+
+资源形态（同一 4 核环境，双进程协议空闲稳态，8 tick 中位数，
+`bench/sample-sut-memory.sh` 每 15s 采样）：
+
+| 栈 | 进程数 | 空闲 PSS | 空闲 RSS | json 负载 PSS |
+|---|---:|---:|---:|---:|
+| capsid + hono | 3（host + 2 workers） | **12.3 MB** | 21.8 MB | 13.5 MB |
+| PHP 8 + Slim | 12（php-fpm + nginx） | —* | 124.1 MB | —* |
+| Python 3 + Flask | 3（gunicorn + 2 workers） | 62.6 MB | 89.4 MB | 62.6 MB |
+
+*php 容器进程跨用户，非 root 读不到 `smaps_rollup`，PSS 不可得；其 RSS
+含 nginx，与其余两栈"应用进程树"口径不同。空闲 PSS capsid 为 Python 3
+栈的 1/5；json c64 负载下 capsid PSS 仅 +1.2 MB（QuickJS 堆涨落）。
+方法细节见性能文档资源形态节。
 
 ## 从源码构建
 
