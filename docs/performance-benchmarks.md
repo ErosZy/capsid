@@ -68,7 +68,9 @@ commit 的结果，以及只提交汇总数字而没有原始样本的变更。
 
 payload 逐字节对齐、0 errors/0 timeouts、**36/36 格结论级（CV ≤ 7%）**。
 实现语言与服务器模型不同，**不是胜负榜**，只用于确认量级。原始样本：
-`bench/results/three-stack-20260814T162308/`。
+`bench/results/three-stack-20260814T162308/`。注意：capsid 侧
+`--initial-stream-window 16384` 是 bench 脚本强制值（`compare-three-stacks.sh`
+默认覆写），**产品默认是 65536**——本矩阵反映 16K 窗口下的形态。
 
 | workload | capsid + hono | PHP 8 + Slim | Python 3 + Flask |
 |---|---:|---:|---:|
@@ -87,11 +89,11 @@ payload 逐字节对齐、0 errors/0 timeouts、**36/36 格结论级（CV ≤ 7%
 
 **形态**：常规 JSON（1-16k）全胜，小载荷优势最大（json 1k 为 Python 3
 栈的 1.37×、PHP 8 栈的 3.58×）；字节流大载荷（bytes ≥8k、stream 32k）
-Python 3 栈反超，其中 stream 32k（3123 vs 3957）差距最大 —— 32k 超出
-initial-stream-window（16384）需要 credit/window 往返，每 chunk 一次，
-是当前第一方优化循环外的已知成本点。PHP 8 栈全矩阵垫底（约为 capsid
-的 0.26-0.40×），CV 最优（≤3.2%）。QuickJS 解释器（无 JIT）仍是单
-worker 延迟主导；JIT 是 vendor 级变更，属独立评估项目。
+Python 3 栈反超，其中 stream 32k（3123 vs 3957）差距最大。曾归因于
+16K 窗口的 credit 往返——单轮 64K 对照（同样本协议，stream32k ≈3120
+QPS）不掉队也不反超，故该归因不成立，成因待查。PHP 8 栈全矩阵垫底
+（约为 capsid 的 0.26-0.40×），CV 最优（≤3.2%）。QuickJS 解释器（无
+JIT）仍是单 worker 延迟主导；JIT 是 vendor 级变更，属独立评估项目。
 
 ## 4. 冷启动对照（4C，2026-08-14，中位数 ms）
 

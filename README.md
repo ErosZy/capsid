@@ -417,8 +417,8 @@ Flask 3.1.3 + Gunicorn 26.0.0。QPS 如下：
 | stream 32k | 3123 | 1573 | **3957** |
 
 形态：常规 JSON 全胜（json 1k 为 Python 3 栈的 1.37×、PHP 8 栈的 3.58×）；
-大字节流载荷（bytes ≥8k、stream 32k）Python 3 栈反超，stream 32k 超出
-initial-stream-window 需 credit 往返，是已知成本点。完整方法、样本与结论
+大字节流载荷（bytes ≥8k、stream 32k）Python 3 栈反超（成因待查；本矩阵
+capsid 侧窗口为 bench 强制 16K，产品默认 64K）。完整方法、样本与结论
 见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
 
 冷启动对照（同一 4 核 cpuset，中位数，ms；fixture 为真实形态 JS 源码，
