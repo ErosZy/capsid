@@ -392,6 +392,50 @@ worker 出现协议错误、`CAPSID_EVENT_EXIT` 或同步 CPU timeout 后，不�
 - 希望直接执行远程模块、目录中的源码树或用户上传的 QuickJS bytecode；
 - 把未开启 strict sandbox 的开发配置用于执行不可信代码。
 
+## 性能（4 核对照，2026-08-14）
+
+capsid+hono 与 PHP 8+Slim、Python 3+Flask 的三栈对照。环境：Ryzen 3300X
+4C/8T、Alpine v3.24（WSL2）；SUT taskset 0-3 / loadgen 4-7、双进程
+（capsid 2 workers / gunicorn 2 / php-fpm max_children=2）、conns=64、
+12 种负载 × 3 轮、payload 逐字节对齐，36/36 格满足结论门槛（CV≤7%、
+0 错误）。版本：PHP 8.5.8 + Slim 4.15.2 + nginx 1.26.3；Python 3.14.5 +
+Flask 3.1.3 + Gunicorn 26.0.0。QPS 如下：
+
+| workload | capsid + hono | PHP 8 + Slim | Python 3 + Flask |
+|---|---:|---:|---:|
+| json 1k | **6354** | 1776 | 4648 |
+| json 8k | **5025** | 1642 | 4423 |
+| json 16k | **4664** | 1607 | 4313 |
+| json 32k | **3914** | 1529 | 3788 |
+| bytes 1k | **4852** | 1794 | 4735 |
+| bytes 8k | 4473 | 1690 | **4554** |
+| bytes 16k | 4114 | 1653 | **4399** |
+| bytes 32k | 3234 | 1619 | **3920** |
+| stream 1k | **4620** | 1782 | 4479 |
+| stream 8k | **4046** | 1717 | 3635 |
+| stream 16k | **3685** | 1671 | 3533 |
+| stream 32k | 3123 | 1573 | **3957** |
+
+形态：常规 JSON 全胜（json 1k 为 Python 3 栈的 1.37×、PHP 8 栈的 3.58×）；
+大字节流载荷（bytes ≥8k、stream 32k）Python 3 栈反超，stream 32k 超出
+initial-stream-window 需 credit 往返，是已知成本点。完整方法、样本与结论
+见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
+
+冷启动对照（同一 4 核 cpuset，中位数，ms；fixture 为真实形态 JS 源码，
+三端加载同一函数体、仅入口不同）：
+
+| 尺寸 | capsid 源码 | capsid 可信字节码 | Node 24 源码 | Deno 2.9 源码 |
+|---:|---:|---:|---:|---:|
+| 10k | **9.5** | **8.2** | 110 | 39 |
+| 100k | **19.6** | **10.6** | 110 | 40 |
+| 1M | 141 | **42** | 149 | 53 |
+
+真实形态下编译成本随 AST 节点数放大：1M 源码 capsid 编译 133ms（总
+141ms，与 Node 的 137ms 解析同量级）；可信字节码把解析移到部署时，
+1M 总耗时降到 42ms（比 Deno 快 21%、比 Node 快 3.6×）。小 bundle 则
+启动基数主导：10k 时 capsid 源码 9.5ms，是 Deno 的 1/4、Node 的 1/11。
+方法细节见性能文档冷启动节。
+
 ## 从源码构建
 
 需要 CMake、C/C++ 工具链、Node.js/npm，以及 txiki.js 所需的系统开发库。
