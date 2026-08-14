@@ -9,6 +9,7 @@
 #include "host/managed_listener.h"
 
 #include "host/request_normalization.h"
+#include "host/response_body_batch.h"
 #include "host/worker_executor.h"
 
 #include <boost/asio/ip/tcp.hpp>
@@ -1118,9 +1119,10 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
                 pending.head_sent = true;
                 if (!pending.body_queue.empty()) {
                     PendingRequest::QueuedBody queued =
-                        std::move(pending.body_queue.front());
-                    pending.body_queue.pop_front();
-                    pending.body_queue_bytes -= queued.bytes.size();
+                        take_coalesced_response_body(
+                            &pending.body_queue,
+                            &pending.body_queue_bytes,
+                            kResponseBodyWriteBatchLimit);
                     self->write_body_block(executor, request_id,
                                            std::move(queued.bytes),
                                            queued.credit_returned_early);
@@ -1429,9 +1431,10 @@ void ManagedListenerImpl::write_body_block(
             pending.outgoing.clear();
             if (!pending.body_queue.empty()) {
                 PendingRequest::QueuedBody queued =
-                    std::move(pending.body_queue.front());
-                pending.body_queue.pop_front();
-                pending.body_queue_bytes -= queued.bytes.size();
+                    take_coalesced_response_body(
+                        &pending.body_queue,
+                        &pending.body_queue_bytes,
+                        kResponseBodyWriteBatchLimit);
                 self->write_body_block(executor, request_id,
                                        std::move(queued.bytes),
                                        queued.credit_returned_early);

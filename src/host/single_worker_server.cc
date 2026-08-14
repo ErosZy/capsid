@@ -55,6 +55,7 @@
 #include "client_ipc_metrics.h"
 #include "host/credit_limits.h"
 #include "host/request_normalization.h"
+#include "host/response_body_batch.h"
 #include "host/structured_log.h"
 #include "host/worker_event_source.h"
 #include "host/worker_executor.h"
@@ -1600,9 +1601,10 @@ void Impl::handle_worker_event(WorkerEvent event) {
                     // Body events that arrived while the head was being
                     // written are queued here and flushed in order.
                     QueuedResponseBody queued =
-                        std::move(pending.body_queue.front());
-                    pending.body_queue.pop_front();
-                    pending.body_queue_bytes -= queued.bytes.size();
+                        take_coalesced_response_body(
+                            &pending.body_queue,
+                            &pending.body_queue_bytes,
+                            kResponseBodyWriteBatchLimit);
                     self->write_body_block(
                         request_id, std::move(queued.bytes),
                         queued.credit_returned_early);
@@ -1962,9 +1964,10 @@ void Impl::write_body_block(std::uint64_t request_id,
             pending.outgoing.clear();
             if (!pending.body_queue.empty()) {
                 QueuedResponseBody queued =
-                    std::move(pending.body_queue.front());
-                pending.body_queue.pop_front();
-                pending.body_queue_bytes -= queued.bytes.size();
+                    take_coalesced_response_body(
+                        &pending.body_queue,
+                        &pending.body_queue_bytes,
+                        kResponseBodyWriteBatchLimit);
                 self->write_body_block(
                     request_id, std::move(queued.bytes),
                     queued.credit_returned_early);

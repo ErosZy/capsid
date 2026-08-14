@@ -13,11 +13,15 @@
 // window/4, zero must always mean "immediate grant" (off), and degenerate
 // windows must degrade to immediate rather than stall.
 #include "host/credit_limits.h"
+#include "host/response_body_batch.h"
 
 #include <cstdint>
 #include <cstdlib>
+#include <deque>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
+#include <vector>
 
 namespace {
 
@@ -28,9 +32,59 @@ void require(bool condition, const char* message) {
     }
 }
 
+struct QueuedBody {
+    std::vector<std::uint8_t> bytes;
+    bool credit_returned_early = false;
+};
+
+QueuedBody body(std::initializer_list<std::uint8_t> bytes,
+                bool credit_returned_early) {
+    return QueuedBody{std::vector<std::uint8_t>(bytes),
+                      credit_returned_early};
+}
+
+void test_response_body_batching() {
+    std::deque<QueuedBody> queue;
+    queue.push_back(body({1, 2}, true));
+    queue.push_back(body({3, 4}, true));
+    queue.push_back(body({5, 6}, true));
+    queue.push_back(body({7, 8}, true));
+    std::size_t queued_bytes = 8;
+
+    QueuedBody first = capsid::host::take_coalesced_response_body(
+        &queue, &queued_bytes, 6);
+    require(first.bytes == std::vector<std::uint8_t>({1, 2, 3, 4, 5, 6}),
+            "same-credit frames did not coalesce in order");
+    require(first.credit_returned_early,
+            "coalescing changed the credit-return state");
+    require(queue.size() == 1 && queued_bytes == 2,
+            "coalescing broke queued-byte accounting");
+
+    queue.clear();
+    queue.push_back(body({1, 2}, true));
+    queue.push_back(body({3, 4}, false));
+    queue.push_back(body({5, 6}, true));
+    queued_bytes = 6;
+    first = capsid::host::take_coalesced_response_body(
+        &queue, &queued_bytes, 64);
+    require(first.bytes == std::vector<std::uint8_t>({1, 2}),
+            "batch crossed an early-credit boundary");
+    require(queue.size() == 2 && queued_bytes == 4,
+            "credit-boundary stop broke queue accounting");
+
+    QueuedBody second = capsid::host::take_coalesced_response_body(
+        &queue, &queued_bytes, 64);
+    require(second.bytes == std::vector<std::uint8_t>({3, 4}) &&
+                !second.credit_returned_early,
+            "completion-credit frame changed semantics");
+    require(queue.size() == 1 && queued_bytes == 2,
+            "completion-credit pop broke queue accounting");
+}
+
 }  // namespace
 
 int main() {
+    test_response_body_batching();
     // 0 stays 0: the off/backward-compat convention is untouched by the
     // clamp, so deployments that explicitly disable aggregation keep the
     // immediate-grant pacing.
