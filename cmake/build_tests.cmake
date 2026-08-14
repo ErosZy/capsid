@@ -4506,13 +4506,29 @@ if(BUILD_TESTING)
                     "${CAPSID_MBEDTLS_TEST_DATA}/server2-sha256.crt"
                     "${CAPSID_MBEDTLS_TEST_DATA}/server2.key"
                     "${CAPSID_MBEDTLS_TEST_DATA}/test-ca-sha256.crt"
-                    --strict
                     --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}"
             )
             set_tests_properties(
                 worker_direct_fetch_https_tls12_rsa_pss
                 PROPERTIES TIMEOUT 30 LABELS "tls;rsa-pss"
             )
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                add_test(
+                    NAME worker_strict_sandbox_https_tls12_rsa_pss
+                    COMMAND test-direct-fetch-tls
+                        $<TARGET_FILE:capsid-worker>
+                        "${CAPSID_DIRECT_FETCH_TLS_FIXTURE}"
+                        "${CAPSID_MBEDTLS_TEST_DATA}/server2-sha256.crt"
+                        "${CAPSID_MBEDTLS_TEST_DATA}/server2.key"
+                        "${CAPSID_MBEDTLS_TEST_DATA}/test-ca-sha256.crt"
+                        --strict
+                        --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}"
+                )
+                set_tests_properties(
+                    worker_strict_sandbox_https_tls12_rsa_pss
+                    PROPERTIES TIMEOUT 30 LABELS "sandbox;tls;rsa-pss"
+                )
+            endif()
         endif()
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(

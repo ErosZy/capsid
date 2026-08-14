@@ -213,7 +213,7 @@ jobs:
             build_host: 1
             ctest_parallel: 2
             ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_package_.*)$
+              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_strict_sandbox_https_tls12_rsa_pss|worker_package_.*)$
           - name: ubsan
             cmake_flag: CAPSID_ENABLE_UBSAN
             build_host: 1
@@ -234,7 +234,7 @@ jobs:
             # run under release, asan and ubsan, which is where their
             # mechanism is actually observable.
             ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_package_.*|host_managed_executable_quarantine_cleared_by_deploy|host_managed_http_rejects_multiple_listeners|host_managed_recovery_rejects_oversized_snapshot)$
+              ^(wpt_conformance_not_configured|worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_strict_sandbox_https_tls12_rsa_pss|worker_package_.*|host_managed_executable_quarantine_cleared_by_deploy|host_managed_http_rejects_multiple_listeners|host_managed_recovery_rejects_oversized_snapshot)$
 
     steps:
       - name: Check out recursively pinned sources

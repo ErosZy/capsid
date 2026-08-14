@@ -87,11 +87,13 @@ TLS 1.2-only 来规避协商。
 
 `worker_direct_fetch_https_tls12_rsa_pss` 启动本地 OpenSSL `s_server`，强制
 `-tls1_2 -sigalgs rsa_pss_rsae_sha256`，然后让真实 worker 完成受信任 HTTPS
-请求；测试带 `--strict`，同时要求请求成功和 worker 干净退出。定向复现命令：
+请求。Linux 另外注册 `worker_strict_sandbox_https_tls12_rsa_pss`，用相同握手
+回归覆盖 `--strict` 沙箱并要求 worker 干净退出；它不在 macOS 注册，也与其他
+strict-sandbox 门一样从 ASan/TSan 矩阵排除。定向复现命令：
 
 ```sh
 ctest --test-dir build --output-on-failure \
-  -R '^(egress_policy|worker_fetch_.*diagnostic|worker_fetch_hostname_authorizes_resolved_loopback|worker_direct_fetch_http_matrix|worker_direct_fetch_https_tls12_rsa_pss)$'
+  -R '^(egress_policy|worker_fetch_.*diagnostic|worker_fetch_hostname_authorizes_resolved_loopback|worker_direct_fetch_http_matrix|worker_direct_fetch_https_tls12_rsa_pss|worker_strict_sandbox_https_tls12_rsa_pss)$'
 ```
 
 ASan 示例：
@@ -103,7 +105,7 @@ cmake -S . -B build-asan -G Ninja \
   -DCAPSID_USE_MIMALLOC=OFF
 cmake --build build-asan
 ctest --test-dir build-asan --output-on-failure \
-  -E '^(worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca)$'
+  -E '^(worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_strict_sandbox_https_tls12_rsa_pss)$'
 ```
 
 UBSan 将开关替换为 `CAPSID_ENABLE_UBSAN=ON`。fuzz 构建使用 Clang、
