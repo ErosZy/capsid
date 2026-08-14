@@ -1,8 +1,40 @@
-# 第三方宿主集成规范
+# 宿主嵌入与集成规范
 
-本规范面向直接链接 `libcapsid_runtime.a` 的网关、server、worker pool 和其他
-embedder。Capsid Runtime 只提供隔离 worker 与 C ABI，不替宿主实现 HTTP
-监听、调度、重试或应用发布。
+本文面向直接链接 `libcapsid_runtime.a` 的网关、server、worker pool 和其他
+embedder，合并了嵌入接口（C ABI）与集成规范（线程/事件循环/背压/ABI 升级）。
+
+- 公开接口以 [`include/capsid/runtime.h`](../include/capsid/runtime.h) 为权威；
+  完整符号与字段注释以 public header 为准。
+- 当前 `CAPSID_ABI_VERSION == 7`；所有配置结构必须先调用对应的 `*_init()`，
+  不要手工清零或猜测结构大小。
+- Capsid Runtime 只提供隔离 worker 与 C ABI，不替宿主实现 HTTP 监听、调度、
+  重试或应用发布。
+
+## 生命周期
+
+典型宿主流程如下：
+
+1. `capsid_worker_config_init()` 后填写 `worker_path`、资源和安全策略；
+2. `capsid_worker_spawn()` 创建 worker（同步校验并深拷贝所有嵌套配置字符串、
+   规则和策略；返回后宿主可以释放原配置内存，要变更策略必须新建 worker）；
+3. `capsid_worker_load_bundle()` 或 `capsid_worker_load_bundle_named()` 加载源码 bundle；
+4. 在当前 POSIX ABI 上通过 `capsid_worker_fd()` 接入宿主 event loop；
+5. 写入请求头/body/end，并按事件补充双向 credit；
+6. 持续调用 `capsid_worker_next_event()` 消费响应、日志、审计和退出事件；
+7. `capsid_worker_shutdown()` 后继续排空，最终调用 `capsid_worker_destroy()`。
+
+创建后必须先发送 bundle，再等待 `CAPSID_EVENT_READY`；READY 前不得发请求。
+
+### 可信字节码
+
+`capsid_worker_load_trusted_bytecode_named()` 可跳过源码解析，加载由完全相同的
+Capsid/QuickJS 构建生成的模块字节码。它是面向宿主构建流水线的可选优化，不是
+应用上传格式。
+
+QuickJS 字节码不保证跨版本、编译选项或架构兼容，反序列化器也不构成安全边界。
+损坏、不匹配或攻击者控制的 bytes 可能导致内存破坏；因此只能加载宿主生成并
+校验过摘要的可信产物，不能加载租户输入。`source_name` 还必须与编译时嵌入的
+模块名完全相同。常规应用继续使用源码 bundle API。
 
 ## 线程与事件循环
 
@@ -20,32 +52,29 @@ owner loop，通过线程安全队列把命令投递给 owner。
 4. 收到 `CAPSID_CLOSED`、`CAPSID_PROTOCOL_ERROR` 或 `CAPSID_EVENT_EXIT` 后停止复用
    该 worker，并按应用发布策略替换它。
 
+大部分 I/O API 可能返回 `CAPSID_WOULD_BLOCK`，这是正常背压信号，不是 worker
+故障或忙循环重试的理由。返回 `WOULD_BLOCK` 的操作不会提交半个逻辑帧。
+
 不要在共享 reactor 上阻塞等待单个 worker。启动、请求和 shutdown 都应有宿主
 deadline；worker 内置 deadline 是第二道边界，不替代网关 deadline。
 
-跨平台宿主应使用自己的 worker-event-source adapter，不要让业务层依赖
-Unix fd。Capsid 将保留 ABI v7 的 fd 路径，并以加法接口建立 Windows
-原生 event source；在该接口与 Windows 构建测试交付前，不得声称 Runtime
-已提供 Windows 嵌入支持。平台支持层级见
-[架构与产品边界](architecture.md#平台契约)。
-
-## worker 与应用生命周期
-
-一个 worker 只加载一个自包含 ESM 应用。创建后必须先发送 bundle，再等待
-`CAPSID_EVENT_READY`；READY 前不得发请求。源码使用
-`capsid_worker_load_bundle_named()`。只有由完全相同且可信的 Capsid/QuickJS 构建
-生成的字节码才能使用 `capsid_worker_load_trusted_bytecode_named()`；字节码不是
-安全输入格式，也不兼容其他构建。
-
-推荐的发布切换顺序是：创建新 worker → 加载并等待 READY → 加入调度 →
-从调度摘除旧 worker → 等待旧请求结束 → deadline 到期则 cancel → shutdown →
-destroy。应用 bundle、policy 和 sandbox 配置在 worker 生命周期内不可变；变更
-时替换 worker，不做原地热补丁。
+`capsid_worker_fd()` 是 ABI v7 的 POSIX 集成面，不应被解释为永久的跨平台抽象。
+跨平台宿主应使用自己的 worker-event-source adapter，不要让业务层依赖 Unix fd。
+Capsid 将保留 ABI v7 的 fd 路径，并以加法接口建立 Windows 原生 event source；
+在该接口与 Windows 构建测试交付前，不得声称 Runtime 已提供 Windows 嵌入支持。
+平台支持层级见[架构与产品边界](architecture.md#平台契约)。
 
 ## 请求、credit 与背压
 
 request ID 在一个 worker 内必须非零且唯一，直到 response end、error、timeout
 或 cancel 完成。请求顺序为：
+
+```text
+begin_request
+  → 收到 REQUEST_CREDIT 后 write_request（可多次）
+  → end_request
+  → RESPONSE_HEAD / RESPONSE_BODY / RESPONSE_END
+```
 
 1. `capsid_worker_begin_request()`；
 2. 只在 `CAPSID_EVENT_REQUEST_CREDIT` 授予的额度内调用
@@ -55,21 +84,35 @@ request ID 在一个 worker 内必须非零且唯一，直到 response end、err
 响应 body 同样受 credit 控制。宿主消费或成功转发一段
 `CAPSID_EVENT_RESPONSE_BODY` 后，才用
 `capsid_worker_grant_response_credit()` 归还对应字节。不能提前按预计消费量授信，
-否则下游慢客户端会把内存压力转移到宿主。`CAPSID_WOULD_BLOCK` 是正常背压信号，
-不得当作 worker 故障或忙循环重试。
+否则下游慢客户端会把内存压力转移到宿主。credit 按 request ID 隔离，全局 queue
+budget 不能代替逐请求背压。
 
 每个 request ID 的事件顺序是 response head → 零个或多个 body → response end，
 或 error/timeout。不同 request ID 可以交错，宿主必须按 ID 保存独立状态。
 
-## payload view 生命周期
+取消使用 `capsid_worker_cancel()`，重复取消是幂等的。取消会传播到 handler、
+上传 body、响应背压和出站 fetch。旧请求已在途的合法帧可能仍需排空，宿主
+不应立即复用 request ID。
 
-`capsid_event.payload`、响应 header、status text 和 audit decode 所引用的 view，
-只保证有效到同一个 worker 的下一次 `capsid_worker_next_event()`。跨回调、跨线程、
-异步写入或排队前必须复制。不得保存裸指针，也不得在读下一事件后继续使用
-header view。memory metrics decode 复制数值，不保留 payload view。
+## 事件与内存生命周期
+
+`capsid_event.payload` 以及从以下函数取得的 view 都指向运行时拥有的事件缓冲：
+
+- `capsid_response_header_at()`；
+- `capsid_response_status_text()`；
+- `capsid_audit_record_decode()`。
+
+这些 view 只保证有效到同一 worker 的下一次 `capsid_worker_next_event()` 调用。
+跨回调、跨线程、异步写入或排队前必须复制；不得保存裸指针。响应 header 应通过
+count/iterator 解码，以保留多个 `Set-Cookie` 的独立值和顺序。memory metrics
+decode 复制数值，不保留 payload view。
 
 宿主自己提供给 `begin_request`、bundle 和 policy 的输入除文档明确说明同步复制
 外，也应按调用边界管理；最安全的规则是调用返回前保持有效。
+
+宿主必须持续排空 `CAPSID_EVENT_LOG` 和 `CAPSID_EVENT_AUDIT`。它们是有界通道，
+不能替代无界日志队列。worker 出现 `CAPSID_EVENT_EXIT`、协议错误或同步 CPU
+timeout 后，应销毁并替换。
 
 ## SSE、streaming 与 no-buffer
 
@@ -100,8 +143,31 @@ header 属于宿主/部署策略。
 
 正常关闭先从调度摘除，等待 inflight 清零，再调用 `capsid_worker_shutdown()` 并
 继续 flush/read。到宿主 shutdown deadline 仍未退出时调用
-`capsid_worker_terminate()`，最后始终 `capsid_worker_destroy()`。destroy 不应在持有
-payload view 的异步回调中发生。
+`capsid_worker_terminate()`，最后始终 `capsid_worker_destroy()`。destroy 是
+abortive cleanup，不应在持有 payload view 的异步回调中发生。
+
+## 超时与销毁
+
+`request_timeout_ms` 产生 `CAPSID_EVENT_REQUEST_TIMEOUT`：
+
+- 异步悬挂只取消对应请求，worker 可以继续使用；
+- QuickJS interrupt 打断同步 CPU 死循环后，worker 视为 disposable。
+
+`capsid_worker_destroy()` 是有界回收路径，会从正常 shutdown 升级到 SIGTERM
+和 SIGKILL。宿主不应依赖应用 bundle 主动退出。
+
+## 网络与安全配置
+
+`egress_policy == NULL` 表示所有出站 Fetch 默认拒绝。若同时配置
+`capsid_capability_policy.net_policy`，两者取交集。hostname、DNS 解析后的实际
+地址和每次 redirect 都会重新检查。
+
+`strict_sandbox`、`sandbox_required_features`、`resource_limits`、
+`sandbox_cgroup_path` 和 `sandbox_network_namespace_fd` 都是宿主接口，
+不会暴露给 JavaScript。详情见：
+
+- [宿主能力策略](capability-policy.md)
+- [Linux 严格沙箱](linux-sandbox.md)
 
 ## sandbox 与资源职责
 
@@ -139,3 +205,21 @@ JavaScript 不能扩大权限。宿主负责构造 capability、egress、cgroup�
 - 验证 worker crash、协议错误、soft/hard timeout 和替换策略；
 - 将 worker PID 的 cgroup memory/CPU/PID 限制与网关资源分开观测；
 - 保存旧 header/新 library、Release 全测和 delegated sandbox 的发布证据。
+
+## 最小配置示例
+
+```c
+capsid_worker_config config;
+capsid_worker_config_init(&config);
+config.worker_path = "/path/to/capsid-worker";
+config.request_timeout_ms = 1000;
+
+capsid_worker *worker = NULL;
+capsid_result result = capsid_worker_spawn(&config, &worker);
+if (result != CAPSID_OK) {
+    /* 记录 capsid_result_string(result)，本次启动失败 */
+}
+```
+
+生产集成还必须处理 `WOULD_BLOCK`、所有事件类型、stream credit、取消、
+worker 替换和宿主进程 shutdown。完整符号与字段注释以 public header 为准。

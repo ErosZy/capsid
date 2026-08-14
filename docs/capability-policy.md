@@ -269,5 +269,31 @@ worker 对相同的连续非 allow 判定最多记录 8 次，并把总速率限
 
 capability rule 是应用授权边界；seccomp、Landlock、namespace、cgroup 和
 宿主 firewall 是独立且更强的进程边界。未来若开放 FFI 或 raw socket，宿主
-必须接受它们可能绕过普通 JavaScript policy。当前明确的默认关闭与 configure
-负控见[逃逸级能力门禁](escape-capabilities.md)。
+必须接受它们可能绕过普通 JavaScript policy。
+
+### 逃逸级能力门禁
+
+`capsid:ffi` 与 `capsid:raw-socket` 不属于普通 capability。它们可以绕过路径、
+DNS、redirect 和逐操作授权，因此当前安全结论是"不提供"，而不是"依赖规则
+谨慎开放"。
+
+- `CAPSID_ENABLE_FFI_CAPABILITY` 与
+  `CAPSID_ENABLE_RAW_SOCKET_CAPABILITY` 明确存在且默认 `OFF`；
+  任一开关设为 `ON` 都在 configure 阶段 fail closed，因为项目尚无独立 ABI、
+  OS sandbox profile 与完整负控；
+- 直接传入 txiki 的 `BUILD_WITH_FFI=ON` 同样被顶层配置拒绝，不能绕过 Capsid
+  开关；restricted txiki overlay 不打包 FFI、POSIX socket 或相关 bytecode，
+  最终 worker 还必须通过符号、translation unit 和 module specifier 审计。
+
+自动化证据：`escape_capability_defaults`（两开关默认 OFF 且 txiki FFI 未暗中
+启用）、`escape_capability_configure_negative_controls`（开启即 configure
+失败）、`worker_binary_audit` 及其负控（危险 initializer/translation unit/
+loader specifier 未进入最终 worker，且审计器能捕获注入）、
+`worker_sandbox_enforcement`（真实进程 strict seccomp/Landlock，含 raw socket
+拒绝）和 capability manifest 拒绝矩阵（应用导入这两个模块得到
+`unavailable`）。
+
+将来若产品确实需要其中任一能力，应新开安全设计和 ABI 版本，至少覆盖库路径
+与符号约束、socket family/type/protocol、DNS/redirect 绕过、fd 传递、资源
+配额、跨请求/跨租户隔离和独立 OS sandbox。不能把当前 fail-closed 开关改成
+"实验性可用"来规避这些前置条件。

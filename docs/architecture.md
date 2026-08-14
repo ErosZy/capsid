@@ -96,8 +96,7 @@ profile 名称为 `CAPSID-MIN-2025-subset-v0`。主要包含：
   compile/instantiate/validate（含 streaming 版本）；
 - `navigator.userAgent`。
 
-正式偏差和资源上限见
-[合规偏差](conformance-deviations.md)。txiki.js 的 `globalThis.tjs`、
+正式偏差和资源上限见[标准与合规](conformance.md)。txiki.js 的 `globalThis.tjs`、
 `tjs:internal/*`、process/child process、server、WASI、外部模块加载、REPL、
 文件执行和宿主 IPC 控制永久不暴露。
 

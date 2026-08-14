@@ -1,76 +1,51 @@
 # 文档导航
 
 这里只维护当前契约、使用说明和可复核的证据规则，不保存一次性评审过程、每日状态
-快照或生成报告的副本。事实发生冲突时，优先级如下：
+快照或生成报告的副本（原始样本与 profile 保存在 `bench/results/`，CI 证据保存在
+workflow artifact）。事实发生冲突时，优先级如下：
 
 1. 公共头文件、manifest、构建配置和测试；
 2. 由当前 commit 生成的原始测试或 benchmark artifact；
 3. Markdown 说明。
 
-截至当前工作树，Runtime、worker 与第一方 `capsid-host`（`--mode single-worker`）
-均可构建、可测试：Host 已具备单 worker 数据面、FetchRPC 协议与 benchmark 基线
-（`bench/`），属于可运行的 benchmark/integration 模式，**非生产部署接口**；多
-App/pool、多 worker 与安全部署闭环（M1D）继续实现中。里程碑状态以源码和测试为准，
-不单独维护易漂移的状态文档。
-
-当前正在进行跨机器迁移，临时操作快照见
-[M1D 跨机器交接](m1d-machine-handoff.md)。恢复、核对并形成新机器测试证据后必须删除
-该快照及本链接，不能把它长期当作产品状态页。
+截至当前工作树，Runtime、worker 与第一方 `capsid-host`（`--mode single-worker`
+/ `static-pool` / `managed`）均可构建、可测试，属可运行的 benchmark/integration
+模式，**非生产部署接口**；里程碑状态以源码和测试为准，不单独维护易漂移的状态
+文档。
 
 ## 入门与架构
 
-- [项目首页](../README.md)：定位、构建、应用打包和最短集成路径
-- [架构与产品边界](architecture.md)：进程模型、平台契约、JavaScript 表面和 vendor 策略
-- [Host v1 详细设计](host-technical-design-review.md)：第一方 Host 的唯一权威设计、
-  已冻结契约、实施顺序和验收门
-- [安全修复执行说明](capsid-remediation-execution-spec-2026-08-09.md)：P0/P1 修复的
-  工作包、RED 证据与验收门（PR-01…PR-14 的当前执行依据）
-- [WP-08 完成报告（PR-13）](capsid-wp08-completion-2026-08-10.md)：安装、CPack
-  与 Release CI 的验收证据、不变量与 RED/GREEN 记录
-- [WP-09 完成报告（PR-14）](capsid-wp09-completion-2026-08-10.md)：P1 收尾包 —
-  EXIT 清零、timeout drain、destroy 语义、有界 registry、24h/72h soak 平台
-  与 managed 数据平面 response-credit 修复
-- [安全审计交接](capsid-audit-handoff-2026-08-09.md)：审计输入、已确认发现和
-  修复完成后的复核要求
+- [项目首页](../README.md)：定位、适用场景、快速开始、权限与安全配置
+- [架构与产品边界](architecture.md)：进程模型、平台契约、JavaScript 表面、
+  受限构建、安全边界、资源策略与限制
+- [Host v1 详细设计](host-technical-design-review.md)：第一方 Host 的权威
+  设计、已冻结契约、验收门与实施顺序
 
-## Runtime 嵌入与安全
+## 宿主嵌入与集成
 
-- [宿主嵌入接口](embedding-api.md)：C ABI 生命周期、流控、事件和超时
-- [第三方宿主集成规范](host-integration.md)：线程、SSE、取消、关闭和升级
-- [宿主能力策略](capability-policy.md)：模块、操作授权、quota 和审计
-- [JavaScript 模块与权限参考](module-permissions.md)：`tjs:*` 门禁、
-  `capsid:*` 模块和 API 到权限的映射
-- [逃逸级能力门禁](escape-capabilities.md)：FFI/raw socket 不提供结论
-- [Linux 严格沙箱](linux-sandbox.md)：seccomp、Landlock、namespace 与 cgroup
+- [宿主嵌入与集成规范](host-integration.md)：C ABI 生命周期、线程与事件循环、
+  请求/credit 背压、SSE/streaming、取消与关闭、ABI 版本策略与上线清单
+- [宿主能力策略](capability-policy.md)：三层门禁、可用模块、环境快照、
+  storage/stdio/fs 契约、审计事件与逃逸级能力门禁
+- [JavaScript 模块与权限参考](module-permissions.md)：bundle 可导入的模块、
+  API→权限映射与配置配方
+- [Linux 严格沙箱](linux-sandbox.md)：strict baseline、cgroup v2、网络
+  namespace、出站网络策略与明确限制
 
 ## 正确性与兼容性
 
-- [测试与持续门禁](testing.md)：测试分层、反空跑规则和执行方式
-- [标准来源锁](conformance-sources.md)：ECMA-429 与 WPT 固定版本
-- [能力追踪矩阵](standards-matrix.md)：标准能力到自动化证据的映射
-- [合规偏差](conformance-deviations.md)：接受的排除项及退出条件
+- [测试与持续门禁](testing.md)：测试分层、有效性规则、sanitizer/TSan 与
+  平台契约门
+- [标准与合规](conformance.md)：ECMA-429 与 WPT 来源锁、合规偏差表、
+  能力追踪矩阵
 - [框架兼容性](framework-compatibility/README.md)：固定版本的 Hono、itty-router
-  和 H3
+  和 H3 v2
 
 ## 性能
 
-- [性能证据规则](performance-benchmarks.md)：profile、A/B、原始数据和结论边界
-- [M1P 无人值守性能优化作战手册](performance-optimization-playbook.md)：DeepSeek 连续执行的
-  baseline、profile、TDD、A/B、验收/撤销与停止条件
-- [M1P 最终报告](m1p-final-report.md)：性能优化循环结论 — 累计收益、瓶颈归因、
-  硬停止判定与下一阶段建议
-- [Bodyless 性能验收 waiver](bodyless-performance-waiver.md)：机制验收通过、
-  性能门未达成的产品决策记录（waiver 不是自动通过）
-- [响应队列饱和活性修复](queue-saturation-activity-fix.md)：worker 输出队列
-  的背压/terminal 保证状态机设计（64 KiB 边界缺陷的正确性修复）
-- [2026-08 性能瓶颈归因与分阶段计划](performance-plan-2026-08.md)：profile
-  会话证据、E1-E14 实验记分板与收敛判定（2026-08-13 循环）
-- [2026-08-14 完成度审计与性能报告](performance-profile-report-2026-08-14.md)：
-  Host/Worker 完成度审计、响应块合并定向门与全矩阵证据
-- [三栈对比基准](three-stack-bench-2026-08.md)：capsid+hono vs php-fpm+nginx+slim
-  vs python+flask+gunicorn 在固定 payload 矩阵下的双进程协议对比
-- [三栈极限调优对比](three-stack-extreme-tune-2026-08.md)：三栈基准的第二阶段 —
-  极端参数扫描与调优结论
+- [性能：证据规则与当前形态](performance-benchmarks.md)：结论门槛、测量
+  分层、池规模结论、三栈对照与第一方 Host 优化结果。runner 与证据目录约定
+  见 `bench/` 下的脚本与 `bench/results/`。
 
 txiki.js 升级报告由 CI 生成并作为 workflow artifact 保存；仓库只保留构建身份所需的
 [`txiki-upgrade-baseline.json`](txiki-upgrade-baseline.json)，不提交会过期的报告副本。

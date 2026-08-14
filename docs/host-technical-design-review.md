@@ -1,7 +1,7 @@
 # Capsid Host v1 详细设计
 
-> 状态：v1 权威设计；M0 可执行契约已完成，M1 正在实现首条可运行的
-> `capsid-host` 单 worker 数据链路。
+> 状态：v1 权威设计；M1 数据面与安全部署闭环已交付（以当前源码和测试为准），
+> static-pool/managed 属可运行的 benchmark/integration 模式，非生产部署接口。
 > Runtime 权威接口：[runtime.h](../include/capsid/runtime.h)；集成约束见
 > [第三方宿主集成规范](host-integration.md)。
 
@@ -68,52 +68,9 @@ v1 技术栈：
 | SQLite/其他数据库 | v1 单进程单写者，只需要一个活动版本指针，没有数据库查询或事务需求 |
 | Boost.JSON 作为安全配置 parser | 重复 key 采用 last-wins，不能直接满足 fail-closed 配置要求 |
 
-## 2. 当前仓库事实
-
-当前树已经有 `capsid_host_core` 的 M0 纯契约实现与单元测试，包括配置、构建身份、
-bytecode attestation、secret snapshot、generation/active state、请求规范化和生命周期
-决策；它还不是监听网络、管理 worker pool 的完整服务。结构可以概括为：
-
-```text
-capsid_host_core（M0 纯契约；尚无 listener/pool executable）
-    │ future adapters / libcapsid_runtime.a / C ABI v7
-    │ FetchRPC over Unix socketpair
-    ▼
-capsid-worker
-    ├── QuickJS-ng + libuv
-    ├── Web API bootstrap
-    ├── capability / egress policy
-    └── seccomp + Landlock + namespace + cgroup
-```
-
-当前 ABI 已能支持：
-
-- spawn、源码 bundle 加载和 READY 事件；
-- 多 request ID、请求/响应 credit、取消和超时；
-- response head/body/end、日志、审计和 worker exit；
-- JS heap、进程地址空间、fd 和 cgroup 限制；
-- strict sandbox、额外 required feature 和预打开 network namespace fd；
-- capability、environment snapshot 和双层 egress policy；
-- worker PID、CPU 拓扑和可选 affinity。
-
-当前 ABI 没有提供：
-
-- HTTP listener、路由、队列、worker pool、发布和持久状态；
-- spawn 失败的结构化阶段、字段和 `errno`；
-- Host 配置到 Runtime descriptor 的编译器；
-- cgroup 目录的创建与生命周期；network namespace 创建有意留给部署环境，不作为
-  第一方 Host 或 Runtime 的待补能力；
-- 非阻塞的 child reap/destroy API。
-- 跨平台 worker event-source ABI 和 Windows `CreateProcess`/IPC/reap 后端；当前
-  `capsid_worker_fd()`、`socketpair`、`posix_spawn`、signal 和 `waitpid` 仍是 POSIX 实现。
-
-`capsid_worker_destroy()` 当前会执行 shutdown、等待、SIGTERM、SIGKILL 和 wait，最坏会
-同步等待数百毫秒。因此它不能直接在数据面 reactor 回调里执行。过渡方案是先在
-owner shard 摘除并关闭 worker，再把唯一 handle 移交给有界 reaper executor；长期可
-增加拆分式非阻塞回收 ABI。
-
-当前 Git tree 没有 benchmark runner 或历史原始报告。因此第一方 Host 的性能验收必须
-重新生成带 commit、原始 A/B 和双侧 profile 的证据，不能复用无法核验的汇总数字。
+当前仍有效的集成约束：`capsid_worker_destroy()` 是同步的有界回收路径，最坏会
+等待数百毫秒，因此不能在数据面 reactor 回调里执行；宿主应先在 owner shard 摘除
+并关闭 worker，再把唯一 handle 移交给有界 reaper executor。
 
 ## 3. 关键契约补充
 

@@ -33,74 +33,9 @@ Capsid 实现固定的 Minimum Common Web API 子集
 `CAPSID-MIN-2025-subset-v0`。合规基线是 ECMA-429 和仓库锁定的 WPT revision；
 项目不宣称完整 ECMA-429 或全部 WPT conformance。
 
-## 适用场景
+## 快速开始
 
-适合：
-
-- 在已有 C/C++、Go/cgo 或其他原生网关中运行 JavaScript Fetch 应用；
-- 每个应用使用独立进程、固定内存和明确能力策略；
-- 运行打包后的 Hono、itty-router、H3 v2 或原生 Fetch handler；
-- 需要宿主控制背压、取消、审计、cgroup 和 Linux 沙箱。
-
-不适合：
-
-- 需要 Node 内置模块、npm 运行时加载、`process`、WASI 或任意文件访问；
-- 需要 runtime 自己监听 HTTP/WebSocket、管理 TLS 或创建 worker pool；
-- 希望直接执行远程模块、目录中的源码树或用户上传的 QuickJS bytecode；
-- 把未开启 strict sandbox 的开发配置用于执行不可信代码。
-
-## 从源码构建
-
-需要 CMake、C/C++ 工具链、Node.js/npm，以及 txiki.js 所需的系统开发库。
-先取得锁定依赖：
-
-```sh
-git submodule update --init --recursive
-npm ci --ignore-scripts --prefix vendor/txiki.js
-```
-
-构建 Release/LTO 产物：
-
-```sh
-cmake -S . -B build-release \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_TESTING=OFF \
-  -DCAPSID_ENABLE_LTO=ON \
-  -DCAPSID_USE_MIMALLOC=OFF
-cmake --build build-release --parallel
-```
-
-主要产物是：
-
-- `build-release/capsid-worker`：隔离的 JavaScript 子进程；
-- `build-release/capsid-host`：第一方 C++ Host（single-worker / static-pool /
-  managed 三种模式，`--mode` 选择）；
-- `build-release/libcapsid_runtime.a`：宿主链接的静态库；
-- `include/capsid/runtime.h`：C ABI；
-- `include/capsid/runtime.hpp`：C++11 RAII 和策略构造器。
-
-`capsid-host` 依赖系统 Boost.Asio/Beast（`libboost-system-dev`）；无 Boost 的
-平台跳过 host 目标但保留 worker 与库。
-
-安装到独立目录：
-
-```sh
-cmake --install build-release --prefix "$PWD/dist"
-```
-
-安装结果包含 `dist/bin/capsid-worker`、静态库、公开头文件和 capability
-manifest。也可以在宿主的 CMake 项目中直接使用：
-
-```cmake
-add_subdirectory(path/to/capsid EXCLUDE_FROM_ALL)
-target_link_libraries(my_gateway PRIVATE capsid::runtime)
-```
-
-当前 ABI 版本是 7。代码应包含 `<capsid/runtime.h>` 或
-`<capsid/runtime.hpp>`，使用 `capsid_*` C 符号、`capsid::` C++ 命名空间和
-`CAPSID_*` 构建变量。此次产品统一不提供旧名称兼容别名。
-
-## 编写和打包应用
+### 1. 编写应用
 
 应用必须导出默认对象的 `fetch()`，或导出名为 `fetch` 的函数：
 
@@ -117,6 +52,8 @@ export default {
 };
 ```
 
+### 2. 打包成自包含 ESM bundle
+
 Capsid 只加载一个自包含 ESM bundle。应用运行时不能从磁盘、URL 或 npm
 解析依赖，因此框架和依赖必须在发布阶段打包：
 
@@ -129,7 +66,40 @@ vendor/txiki.js/node_modules/.bin/esbuild app.js \
   --outfile=app.bundle.js
 ```
 
-bundle 不应包含 Node/Bun/Deno server adapter。框架入口示例和已验证范围见：
+### 3. 运行
+
+用第一方 Host 直接跑起来（`capsid-worker` 与 `capsid-host` 来自
+[从源码构建](#从源码构建)）：
+
+```sh
+./build-release/capsid-host \
+  --mode single-worker \
+  --worker ./build-release/capsid-worker \
+  --source-bundle app.bundle.js \
+  --source-name "file://$PWD/app.bundle.js" \
+  --application orders \
+  --listen 127.0.0.1:8080 \
+  --routing path \
+  --public-scheme http
+```
+
+请求经 `--routing path` 剥离 `/@capsid/<application>/` 前缀后到达应用：
+
+```sh
+curl http://127.0.0.1:8080/@capsid/orders/
+# {"message":"hello from Capsid","path":"/"}
+```
+
+### 4. 嵌入自己的宿主
+
+生产宿主不直接运行 `capsid-host`，而是链接 `libcapsid_runtime`（C ABI 或
+C++11 RAII 封装），自己管理 listener、worker 池与生命周期。见
+[在宿主中使用](#在宿主中使用)与[宿主嵌入与集成规范](docs/host-integration.md)。
+
+## 编写和打包应用
+
+框架必须和依赖一起打包进 bundle。bundle 不应包含 Node/Bun/Deno server
+adapter。框架入口示例和已验证范围见：
 
 - [Hono](docs/framework-compatibility/hono.md)
 - [itty-router](docs/framework-compatibility/itty-router.md)
@@ -197,8 +167,8 @@ begin_request
 
 事件 payload、响应 header 和解码后的 audit view 只保证有效到同一 worker
 下一次 `capsid_worker_next_event()`。需要跨线程、排队或异步写出时必须先复制。
-完整集成契约见[宿主集成规范](docs/host-integration.md)和
-[嵌入接口](docs/embedding-api.md)。
+完整集成契约（线程模型、SSE/streaming、ABI 版本策略、上线清单）见
+[宿主嵌入与集成规范](docs/host-integration.md)。
 
 ## 权限配置
 
@@ -433,6 +403,73 @@ worker 出现协议错误、`CAPSID_EVENT_EXIT` 或同步 CPU timeout 后，不�
 校验摘要的产物。QuickJS bytecode 不是安全输入格式，绝不能加载租户或其他
 不可信来源提供的 bytes。
 
+## 适用场景
+
+适合：
+
+- 在已有 C/C++、Go/cgo 或其他原生网关中运行 JavaScript Fetch 应用；
+- 每个应用使用独立进程、固定内存和明确能力策略；
+- 运行打包后的 Hono、itty-router、H3 v2 或原生 Fetch handler；
+- 需要宿主控制背压、取消、审计、cgroup 和 Linux 沙箱。
+
+不适合：
+
+- 需要 Node 内置模块、npm 运行时加载、`process`、WASI 或任意文件访问；
+- 需要 runtime 自己监听 HTTP/WebSocket、管理 TLS 或创建 worker pool；
+- 希望直接执行远程模块、目录中的源码树或用户上传的 QuickJS bytecode；
+- 把未开启 strict sandbox 的开发配置用于执行不可信代码。
+
+## 从源码构建
+
+需要 CMake、C/C++ 工具链、Node.js/npm，以及 txiki.js 所需的系统开发库。
+先取得锁定依赖：
+
+```sh
+git submodule update --init --recursive
+npm ci --ignore-scripts --prefix vendor/txiki.js
+```
+
+构建 Release/LTO 产物：
+
+```sh
+cmake -S . -B build-release \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=OFF \
+  -DCAPSID_ENABLE_LTO=ON \
+  -DCAPSID_USE_MIMALLOC=OFF
+cmake --build build-release --parallel
+```
+
+主要产物是：
+
+- `build-release/capsid-worker`：隔离的 JavaScript 子进程；
+- `build-release/capsid-host`：第一方 C++ Host（single-worker / static-pool /
+  managed 三种模式，`--mode` 选择）；
+- `build-release/libcapsid_runtime.a`：宿主链接的静态库；
+- `include/capsid/runtime.h`：C ABI；
+- `include/capsid/runtime.hpp`：C++11 RAII 和策略构造器。
+
+`capsid-host` 依赖系统 Boost.Asio/Beast（`libboost-system-dev`）；无 Boost 的
+平台跳过 host 目标但保留 worker 与库。
+
+安装到独立目录：
+
+```sh
+cmake --install build-release --prefix "$PWD/dist"
+```
+
+安装结果包含 `dist/bin/capsid-worker`、静态库、公开头文件和 capability
+manifest。也可以在宿主的 CMake 项目中直接使用：
+
+```cmake
+add_subdirectory(path/to/capsid EXCLUDE_FROM_ALL)
+target_link_libraries(my_gateway PRIVATE capsid::runtime)
+```
+
+当前 ABI 版本是 7。代码应包含 `<capsid/runtime.h>` 或
+`<capsid/runtime.hpp>`，使用 `capsid_*` C 符号、`capsid::` C++ 命名空间和
+`CAPSID_*` 构建变量。此次产品统一不提供旧名称兼容别名。
+
 ## 验证当前 checkout
 
 初始化参考框架依赖：
@@ -464,11 +501,10 @@ ctest --test-dir build-release --output-on-failure \
 
 - [文档导航](docs/README.md)
 - [架构与产品边界](docs/architecture.md)
-- [宿主嵌入接口](docs/embedding-api.md)
-- [第三方宿主集成规范](docs/host-integration.md)
+- [宿主嵌入与集成规范](docs/host-integration.md)
 - [第一方 Host v1 详细设计](docs/host-technical-design-review.md)
-- [能力与安全策略](docs/capability-policy.md)
+- [宿主能力策略](docs/capability-policy.md)
 - [JavaScript 模块与权限参考](docs/module-permissions.md)
 - [Linux 严格沙箱](docs/linux-sandbox.md)
-- [标准与偏差](docs/standards-matrix.md)
-- [性能证据规则](docs/performance-benchmarks.md)
+- [标准与合规](docs/conformance.md)
+- [性能：证据规则与当前形态](docs/performance-benchmarks.md)

@@ -13,10 +13,7 @@
    libFuzzer harness；
 6. benchmark contract：先验证内容、版本和环境，再允许记录性能样本。
 
-标准来源、WPT 选择和偏差分别见
-[标准来源锁](conformance-sources.md)、
-[能力追踪矩阵](standards-matrix.md)和
-[合规偏差](conformance-deviations.md)。
+标准来源、WPT 选择和偏差统一见[标准与合规](conformance.md)。
 
 ## 有效性规则
 
