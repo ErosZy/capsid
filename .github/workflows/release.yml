@@ -3,9 +3,10 @@ name: Release
 # Tag pushes (v*) package the pinned checkout per platform with the same
 # dependency versions as testing-validity (OpenSSL 3.5.7 from pinned
 # source, LTO on, mimalloc off) and attach the CPack TGZ + SHA256 to a
-# GitHub Release. testing-validity does not run on tags (it is scoped to
-# main/PR), so the tag must point at a commit whose main-branch checks
-# already passed.
+# GitHub Release. Three platforms ship: glibc (ubuntu), musl (Alpine
+# container) and macOS (arm64). testing-validity does not run on tags (it
+# is scoped to main/PR), so the tag must point at a commit whose
+# main-branch checks already passed.
 
 on:
   push:
@@ -18,6 +19,9 @@ permissions:
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  OPENSSL_SHA256: a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
 
 jobs:
   package:
@@ -38,8 +42,11 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # The tag name resolves to refs/tags/<name>; no fetch-tags, so
+          # checkout only fetches the triggering ref itself (fetch-tags on
+          # a tag-push event made the first release run fail in checkout).
+          ref: ${{ github.ref_name }}
           submodules: recursive
-          fetch-tags: true
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -49,6 +56,18 @@ jobs:
       - name: Install platform build dependencies
         run: ${{ matrix.deps }}
 
+      - name: Install pinned node modules
+        run: |
+          set -euo pipefail
+          for directory in \
+            vendor/txiki.js \
+            examples/hono-reference \
+            examples/itty-router-reference \
+            examples/h3-v2-reference
+          do
+            npm ci --ignore-scripts --prefix "${directory}"
+          done
+
       - name: Build OpenSSL 3.5.7 for Release
         run: |
           set -euo pipefail
@@ -56,7 +75,7 @@ jobs:
           # testing-validity; built outside the workspace so the checkout
           # stays clean for the Release identity gate.
           cd "${RUNNER_TEMP}"
-          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
+          echo "${OPENSSL_SHA256}  openssl-3.5.7.tar.gz" > openssl.sha256
           curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
           sha256sum -c openssl.sha256
           tar xzf openssl-3.5.7.tar.gz
@@ -89,8 +108,78 @@ jobs:
           # creates the release, later ones only verify the tag exists.
           gh release create "${tag}" \
             --title "capsid ${tag}" \
-            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (per platform) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
             --verify-tag
           gh release upload "${tag}" \
             build/capsid-*.tar.gz \
             build/capsid-*.tar.gz.sha256
+
+  package-musl:
+    # Alpine container on the ubuntu runner: musl libc, the same toolchain
+    # family as the primary development environment.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out recursively pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.ref_name }}
+          submodules: recursive
+
+      - name: Build and package in Alpine (musl)
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/src" \
+            -w /src \
+            alpine:3.24 sh -eu -c '
+              apk add --no-cache build-base cmake ninja linux-headers \
+                nodejs npm git perl boost-dev
+              cd /tmp
+              echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
+              wget -q https://www.openssl.org/source/openssl-3.5.7.tar.gz
+              sha256sum -c openssl.sha256
+              tar xzf openssl-3.5.7.tar.gz
+              cd openssl-3.5.7
+              ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
+              make -j2
+              make install_sw
+              cd /src
+              for directory in \
+                vendor/txiki.js \
+                examples/hono-reference \
+                examples/itty-router-reference \
+                examples/h3-v2-reference
+              do
+                npm ci --ignore-scripts --prefix "${directory}"
+              done
+              cmake -S . -B build-musl -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCAPSID_BUILD_HOST=ON \
+                -DCMAKE_PREFIX_PATH=/opt/openssl35
+              cmake --build build-musl --parallel 2
+              cmake --build build-musl --target package
+            '
+          # The CPack basename only carries system/arch, so the musl package
+          # would collide with the glibc one; disambiguate and regenerate
+          # the checksum file under the new name before upload.
+          pkg=$(ls build-musl/capsid-*.tar.gz)
+          musl_pkg="${pkg%.tar.gz}-musl.tar.gz"
+          mv "${pkg}" "${musl_pkg}"
+          (cd build-musl && sha256sum "$(basename "${musl_pkg}")" > "$(basename "${musl_pkg}").sha256")
+          rm -f "${pkg}.sha256"
+
+      - name: Publish package to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          gh release create "${tag}" \
+            --title "capsid ${tag}" \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --verify-tag
+          gh release upload "${tag}" \
+            build-musl/capsid-*.tar.gz \
+            build-musl/capsid-*.tar.gz.sha256
