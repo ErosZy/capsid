@@ -1,12 +1,12 @@
 name: Release
 
-# Tag pushes (v*) package the pinned checkout per platform with the same
-# dependency versions as testing-validity (OpenSSL 3.5.7 from pinned
-# source, LTO on, mimalloc off) and attach the CPack TGZ + SHA256 to a
-# GitHub Release. Three platforms ship: glibc (ubuntu), musl (Alpine
-# container) and macOS (arm64). testing-validity does not run on tags (it
-# is scoped to main/PR), so the tag must point at a commit whose
-# main-branch checks already passed.
+# Tag pushes (v*) package the pinned checkout and attach the CPack TGZ +
+# SHA256 to a GitHub Release. Two platform packages ship:
+#   - linux-x86_64: fully static (musl + mimalloc) built in an Alpine
+#     container — one portable binary, no libc version matrix to manage;
+#   - darwin-arm64: native macOS build (Apple ships no static libSystem).
+# testing-validity does not run on tags (scoped to main/PR), so the tag
+# must point at a commit whose main-branch checks already passed.
 
 on:
   push:
@@ -30,9 +30,6 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            deps: sudo apt-get update && sudo apt-get install -y ninja-build libboost-system-dev
-          # macos-15 is arm64; the package name carries the arch
-          # (capsid-<ver>-darwin-arm64.tar.gz) so uploads never collide.
           - os: macos-15
             deps: brew install ninja boost
     runs-on: ${{ matrix.os }}
@@ -54,97 +51,17 @@ jobs:
           node-version: 24
 
       - name: Install platform build dependencies
+        if: matrix.deps
         run: ${{ matrix.deps }}
 
-      - name: Install pinned node modules
+      - name: Install pinned txiki node modules
         run: |
           set -euo pipefail
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
+          # --ignore-scripts: pure JS, no native bindings, so the musl
+          # container reuses this tree verbatim.
+          npm ci --ignore-scripts --prefix vendor/txiki.js
 
-      - name: Build OpenSSL 3.5.7 for Release
-        run: |
-          set -euo pipefail
-          # Same pinned provider source as the sanitizer Host build in
-          # testing-validity; built outside the workspace so the checkout
-          # stays clean for the Release identity gate.
-          cd "${RUNNER_TEMP}"
-          echo "${OPENSSL_SHA256}  openssl-3.5.7.tar.gz" > openssl.sha256
-          if ! {
-            curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-            sha256sum -c openssl.sha256
-            tar xzf openssl-3.5.7.tar.gz
-            cd openssl-3.5.7
-            ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
-            make -j2
-            sudo make install_sw
-          } 2>&1 | tee /tmp/openssl.log; then
-            tail -40 /tmp/openssl.log | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
-            exit 1
-          fi
-
-      - name: Configure Release/LTO
-        run: |
-          set -euo pipefail
-          if ! cmake -S . -B build -G Ninja \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DCAPSID_BUILD_HOST=ON \
-              -DCMAKE_PREFIX_PATH=/opt/openssl35 2>&1 | tee /tmp/configure.log; then
-            tail -50 /tmp/configure.log | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
-            exit 1
-          fi
-
-      - name: Build
-        run: |
-          set -euo pipefail
-          if ! cmake --build build --parallel 2 2>&1 | tee /tmp/build.log; then
-            tail -50 /tmp/build.log | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
-            exit 1
-          fi
-
-      - name: Package (CPack TGZ + SHA256)
-        run: |
-          set -euo pipefail
-          if ! cmake --build build --target package 2>&1 | tee /tmp/package.log; then
-            tail -50 /tmp/package.log | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
-            exit 1
-          fi
-          ls -la build/capsid-*
-
-      - name: Publish package to GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          # --verify-tag does NOT make create idempotent: once the release
-          # exists it fails with HTTP 422 (tag_name already exists), which
-          # is exactly what happens for every concurrent job that arrives
-          # after the first one. Tolerate that specific race; upload is the
-          # real gate and fails loudly on anything else.
-          gh release create "${tag}" \
-            --title "capsid ${tag}" \
-            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (glibc, musl, macOS arm64) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
-            --verify-tag || true
-          gh release upload --clobber "${tag}" \
-            build/capsid-*.tar.gz \
-            build/capsid-*.tar.gz.sha256
-
-      - name: Build and package in Alpine (musl, ubuntu runner only)
+      - name: Build and package in Alpine (musl, fully static)
         if: matrix.os == 'ubuntu-24.04'
         run: |
           set -euo pipefail
@@ -156,10 +73,9 @@ jobs:
               apk add --no-cache build-base cmake ninja linux-headers \
                 nodejs npm git perl boost-dev
               # The mounted workspace is owned by the runner user; as root,
-              # git refuses it (dubious ownership) and the overlay-key /
-              # identity gates then cannot resolve the vendor HEAD.
-              # Covers every nested submodule gitdir (txiki.js itself,
-              # deps/libuv, ...) in the ephemeral container.
+              # git refuses it and the overlay-key / identity gates then
+              # cannot resolve vendor HEADs. Covers every nested submodule
+              # gitdir in the ephemeral container.
               git config --global --add safe.directory "*"
               echo "== openssl fetch"
               cd /tmp
@@ -175,20 +91,13 @@ jobs:
               make install_sw
               echo "== reuse node_modules"
               cd /src
-              # The txiki node_modules tree was installed by the ubuntu
-              # leg above (node 24, --ignore-scripts: pure JS, no native
-              # bindings), so the container reuses it instead of running
-              # npm ci under apk node 22, whose npm chokes on the txiki
-              # lockfile.
-              if ! test -d vendor/txiki.js/node_modules; then
-                echo "== node_modules MISSING in container"
-                ls -la vendor/txiki.js/ | head -20
-                exit 1
-              fi
+              test -d vendor/txiki.js/node_modules
               echo "== cmake configure"
               if ! cmake -S . -B build-musl -G Ninja \
                   -DCMAKE_BUILD_TYPE=Release \
                   -DCAPSID_BUILD_HOST=ON \
+                  -DCAPSID_USE_MIMALLOC=ON \
+                  -DCMAKE_EXE_LINKER_FLAGS="-static" \
                   -DCMAKE_PREFIX_PATH=/opt/openssl35 \
                   > /tmp/configure.log 2>&1; then
                 echo "== CONFIGURE FAILED"
@@ -212,24 +121,77 @@ jobs:
             done
             exit 1
           fi
-          musl_pkg="${pkg%.tar.gz}-musl.tar.gz"
-          mv "${pkg}" "${musl_pkg}"
-          (cd build-musl && sha256sum "$(basename "${musl_pkg}")" > "$(basename "${musl_pkg}").sha256")
-          rm -f "${pkg}.sha256"
 
-      - name: Publish musl package to GitHub Release
-        if: matrix.os == 'ubuntu-24.04'
+      - name: Build OpenSSL 3.5.7 for macOS Release
+        if: matrix.os == 'macos-15'
+        run: |
+          set -euo pipefail
+          # Same pinned provider source as the sanitizer Host build in
+          # testing-validity; built outside the workspace so the checkout
+          # stays clean for the Release identity gate.
+          cd "${RUNNER_TEMP}"
+          echo "${OPENSSL_SHA256}  openssl-3.5.7.tar.gz" > openssl.sha256
+          if ! {
+            curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
+            sha256sum -c openssl.sha256
+            tar xzf openssl-3.5.7.tar.gz
+            cd openssl-3.5.7
+            ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
+            make -j2
+            sudo make install_sw
+          } 2>&1 | tee /tmp/openssl.log; then
+            tail -8 /tmp/openssl.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
+
+      - name: Configure and build macOS Release/LTO
+        if: matrix.os == 'macos-15'
+        run: |
+          set -euo pipefail
+          if ! cmake -S . -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCAPSID_BUILD_HOST=ON \
+              -DCMAKE_PREFIX_PATH=/opt/openssl35 2>&1 | tee /tmp/configure.log; then
+            tail -8 /tmp/configure.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
+          if ! cmake --build build --parallel 2 2>&1 | tee /tmp/build.log; then
+            tail -8 /tmp/build.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
+          if ! cmake --build build --target package 2>&1 | tee /tmp/package.log; then
+            tail -8 /tmp/package.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
+          ls -la build/capsid-*
+
+      - name: Publish package to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          echo "musl artifacts:"; ls -la build-musl/
-          if ! gh release upload --clobber "${tag}" \
-              build-musl/capsid-*.tar.gz \
-              build-musl/capsid-*.tar.gz.sha256 2>&1 | tee /tmp/upload.log; then
-            tail -30 /tmp/upload.log | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
-            exit 1
-          fi
+          # --verify-tag does NOT make create idempotent: once the release
+          # exists it fails with HTTP 422 (tag_name already exists), which
+          # is exactly what happens for every concurrent job that arrives
+          # after the first one. Tolerate that specific race; upload is the
+          # real gate and fails loudly on anything else.
+          gh release create "${tag}" \
+            --title "capsid ${tag}" \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. Linux package is fully static (musl + mimalloc, runs on any Linux kernel without a libc version matrix); macOS package is native arm64. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --verify-tag || true
+          for dir in build build-musl; do
+            if ls "${dir}"/capsid-*.tar.gz >/dev/null 2>&1; then
+              gh release upload --clobber "${tag}" \
+                "${dir}"/capsid-*.tar.gz \
+                "${dir}"/capsid-*.tar.gz.sha256
+            fi
+          done
