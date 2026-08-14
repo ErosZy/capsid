@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include "protocol.h"
@@ -31,7 +32,14 @@ public:
                               void *opaque);
 
     OutboundBuffer()
-        : write_offset_(0), frame_end_(0), frame_start_(0) {}
+        : write_offset_(0),
+          frame_end_(0),
+          frame_start_(0),
+          tail_frame_start_(kNoFrame),
+          tail_type_(0),
+          tail_flags_(0),
+          tail_request_id_(0),
+          tail_payload_size_(0) {}
 
     // Appends one encoded frame. The caller has already checked wire
     // capacity; the frame-size limit is enforced here. The sent prefix
@@ -46,8 +54,21 @@ public:
             return false;
         }
         compact_if_needed();
-        return capsid::protocol::append_encoded(
-            type, flags, request_id, payload, payload_size, &storage_);
+        if (try_coalesce_response_body(
+                type, flags, request_id, payload, payload_size)) {
+            return true;
+        }
+        const size_t frame_start = storage_.size();
+        if (!capsid::protocol::append_encoded(
+                type, flags, request_id, payload, payload_size, &storage_)) {
+            return false;
+        }
+        tail_frame_start_ = frame_start;
+        tail_type_ = type;
+        tail_flags_ = flags;
+        tail_request_id_ = request_id;
+        tail_payload_size_ = payload_size;
+        return true;
     }
 
     // Sends whole frames, one frame at a time; stops on a stall, a
@@ -79,6 +100,11 @@ public:
             write_offset_ = 0;
             frame_end_ = 0;
             frame_start_ = 0;
+            tail_frame_start_ = kNoFrame;
+            tail_type_ = 0;
+            tail_flags_ = 0;
+            tail_request_id_ = 0;
+            tail_payload_size_ = 0;
         }
         return true;
     }
@@ -90,6 +116,45 @@ public:
     bool drained() const { return write_offset_ == storage_.size(); }
 
 private:
+    // Joins only adjacent, wholly unsent response-body frames for one
+    // request. This avoids another IPC header, write syscall and Host parser
+    // event without waiting for a future stream chunk. Once flush() has
+    // opened the tail frame (and cached its boundary), its header is immutable
+    // even if the first writer call stalls.
+    bool try_coalesce_response_body(uint16_t type,
+                                    uint32_t flags,
+                                    uint64_t request_id,
+                                    const uint8_t *payload,
+                                    size_t payload_size) {
+        if (type != capsid::protocol::kResponseBody ||
+            tail_frame_start_ == kNoFrame ||
+            tail_type_ != type ||
+            tail_flags_ != flags ||
+            tail_request_id_ != request_id ||
+            tail_frame_start_ < write_offset_ ||
+            (frame_end_ != 0 && tail_frame_start_ < frame_end_) ||
+            tail_payload_size_ > capsid::protocol::kMaxPayloadSize ||
+            payload_size >
+                capsid::protocol::kMaxPayloadSize - tail_payload_size_ ||
+            tail_frame_start_ + capsid::protocol::kHeaderSize +
+                    tail_payload_size_ !=
+                storage_.size()) {
+            return false;
+        }
+
+        const size_t combined_size = tail_payload_size_ + payload_size;
+        const size_t size_offset = tail_frame_start_ + 20;
+        storage_[size_offset] = static_cast<uint8_t>(combined_size);
+        storage_[size_offset + 1] = static_cast<uint8_t>(combined_size >> 8);
+        storage_[size_offset + 2] = static_cast<uint8_t>(combined_size >> 16);
+        storage_[size_offset + 3] = static_cast<uint8_t>(combined_size >> 24);
+        if (payload_size != 0) {
+            storage_.insert(storage_.end(), payload, payload + payload_size);
+        }
+        tail_payload_size_ = combined_size;
+        return true;
+    }
+
     // End offset of the complete frame starting at `offset`, or
     // `offset` itself when the frame is not fully buffered yet.
     size_t next_frame_end(size_t offset) const {
@@ -121,21 +186,37 @@ private:
             return;
         }
         if (frame_start_ >= kCompactThreshold) {
+            const size_t removed = frame_start_;
             storage_.erase(
                 storage_.begin(),
-                storage_.begin() + static_cast<ptrdiff_t>(frame_start_));
-            write_offset_ -= frame_start_;
-            frame_end_ -= frame_start_;
+                storage_.begin() + static_cast<ptrdiff_t>(removed));
+            write_offset_ -= removed;
+            frame_end_ -= removed;
             frame_start_ = 0;
+            if (tail_frame_start_ != kNoFrame) {
+                if (tail_frame_start_ >= removed) {
+                    tail_frame_start_ -= removed;
+                } else {
+                    tail_frame_start_ = kNoFrame;
+                    tail_payload_size_ = 0;
+                }
+            }
         }
     }
 
     static const size_t kCompactThreshold = 64u * 1024u;
+    static constexpr size_t kNoFrame =
+        std::numeric_limits<size_t>::max();
 
     std::vector<uint8_t> storage_;
     size_t write_offset_;
     size_t frame_end_;    // end of the frame being flushed (a boundary)
     size_t frame_start_;  // start of the frame being flushed (kept)
+    size_t tail_frame_start_;
+    uint16_t tail_type_;
+    uint32_t tail_flags_;
+    uint64_t tail_request_id_;
+    size_t tail_payload_size_;
 };
 
 }  // namespace capsid
