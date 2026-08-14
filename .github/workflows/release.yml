@@ -2,8 +2,8 @@ name: Release
 
 # Tag pushes (v*) package the pinned checkout and attach the CPack TGZ +
 # SHA256 to a GitHub Release. Two platform packages ship:
-#   - linux-x86_64: fully static (musl + mimalloc) built in an Alpine
-#     container — one portable binary, no libc version matrix to manage;
+#   - linux-x86_64: fully static (musl) built in an Alpine container —
+#     one portable binary, no libc version matrix to manage;
 #   - darwin-arm64: native macOS build (Apple ships no static libSystem).
 # testing-validity does not run on tags (scoped to main/PR), so the tag
 # must point at a commit whose main-branch checks already passed.
@@ -104,7 +104,6 @@ jobs:
               if ! cmake -S . -B build-musl -G Ninja \
                   -DCMAKE_BUILD_TYPE=Release \
                   -DCAPSID_BUILD_HOST=ON \
-                  -DCAPSID_USE_MIMALLOC=ON \
                   -DCMAKE_EXE_LINKER_FLAGS="-static" \
                   -DCMAKE_PREFIX_PATH=/opt/openssl35 \
                   > /tmp/configure.log 2>&1; then
@@ -194,7 +193,7 @@ jobs:
           # real gate and fails loudly on anything else.
           gh release create "${tag}" \
             --title "capsid ${tag}" \
-            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. Linux package is fully static (musl + mimalloc, runs on any Linux kernel without a libc version matrix); macOS package is native arm64. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. Linux package is fully static (musl, runs on any Linux kernel without a libc version matrix); macOS package is native arm64. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
             --verify-tag || true
           for dir in build build-musl; do
             if ls "${dir}"/capsid-*.tar.gz >/dev/null 2>&1; then
