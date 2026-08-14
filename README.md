@@ -170,6 +170,24 @@ Linux 生产环境必须显式启用 strict sandbox，并根据部署要求验�
 namespace/firewall、网关侧请求限制与日志持久化仍由宿主负责。详见
 [Linux 严格沙箱](docs/linux-sandbox.md)与[安全策略](SECURITY.md)。
 
+## 性能概览
+
+以下是 2026-08-14 在 Ryzen 3300X 4C/8T、Alpine v3.24（WSL2）上的代表性结果。
+吞吐测试使用 2 workers、64 connections、12 种负载各 3 轮；冷启动和内存采用各自
+独立口径，不能与吞吐数字混合解读。
+
+| 维度 | Capsid 结果 | 对照与说明 |
+| --- | ---: | --- |
+| JSON 1 KiB 吞吐 | **6,820 QPS** | Python 3 + Flask 4,625；PHP 8 + Slim 1,826 |
+| 约 10 kB 冷启动 | **9.5 ms** 源码 / **8.2 ms** 可信字节码 | Node 24：110 ms；Deno 2.9：39 ms |
+| 约 1 MB 冷启动 | 141 ms 源码 / **42 ms** 可信字节码 | Node 24：149 ms；Deno 2.9：53 ms |
+| 双 worker 空闲 PSS | **12.3 MB** | Host + 2 workers；Python 3 栈为 62.6 MB |
+
+Capsid 在该矩阵的常规 JSON 负载中领先；大字节流并非全部领先，例如
+`stream 32k` 低于 Python 3 栈。冷启动的可信字节码只接受由完全相同构建生成并经
+宿主校验的产物，不能加载不可信输入。完整的 12 组吞吐结果、PSS/RSS 口径、原始
+样本位置和证据门槛见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
+
 ## 文档
 
 | 目标 | 文档 |
