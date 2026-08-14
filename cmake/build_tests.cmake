@@ -3097,6 +3097,43 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_fetch_direct_egress PROPERTIES TIMEOUT 20)
         add_test(
+            NAME worker_fetch_hostname_authorizes_resolved_loopback
+            COMMAND test-worker-integration
+                $<TARGET_FILE:capsid-worker>
+                "${CAPSID_FETCH_FIXTURE}"
+                fetch-hostname-egress
+        )
+        set_tests_properties(
+            worker_fetch_hostname_authorizes_resolved_loopback
+            PROPERTIES TIMEOUT 20)
+        add_test(
+            NAME worker_fetch_host_deny_diagnostic
+            COMMAND test-worker-integration
+                $<TARGET_FILE:capsid-worker>
+                "${CAPSID_FETCH_FIXTURE}"
+                fetch-host-denied
+        )
+        set_tests_properties(
+            worker_fetch_host_deny_diagnostic PROPERTIES TIMEOUT 20)
+        add_test(
+            NAME worker_fetch_protected_deny_diagnostic
+            COMMAND test-worker-integration
+                $<TARGET_FILE:capsid-worker>
+                "${CAPSID_FETCH_FIXTURE}"
+                fetch-protected-denied
+        )
+        set_tests_properties(
+            worker_fetch_protected_deny_diagnostic PROPERTIES TIMEOUT 20)
+        add_test(
+            NAME worker_fetch_explicit_deny_diagnostic
+            COMMAND test-worker-integration
+                $<TARGET_FILE:capsid-worker>
+                "${CAPSID_FETCH_FIXTURE}"
+                fetch-address-explicit-deny
+        )
+        set_tests_properties(
+            worker_fetch_explicit_deny_diagnostic PROPERTIES TIMEOUT 20)
+        add_test(
             NAME worker_p1_platform_contract
             COMMAND test-worker-integration
                 $<TARGET_FILE:capsid-worker>
@@ -4454,6 +4491,23 @@ if(BUILD_TESTING)
             worker_direct_fetch_https_ca
             PROPERTIES TIMEOUT 30
         )
+        find_program(CAPSID_TEST_OPENSSL_EXECUTABLE NAMES openssl)
+        if(CAPSID_TEST_OPENSSL_EXECUTABLE)
+            add_test(
+                NAME worker_direct_fetch_https_tls12_rsa_pss
+                COMMAND test-direct-fetch-tls
+                    $<TARGET_FILE:capsid-worker>
+                    "${CAPSID_DIRECT_FETCH_TLS_FIXTURE}"
+                    "${CAPSID_MBEDTLS_TEST_DATA}/server2-sha256.crt"
+                    "${CAPSID_MBEDTLS_TEST_DATA}/server2.key"
+                    "${CAPSID_MBEDTLS_TEST_DATA}/test-ca-sha256.crt"
+                    --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}"
+            )
+            set_tests_properties(
+                worker_direct_fetch_https_tls12_rsa_pss
+                PROPERTIES TIMEOUT 30 LABELS "tls;rsa-pss"
+            )
+        endif()
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(
                 NAME worker_strict_sandbox_https_ca

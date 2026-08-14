@@ -15,8 +15,20 @@ export default {
         const url = new URL(request.url);
         const port = url.searchParams.get('port');
         const trusted = url.searchParams.get('trusted') === '1';
+        const rsaPss = url.searchParams.get('rsaPss') === '1';
 
         try {
+            if (rsaPss) {
+                const response = await fetch(
+                    `https://localhost:${port}/rsa-pss-tls12`);
+                await response.text();
+                if (response.status !== 200) {
+                    throw new Error(
+                        `RSA-PSS HTTPS response ${response.status}`);
+                }
+                return Response.json({ passed: true, mode: 'rsa-pss' });
+            }
+
             if (!trusted) {
                 await expectTypeError(
                     fetch(`https://localhost:${port}/without-custom-ca`),

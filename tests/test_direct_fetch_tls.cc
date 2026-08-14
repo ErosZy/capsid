@@ -5,7 +5,9 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <signal.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <mbedtls/ctr_drbg.h>
@@ -104,6 +106,88 @@ uint16_t unused_port() {
     close(fd);
     return port;
 }
+
+class OpenSslRsaPssServer {
+public:
+    OpenSslRsaPssServer(const char *openssl_path,
+                        const char *certificate,
+                        const char *private_key,
+                        uint16_t port)
+        : pid_(-1) {
+        const std::string port_text = std::to_string(port);
+        pid_ = fork();
+        if (pid_ == 0) {
+            execl(openssl_path,
+                  openssl_path,
+                  "s_server",
+                  "-accept",
+                  port_text.c_str(),
+                  "-cert",
+                  certificate,
+                  "-key",
+                  private_key,
+                  "-tls1_2",
+                  "-sigalgs",
+                  "rsa_pss_rsae_sha256",
+                  "-www",
+                  "-quiet",
+                  "-no_ign_eof",
+                  static_cast<char *>(nullptr));
+            _exit(127);
+        }
+        if (pid_ < 0) {
+            fail(std::string("cannot launch OpenSSL TLS test server: ") +
+                 std::strerror(errno));
+        }
+
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            int status = 0;
+            if (waitpid(pid_, &status, WNOHANG) == pid_) {
+                pid_ = -1;
+                fail(std::string("OpenSSL TLS test server exited early: ") +
+                     std::to_string(status));
+            }
+
+            const int probe = socket(AF_INET, SOCK_STREAM, 0);
+            if (probe >= 0) {
+                struct sockaddr_in address = {};
+                address.sin_family = AF_INET;
+                address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                address.sin_port = htons(port);
+                const int connected = connect(
+                    probe,
+                    reinterpret_cast<const struct sockaddr *>(&address),
+                    sizeof(address));
+                close(probe);
+                if (connected == 0) {
+                    std::this_thread::sleep_for(
+                        std::chrono::milliseconds(50));
+                    return;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+
+        stop();
+        fail("OpenSSL TLS test server did not start listening");
+    }
+
+    ~OpenSslRsaPssServer() { stop(); }
+
+private:
+    void stop() {
+        if (pid_ <= 0) {
+            return;
+        }
+        kill(pid_, SIGTERM);
+        int status = 0;
+        while (waitpid(pid_, &status, 0) < 0 && errno == EINTR) {
+        }
+        pid_ = -1;
+    }
+
+    pid_t pid_;
+};
 
 class MbedTlsServer {
 public:
@@ -381,6 +465,7 @@ Result run_case(const char *worker_path,
                 const char *ca_bundle,
                 uint16_t port,
                 bool trusted,
+                bool rsa_pss,
                 uint64_t id,
                 bool strict) {
     capsid_worker_config config;
@@ -407,7 +492,8 @@ Result run_case(const char *worker_path,
     }
     const std::string url =
         "https://example.test/direct-fetch-tls?port=" +
-        std::to_string(port) + "&trusted=" + (trusted ? "1" : "0");
+        std::to_string(port) + "&trusted=" + (trusted ? "1" : "0") +
+        "&rsaPss=" + (rsa_pss ? "1" : "0");
     const Result result = run_request(worker, id, url);
     if (strict) {
         require_clean_worker_shutdown(worker, "strict TLS worker");
@@ -430,22 +516,46 @@ void require_passed(const Result &result, const char *mode) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 6 && argc != 7) {
-        fail("expected worker, fixture, certificate, key, CA and optional --strict");
+    if (argc < 6) {
+        fail("expected worker, fixture, certificate, key, CA and options");
     }
-    const bool strict = argc == 7 && std::string(argv[6]) == "--strict";
-    if (argc == 7 && !strict) {
-        fail("unknown TLS test option");
+    bool strict = false;
+    const char *openssl_path = NULL;
+    for (int index = 6; index < argc; ++index) {
+        const std::string option(argv[index]);
+        if (option == "--strict" && !strict) {
+            strict = true;
+        } else if (option == "--openssl" && !openssl_path &&
+                   index + 1 < argc) {
+            openssl_path = argv[++index];
+        } else {
+            fail(std::string("unknown TLS test option: ") + option);
+        }
     }
     const uint16_t port = unused_port();
     MbedTlsServer server(argv[3], argv[4], port);
     const std::string bundle = read_file(argv[2]);
 
     require_passed(
-        run_case(argv[1], bundle, NULL, port, false, 71, strict),
+        run_case(argv[1], bundle, NULL, port, false, false, 71, strict),
         "untrusted");
     require_passed(
-        run_case(argv[1], bundle, argv[5], port, true, 72, strict),
+        run_case(argv[1], bundle, argv[5], port, true, false, 72, strict),
         "trusted");
+    if (openssl_path) {
+        const uint16_t rsa_pss_port = unused_port();
+        OpenSslRsaPssServer rsa_pss_server(
+            openssl_path, argv[3], argv[4], rsa_pss_port);
+        require_passed(
+            run_case(argv[1],
+                     bundle,
+                     argv[5],
+                     rsa_pss_port,
+                     true,
+                     true,
+                     73,
+                     strict),
+            "rsa-pss");
+    }
     return 0;
 }

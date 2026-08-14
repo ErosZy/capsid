@@ -114,3 +114,48 @@
  #endif
  
  char *lws_hdr_simple_ptr(struct lws *wsi, enum lws_token_indexes h)
+--- a/deps/mbedtls/library/ssl_tls12_client.c	2026-07-27 13:00:19.586898995 +0800
++++ b/deps/mbedtls/library/ssl_tls12_client.c	2026-08-14 22:53:44.151783993 +0800
+@@ -2095,14 +2095,38 @@
+     /*
+      * mbedtls_ssl_get_pk_sigalg_and_md_alg_from_sig_alg() understands sig_alg code points across
+      * TLS versions. Make sure that the received sig_alg extension is valid in TLS 1.2.
+      */
+     if (!mbedtls_ssl_sig_alg_is_supported(ssl, sig_alg)) {
+-        MBEDTLS_SSL_DEBUG_MSG(1,
+-                              ("Server used unsupported value in SigAlg extension 0x%04x",
+-                               sig_alg));
+-        return MBEDTLS_SSL_ALERT_MSG_ILLEGAL_PARAMETER;
++        /* RFC 8446 Section 4.2.3 requires a client that advertised
++         * rsa_pss_rsae_* to accept it when TLS 1.2 is negotiated. These
++         * scheme code points are not TLS 1.2 hash/signature byte pairs, so
++         * the generic TLS 1.2 support check above intentionally misses them.
++         * Keep the exception local to the client path and require that the
++         * scheme was offered below. */
++        switch (sig_alg) {
++#if defined(MBEDTLS_PKCS1_V21)
++#if defined(MBEDTLS_MD_CAN_SHA256)
++            case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA256:
++                break;
++#endif
++#if defined(MBEDTLS_MD_CAN_SHA384)
++            case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA384:
++                break;
++#endif
++#if defined(MBEDTLS_MD_CAN_SHA512)
++            case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA512:
++                break;
++#endif
++#endif /* MBEDTLS_PKCS1_V21 */
++            default:
++                MBEDTLS_SSL_DEBUG_MSG(
++                    1,
++                    ("Server used unsupported value in SigAlg extension 0x%04x",
++                     sig_alg));
++                return MBEDTLS_SSL_ALERT_MSG_ILLEGAL_PARAMETER;
++        }
+     }
+ 
+     /*
+      * Check if the signature algorithm is acceptable
+      */

@@ -79,6 +79,22 @@ bool allows_address(const capsid::EgressPolicy &policy,
         reinterpret_cast<const sockaddr *>(&storage), size, port);
 }
 
+capsid::EgressDecision decide_address(
+    const capsid::EgressPolicy &policy,
+    const char *text,
+    uint16_t port,
+    bool authoritative) {
+    const sockaddr_storage storage = address(text, port);
+    const socklen_t size =
+        storage.ss_family == AF_INET ? sizeof(sockaddr_in)
+                                    : sizeof(sockaddr_in6);
+    return authoritative
+               ? policy.decide_resolved_address_authoritative(
+                     reinterpret_cast<const sockaddr *>(&storage), size, port)
+               : policy.decide_resolved_address(
+                     reinterpret_cast<const sockaddr *>(&storage), size, port);
+}
+
 void test_default_and_host_matching() {
     capsid::EgressPolicy policy;
     std::string error;
@@ -177,6 +193,65 @@ void test_protected_addresses_and_rebinding() {
             "explicit metadata address allow was not honored");
 }
 
+void test_authoritative_hostname_resolution() {
+    capsid::EgressPolicy policy;
+    std::string error;
+    std::vector<capsid_egress_rule> rules;
+    rules.push_back(rule(
+        CAPSID_EGRESS_ALLOW, "api.example.com", 443, 443));
+    rules.push_back(rule(
+        CAPSID_EGRESS_ALLOW, "203.0.113.0/24", 443, 443));
+    rules.push_back(rule(
+        CAPSID_EGRESS_DENY, "10.1.0.0/16", 443, 443));
+    require(configure(&policy, CAPSID_EGRESS_DENY, rules, &error), error);
+
+    require(policy.decide_host("api.example.com", 443).allowed,
+            "authorized hostname failed the host-stage check");
+
+    const capsid::EgressDecision explicit_allow =
+        decide_address(policy, "203.0.113.7", 443, true);
+    require(explicit_allow.allowed && explicit_allow.rule_id == 2,
+            "authoritative resolution ignored an explicit address allow");
+
+    const capsid::EgressDecision explicit_deny =
+        decide_address(policy, "10.1.2.3", 443, true);
+    require(!explicit_deny.allowed && explicit_deny.rule_id == 3 &&
+                explicit_deny.deny_reason ==
+                    capsid::EgressDenyReason::kExplicitDeny,
+            "authoritative resolution ignored an explicit address deny");
+
+    const capsid::EgressDecision unmatched_public =
+        decide_address(policy, "198.51.100.9", 443, true);
+    require(unmatched_public.allowed && unmatched_public.rule_id == 0,
+            "authorized hostname did not authorize an unmatched public IP");
+
+    const capsid::EgressDecision unmatched_protected =
+        decide_address(policy, "10.3.3.31", 443, true);
+    require(unmatched_protected.allowed && unmatched_protected.rule_id == 0,
+            "authorized hostname did not authorize its protected resolved IP");
+
+    const capsid::EgressDecision guarded_protected =
+        decide_address(policy, "10.3.3.31", 443, false);
+    require(!guarded_protected.allowed &&
+                guarded_protected.deny_reason ==
+                    capsid::EgressDenyReason::kProtected,
+            "ordinary resolved-address check lost protected-range defense");
+
+    const capsid::EgressDecision numeric_host =
+        policy.decide_host("10.3.3.31", 443);
+    require(!numeric_host.allowed &&
+                numeric_host.deny_reason ==
+                    capsid::EgressDenyReason::kProtected,
+            "numeric host bypassed protected-range defense");
+
+    const capsid::EgressDecision unmatched_host =
+        policy.decide_host("not-authorized.example", 443);
+    require(!unmatched_host.allowed &&
+                unmatched_host.deny_reason ==
+                    capsid::EgressDenyReason::kNoMatch,
+            "unmatched hostname did not report a no-match denial");
+}
+
 void test_numeric_targets_and_copy_lifetime() {
     capsid::EgressPolicy policy;
     std::string target("203.0.113.7/32");
@@ -264,6 +339,7 @@ int main() {
     test_default_and_host_matching();
     test_deny_precedence();
     test_protected_addresses_and_rebinding();
+    test_authoritative_hostname_resolution();
     test_numeric_targets_and_copy_lifetime();
     test_malformed_rules();
     return 0;

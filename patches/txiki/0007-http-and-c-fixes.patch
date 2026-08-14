@@ -458,7 +458,30 @@
      tjs_urlsearchparams_sync_to_url(ctx, this_val);
 --- a/src/httpclient.c	2026-07-27 13:25:47.400695137 +0800
 +++ b/src/httpclient.c	2026-07-27 19:28:49.449729696 +0800
-@@ -133,25 +133,13 @@
+@@ -32,8 +32,12 @@
+         TJS_VERSION_SUFFIX
+ 
+ #define TJS_LWS_HTTP_PROTOCOL_NAME "tjs-http"
+ 
++/* Deny-reason buffer filled by the host-side egress hook; the connection
++ * error path reports it so the app sees why a fetch was blocked. */
++#define TJS_EGRESS_REASON_MAX 192
++
+ enum {
+     HC_CALLBACK_STATUS = 0,
+     HC_CALLBACK_URL,
+     HC_CALLBACK_HEADER,
+@@ -60,6 +64,9 @@
+     unsigned long timeout;
+     int ssl_flags;
+     JSValue url;
++    /* Set by tjs_httpclient_egress_allowed on deny; reported by the
++     * CONNECTION_ERROR path and the synchronous connect failure. */
++    char egress_deny_reason[TJS_EGRESS_REASON_MAX];
+     /* Response decompression. */
+     TJSDecompressor *decompressor;
+ } TJSHttpClient;
+@@ -133,25 +140,13 @@
      TJSHttpClient *h;
  } TJSHttpHdrCtx;
  
@@ -489,7 +512,7 @@
      /* Strip trailing colon from name. */
      int name_len = nlen;
      if (name_len > 0 && name[name_len - 1] == ':') {
-@@ -160,10 +148,8 @@
+@@ -160,10 +155,8 @@
  
      JSValue args[2];
      args[0] = JS_NewStringLen(hctx->h->ctx, name, name_len);
@@ -501,7 +524,7 @@
  }
  
  static void fire_response_headers(TJSHttpClient *h, struct lws *wsi) {
-@@ -178,31 +164,33 @@
+@@ -178,31 +171,33 @@
          if (tn_len == 0 || tn[tn_len - 1] != ':') {
              continue;
          }
@@ -554,7 +577,7 @@
  }
  
  /* Check whether the user already set a given request header (case-insensitive). */
-@@ -263,6 +251,57 @@
+@@ -263,6 +258,62 @@
      return NULL;
  }
  
@@ -600,19 +623,24 @@
 +
 +#ifdef TJS_RESTRICTED_CORE
 +static int tjs_httpclient_egress_allowed(TJSHttpClient *h, const char *host, uint16_t port,
-+                                         const struct sockaddr *address, socklen_t address_len) {
++                                         const struct sockaddr *address, socklen_t address_len,
++                                         char *reason, size_t reason_size) {
 +    TJSRuntime *qrt = TJS_GetRuntime(h->ctx);
++    if (reason && reason_size) {
++        reason[0] = '\0';
++    }
 +    if (!qrt || !qrt->egress.check) {
 +        return 0;
 +    }
-+    return qrt->egress.check(qrt->egress.opaque, host, port, address, address_len);
++    return qrt->egress.check(qrt->egress.opaque, host, port, address, address_len,
++                             reason, reason_size);
 +}
 +#endif
 +
  static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
      TJSHttpClient *h = (TJSHttpClient *) user;
  
-@@ -271,6 +310,31 @@
+@@ -271,6 +322,33 @@
      }
  
      switch (reason) {
@@ -629,7 +657,9 @@
 +                                                        uri->host,
 +                                                        (uint16_t) uri->port,
 +                                                        (const struct sockaddr *) &address,
-+                                                        address_len);
++                                                        address_len,
++                                                        h->egress_deny_reason,
++                                                        sizeof(h->egress_deny_reason));
 +            }
 +            if (uri) {
 +                lws_parse_uri_destroy(&uri);
@@ -644,7 +674,7 @@
          case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER: {
              unsigned char **p = (unsigned char **) in, *end = (*p) + len;
  
-@@ -380,8 +444,10 @@
+@@ -380,8 +458,10 @@
                  h->decompressor = tjs__decompressor_create(h->ctx, encoding);
              }
  
@@ -657,7 +687,24 @@
  
              JSValue url_arg = JS_DupValue(h->ctx, h->url);
              maybe_invoke_callback(h, HC_CALLBACK_URL, 1, &url_arg);
-@@ -699,7 +765,22 @@
+@@ -527,11 +607,15 @@
+             if (!h->completed) {
+                 h->completed = true;
+                 if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR) {
+                     JSValue args[2];
+                     args[0] = JS_NewString(h->ctx, "CONNECTION_ERROR");
+-                    args[1] = JS_NewString(h->ctx, in ? (const char *) in : "Connection error");
++                    if (h->egress_deny_reason[0]) {
++                        args[1] = JS_NewString(h->ctx, h->egress_deny_reason);
++                    } else {
++                        args[1] = JS_NewString(h->ctx, in ? (const char *) in : "Connection error");
++                    }
+                     maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 2, args);
+                 } else {
+                     JSValue error = JS_NewString(h->ctx, "CONNECTION_CLOSED");
+                     maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+                 }
+@@ -699,7 +783,24 @@
          return -1;
      }
  
@@ -673,7 +720,9 @@
 +    }
 +
 +#ifdef TJS_RESTRICTED_CORE
-+    if (!tjs_httpclient_egress_allowed(h, uri->host, (uint16_t) uri->port, NULL, 0)) {
++    if (!tjs_httpclient_egress_allowed(h, uri->host, (uint16_t) uri->port, NULL, 0,
++                                       h->egress_deny_reason,
++                                       sizeof(h->egress_deny_reason))) {
 +        lws_parse_uri_destroy(&uri);
 +        return -2;
 +    }
@@ -681,23 +730,33 @@
  
      char full_path[TJS_PATH_MAX];
      snprintf(full_path, sizeof(full_path), "/%s", uri->path);
-@@ -786,10 +867,14 @@
+@@ -786,10 +887,24 @@
      h->this_val = JS_DupValue(ctx, this_val);
      h->sent = true;
  
 -    if (tjs_httpclient_connect(h)) {
 +    int connect_result = tjs_httpclient_connect(h);
 +    if (connect_result) {
++        char egress_reason[TJS_EGRESS_REASON_MAX];
++        const bool has_reason = h->egress_deny_reason[0] != '\0';
++        if (has_reason) {
++            memcpy(egress_reason,
++                   h->egress_deny_reason,
++                   sizeof(egress_reason));
++        }
          h->sent = false;
          JS_FreeValue(ctx, h->this_val);
          h->this_val = JS_UNDEFINED;
-+        if (connect_result == -2) {
-+            return JS_ThrowTypeError(ctx, "Network request denied by egress policy");
++        if (connect_result == -2 || has_reason) {
++            return JS_ThrowTypeError(ctx,
++                                     has_reason
++                                         ? egress_reason
++                                         : "Network request denied by egress policy");
 +        }
          return JS_ThrowInternalError(ctx, "Connection failed");
      }
  
-@@ -882,9 +967,13 @@
+@@ -882,9 +997,13 @@
          JSValue error = JS_NewString(ctx, "ABORTED");
          maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
  

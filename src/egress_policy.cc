@@ -384,9 +384,9 @@ EgressDecision EgressPolicy::decide_host(
     int family = AF_UNSPEC;
     if (parse_numeric(input, &family, bytes)) {
         if (family == AF_INET6 && is_ipv4_mapped(bytes)) {
-            return decide_address(bytes + 12, AF_INET, port, true);
+            return decide_address(bytes + 12, AF_INET, port, true, true);
         }
-        return decide_address(bytes, family, port, true);
+        return decide_address(bytes, family, port, true, true);
     }
 
     std::string host;
@@ -405,24 +405,30 @@ EgressDecision EgressPolicy::decide_host(
             continue;
         }
         if (it->action == CAPSID_EGRESS_DENY) {
-            return EgressDecision(false, it->rule_id);
+            return EgressDecision(false, it->rule_id,
+                                  EgressDenyReason::kExplicitDeny);
         }
         allowed = true;
         if (allow_rule_id == 0) {
             allow_rule_id = it->rule_id;
         }
     }
-    return allowed
-               ? EgressDecision(true, allow_rule_id)
-               : EgressDecision(
-                     default_action_ == CAPSID_EGRESS_ALLOW, 0);
+    if (allowed) {
+        return EgressDecision(true, allow_rule_id);
+    }
+    return EgressDecision(
+        default_action_ == CAPSID_EGRESS_ALLOW, 0,
+        default_action_ == CAPSID_EGRESS_ALLOW
+            ? EgressDenyReason::kNone
+            : EgressDenyReason::kNoMatch);
 }
 
 EgressDecision EgressPolicy::decide_address(
     const uint8_t *bytes,
     int family,
     uint16_t port,
-    bool apply_default) const {
+    bool apply_default,
+    bool protect_unmatched) const {
     bool allowed = false;
     uint32_t allow_rule_id = 0;
     for (std::vector<Rule>::const_iterator it = rules_.begin();
@@ -434,7 +440,8 @@ EgressDecision EgressPolicy::decide_address(
             continue;
         }
         if (it->action == CAPSID_EGRESS_DENY) {
-            return EgressDecision(false, it->rule_id);
+            return EgressDecision(false, it->rule_id,
+                                  EgressDenyReason::kExplicitDeny);
         }
         allowed = true;
         if (allow_rule_id == 0) {
@@ -444,19 +451,40 @@ EgressDecision EgressPolicy::decide_address(
     if (allowed) {
         return EgressDecision(true, allow_rule_id);
     }
-    if ((family == AF_INET && is_protected_ipv4(bytes)) ||
-        (family == AF_INET6 && is_protected_ipv6(bytes))) {
-        return EgressDecision();
+    if (protect_unmatched &&
+        ((family == AF_INET && is_protected_ipv4(bytes)) ||
+         (family == AF_INET6 && is_protected_ipv6(bytes)))) {
+        return EgressDecision(false, 0, EgressDenyReason::kProtected);
     }
     return EgressDecision(
         apply_default ? default_action_ == CAPSID_EGRESS_ALLOW : true,
-        0);
+        0,
+        (apply_default && default_action_ != CAPSID_EGRESS_ALLOW)
+            ? EgressDenyReason::kNoMatch
+            : EgressDenyReason::kNone);
 }
 
 EgressDecision EgressPolicy::decide_resolved_address(
     const struct sockaddr *address,
     socklen_t address_size,
     uint16_t expected_port) const {
+    return decide_resolved_address_impl(
+        address, address_size, expected_port, true);
+}
+
+EgressDecision EgressPolicy::decide_resolved_address_authoritative(
+    const struct sockaddr *address,
+    socklen_t address_size,
+    uint16_t expected_port) const {
+    return decide_resolved_address_impl(
+        address, address_size, expected_port, false);
+}
+
+EgressDecision EgressPolicy::decide_resolved_address_impl(
+    const struct sockaddr *address,
+    socklen_t address_size,
+    uint16_t expected_port,
+    bool protect_unmatched) const {
     if (!address || expected_port == 0) {
         return EgressDecision();
     }
@@ -471,7 +499,8 @@ EgressDecision EgressPolicy::decide_resolved_address(
             reinterpret_cast<const uint8_t *>(&v4->sin_addr),
             AF_INET,
             expected_port,
-            false);
+            false,
+            protect_unmatched);
     }
     if (address->sa_family == AF_INET6 &&
         address_size >= static_cast<socklen_t>(sizeof(sockaddr_in6))) {
@@ -484,10 +513,11 @@ EgressDecision EgressPolicy::decide_resolved_address(
             reinterpret_cast<const uint8_t *>(&v6->sin6_addr);
         if (is_ipv4_mapped(bytes)) {
             return decide_address(
-                bytes + 12, AF_INET, expected_port, false);
+                bytes + 12, AF_INET, expected_port, false,
+                protect_unmatched);
         }
         return decide_address(
-            bytes, AF_INET6, expected_port, false);
+            bytes, AF_INET6, expected_port, false, protect_unmatched);
     }
     return EgressDecision();
 }

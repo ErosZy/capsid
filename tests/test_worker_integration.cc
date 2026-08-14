@@ -90,10 +90,13 @@ public:
         }
     }
 
-    std::string application_url() const {
+    uint16_t port() const { return port_; }
+
+    std::string application_url(const char *target_host = "127.0.0.1") const {
         return std::string(
                    "https://example.test/fetch?"
-                   "target=http%3A%2F%2F127.0.0.1%3A") +
+                   "target=http%3A%2F%2F") +
+               target_host + "%3A" +
                std::to_string(port_) + "%2Fdata";
     }
 
@@ -414,10 +417,28 @@ int main(int argc, char **argv) {
         fail("expected worker path, JavaScript fixture path, optional mode and source name");
     }
     const std::string mode = argc >= 4 ? argv[3] : "surface";
-    LocalHttpServer *server = mode == "fetch" ? new LocalHttpServer() : NULL;
-    const std::string request_url =
-        server ? server->application_url() :
-                 "https://example.test/integration";
+    const bool hostname_egress = mode == "fetch-hostname-egress";
+    const bool address_explicit_deny =
+        mode == "fetch-address-explicit-deny";
+    LocalHttpServer *server =
+        mode == "fetch" || hostname_egress || address_explicit_deny
+            ? new LocalHttpServer()
+            : NULL;
+    std::string request_url =
+        server ? server->application_url(
+                     hostname_egress || address_explicit_deny
+                         ? "localhost"
+                         : "127.0.0.1")
+               : "https://example.test/integration";
+    if (mode == "fetch-host-denied") {
+        request_url =
+            "https://example.test/fetch?"
+            "target=http%3A%2F%2Fnot-authorized.invalid%3A80%2Fdata";
+    } else if (mode == "fetch-protected-denied") {
+        request_url =
+            "https://example.test/fetch?"
+            "target=http%3A%2F%2F127.0.0.1%3A80%2Fdata";
+    }
     const std::string bundle = read_file(argv[2]);
 
     capsid_worker_config config;
@@ -456,8 +477,41 @@ int main(int argc, char **argv) {
         config.capability_policy = &fail_end_policy;
     }
     LoopbackEgressPolicy egress_policy;
-    if (server) {
+    capsid_egress_rule hostname_rules[3];
+    capsid_egress_policy hostname_policy;
+    if (mode == "fetch") {
         egress_policy.attach(&config);
+    } else if (hostname_egress || address_explicit_deny) {
+        capsid_egress_policy_init(&hostname_policy);
+        hostname_policy.default_action = CAPSID_EGRESS_DENY;
+
+        capsid_egress_rule_init(&hostname_rules[0]);
+        hostname_rules[0].action = CAPSID_EGRESS_ALLOW;
+        hostname_rules[0].target = "localhost";
+        hostname_rules[0].port_start = server->port();
+        hostname_rules[0].port_end = server->port();
+
+        hostname_policy.rules = hostname_rules;
+        hostname_policy.rule_count = 1;
+        if (address_explicit_deny) {
+            capsid_egress_rule_init(&hostname_rules[1]);
+            hostname_rules[1].action = CAPSID_EGRESS_DENY;
+            hostname_rules[1].target = "127.0.0.0/8";
+            hostname_rules[1].port_start = server->port();
+            hostname_rules[1].port_end = server->port();
+
+            capsid_egress_rule_init(&hostname_rules[2]);
+            hostname_rules[2].action = CAPSID_EGRESS_DENY;
+            hostname_rules[2].target = "::1/128";
+            hostname_rules[2].port_start = server->port();
+            hostname_rules[2].port_end = server->port();
+            hostname_policy.rule_count = 3;
+        }
+        config.egress_policy = &hostname_policy;
+    } else if (mode == "fetch-protected-denied") {
+        capsid_egress_policy_init(&hostname_policy);
+        hostname_policy.default_action = CAPSID_EGRESS_ALLOW;
+        config.egress_policy = &hostname_policy;
     }
 
     capsid_worker *worker = NULL;
@@ -565,12 +619,27 @@ int main(int argc, char **argv) {
             fail(std::string("invalid WPT execution evidence: ") +
                  report_error + ": " + body);
         }
-    } else if (mode == "fetch") {
+    } else if (mode == "fetch" || hostname_egress) {
         if (!contains(body, "\"passed\":true") ||
             !contains(body, "\"status\":200") ||
             !contains(body, "\"upstreamHeader\":\"direct-egress\"") ||
             !contains(body, "\"body\":\"capsid-fetch-ok\"")) {
             fail(std::string("unexpected direct fetch report: ") + body);
+        }
+    } else if (mode == "fetch-host-denied") {
+        if (!contains(body, "not-authorized.invalid:80") ||
+            !contains(body, "is not authorized")) {
+            fail(std::string("missing host-deny diagnostic: ") + body);
+        }
+    } else if (mode == "fetch-protected-denied") {
+        if (!contains(body, "127.0.0.1:80") ||
+            !contains(body, "protected range") ||
+            !contains(body, "not explicitly authorized")) {
+            fail(std::string("missing protected-address diagnostic: ") + body);
+        }
+    } else if (address_explicit_deny) {
+        if (!contains(body, "denied by an explicit egress rule")) {
+            fail(std::string("missing explicit-deny diagnostic: ") + body);
         }
     } else if (mode == "surface") {
         if (!contains(body, "\"profile\":\"CAPSID-MIN-2025-subset-v0\"") ||
@@ -596,10 +665,10 @@ int main(int argc, char **argv) {
         fail(std::string("unknown integration test mode: ") + mode);
     }
 
-    if (server) {
+    if (server && !address_explicit_deny) {
         server->wait();
-        delete server;
     }
+    delete server;
     capsid_worker_destroy(worker);
     return 0;
 }

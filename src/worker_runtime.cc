@@ -25,7 +25,9 @@ int capsid_tjs_set_egress_policy(
                  const char *host,
                  uint16_t port,
                  const struct sockaddr *address,
-                 socklen_t address_len),
+                 socklen_t address_len,
+                 char *reason,
+                 size_t reason_size),
     void *opaque);
 JSModuleDef *tjs_module_loader(
     JSContext *ctx,
@@ -1043,13 +1045,56 @@ private:
             ctx, capsid__bootstrap, capsid__bootstrap_size, true);
     }
 
+    // Fills the diagnostic message a denied fetch reports to the app.
+    // The hook contract is: reason is written only on deny; callers zero
+    // it before the check.
+    static void set_egress_deny_reason(
+        char *reason,
+        size_t reason_size,
+        const std::string &resource,
+        capsid::EgressDenyReason deny_reason) {
+        if (!reason || reason_size == 0) {
+            return;
+        }
+        switch (deny_reason) {
+        case capsid::EgressDenyReason::kProtected:
+            snprintf(reason,
+                     reason_size,
+                     "Network request denied by egress policy: address "
+                     "'%s' is in a protected range and not explicitly "
+                     "authorized",
+                     resource.c_str());
+            break;
+        case capsid::EgressDenyReason::kExplicitDeny:
+            snprintf(reason,
+                     reason_size,
+                     "Network request denied by egress policy: denied by "
+                     "an explicit egress rule");
+            break;
+        case capsid::EgressDenyReason::kNoMatch:
+        case capsid::EgressDenyReason::kNone:
+        default:
+            snprintf(reason,
+                     reason_size,
+                     "Network request denied by egress policy: '%s' is "
+                     "not authorized",
+                     resource.c_str());
+            break;
+        }
+    }
+
     static int egress_check(void *opaque,
                             const char *host,
                             uint16_t port,
                             const struct sockaddr *address,
-                            socklen_t address_len) {
+                            socklen_t address_len,
+                            char *reason,
+                            size_t reason_size) {
         WorkerRuntime *self =
             static_cast<WorkerRuntime *>(opaque);
+        if (reason && reason_size != 0) {
+            reason[0] = '\0';
+        }
         if (!self || !host || port == 0) {
             return 0;
         }
@@ -1076,6 +1121,8 @@ private:
                 "net",
                 "host",
                 resource);
+            set_egress_deny_reason(
+                reason, reason_size, resource, decision.deny_reason);
             return 0;
         }
         if (self->config_.capability_policy.enabled() &&
@@ -1093,19 +1140,26 @@ private:
                     "net",
                     "host",
                     resource);
+                set_egress_deny_reason(
+                    reason, reason_size, resource, legacy.deny_reason);
                 return 0;
             }
         }
         if (address) {
+            // The hostname passed the host stage, so the address being
+            // connected came from the fetch engine's own resolution of
+            // that authorized hostname: only explicit address rules may
+            // still deny it. This applies equally to public and internal
+            // DNS names, including when they resolve into a protected range.
             if (self->config_.capability_policy.enabled()) {
                 decision =
                     self->config_.capability_policy.net_policy()
-                        .decide_resolved_address(
+                        .decide_resolved_address_authoritative(
                             address, address_len, port);
             } else {
                 decision =
                     self->config_.egress_policy
-                        .decide_resolved_address(
+                        .decide_resolved_address_authoritative(
                             address, address_len, port);
             }
             if (!decision.allowed) {
@@ -1118,13 +1172,15 @@ private:
                     "net",
                     "address",
                     resource);
+                set_egress_deny_reason(
+                    reason, reason_size, resource, decision.deny_reason);
                 return 0;
             }
             if (self->config_.capability_policy.enabled() &&
                 self->config_.legacy_egress_configured) {
                 const capsid::EgressDecision legacy =
                     self->config_.egress_policy
-                        .decide_resolved_address(
+                        .decide_resolved_address_authoritative(
                             address, address_len, port);
                 if (!legacy.allowed) {
                     self->emit_audit(
@@ -1136,6 +1192,9 @@ private:
                         "net",
                         "address",
                         resource);
+                    set_egress_deny_reason(
+                        reason, reason_size, resource,
+                        legacy.deny_reason);
                     return 0;
                 }
             }

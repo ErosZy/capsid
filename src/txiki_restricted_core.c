@@ -40,7 +40,9 @@ int capsid_tjs_set_egress_policy(
                  const char *host,
                  uint16_t port,
                  const struct sockaddr *address,
-                 socklen_t address_len),
+                 socklen_t address_len,
+                 char *reason,
+                 size_t reason_size),
     void *opaque) {
     if (!runtime || !check || runtime->egress.check) {
         return -1;

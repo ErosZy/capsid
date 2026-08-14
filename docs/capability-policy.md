@@ -47,6 +47,19 @@ utility 模块仍必须逐个列入 `allowed_modules`；“已构建”不等于
 `CAPSID_PERMISSION_ENV`、`CAPSID_PERMISSION_SYS` 与
 `CAPSID_PERMISSION_STORAGE`、`CAPSID_PERMISSION_STDIO` rule 接入同一门禁。
 
+`fetch()` 的域名规则是授权边界：域名及端口在 host 阶段获准后，该域名由
+客户端 DNS 解析出的地址（包括私网、loopback 和 link-local 地址）也视为获准，
+调用方无需、也不应枚举会随 DNS 变化的 IP。解析地址仍会匹配显式 IP/CIDR
+规则，任何显式 deny 都优先于域名 allow。直接以数字 IP 发起请求则继续执行
+protected-range 防护；私网、loopback、link-local 等地址必须有显式 IP/CIDR
+allow 才能以数字 IP 直接访问。因此，不论 `internal-api.example:443` 被视为
+内网域名还是公网域名，只要它已获授权，就可以访问它实际解析到的全部地址，
+包括 `10/8` 等 protected range；这一判断不依赖域名的“公网/内网”分类。
+
+被拒绝的 `fetch()` 错误会区分三种原因：host/端口没有匹配授权规则、地址位于
+protected range 且未被显式授权，以及命中了显式 deny 规则。错误文本仅用于
+诊断；策略判断仍以规则和 deny 优先级为准，应用不应解析错误字符串来实施授权。
+
 `write`、`ffi`、`rawSocket` 和 `engine`
 matcher 已能解析和测试，但对应操作未构建，JavaScript 查询返回
 `unavailable`。`read`、`env` 与 `storage` 已构建；`stdio` 只提供 stdout/stderr
