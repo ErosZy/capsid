@@ -23,8 +23,8 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 Ja
 - **最小权限能力面**：模块、文件、环境变量、存储、stdio 和出站网络均显式授权。
 - **宿主拥有数据面**：C ABI、C++11 RAII、非阻塞 IPC、credit 背压、取消、
   streaming 与审计事件可接入现有 reactor。
-- **高吞吐 Fetch 执行**：在当前 4 核、2 workers 的代表性测试中，JSON 1 KiB
-  工作负载测得约 **6.8k QPS**。
+- **高吞吐 Fetch 执行**：当前 4 核基准测试中，2 个 workers 每秒完成约
+  **6,800 个 JSON 请求**，约为同机 Flask 的 **1.5 倍**、Slim 的 **3.7 倍**。
 - **低常驻资源**：同一环境下，Host + 2 workers 空闲 PSS 为 **12.3 MB**，
   适合需要进程隔离又关注部署密度的场景。
 - **快速冷启动**：小型 bundle 冷启动约 **8–10 ms**；约 1 MB bundle 使用可信
