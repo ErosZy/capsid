@@ -70,8 +70,8 @@ payload 逐字节对齐、0 errors/0 timeouts、**33/36 格结论级（CV ≤ 7%
 php bytes16k、capsid stream32k、python stream32k 三格 CV 超标，按观察
 样本记录（表内不标注，原始样本可查）。实现语言与服务器模型不同，
 **不是胜负榜**，只用于确认量级。capsid 侧使用产品默认
-`--initial-stream-window 65536`（本矩阵与 16K 版窗口差异见形态节）。
-原始样本：`bench/results/three-stack-20260814T172510/`。
+`--initial-stream-window 65536`。原始样本：
+`bench/results/three-stack-20260814T172510/`。
 
 | workload | capsid + hono | PHP 8 + Slim | Python 3 + Flask |
 |---|---:|---:|---:|
@@ -90,12 +90,10 @@ php bytes16k、capsid stream32k、python stream32k 三格 CV 超标，按观察
 
 **形态**：常规 JSON 全胜，小载荷优势最大（json 1k 为 Python 3 栈的
 1.47×、PHP 8 栈的 3.74×）；大字节流载荷（bytes ≥16k、stream 32k）
-Python 3 栈反超。与 16K 窗口版（旧矩阵，`three-stack-20260814T162308/`）
-对比：json32k/bytes32k 在 64K 下分别 +16%/+6%（32k 响应在 16K 窗口下
-被 credit 往返压制，64K 恢复）；stream32k 反而略降（3123→2886），
-确认其掉队与窗口无关，成因待查。PHP 8 栈全矩阵垫底（约为 capsid 的
-0.26-0.40×），CV 最优。QuickJS 解释器（无 JIT）仍是单 worker 延迟
-主导；JIT 是 vendor 级变更，属独立评估项目。
+Python 3 栈反超，其中 stream 32k（2886 vs 3756）掉队成因待查。PHP 8
+栈全矩阵垫底（约为 capsid 的 0.26-0.40×），CV 最优。QuickJS 解释器
+（无 JIT）仍是单 worker 延迟主导；JIT 是 vendor 级变更，属独立评估
+项目。
 
 ## 4. 冷启动对照（4C，2026-08-14，中位数 ms）
 
@@ -122,9 +120,7 @@ Node 97/97/137、Deno 31/32/45。
 启动基数 + 40ms 解析；Deno 31ms 启动基数 + 14ms 解析。
 
 - **真实形态下尺寸显著敏感**：capsid 源码 10k→1M 总耗时 +132ms，编译
-  成本与 AST 节点数成正比（3547 个顶层单元 ≈133ms）。单字符串字面量
-  fixture 的"尺寸不敏感"结论不成立——那是词法最乐观形态，不代表
-  任意 JS。
+  成本与 AST 节点数成正比（3547 个顶层单元 ≈133ms）。
 - **可信字节码收益随编译成本放大**：1M 真实源码 141 → 41.7ms（−70%，
   3.4×），字节码路径全面第一（比 Deno 快 21%、比 Node 快 3.6×）；小
   尺寸收益收敛（10k 只快 1.3ms）。但字节码不免费：体积 2.5× 使传输
@@ -159,5 +155,3 @@ Node 97/97/137、Deno 31/32/45。
   PHP 8 栈的 1/5.7（21.8 vs 124.1 MB，后者口径偏大见上注）。
 - 负载增量：capsid json c64 时 PSS +1.2 MB（QuickJS 堆随请求涨落），
   Python/PHP 侧无可见增量（2 tick 观察，样本少）。
-- 采样器为本次补建（`bench/sample-sut-memory.sh`）；三栈主 runner 目前
-  不采内存，后续应把该采样并入 `compare-three-stacks.sh` 每格采一次。

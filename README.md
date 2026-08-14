@@ -419,7 +419,7 @@ initial-stream-window 64K。版本：PHP 8.5.8 + Slim 4.15.2 + nginx
 
 形态：常规 JSON 全胜（json 1k 为 Python 3 栈的 1.47×、PHP 8 栈的
 3.74×）；大字节流载荷（bytes ≥16k、stream 32k）Python 3 栈反超，
-stream 32k 成因待查（64K 下与 16K 版同样掉队，与窗口无关）。资源形态
+stream 32k 掉队成因待查。资源形态
 （空闲稳态，PSS 中位数）：capsid 3 进程 12.3MB，为 Python 3 栈 62.6MB
 的 1/5；PHP 8 栈 RSS 124MB（docker 跨用户 PSS 不可读，口径含 nginx）。
 完整方法、样本与结论见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
