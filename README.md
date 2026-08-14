@@ -17,6 +17,8 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 Ja
 
 ## 为什么是 Capsid
 
+- **AI 生成服务端代码的受控执行**：把 AI 生成的 Fetch handler 视为不可信输入，
+  放入独立 worker，并以能力白名单、Linux strict sandbox、资源上限和审计事件约束行为。
 - **进程级故障边界**：应用独占 worker，崩溃、超时和回收由宿主控制。
 - **Fetch 原生应用模型**：支持原生 handler，以及可打包为自包含 ESM、以 Fetch
   handler 为入口的轻量 Web 框架；Hono、itty-router 和 H3 v2 已通过兼容性验证。
@@ -41,6 +43,13 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 Ja
                          ├── capsid-worker：应用 A
                          └── capsid-worker：应用 B
 ```
+
+在 AI 代码执行场景中，推荐流程是：生成 Fetch handler → 打包为自包含 ESM →
+由宿主固定权限与资源上限 → worker 在 strict sandbox 中加载 → 验证 READY 后进入调度。
+生成代码不能自行申请权限，也不能直接访问 Node 内置模块、进程、raw socket 或任意
+文件；它只能使用明确授权的环境变量、文件、存储、stdio 和出站目标。协议错误、超时
+或崩溃时，宿主可摘除并替换对应 worker。Capsid 提供的是可审计、可回收的纵深执行
+边界，不是对任意生成代码“绝对安全”的承诺。
 
 Capsid 实现固定的 Minimum Common Web API 子集
 `CAPSID-MIN-2025-subset-v0`，不宣称完整 ECMA-429 或全部 WPT conformance。
