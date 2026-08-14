@@ -79,7 +79,7 @@ jobs:
             alpine:3.24 sh -eux -c '
               echo "== apk add"
               apk add --no-cache build-base cmake ninja linux-headers \
-                nodejs npm git perl boost-dev
+                nodejs npm git perl boost-dev boost1.84-static
               # The mounted workspace is owned by the runner user; as root,
               # git refuses it and the overlay-key / identity gates then
               # cannot resolve vendor HEADs. Covers every nested submodule
