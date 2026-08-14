@@ -117,6 +117,15 @@ profile 为 757.3 req/s（+12.8%）。Host 的
 `write_body_block` 在合并前 flat report 中可见，合并后均低于 0.25% 报告阈值。
 这为三轮吞吐/CPU 结果提供了与改动机制一致的热点证据。
 
+### 未保留的 Worker 帧合并实验
+
+继续尝试了在 Worker `OutboundBuffer` 中合并同请求、相邻且完全未写出的
+`ResponseBody` 帧。实现通过帧上限、跨请求、partial-header、协议解析和上述集成
+门，但 v2/v3 紧邻三轮对照没有产生足以覆盖复杂度的收益：stream 16/32/64 KiB
+的 c64 QPS 分别为 -0.2%、+0.3%、+0.6%，c1 分别为 +0.6%、+1.2%、+0.9%；
+stream 64 KiB / c64 p99 反而 +11.9%。这说明 Worker 事件循环通常会在后续帧排队
+前开始 flush，安全合并窗口很小。该实验已显式 revert，没有进入最终实现。
+
 ## 三栈代表性对照
 
 相同协议、镜像约束和 load generator 下，c64 中位数：
@@ -154,6 +163,8 @@ profile 为 757.3 req/s（+12.8%）。Host 的
 - perf：`baseline-profile-*`、`optimized-profile-*`
 - 响应块合并三轮确认：`stream-v1-confirm-3r/`、`stream-v2-confirm-3r/`
 - 响应块合并 perf：`stream-v2-profile-stream64k-c64/`
+- 未保留的 Worker 帧合并对照：`stream-v2-v3-pair-3r/`、
+  `stream-v3-pair-3r/`
 - 三栈对照：`three-stack-formal-optimized/`
 
 每个正式目录包含环境快照、image ID/digest、逐运行 JSONL、正确性证据、summary
