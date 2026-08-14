@@ -82,18 +82,35 @@ foreach(CAPSID_RPATH_TARGET IN LISTS CAPSID_INSTALL_BINARIES)
 endforeach()
 
 # ---- §12.3 package naming ---------------------------------------------------
-# capsid-<version>-<system>-<arch>.tar.gz. Names are lowercased so the
-# archive name is stable across host spellings (Linux/Darwin, x86_64/AMD64).
-# Computed BEFORE the install(CODE) below: the SBOM name and the basename are
-# expanded at configure time, so the package identity must already exist.
+# Linux packages carry the libc instead of the arch: capsid-<ver>-linux-musl
+# (glibc builds would be linux-gnu). Non-Linux platforms keep the arch
+# (capsid-<ver>-darwin-arm64). Names are lowercased so the archive name is
+# stable across host spellings (Linux/Darwin, x86_64/AMD64). Computed BEFORE
+# the install(CODE) below: the SBOM name and the basename are expanded at
+# configure time, so the package identity must already exist.
 string(TOLOWER "${CMAKE_SYSTEM_NAME}" CAPSID_PACKAGE_SYSTEM)
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
     set(CAPSID_PACKAGE_ARCH "x86_64")
 else()
     string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" CAPSID_PACKAGE_ARCH)
 endif()
-set(CAPSID_PACKAGE_BASENAME
-    "capsid-${PROJECT_VERSION}-${CAPSID_PACKAGE_SYSTEM}-${CAPSID_PACKAGE_ARCH}")
+if(CAPSID_PACKAGE_SYSTEM STREQUAL "linux")
+    include(CheckCSourceCompiles)
+    set(CMAKE_REQUIRED_QUIET TRUE)
+    check_c_source_compiles(
+        "#include <features.h>\n#if !defined(__MUSL__)\n#error not musl\n#endif\nint main(void){return 0;}"
+        CAPSID_LIBC_IS_MUSL)
+    if(CAPSID_LIBC_IS_MUSL)
+        set(CAPSID_PACKAGE_LIBC "musl")
+    else()
+        set(CAPSID_PACKAGE_LIBC "gnu")
+    endif()
+    set(CAPSID_PACKAGE_BASENAME
+        "capsid-${PROJECT_VERSION}-${CAPSID_PACKAGE_SYSTEM}-${CAPSID_PACKAGE_LIBC}")
+else()
+    set(CAPSID_PACKAGE_BASENAME
+        "capsid-${PROJECT_VERSION}-${CAPSID_PACKAGE_SYSTEM}-${CAPSID_PACKAGE_ARCH}")
+endif()
 set(CAPSID_SBOM_NAME "${CAPSID_PACKAGE_BASENAME}")
 
 # Post-install generation of the file manifest and the SPDX SBOM. Runs for
