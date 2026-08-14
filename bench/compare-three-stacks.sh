@@ -2,7 +2,7 @@
 # bench/compare-three-stacks.sh — capsid+hono vs php-fpm+nginx+slim vs
 # python+flask+gunicorn, workload matrix 1k/8k/16k/32k x json/bytes/stream.
 #
-# 公平性协议（docs/three-stack-bench-2026-08.md）：
+# 公平性协议（见 docs/performance-benchmarks.md 的 bench 约定）：
 #   双进程（capsid static-pool --workers 2 / php-fpm pm=static max_children=2
 #   / gunicorn --workers 2）；被测栈 taskset 0-5，loadgen taskset 6-7；
 #   全栈常驻一轮；workload 间轮转起始栈抵消漂移；每格 3 轮

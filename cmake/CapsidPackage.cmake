@@ -48,7 +48,14 @@ install(FILES
 install(FILES
     README.md
     docs/architecture.md
-    docs/embedding-api.md
+    docs/host-integration.md
+    docs/capsid-json.md
+    docs/host-config.md
+    docs/capability-policy.md
+    docs/module-permissions.md
+    docs/linux-sandbox.md
+    docs/conformance.md
+    docs/performance-benchmarks.md
     docs/testing.md
     DESTINATION share/doc/capsid)
 

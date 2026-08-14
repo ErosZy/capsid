@@ -14,8 +14,7 @@ endif()
 # tests/wpt/manifest.json declares two lists that must agree:
 #
 #   tests[].paths    -- the upstream files each conformance group claims as its
-#                       evidence. docs/standards-matrix.md and
-#                       docs/conformance-deviations.md cite these when closing a
+#                       evidence. docs/conformance.md cites these when closing a
 #                       CAPSID-D gap.
 #   executedProfile  -- the flat list of files actually turned into worker realms.
 #
@@ -104,7 +103,7 @@ if(CAPSID_MISSING_REPORT)
         "evidence that are never executed.${CAPSID_MISSING_REPORT}\n\n"
         "Either add the path to executedProfile (and to the CAPSID_WPT_BATCH list in "
         "cmake/build_tests.cmake), or remove it from tests[].paths and reopen the "
-        "corresponding gap in docs/conformance-deviations.md. Documentation must "
+        "corresponding gap in docs/conformance.md. Documentation must "
         "not cite evidence the suite does not produce.")
 endif()
 

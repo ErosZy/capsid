@@ -325,7 +325,7 @@ def ctest_evidence(
 
 
 def deviations(root: Path, baseline: dict[str, Any]) -> dict[str, Any]:
-    path = root / "docs/conformance-deviations.md"
+    path = root / "docs/conformance.md"
     current: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.startswith("| CAPSID-D"):

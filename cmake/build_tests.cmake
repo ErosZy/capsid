@@ -2984,14 +2984,14 @@ if(BUILD_TESTING)
             COMMAND "${CAPSID_NODE_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/audit-metadata.mjs"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/manifest.json"
-                "${CMAKE_CURRENT_SOURCE_DIR}/docs/conformance-deviations.md"
+                "${CMAKE_CURRENT_SOURCE_DIR}/docs/conformance.md"
         )
         add_test(
             NAME wpt_metadata_negative_controls
             COMMAND "${CAPSID_NODE_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/audit-metadata.test.mjs"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/manifest.json"
-                "${CMAKE_CURRENT_SOURCE_DIR}/docs/conformance-deviations.md"
+                "${CMAKE_CURRENT_SOURCE_DIR}/docs/conformance.md"
         )
         set_tests_properties(
             wpt_metadata_manifest
@@ -3159,7 +3159,7 @@ if(BUILD_TESTING)
             )
         else()
             # WPT is the ONLY source of evidence for the ECMA-429 conformance
-            # claims in docs/standards-matrix.md and docs/conformance-deviations.md.
+            # claims in docs/conformance.md.
             # If it silently does not run, `ctest` reports all-green while the
             # conformance surface is entirely untested. Register a test that fails
             # loudly so that absence of coverage can never be mistaken for a pass.
@@ -4055,7 +4055,7 @@ if(BUILD_TESTING)
         # FAIL on the pre-fix bridge (identity collapse P0-1, request
         # context loss P0-2, terminal continuation survival P0-3); the
         # script tests fail on the pre-fix distribution (P0-6) and identity
-        # truncation (P0-7). See docs/capsid-remediation-execution-spec.
+        # truncation (P0-7).
 
         add_executable(
             test-worker-request-id-boundaries
