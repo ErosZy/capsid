@@ -24,6 +24,8 @@ async function markdownFiles(relativeRoot) {
 
 const documentPaths = [
   "README.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
   ...await markdownFiles("docs"),
   ...await markdownFiles("examples"),
 ].map((value) => value.split(path.sep).join("/")).sort();

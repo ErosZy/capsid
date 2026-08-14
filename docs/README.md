@@ -1,19 +1,38 @@
-# 文档导航
+# 文档中心
 
-这里只维护当前契约、使用说明和可复核的证据规则，不保存一次性评审过程、每日状态
-快照或生成报告的副本（原始样本与 profile 保存在 `bench/results/`，CI 证据保存在
-workflow artifact）。事实发生冲突时，优先级如下：
+这里维护当前契约、使用说明和可复核的证据规则。首次接触项目请从
+[项目首页](../README.md)开始；准备提交变更请阅读[贡献指南](../CONTRIBUTING.md)，
+敏感问题按[安全策略](../SECURITY.md)处理。
+
+## 按任务查找
+
+| 你想做什么 | 从这里开始 | 深入阅读 |
+| --- | --- | --- |
+| 理解 Capsid 是否适合我的场景 | [架构与产品边界](architecture.md) | [标准与合规](conformance.md) |
+| 把 Runtime 嵌入现有网关 | [宿主嵌入规范](host-integration.md) | [能力策略](capability-policy.md) |
+| 部署第一方 managed Host | [Host 配置参考](host-config.md) | [Host v1 详细设计](host-technical-design-review.md) |
+| 编写并授权应用 | [capsid.json 教程](capsid-json.md) | [模块与权限参考](module-permissions.md) |
+| 运行不可信代码 | [Linux 严格沙箱](linux-sandbox.md) | [能力策略](capability-policy.md) |
+| 移植现有 Fetch 框架 | [框架兼容性](framework-compatibility/README.md) | 各框架验证页 |
+| 复现质量或性能结论 | [测试门禁](testing.md) | [性能证据](performance-benchmarks.md) |
+
+## 维护规则
+
+不保存一次性评审过程、每日状态快照或生成报告的副本。原始样本与 profile 保存在
+`bench/results/`，CI 证据保存在 workflow artifact。事实发生冲突时，优先级如下：
 
 1. 公共头文件、manifest、构建配置和测试；
 2. 由当前 commit 生成的原始测试或 benchmark artifact；
 3. Markdown 说明。
 
-截至当前工作树，Runtime、worker 与第一方 `capsid-host`（`--mode single-worker`
+当前代码线的 Runtime、worker 与第一方 `capsid-host`（`--mode single-worker`
 / `static-pool` / `managed`）均可构建、可测试，属可运行的 benchmark/integration
 模式，**非生产部署接口**；里程碑状态以源码和测试为准，不单独维护易漂移的状态
 文档。
 
-## 入门与架构
+## 全部文档
+
+### 入门与架构
 
 - [项目首页](../README.md)：定位、适用场景、快速开始、权限与安全配置
 - [架构与产品边界](architecture.md)：进程模型、平台契约、JavaScript 表面、
@@ -21,7 +40,7 @@ workflow artifact）。事实发生冲突时，优先级如下：
 - [Host v1 详细设计](host-technical-design-review.md)：第一方 Host 的权威
   设计、已冻结契约、验收门与实施顺序
 
-## 宿主嵌入与集成
+### 宿主嵌入与集成
 
 - [宿主嵌入与集成规范](host-integration.md)：C ABI 生命周期、线程与事件循环、
   请求/credit 背压、SSE/streaming、取消与关闭、ABI 版本策略与上线清单
@@ -36,7 +55,7 @@ workflow artifact）。事实发生冲突时，优先级如下：
 - [Linux 严格沙箱](linux-sandbox.md)：strict baseline、cgroup v2、网络
   namespace、出站网络策略与明确限制
 
-## 正确性与兼容性
+### 正确性与兼容性
 
 - [测试与持续门禁](testing.md)：测试分层、有效性规则、sanitizer/TSan 与
   平台契约门
@@ -45,7 +64,7 @@ workflow artifact）。事实发生冲突时，优先级如下：
 - [框架兼容性](framework-compatibility/README.md)：固定版本的 Hono、itty-router
   和 H3 v2
 
-## 性能
+### 性能
 
 - [性能：证据规则与当前形态](performance-benchmarks.md)：结论门槛、测量
   分层、池规模结论、三栈对照与第一方 Host 优化结果。runner 与证据目录约定
