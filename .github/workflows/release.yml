@@ -1,0 +1,96 @@
+name: Release
+
+# Tag pushes (v*) package the pinned checkout per platform with the same
+# dependency versions as testing-validity (OpenSSL 3.5.7 from pinned
+# source, LTO on, mimalloc off) and attach the CPack TGZ + SHA256 to a
+# GitHub Release. testing-validity does not run on tags (it is scoped to
+# main/PR), so the tag must point at a commit whose main-branch checks
+# already passed.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            deps: sudo apt-get update && sudo apt-get install -y ninja-build libboost-system-dev
+          # macos-15 is arm64; the package name carries the arch
+          # (capsid-<ver>-darwin-arm64.tar.gz) so uploads never collide.
+          - os: macos-15
+            deps: brew install ninja boost
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out recursively pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Install platform build dependencies
+        run: ${{ matrix.deps }}
+
+      - name: Build OpenSSL 3.5.7 for Release
+        run: |
+          set -euo pipefail
+          # Same pinned provider source as the sanitizer Host build in
+          # testing-validity; built outside the workspace so the checkout
+          # stays clean for the Release identity gate.
+          cd "${RUNNER_TEMP}"
+          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
+          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
+          sha256sum -c openssl.sha256
+          tar xzf openssl-3.5.7.tar.gz
+          cd openssl-3.5.7
+          ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
+          make -j2
+          sudo make install_sw
+
+      - name: Configure Release/LTO
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCAPSID_BUILD_HOST=ON \
+            -DCMAKE_PREFIX_PATH=/opt/openssl35
+
+      - name: Build
+        run: cmake --build build --parallel 2
+
+      - name: Package (CPack TGZ + SHA256)
+        run: cmake --build build --target package
+
+      - name: Publish package to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          # --verify-tag makes concurrent matrix jobs idempotent: the first
+          # creates the release, later ones only verify the tag exists.
+          gh release create "${tag}" \
+            --title "capsid ${tag}" \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. TGZ packages (per platform) plus their SHA256 files are attached. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --verify-tag
+          gh release upload "${tag}" \
+            build/capsid-*.tar.gz \
+            build/capsid-*.tar.gz.sha256
