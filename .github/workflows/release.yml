@@ -54,12 +54,20 @@ jobs:
         if: matrix.deps
         run: ${{ matrix.deps }}
 
-      - name: Install pinned txiki node modules
+      - name: Install pinned node modules
         run: |
           set -euo pipefail
           # --ignore-scripts: pure JS, no native bindings, so the musl
-          # container reuses this tree verbatim.
-          npm ci --ignore-scripts --prefix vendor/txiki.js
+          # container reuses these trees verbatim. All four trees are
+          # required: the configure gate checks the example dependencies.
+          for directory in \
+            vendor/txiki.js \
+            examples/hono-reference \
+            examples/itty-router-reference \
+            examples/h3-v2-reference
+          do
+            npm ci --ignore-scripts --prefix "${directory}"
+          done
 
       - name: Build and package in Alpine (musl, fully static)
         if: matrix.os == 'ubuntu-24.04'

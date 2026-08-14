@@ -422,6 +422,11 @@ capsid_worker* spawn_loaded_worker(
     policy.rule_count = static_cast<std::uint32_t>(rules.size());
     policy.env_entries = env_entries.empty() ? nullptr : env_entries.data();
     policy.env_entry_count = static_cast<std::uint32_t>(env_entries.size());
+    // Without this the worker's egress check consults a default-constructed
+    // (deny-all) net policy whenever a capability policy is present — which
+    // is always the case in managed mode — so every fetch was rejected.
+    // nullptr keeps the deny-all fail-closed default for empty fetch sets.
+    policy.net_policy = egress_rules.empty() ? nullptr : &egress_policy;
 
     capsid_worker_config config;
     capsid_worker_config_init(&config);
