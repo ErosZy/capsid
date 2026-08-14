@@ -13,17 +13,18 @@
 //     (errors_as_success is always false).
 //
 // Workloads:
-//   fixed-1k      GET /@capsid/orders/fixed       -> 1024 bytes of 0x78
-//   cpu-template  GET /@capsid/orders/cpu         -> generated HTML template
-//   json          GET /@capsid/orders/bench/json  -> JSON document
-//   bytes         GET /@capsid/orders/bench/bytes -> 1024 bytes
-//   stream        GET /@capsid/orders/bench/stream -> 1024 streamed bytes
-//   json16k       GET /@capsid/orders/bench/json16k -> ~16 KiB JSON
-//   bytes16k      GET /@capsid/orders/bench/bytes16k -> 16384 bytes
-//   stream16k     GET /@capsid/orders/bench/stream16k -> 16384 streamed bytes
-//   json64k       GET /@capsid/orders/bench/json64k -> ~64 KiB JSON
-//   bytes64k      GET /@capsid/orders/bench/bytes64k -> 65536 bytes
-//   stream64k     GET /@capsid/orders/bench/stream64k -> 65536 streamed bytes
+//
+//	fixed-1k      GET /@capsid/orders/fixed       -> 1024 bytes of 0x78
+//	cpu-template  GET /@capsid/orders/cpu         -> generated HTML template
+//	json          GET /@capsid/orders/bench/json  -> JSON document
+//	bytes         GET /@capsid/orders/bench/bytes -> 1024 bytes
+//	stream        GET /@capsid/orders/bench/stream -> 1024 streamed bytes
+//	json16k       GET /@capsid/orders/bench/json16k -> ~16 KiB JSON
+//	bytes16k      GET /@capsid/orders/bench/bytes16k -> 16384 bytes
+//	stream16k     GET /@capsid/orders/bench/stream16k -> 16384 streamed bytes
+//	json64k       GET /@capsid/orders/bench/json64k -> ~64 KiB JSON
+//	bytes64k      GET /@capsid/orders/bench/bytes64k -> 65536 bytes
+//	stream64k     GET /@capsid/orders/bench/stream64k -> 65536 streamed bytes
 package main
 
 import (
@@ -36,7 +37,9 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -48,23 +51,25 @@ type sample struct {
 	P50Ms          float64 `json:"p50_ms"`
 	P95Ms          float64 `json:"p95_ms"`
 	P99Ms          float64 `json:"p99_ms"`
-	DispatchWaitMs  float64 `json:"dispatch_wait_ms"`
+	DispatchWaitMs float64 `json:"dispatch_wait_ms"`
 	Completed      int     `json:"completed"`
 	Errors         int     `json:"errors"`
 	Timeouts       int     `json:"timeouts"`
 	DurationS      float64 `json:"duration_s"`
 	Connections    int     `json:"connections"`
 	Inflight       int     `json:"inflight"`
+	ClientCPUS     float64 `json:"client_cpu_s"`
+	ClientAvgCores float64 `json:"client_avg_cores"`
 }
 
 type correctness struct {
-	OK                bool   `json:"ok"`
-	Error             string `json:"error,omitempty"`
-	ResponsesChecked  int    `json:"responses_checked"`
-	Mismatches        int    `json:"mismatches"`
-	Errors            int    `json:"errors"`
-	Timeouts          int    `json:"timeouts"`
-	ErrorsAsSuccess   bool   `json:"errors_as_success"`
+	OK               bool   `json:"ok"`
+	Error            string `json:"error,omitempty"`
+	ResponsesChecked int    `json:"responses_checked"`
+	Mismatches       int    `json:"mismatches"`
+	Errors           int    `json:"errors"`
+	Timeouts         int    `json:"timeouts"`
+	ErrorsAsSuccess  bool   `json:"errors_as_success"`
 }
 
 func envOr(name, fallback string) string {
@@ -96,6 +101,7 @@ func main() {
 	inflight := envInt("CAPSID_BENCH_INFLIGHT", 64)
 	samplesOut := envOr("CAPSID_BENCH_SAMPLES_OUT", "")
 	correctnessOut := envOr("CAPSID_BENCH_CORRECTNESS_OUT", "")
+	phaseOut := envOr("CAPSID_BENCH_PHASE_OUT", "")
 	if samplesOut == "" || correctnessOut == "" {
 		fatal("CAPSID_BENCH_SAMPLES_OUT and CAPSID_BENCH_CORRECTNESS_OUT are required")
 	}
@@ -103,80 +109,103 @@ func main() {
 	path := "/@capsid/orders/fixed"
 	expectedLen := 1024
 	expectedByte := byte(0x78)
-	switch workload {
-	case "cpu-template":
-		path = "/@capsid/orders/cpu"
-		expectedLen = -1
-	case "json":
-		path = "/@capsid/orders/bench/json"
-		expectedLen = -1
-	case "bytes":
-		path = "/@capsid/orders/bench/bytes"
-		expectedLen = 1024
-		expectedByte = byte(0x61)
-	case "stream":
-		path = "/@capsid/orders/bench/stream"
-		expectedLen = 1024
-		expectedByte = byte(0x62)
-	case "json16k":
-		path = "/@capsid/orders/bench/json16k"
-		expectedLen = -1
-	case "bytes16k":
-		path = "/@capsid/orders/bench/bytes16k"
-		expectedLen = 16384
-		expectedByte = byte(0x61)
-	case "stream16k":
-		path = "/@capsid/orders/bench/stream16k"
-		expectedLen = 16384
-		expectedByte = byte(0x62)
-	case "json64k":
-		path = "/@capsid/orders/bench/json64k"
-		expectedLen = -1
-	case "json64k-pre":
-		path = "/@capsid/orders/bench/json64k-pre"
-		expectedLen = -1
-	case "json64k-bytes":
-		path = "/@capsid/orders/bench/json64k-bytes"
-		expectedLen = -1
-	case "json64k-octet":
-		path = "/@capsid/orders/bench/json64k-octet"
-		expectedLen = -1
-	case "text64k":
-		path = "/@capsid/orders/bench/text64k"
-		expectedLen = 65536
-	case "bytes65535":
-		path = "/@capsid/orders/bench/bytes65535"
-		expectedLen = 65535
-		expectedByte = byte(0x61)
-	case "bytes65537":
-		path = "/@capsid/orders/bench/bytes65537"
-		expectedLen = 65537
-		expectedByte = byte(0x61)
-	case "bytes65537-pre":
-		path = "/@capsid/orders/bench/bytes65537-pre"
-		expectedLen = 65537
-		expectedByte = byte(0x61)
-	case "entry":
-		path = "/@capsid/orders/entry"
-		expectedLen = 12
-	case "no-content":
-		path = "/@capsid/orders/response/no-content"
-		expectedLen = 0
-	case "bare":
-		path = "/@capsid/orders/x"
-		expectedLen = 1
-	case "bytes64k":
-		path = "/@capsid/orders/bench/bytes64k"
-		expectedLen = 65536
-		expectedByte = byte(0x61)
-	case "stream64k":
-		path = "/@capsid/orders/bench/stream64k"
-		expectedLen = 65536
-		expectedByte = byte(0x62)
-	case "fixed-1k":
-		// default above
-	default:
-		fatal("unknown workload: " + workload)
+	matrixKind := ""
+	matrixParts := strings.Split(workload, "-")
+	matrixSizes := map[string]int{
+		"1k": 1024, "4k": 4096, "16k": 16384,
+		"32k": 32768, "64k": 65536,
+	}
+	if len(matrixParts) == 3 && matrixParts[0] == "matrix" {
+		kind, label := matrixParts[1], matrixParts[2]
+		size, knownSize := matrixSizes[label]
+		if !knownSize || (kind != "json" && kind != "bytes" && kind != "stream") {
+			fatal("unknown workload: " + workload)
+		}
+		matrixKind = kind
+		path = "/@capsid/orders/bench/" + workload
+		expectedLen = size
+		switch kind {
+		case "bytes":
+			expectedByte = byte('b')
+		case "stream":
+			expectedByte = byte('s')
+		}
+	} else {
+		switch workload {
+		case "cpu-template":
+			path = "/@capsid/orders/cpu"
+			expectedLen = -1
+		case "json":
+			path = "/@capsid/orders/bench/json"
+			expectedLen = -1
+		case "bytes":
+			path = "/@capsid/orders/bench/bytes"
+			expectedLen = 1024
+			expectedByte = byte(0x61)
+		case "stream":
+			path = "/@capsid/orders/bench/stream"
+			expectedLen = 1024
+			expectedByte = byte(0x62)
+		case "json16k":
+			path = "/@capsid/orders/bench/json16k"
+			expectedLen = -1
+		case "bytes16k":
+			path = "/@capsid/orders/bench/bytes16k"
+			expectedLen = 16384
+			expectedByte = byte(0x61)
+		case "stream16k":
+			path = "/@capsid/orders/bench/stream16k"
+			expectedLen = 16384
+			expectedByte = byte(0x62)
+		case "json64k":
+			path = "/@capsid/orders/bench/json64k"
+			expectedLen = -1
+		case "json64k-pre":
+			path = "/@capsid/orders/bench/json64k-pre"
+			expectedLen = -1
+		case "json64k-bytes":
+			path = "/@capsid/orders/bench/json64k-bytes"
+			expectedLen = -1
+		case "json64k-octet":
+			path = "/@capsid/orders/bench/json64k-octet"
+			expectedLen = -1
+		case "text64k":
+			path = "/@capsid/orders/bench/text64k"
+			expectedLen = 65536
+		case "bytes65535":
+			path = "/@capsid/orders/bench/bytes65535"
+			expectedLen = 65535
+			expectedByte = byte(0x61)
+		case "bytes65537":
+			path = "/@capsid/orders/bench/bytes65537"
+			expectedLen = 65537
+			expectedByte = byte(0x61)
+		case "bytes65537-pre":
+			path = "/@capsid/orders/bench/bytes65537-pre"
+			expectedLen = 65537
+			expectedByte = byte(0x61)
+		case "entry":
+			path = "/@capsid/orders/entry"
+			expectedLen = 12
+		case "no-content":
+			path = "/@capsid/orders/response/no-content"
+			expectedLen = 0
+		case "bare":
+			path = "/@capsid/orders/x"
+			expectedLen = 1
+		case "bytes64k":
+			path = "/@capsid/orders/bench/bytes64k"
+			expectedLen = 65536
+			expectedByte = byte(0x61)
+		case "stream64k":
+			path = "/@capsid/orders/bench/stream64k"
+			expectedLen = 65536
+			expectedByte = byte(0x62)
+		case "fixed-1k":
+			// default above
+		default:
+			fatal("unknown workload: " + workload)
+		}
 	}
 
 	// Fixed explicit headers for every request: the baseline and candidate
@@ -216,7 +245,9 @@ func main() {
 	// capping measured QPS below the server's real throughput.
 	// bytes.Equal is a memcmp (SIMD) and keeps the client unsaturated.
 	var expectedBuf []byte
-	if expectedLen > 0 {
+	if matrixKind == "json" {
+		expectedBuf = []byte(`{"data":"` + strings.Repeat("x", expectedLen-11) + `"}`)
+	} else if expectedLen > 0 {
 		expectedBuf = bytes.Repeat([]byte{expectedByte}, expectedLen)
 	}
 	// JSON marker check is serializer-format-agnostic: compact (PHP json_encode
@@ -227,6 +258,9 @@ func main() {
 			bytes.Contains(body, []byte(`"status": "ok"`))
 	}
 	verify := func(body []byte) bool {
+		if matrixKind != "" {
+			return len(body) == expectedLen && bytes.Equal(body, expectedBuf)
+		}
 		switch workload {
 		case "json":
 			// The JSON document starts with '{' and carries the marker.
@@ -272,7 +306,13 @@ func main() {
 	}
 
 	runPhase := func(phase string, seconds int) {
+		if phase == "measured" && phaseOut != "" {
+			if err := os.WriteFile(phaseOut, []byte("measured\n"), 0o644); err != nil {
+				fatal("cannot write measured phase marker: " + err.Error())
+			}
+		}
 		start := time.Now()
+		cpuStart := processCPUSeconds()
 		end := start.Add(time.Duration(seconds) * time.Second)
 		sem := make(chan struct{}, inflight)
 		var wg sync.WaitGroup
@@ -347,6 +387,7 @@ func main() {
 		mismatch += phaseMismatch
 
 		measured := time.Since(start).Seconds()
+		clientCPUS := processCPUSeconds() - cpuStart
 		qps := 0.0
 		if measured > 0 {
 			qps = float64(phaseCompleted) / measured
@@ -360,8 +401,9 @@ func main() {
 			Side: side, Round: round, Phase: phase,
 			QPS: qps, P50Ms: p50, P95Ms: p95, P99Ms: p99,
 			DispatchWaitMs: lagMs,
-			Completed: phaseCompleted, Errors: phaseErrors, Timeouts: phaseTimeouts,
+			Completed:      phaseCompleted, Errors: phaseErrors, Timeouts: phaseTimeouts,
 			DurationS: measured, Connections: connections, Inflight: inflight,
+			ClientCPUS: clientCPUS, ClientAvgCores: clientCPUS / measured,
 		})
 	}
 
@@ -383,13 +425,22 @@ func main() {
 	writeJSON(correctnessOut, verdict)
 }
 
+func processCPUSeconds() float64 {
+	var usage syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &usage); err != nil {
+		return 0
+	}
+	return float64(usage.Utime.Sec+usage.Stime.Sec) +
+		float64(usage.Utime.Usec+usage.Stime.Usec)/1e6
+}
+
 func percentile(values []float64, p int) float64 {
 	if len(values) == 0 {
 		return 0
 	}
 	sorted := append([]float64(nil), values...)
 	sort.Float64s(sorted)
-	index := (len(sorted)-1)*p/100
+	index := (len(sorted) - 1) * p / 100
 	return sorted[index]
 }
 

@@ -237,6 +237,7 @@ WorkerExecutor::WorkerFactory hello_factory(
 
 void test_factory_lifecycle(const std::string& worker_path) {
     WorkerExecutor executor;
+    executor.set_metrics_enabled(true);
     EventHarness harness(executor);
     std::string error;
     require(executor.start(hello_factory(worker_path), &error),
@@ -252,6 +253,28 @@ void test_factory_lifecycle(const std::string& worker_path) {
     require(has_fixed_response_head_for(events, 7, 14),
             "non-streamed response missing exact fixed-body metadata");
     require(executor.inflight() == 0, "inflight 0 after response end");
+
+    // Owner acknowledgement of a Runtime-terminal response is local queue
+    // retirement, not another command/wake or a redundant Runtime cancel.
+    const auto submitted_before_retire =
+        executor.metrics().commands_submitted.load(std::memory_order_relaxed);
+    const auto batches_before_retire =
+        executor.metrics().command_batches.load(std::memory_order_relaxed);
+    executor.retire_terminal_request(7);
+    require(executor.metrics().commands_submitted.load(
+                std::memory_order_relaxed) == submitted_before_retire,
+            "terminal retirement submitted a command");
+    require(executor.metrics().command_batches.load(
+                std::memory_order_relaxed) == batches_before_retire,
+            "terminal retirement emitted a wake");
+
+    // The next request proves that an old response-credit command, whether
+    // still shared or already swapped locally, cannot poison the worker.
+    events.clear();
+    begin_and_observe(executor, harness, 9, events);
+    require(has_response_head_for(events, 9),
+            "worker unavailable after terminal retirement");
+    executor.retire_terminal_request(9);
 
     // Cancel path: a begun request returns to inflight 0 at mark_canceled
     // (the host no longer counts it), and the cancel frame reaches the

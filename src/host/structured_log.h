@@ -2,12 +2,13 @@
 #define CAPSID_HOST_STRUCTURED_LOG_H
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
-#include <vector>
 
 namespace capsid::host {
 
@@ -122,8 +123,9 @@ private:
     std::atomic<std::uint64_t> dropped_app_ = 0;
     std::atomic<std::uint64_t> accepted_ = 0;
     mutable std::mutex mutex_;
-    std::vector<LogFields> app_queue_;
-    std::vector<LogFields> control_queue_;
+    std::condition_variable queue_ready_;
+    std::deque<LogFields> app_queue_;
+    std::deque<LogFields> control_queue_;
 };
 
 // Encodes one fixed-field JSON line (exported for tests). timestamp_ms is

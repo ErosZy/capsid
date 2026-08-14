@@ -14,7 +14,8 @@
 //
 // Thread model:
 //   - the owner thread (the SingleWorkerServer io thread) calls submit(),
-//     mark_canceled(), drain_events(), request_shutdown() and stop_and_join();
+//     mark_canceled(), retire_terminal_request(), drain_events(),
+//     request_shutdown() and stop_and_join();
 //   - the worker thread runs worker_thread_main() and owns the destroy;
 //   - the two threads communicate through two mutex-protected queues; the
 //     worker thread copies every event payload before posting it, so
@@ -198,6 +199,12 @@ public:
     // Runtime reports the request terminal. Also releases the inflight slot
     // exactly once (idempotent).
     void mark_canceled(std::uint64_t request_id);
+    // Acknowledges a terminal event that the Runtime already emitted. It
+    // purges owner-queued stale frames without submitting a redundant
+    // Runtime cancel or wake. The worker thread retires the tombstone after
+    // its current local batch has drained; this preserves the race barrier
+    // for commands already swapped out of commands_.
+    void retire_terminal_request(std::uint64_t request_id);
 
     // ---- event direction (worker thread → owner thread) ----------------
 
@@ -275,6 +282,10 @@ private:
     // or the owner cancelled (owner thread): any queued frame for them is
     // dropped before it reaches the IPC channel.
     std::set<std::uint64_t> canceled_;
+    // Terminal-event tombstones acknowledged by the owner. These are
+    // cleared only on the worker thread after its current command batch,
+    // so an already-swapped stale grant/write cannot race their removal.
+    std::set<std::uint64_t> retire_pending_;
     // M2 item 6: probe state (worker thread writes, supervisor reads).
     // next_probe_id_ is the owner-thread allocator for the reserved high
     // range; the rest lives under mutex_.

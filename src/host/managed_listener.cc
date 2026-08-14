@@ -1201,15 +1201,13 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
         pending.end_seen = true;
         // Drain any remaining pending credit; the Runtime erased the
         // request, so the grant frame is queued only to satisfy the
-        // tombstone check (single_worker_server does the same).
+        // terminal retirement (single_worker_server does the same).
         flush_pending_credit(executor, event.request_id, pending);
-        // Tombstone the id and cancel any stale request-direction frames:
-        // the Runtime erased this request with RESPONSE_END.
-        const_cast<WorkerExecutor*>(executor)->mark_canceled(event.request_id);
-        Command cancel;
-        cancel.type = CommandType::kCancel;
-        cancel.request_id = event.request_id;
-        const_cast<WorkerExecutor*>(executor)->submit(std::move(cancel));
+        // The Runtime erased this request with RESPONSE_END. Purge queued
+        // stale frames and retire the tombstone after the worker's current
+        // command batch, without a redundant Runtime cancel.
+        const_cast<WorkerExecutor*>(executor)->retire_terminal_request(
+            event.request_id);
         if (pending.fixed_response) {
             if (pending.fixed_body_received !=
                 pending.fixed_body_expected) {

@@ -61,6 +61,7 @@ StructuredLog::~StructuredLog() {
 
 void StructuredLog::flush() {
     if (!stop_.exchange(true)) {
+        queue_ready_.notify_all();
         writer_.join();
     }
 }
@@ -70,18 +71,22 @@ void StructuredLog::writer_run() {
         LogFields fields;
         bool have = false;
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::unique_lock<std::mutex> lock(mutex_);
+            queue_ready_.wait(lock, [this] {
+                return stop_.load(std::memory_order_relaxed) ||
+                       !control_queue_.empty() || !app_queue_.empty();
+            });
             if (!control_queue_.empty()) {
                 // Control first: a security/lifecycle event never waits
                 // behind an app-log backlog.
-                fields = std::move(control_queue_.back());
-                control_queue_.pop_back();
+                fields = std::move(control_queue_.front());
+                control_queue_.pop_front();
                 have = true;
             } else if (!app_queue_.empty()) {
-                fields = std::move(app_queue_.back());
-                app_queue_.pop_back();
+                fields = std::move(app_queue_.front());
+                app_queue_.pop_front();
                 have = true;
-            } else if (stop_) {
+            } else if (stop_.load(std::memory_order_relaxed)) {
                 return;
             }
         }
@@ -124,12 +129,14 @@ void StructuredLog::log(LogLane lane, LogFields fields) {
                 return;
             }
             app_queue_.push_back(std::move(fields));
+            queue_ready_.notify_one();
             return;
         }
         if (control_queue_.size() >= control_capacity_) {
             // Fall through to the synchronous write outside the lock.
         } else {
             control_queue_.push_back(std::move(fields));
+            queue_ready_.notify_one();
             return;
         }
     }

@@ -674,7 +674,8 @@ if(BUILD_TESTING)
                 structured_log_emits_single_line_json
                 structured_log_app_lane_drops_and_counts
                 structured_log_control_lane_never_drops
-                structured_log_control_precedes_app_backlog)
+                structured_log_control_precedes_app_backlog
+                structured_log_app_lane_is_fifo)
             add_test(
                 NAME "${CAPSID_STRUCTURED_LOG_TEST_ID}"
                 COMMAND test-host-structured-log

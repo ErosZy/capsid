@@ -1686,19 +1686,15 @@ void Impl::handle_worker_event(WorkerEvent event) {
         PendingRequest& pending = it->second;
         pending.end_seen = true;
         // Drain any remaining pending credit; the Runtime erased the request,
-        // so the grant frame is queued only to satisfy the tombstone check.
+        // so terminal retirement drops the stale grant.
         flush_pending_credit(event.request_id, pending, true);
         // The Runtime erased this request when it sent RESPONSE_END, so any
         // request-direction frame still queued for it (body writes, the
         // request-end) would be rejected as an invalid IPC frame and kill
-        // the worker. Tombstone the id; the kCancel marker below is a no-op
-        // at the Runtime (the id is already gone) and removes the tombstone
-        // once the stale commands have drained, keeping the set bounded.
-        executor_->mark_canceled(event.request_id);
-        Command cancel;
-        cancel.type = CommandType::kCancel;
-        cancel.request_id = event.request_id;
-        executor_->submit(std::move(cancel));
+        // the worker. Acknowledge the worker-thread tombstone without a
+        // redundant Runtime cancel. Retirement purges shared queued frames
+        // and keeps the tombstone until an already-swapped batch has drained.
+        executor_->retire_terminal_request(event.request_id);
         if (pending.fixed_response) {
             if (pending.fixed_body_received !=
                 pending.fixed_body_expected) {

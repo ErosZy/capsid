@@ -217,6 +217,29 @@ int mode_control_precedes_app_backlog() {
     return 0;
 }
 
+int mode_app_lane_is_fifo() {
+    std::mutex sink_mutex;
+    std::vector<std::string> received;
+    StructuredLog log([&](const std::string& line) {
+        std::lock_guard<std::mutex> lock(sink_mutex);
+        received.push_back(line);
+    });
+    for (std::size_t index = 0; index < 3; ++index) {
+        LogFields fields;
+        fields.event = "app_log";
+        fields.message = "fifo-" + std::to_string(index);
+        log.log(LogLane::kApp, std::move(fields));
+    }
+    log.flush();
+    require(received.size() == 3, "FIFO test lost an app event");
+    for (std::size_t index = 0; index < received.size(); ++index) {
+        require(contains(received[index], "fifo-" + std::to_string(index)),
+                "app lane is not FIFO at index " + std::to_string(index));
+    }
+    std::cout << "PASS" << std::endl;
+    return 0;
+}
+
 #endif  // CAPSID_HAS_STRUCTURED_LOG
 
 }  // namespace
@@ -240,11 +263,15 @@ int main(int argc, char** argv) {
     if (mode == "structured_log_control_precedes_app_backlog") {
         return mode_control_precedes_app_backlog();
     }
+    if (mode == "structured_log_app_lane_is_fifo") {
+        return mode_app_lane_is_fifo();
+    }
 #else
     if (mode == "structured_log_emits_single_line_json" ||
         mode == "structured_log_app_lane_drops_and_counts" ||
         mode == "structured_log_control_lane_never_drops" ||
-        mode == "structured_log_control_precedes_app_backlog") {
+        mode == "structured_log_control_precedes_app_backlog" ||
+        mode == "structured_log_app_lane_is_fifo") {
         fail("structured log component is not implemented");
     }
 #endif

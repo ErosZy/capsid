@@ -195,6 +195,25 @@ void WorkerExecutor::mark_canceled(std::uint64_t request_id) {
     }
 }
 
+void WorkerExecutor::retire_terminal_request(std::uint64_t request_id) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    canceled_.insert(request_id);
+    if (inflight_ids_.erase(request_id) == 1) {
+        inflight_.fetch_sub(1, std::memory_order_relaxed);
+    }
+    // Anything still in the shared queue has not reached the Runtime and is
+    // stale now. A command already swapped into the worker's local batch is
+    // protected by canceled_ until that batch reaches the retirement point
+    // below.
+    commands_.erase(
+        std::remove_if(commands_.begin(), commands_.end(),
+                       [request_id](const Command& command) {
+                           return command.request_id == request_id;
+                       }),
+        commands_.end());
+    retire_pending_.insert(request_id);
+}
+
 void WorkerExecutor::set_event_notifier(EventNotifier notifier) {
     notifier_ = std::move(notifier);
 }
@@ -270,6 +289,17 @@ void WorkerExecutor::worker_thread_main() {
             if (!batch_flush()) {
                 queue_worker_exit_event();
                 goto worker_exit;
+            }
+            // The owner has observed these Runtime-terminal requests and
+            // promised not to submit another frame for them. Clearing after
+            // the local batch also covers stale commands that were swapped
+            // out before the acknowledgement.
+            {
+                std::unique_lock<std::mutex> retire_lock(mutex_);
+                for (const std::uint64_t request_id : retire_pending_) {
+                    canceled_.erase(request_id);
+                }
+                retire_pending_.clear();
             }
         }
 
@@ -386,9 +416,9 @@ bool WorkerExecutor::execute_command(Command command) {
     // Commands for a cancelled request are dropped before execution: the
     // worker may have already expired the request (and erased its state), so
     // a late write/end/grant frame would be rejected as an invalid IPC frame
-    // and kill the worker. The tombstone entry is removed again when the
-    // matching cancel reaches the worker thread, so the set stays bounded by
-    // the cancels still in flight.
+    // and kill the worker. An explicit owner cancel removes its tombstone
+    // when kCancel reaches this thread; a Runtime-terminal request removes
+    // it at the safe post-batch retirement point.
     if (command.type != CommandType::kBeginRequest &&
         command.type != CommandType::kShutdown &&
         command.type != CommandType::kCancel &&
@@ -687,9 +717,9 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
         // as an internal state error. Mark the request terminal here, on the
         // worker thread, before the event is handed to the owner thread: the
         // drop check in execute_command then covers the window until the
-        // owner's kResponseEnd handler inserts the same tombstone and the
-        // kCancel marker removes it again. The inflight slot is released
-        // exactly once.
+        // owner's kResponseEnd handler acknowledges the terminal event. The
+        // worker thread removes the tombstone only after its current command
+        // batch has drained. The inflight slot is released exactly once.
         mark_canceled(event.request_id);
         WorkerEvent worker_event;
         worker_event.type = WorkerEvent::Type::kResponseEnd;
