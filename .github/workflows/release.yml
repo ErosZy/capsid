@@ -155,6 +155,11 @@ jobs:
               echo "== apk add"
               apk add --no-cache build-base cmake ninja linux-headers \
                 nodejs npm git perl boost-dev
+              # The mounted workspace is owned by the runner user; as root,
+              # git refuses it (dubious ownership) and the overlay-key /
+              # identity gates then cannot resolve the vendor HEAD.
+              git config --global --add safe.directory /src
+              git config --global --add safe.directory /src/vendor/txiki.js
               echo "== openssl fetch"
               cd /tmp
               echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
