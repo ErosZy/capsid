@@ -100,6 +100,14 @@ if(CAPSID_BUILD_HOST)
     # Platforms without system Boost configure fine but get no capsid-host;
     # the frozen integration test registration only references the target
     # when CAPSID_BUILD_WORKER is enabled, which requires the Linux toolchain.
+    # A fully static package (-static in CMAKE_EXE_LINKER_FLAGS) cannot link
+    # Boost's shared library; FindBoost must be told to prefer the archive
+    # before it resolves the target (Alpine's boost-dev ships both, and the
+    # default picks libboost_system.so.1.84.0).
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND
+       CMAKE_EXE_LINKER_FLAGS MATCHES "(^| )-static( |$)")
+        set(Boost_USE_STATIC_LIBS ON)
+    endif()
     find_package(Boost 1.74 QUIET COMPONENTS system)
     if(NOT Boost_FOUND)
         # Boost >= 1.87 ships Boost.System as header-only and no longer
