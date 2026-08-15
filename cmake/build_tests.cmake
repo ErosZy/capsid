@@ -1360,14 +1360,20 @@ if(BUILD_TESTING)
                     endif()
                 endif()
             endif()
-            add_test(
-                NAME host_static_pool_activation_barrier
-                COMMAND test-host-static-pool-integration activation-barrier
-                    $<TARGET_FILE:capsid-worker>)
-            add_test(
-                NAME host_static_pool_worker_exit_isolation
-                COMMAND test-host-static-pool-integration worker-exit
-                    $<TARGET_FILE:capsid-worker>)
+            # The activation-barrier case wraps the worker in a POSIX shell
+            # script (mkdir/sleep/exec semantics); it SKIPs by absence on
+            # Windows. The worker-exit case needs /proc evidence and is
+            # Linux-only as well.
+            if(NOT WIN32)
+                add_test(
+                    NAME host_static_pool_activation_barrier
+                    COMMAND test-host-static-pool-integration activation-barrier
+                        $<TARGET_FILE:capsid-worker>)
+                add_test(
+                    NAME host_static_pool_worker_exit_isolation
+                    COMMAND test-host-static-pool-integration worker-exit
+                        $<TARGET_FILE:capsid-worker>)
+            endif()
             set_tests_properties(
                 host_static_pool_activation_barrier
                 host_static_pool_worker_exit_isolation PROPERTIES

@@ -65,7 +65,7 @@ void require(bool condition, const std::string& message) {
 }
 
 std::uint16_t reserve_test_port() {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create integration port socket");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
@@ -85,7 +85,7 @@ std::uint16_t reserve_test_port() {
 }
 
 bool http_succeeds(std::uint16_t port, int timeout_ms) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     if (fd < 0) {
         return false;
     }
@@ -93,7 +93,7 @@ bool http_succeeds(std::uint16_t port, int timeout_ms) {
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     if (inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) != 1 ||
-        connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+        capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                 sizeof(address)) != 0) {
         close(fd);
         return false;
@@ -102,7 +102,7 @@ bool http_succeeds(std::uint16_t port, int timeout_ms) {
         "GET /@capsid/orders/pool-integration HTTP/1.1\r\n"
         "Host: public.example\r\n"
         "Connection: close\r\n\r\n";
-    if (send(fd, request.data(), request.size(), MSG_NOSIGNAL) !=
+    if (capsid::win32::send_fd(fd, request.data(), request.size(), 0) !=
         static_cast<ssize_t>(request.size())) {
         close(fd);
         return false;
@@ -123,7 +123,7 @@ bool http_succeeds(std::uint16_t port, int timeout_ms) {
             break;
         }
         char bytes[2048];
-        const ssize_t count = recv(fd, bytes, sizeof(bytes), 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, bytes, sizeof(bytes), 0);
         if (count <= 0) {
             break;
         }
@@ -184,6 +184,11 @@ std::string shell_quote(const std::string& value) {
 }
 
 void test_activation_barrier(const char* real_worker_path) {
+#if defined(_WIN32)
+    // The activation barrier wraps the worker in a POSIX shell script
+    // (mkdir/sleep/exec); the case is not registered on Windows.
+    (void)real_worker_path;
+#else
     char directory_template[] = "/tmp/capsid-pool-barrier-XXXXXX";
     char* directory_bytes = mkdtemp(directory_template);
     require(directory_bytes != nullptr, "cannot create activation fixture");
@@ -210,7 +215,7 @@ void test_activation_barrier(const char* real_worker_path) {
             "cannot make delayed worker wrapper executable");
 
     int ready[2];
-    require(pipe(ready) == 0, "cannot create activation READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create activation READY pipe");
     const std::uint16_t port = reserve_test_port();
     capsid::host::StaticPoolServer pool(make_options(wrapper, ready[1], port));
     bool started = false;
@@ -239,6 +244,7 @@ void test_activation_barrier(const char* real_worker_path) {
     rmdir(first.c_str());
     unlink(wrapper.c_str());
     rmdir(directory.c_str());
+#endif  // !defined(_WIN32)
 }
 
 #if defined(__linux__)
@@ -288,7 +294,7 @@ std::set<pid_t> matching_worker_children(const std::string& worker_path) {
 void test_worker_exit_isolation(const char* worker_path_bytes) {
     const std::string worker_path = canonical_path(worker_path_bytes);
     int ready[2];
-    require(pipe(ready) == 0, "cannot create isolation READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create isolation READY pipe");
     const std::uint16_t port = reserve_test_port();
     capsid::host::StaticPoolServer pool(
         make_options(worker_path, ready[1], port));

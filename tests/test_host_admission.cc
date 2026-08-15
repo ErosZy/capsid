@@ -308,7 +308,7 @@ RawHttpResponse http_get(std::uint16_t port, const std::string& target) {
 // form; see docs/windows.md.)
 pid_t find_worker_child_pid() {
 #if defined(_WIN32)
-    return -1;
+    return static_cast<pid_t>(0);
 #else
     const pid_t self = getpid();
     DIR* directory = opendir("/proc");
