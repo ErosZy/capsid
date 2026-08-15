@@ -526,8 +526,7 @@ public:
         {
             FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
             if (dbg != NULL) {
-                std::fprintf(dbg, "run: before load_application
-");
+                std::fprintf(dbg, "run: before load_application\n");
                 std::fclose(dbg);
             }
         }
@@ -539,8 +538,7 @@ public:
         {
             FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
             if (dbg != NULL) {
-                std::fprintf(dbg, "run: after load_application
-");
+                std::fprintf(dbg, "run: after load_application\n");
                 std::fclose(dbg);
             }
         }
