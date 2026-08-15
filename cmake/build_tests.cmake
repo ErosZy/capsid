@@ -1092,7 +1092,6 @@ if(BUILD_TESTING)
                     endif()
                 endif()
             endif()
-            add_test(
             # Multi-shard scenarios require SO_REUSEPORT, which Windows
             # does not provide; only the single-shard scenarios run there
             # (see docs/windows.md).
