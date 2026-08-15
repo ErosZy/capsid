@@ -66,14 +66,27 @@ void WorkerEventSource::set_worker(capsid_worker* worker) {
 
 void WorkerEventSource::wake() {
     const char byte = 0;
+#if defined(_WIN32)
+    // The wake channel is a loopback socketpair on Windows; the CRT's
+    // write() is invalid on socket fds.
+    const ssize_t unused =
+        capsid::win32::send_fd(wake_pipe_[1], &byte, 1, 0);
+#else
     const ssize_t unused = ::write(wake_pipe_[1], &byte, 1);
+#endif
     (void)unused;
 }
 
 void WorkerEventSource::drain_wake_bytes() {
     char buffer[64];
+#if defined(_WIN32)
+    while (capsid::win32::recv_fd(wake_pipe_[0], buffer, sizeof(buffer), 0) >
+           0) {
+    }
+#else
     while (::read(wake_pipe_[0], buffer, sizeof(buffer)) > 0) {
     }
+#endif
 }
 
 bool WorkerEventSource::wait(
