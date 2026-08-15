@@ -2160,6 +2160,14 @@ private:
             }
             uint8_t buffer[64 * 1024];
             const ssize_t count = read(fd_, buffer, sizeof(buffer));
+            {
+                FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+                if (dbg != NULL) {
+                    std::fprintf(dbg, "read_startup: read count=%lld errno=%d\n",
+                                 static_cast<long long>(count), errno);
+                    std::fclose(dbg);
+                }
+            }
             if (count > 0) {
                 if (!parser_.append(buffer, static_cast<size_t>(count))) {
                     return false;
