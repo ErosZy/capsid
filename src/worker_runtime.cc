@@ -595,6 +595,20 @@ public:
         }
 
         set_nonblocking();
+#if defined(_WIN32)
+        // Windows: flush READY before arming the loop poll. libuv's
+        // fast-poll submits an AFD poll registration whose completion
+        // races a second send on the same socket (ERROR_ALREADY_EXISTS);
+        // sending everything up front keeps the startup flush inside the
+        // registration-free window and makes the ordering deterministic.
+        static_assert(sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1 == 71,
+                      "compatibility ID must be sha256: plus 64 hex digits");
+        send_payload(capsid::protocol::kReady, 0, sandbox_features,
+                     reinterpret_cast<const std::uint8_t *>(
+                         CAPSID_BUILD_COMPATIBILITY_ID),
+                     sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1);
+        flush_output();
+#endif
         {
             FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
             if (dbg != NULL) {
@@ -638,10 +652,12 @@ public:
                 std::fclose(dbg);
             }
         }
+#if !defined(_WIN32)
         // The READY payload is the 71-byte compatibility ID from the single
         // generated identity source, so a host can compare the running
         // worker against the linked library and the bytecode compiler
         // without trusting either side. sandbox features stay in flags.
+        // (On Windows this flush happens before uv_poll_init instead.)
         static_assert(sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1 == 71,
                       "compatibility ID must be sha256: plus 64 hex digits");
         send_payload(capsid::protocol::kReady, 0, sandbox_features,
@@ -656,6 +672,7 @@ public:
                 std::fclose(dbg);
             }
         }
+#endif
 
         const int run_result = TJS_Run(runtime_);
         // §7.5: a clean exit — not poisoned and with no response state
