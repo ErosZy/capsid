@@ -617,6 +617,8 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                             event.payload.data + event.payload.size),
                         options.runtime_compatibility_id,
                         bindings,
+                        /*expected_seccomp_mode=*/0,
+                        /*expected_landlock_abi=*/0,
                         &ready_error)) {
                     capsid_worker_destroy(out.worker);
                     out.worker = nullptr;

@@ -270,7 +270,7 @@ void test_worker_ready_verification() {
 
     // Zero-binding baseline passes.
     require(capsid::host::verify_worker_ready(
-                baseline, compat, {}, &error),
+                baseline, compat, {}, 0, 0, &error),
             "zero-binding baseline was rejected: " + error);
     // A zero-binding worker reporting an extended proof is rejected.
     std::vector<std::uint8_t> extended = baseline;
@@ -278,7 +278,7 @@ void test_worker_ready_verification() {
         &extended, 0, 2, 3, "",
         "sha256:" + std::string(64, 'b'));
     require(!capsid::host::verify_worker_ready(
-                extended, compat, {}, &error) &&
+                extended, compat, {}, 0, 0, &error) &&
                 !error.empty(),
             "zero-binding extended READY was accepted");
 
@@ -302,7 +302,7 @@ void test_worker_ready_verification() {
     std::vector<std::uint8_t> good = baseline;
     capsid::append_ready_proof(&good, 0, 2, 3, "", expected_digest);
     require(capsid::host::verify_worker_ready(
-                good, compat, compiled.bindings, &error),
+                good, compat, compiled.bindings, 0, 0, &error),
             "matching binding READY was rejected: " + error);
 
     std::vector<std::uint8_t> bad = baseline;
@@ -310,19 +310,19 @@ void test_worker_ready_verification() {
         &bad, 0, 2, 3, "",
         "sha256:" + std::string(64, 'f'));
     require(!capsid::host::verify_worker_ready(
-                bad, compat, compiled.bindings, &error) &&
+                bad, compat, compiled.bindings, 0, 0, &error) &&
                 !error.empty(),
             "digest-mismatched binding READY was accepted");
 
     require(!capsid::host::verify_worker_ready(
-                baseline, compat, compiled.bindings, &error) &&
+                baseline, compat, compiled.bindings, 0, 0, &error) &&
                 !error.empty(),
             "binding worker with a baseline READY was accepted");
 
     std::vector<std::uint8_t> malformed = baseline;
     malformed.pop_back();
     require(!capsid::host::verify_worker_ready(
-                malformed, compat, {}, &error),
+                malformed, compat, {}, 0, 0, &error),
             "malformed READY was accepted");
 }
 

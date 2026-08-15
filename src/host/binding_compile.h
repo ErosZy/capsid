@@ -79,10 +79,13 @@ std::string compute_effective_profile_digest(
 // 71-byte compatibility id plus an optional proof; a Binding worker's
 // proof must carry exactly the Host's expected profile digest. Returns
 // true only on a full match, with a static diagnostic otherwise.
-bool verify_worker_ready(const std::vector<std::uint8_t>& payload,
-                         const std::string& compatibility_id,
-                         const std::vector<EffectiveBinding>& bindings,
-                         std::string* error);
+bool verify_worker_ready(
+    const std::vector<std::uint8_t>& payload,
+    const std::string& compatibility_id,
+    const std::vector<EffectiveBinding>& bindings,
+    uint32_t expected_seccomp_mode,  // 0 = this Host does not pin it
+    uint32_t expected_landlock_abi,  // 0 = this Host does not pin it
+    std::string* error);
 
 // Serializes the committed binding snapshot (manifest, source, config,
 // effective permissions, profiles, modules, secret key ids — never secret

@@ -353,10 +353,13 @@ std::string compute_effective_profile_digest(
         canonical.size()));
 }
 
-bool verify_worker_ready(const std::vector<std::uint8_t>& payload,
-                         const std::string& compatibility_id,
-                         const std::vector<EffectiveBinding>& bindings,
-                         std::string* error) {
+bool verify_worker_ready(
+    const std::vector<std::uint8_t>& payload,
+    const std::string& compatibility_id,
+    const std::vector<EffectiveBinding>& bindings,
+    uint32_t expected_seccomp_mode,
+    uint32_t expected_landlock_abi,
+    std::string* error) {
     if (error != nullptr) {
         error->clear();
     }
@@ -398,6 +401,22 @@ bool verify_worker_ready(const std::vector<std::uint8_t>& payload,
     if (proof.sandbox_profile_digest != expected) {
         if (error != nullptr) {
             *error = "worker READY profile digest mismatch";
+        }
+        return false;
+    }
+    // §4.3: the Host pins the kernel-level proof values it can observe;
+    // a zero expectation skips the comparison (non-Linux hosts).
+    if (expected_seccomp_mode != 0 &&
+        proof.seccomp_mode != expected_seccomp_mode) {
+        if (error != nullptr) {
+            *error = "worker READY seccomp mode mismatch";
+        }
+        return false;
+    }
+    if (expected_landlock_abi != 0 &&
+        proof.landlock_abi != expected_landlock_abi) {
+        if (error != nullptr) {
+            *error = "worker READY Landlock ABI mismatch";
         }
         return false;
     }
