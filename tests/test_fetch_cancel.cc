@@ -139,7 +139,14 @@ private:
             descriptor.fd = client;
             descriptor.events = POLLIN | POLLHUP;
             descriptor.revents = 0;
-            if (capsid::win32::capsid_poll(&descriptor, 1, 5000) <= 0) {
+            // Short slices: WSAPoll's POLLHUP reporting is unreliable, and
+            // a single long poll can miss the close entirely.
+            const int polled =
+                capsid::win32::capsid_poll(&descriptor, 1, 250);
+            if (polled <= 0) {
+                if (polled == 0) {
+                    continue;
+                }
                 return;
             }
 #if defined(_WIN32)
@@ -155,6 +162,11 @@ private:
                 return;
             }
             if (count < 0) {
+#if defined(_WIN32)
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    continue;
+                }
+#endif
                 return;
             }
         }
