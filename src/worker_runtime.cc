@@ -2159,37 +2159,12 @@ private:
                 continue;
             }
             uint8_t buffer[64 * 1024];
-#if defined(_WIN32)
-            {
-                FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-                if (dbg != NULL) {
-                    std::fprintf(dbg, "read_startup: fd_=%d osfhandle=%lld\n",
-                                 fd_,
-                                 static_cast<long long>(
-                                     _get_osfhandle(fd_)));
-                    std::fclose(dbg);
-                }
-            }
-#endif
             const ssize_t count =
 #if defined(_WIN32)
                 capsid::win32::read_fd(fd_, buffer, sizeof(buffer));
 #else
                 read(fd_, buffer, sizeof(buffer));
 #endif
-            {
-                FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-                if (dbg != NULL) {
-                    std::fprintf(dbg, "read_startup: read count=%lld errno=%d wsa=%d\n",
-                                 static_cast<long long>(count), errno,
-#if defined(_WIN32)
-                                 WSAGetLastError());
-#else
-                                 0);
-#endif
-                    std::fclose(dbg);
-                }
-            }
             if (count > 0) {
                 if (!parser_.append(buffer, static_cast<size_t>(count))) {
                     return false;
@@ -2198,6 +2173,20 @@ private:
             }
             if (count < 0 && errno == EINTR) {
                 continue;
+            }
+            if (count < 0 && errno == EAGAIN) {
+                // The channel may arrive nonblocking on Windows before
+                // set_nonblocking() has been reached (line 532); wait for
+                // readability instead of treating the transient state as
+                // a dead worker.
+                capsid_pollfd descriptor = {};
+                descriptor.fd = fd_;
+                descriptor.events = POLLIN;
+                const int polled =
+                    capsid::win32::capsid_poll(&descriptor, 1, 2000);
+                if (polled > 0 && (descriptor.revents & POLLIN) != 0) {
+                    continue;
+                }
             }
             return false;
         }
