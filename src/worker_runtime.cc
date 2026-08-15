@@ -2159,7 +2159,12 @@ private:
                 continue;
             }
             uint8_t buffer[64 * 1024];
-            const ssize_t count = read(fd_, buffer, sizeof(buffer));
+            const ssize_t count =
+#if defined(_WIN32)
+                capsid::win32::read_fd(fd_, buffer, sizeof(buffer));
+#else
+                read(fd_, buffer, sizeof(buffer));
+#endif
             {
                 FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
                 if (dbg != NULL) {
@@ -4021,7 +4026,12 @@ private:
         PhaseGuard guard(this, WorkerPhase::kRead);
         uint8_t buffer[64 * 1024];
         for (;;) {
-            const ssize_t count = read(fd_, buffer, sizeof(buffer));
+            const ssize_t count =
+#if defined(_WIN32)
+                capsid::win32::read_fd(fd_, buffer, sizeof(buffer));
+#else
+                read(fd_, buffer, sizeof(buffer));
+#endif
             if (count > 0) {
                 if (!parser_.append(buffer, static_cast<size_t>(count))) {
                     shutdown();

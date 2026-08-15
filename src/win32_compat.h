@@ -430,6 +430,26 @@ inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
     return static_cast<ssize_t>(received);
 }
 
+// read() on a CRT fd: Winsock sockets must go through recv — the CRT's
+// own read() does not handle _open_osfhandle socket fds (EINVAL).
+inline ssize_t read_fd(int fd, void *buffer, size_t size) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int received = recv(
+        socket_handle,
+        static_cast<char *>(buffer),
+        static_cast<int>(size),
+        0);
+    if (received == SOCKET_ERROR) {
+        map_winsock_errno();
+        return -1;
+    }
+    return static_cast<ssize_t>(received);
+}
+
 // SO_REUSEADDR on a CRT fd (Windows takes the option value as a char
 // pointer; POSIX as an int pointer).
 inline int setsockopt_reuseaddr_fd(int fd) {
@@ -503,6 +523,10 @@ inline int getsockname_fd(int fd, struct sockaddr *address,
 
 inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
     return recv(fd, buffer, size, flags);
+}
+
+inline ssize_t read_fd(int fd, void *buffer, size_t size) {
+    return read(fd, buffer, size);
 }
 
 inline int setsockopt_reuseaddr_fd(int fd) {

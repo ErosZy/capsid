@@ -2512,7 +2512,12 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                     1, std::memory_order_relaxed);
                 }
                 const ssize_t read_size =
+#if defined(_WIN32)
+                    capsid::win32::read_fd(
+                        worker->fd, buffer, sizeof(buffer));
+#else
                     read(worker->fd, buffer, sizeof(buffer));
+#endif
                 if (read_size > 0) {
                     if (worker->ipc_metrics_enabled) {
                         worker->ipc_metrics.socket_read_bytes.fetch_add(
