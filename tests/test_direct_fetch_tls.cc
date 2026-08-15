@@ -137,9 +137,15 @@ public:
         const std::string port_text = std::to_string(port);
 #if defined(_WIN32)
         // _spawnv(_P_NOWAIT) launches the same s_server CLI surface.
+        // The storage vector keeps every argument string alive: c_str()
+        // pointers into temporaries would dangle before _spawnv runs.
+        std::vector<std::string> spawn_arg_storage;
         std::vector<char*> spawn_args;
-        auto push_arg = [&spawn_args](const std::string& value) {
-            spawn_args.push_back(const_cast<char*>(value.c_str()));
+        auto push_arg = [&spawn_arg_storage, &spawn_args](
+                            const std::string& value) {
+            spawn_arg_storage.push_back(value);
+            spawn_args.push_back(
+                const_cast<char*>(spawn_arg_storage.back().c_str()));
         };
         push_arg(openssl_path);
         push_arg("s_server");
@@ -331,7 +337,13 @@ public:
     ~MbedTlsServer() {
         stopping_ = true;
         if (listener_.fd >= 0) {
+#if defined(_WIN32)
+            // mbedtls_net_context.fd is a raw SOCKET on Windows, not a
+            // CRT descriptor — the fd wrappers must not touch it.
+            shutdown(static_cast<SOCKET>(listener_.fd), SD_BOTH);
+#else
             capsid::win32::shutdown_fd(listener_.fd);
+#endif
         }
         mbedtls_net_free(&listener_);
         if (thread_.joinable()) {
