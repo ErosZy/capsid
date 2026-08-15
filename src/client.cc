@@ -2549,17 +2549,11 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
 #else
                     read(worker->fd, buffer, sizeof(buffer));
 #endif
-                {
-                    FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-                    if (dbg != NULL) {
-                        std::fprintf(dbg,
-                                     "client read loop: fd=%d read_size=%lld errno=%d\n",
-                                     worker->fd,
-                                     static_cast<long long>(read_size),
-                                     errno);
-                        std::fclose(dbg);
-                    }
-                }
+                std::fprintf(stderr,
+                             "client read loop: fd=%d read_size=%lld errno=%d\n",
+                             worker->fd,
+                             static_cast<long long>(read_size),
+                             errno);
                 if (read_size > 0) {
                     if (worker->ipc_metrics_enabled) {
                         worker->ipc_metrics.socket_read_bytes.fetch_add(

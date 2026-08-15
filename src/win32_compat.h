@@ -507,25 +507,13 @@ inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
 // own read() does not handle _open_osfhandle socket fds (EINVAL).
 inline ssize_t read_fd(int fd, void *buffer, size_t size) {
     if (!ensure_winsock()) {
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "read_fd: fd=%d ENSURE_WINSOCK_FAILED\n", fd);
-                std::fclose(dbg);
-            }
-        }
+        std::fprintf(stderr, "read_fd: fd=%d ENSURE_WINSOCK_FAILED\n", fd);
         errno = EIO;
         return -1;
     }
     const intptr_t osfhandle = _get_osfhandle(fd);
     if (osfhandle < 0) {
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "read_fd: fd=%d BAD_OSFHANDLE\n", fd);
-                std::fclose(dbg);
-            }
-        }
+        std::fprintf(stderr, "read_fd: fd=%d BAD_OSFHANDLE\n", fd);
         errno = EBADF;
         return -1;
     }
@@ -537,16 +525,10 @@ inline ssize_t read_fd(int fd, void *buffer, size_t size) {
         0);
     if (received == SOCKET_ERROR) {
         const int error = WSAGetLastError();
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "read_fd: fd=%d handle=%lld recv_error=%d\n",
-                             fd,
-                             static_cast<long long>(osfhandle),
-                             error);
-                std::fclose(dbg);
-            }
-        }
+        std::fprintf(stderr, "read_fd: fd=%d handle=%lld recv_error=%d\n",
+                     fd,
+                     static_cast<long long>(osfhandle),
+                     error);
         if (error == WSAECONNRESET || error == WSAENOTCONN ||
             error == WSAESHUTDOWN) {
             return 0;
