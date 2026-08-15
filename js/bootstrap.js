@@ -16,6 +16,15 @@ import 'txiki-polyfills/file.js';
 import './file.js';
 import 'txiki-polyfills/form-data.js';
 import 'txiki-polyfills/abort-controller.js';
+import { HttpClient } from 'txiki-polyfills/http-client.js';
+{
+    // debug probe: trace the fetch abort path on Windows
+    const originalAbort = HttpClient.prototype.abort;
+    HttpClient.prototype.abort = function (...args) {
+        console.error('DBG HttpClient.abort called');
+        return originalAbort.apply(this, args);
+    };
+}
 import 'txiki-polyfills/fetch/polyfill.js';
 import {
     configureFetchLimits,
