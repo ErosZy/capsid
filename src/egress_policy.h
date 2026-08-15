@@ -7,6 +7,8 @@
 #if defined(_WIN32)
 #include "win32_compat.h"
 #else
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #endif
 
