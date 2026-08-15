@@ -2860,7 +2860,7 @@ void Impl::write_metrics_line() {
         (unsigned long)client_metrics.socket_read_calls,
         (unsigned long)client_metrics.socket_read_bytes,
         (unsigned long)client_metrics.socket_read_eagain,
-        (unsigned long)client_metrics.queued_bytes_high_water);
+        (size_t)client_metrics.queued_bytes_high_water);
 }
 
 SingleWorkerServer::SingleWorkerServer(SingleWorkerServerOptions options)
