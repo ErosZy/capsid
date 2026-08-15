@@ -245,21 +245,9 @@ std::vector<std::uint8_t> read_bundle(const std::string& path) {
     return bytes;
 }
 
-// ---- managed mode: host.json authority, real coordinator, Admin service ----
-#if defined(_WIN32)
-// The managed coordinator is POSIX-only (dirfd-relative openat/mkdirat
-// state walks, uid-based verification, UDS admin plane). Windows builds
-// ship the single-worker and static-pool data planes only; see
-// docs/windows.md for the full capability matrix.
-#else
-
-// Process-level stop signal. SIGTERM is blocked process-wide and waited
-// for with sigwait on the main thread, so no C++ object is ever touched
-// inside a signal handler.
-std::atomic<bool> g_stop{false};
-
 // "256MiB" style size with explicit suffix (same grammar as the managed
-// coordinator's worker.memoryMax).
+// coordinator's worker.memoryMax; also used by the single-worker /
+// static-pool CLI, so it stays outside the managed-only section).
 bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
     if (text.empty()) {
         return false;
@@ -293,6 +281,19 @@ bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
     *out = static_cast<std::uint64_t>(base) * multiplier;
     return true;
 }
+
+// ---- managed mode: host.json authority, real coordinator, Admin service ----
+#if defined(_WIN32)
+// The managed coordinator is POSIX-only (dirfd-relative openat/mkdirat
+// state walks, uid-based verification, UDS admin plane). Windows builds
+// ship the single-worker and static-pool data planes only; see
+// docs/windows.md for the full capability matrix.
+#else
+
+// Process-level stop signal. SIGTERM is blocked process-wide and waited
+// for with sigwait on the main thread, so no C++ object is ever touched
+// inside a signal handler.
+std::atomic<bool> g_stop{false};
 
 // Safe open of a Host-owned directory: O_NOFOLLOW, directory, euid owner,
 // no group/other bits.
