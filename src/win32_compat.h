@@ -298,6 +298,8 @@ inline bool create_socket_pair(int fds[2]) {
 }  // namespace win32
 }  // namespace capsid
 
+#endif  // _WIN32
+
 // ---- socket-fd wrappers (both platforms) ---------------------------------
 // Tests and host sources drive sockets through CRT fds; these wrappers
 // translate to raw SOCKET handles on Windows and pass through on POSIX,
