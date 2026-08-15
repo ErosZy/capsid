@@ -503,7 +503,7 @@ jobs:
       - name: Install Windows build dependencies (vcpkg)
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
-            openssl boost-system boost-asio --triplet x64-windows-static
+            openssl boost-system boost-asio boost-beast --triplet x64-windows-static
         shell: pwsh
 
       # §12.5 Windows row: Host units plus the non-strict worker contracts.
