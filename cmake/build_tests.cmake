@@ -192,6 +192,10 @@ if(BUILD_TESTING)
                 COMMAND test-host-artifact-safe-read)
         endif()
 
+        # Secret files belong to the managed coordinator (POSIX-only,
+        # docs/windows.md); the driver's openat/mkfifoat fixtures skip by
+        # absence on Windows.
+        if(NOT WIN32)
         add_executable(
             test-host-secret-file-provider
             tests/test_host_secret_file_provider.cc)
@@ -217,6 +221,7 @@ if(BUILD_TESTING)
         add_test(
             NAME host_secret_file_provider
             COMMAND test-host-secret-file-provider)
+        endif()
 
         if(UNIX)
             # M1D Unix Admin API frozen RED suite. This is deliberately
@@ -410,11 +415,12 @@ if(BUILD_TESTING)
             endforeach()
         endif()
 
-        if(CAPSID_BUILD_WORKER)
+        if(CAPSID_BUILD_WORKER AND NOT WIN32)
             # M1D Admin/coordinator bridge: the real managed adapter and its
             # bounded asynchronous submission wrapper are separate from the
             # HTTP transport so operation progress remains independently
-            # testable.
+            # testable. (The managed coordinator is POSIX-only;
+            # docs/windows.md.)
             find_package(Threads REQUIRED)
             add_executable(
                 test-host-managed-admin-backend
