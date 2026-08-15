@@ -1518,6 +1518,19 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
             static_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
         sockets[1] = _open_osfhandle(
             static_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                DWORD flags = 0;
+                GetHandleInformation(reinterpret_cast<HANDLE>(child),
+                                     &flags);
+                std::fprintf(dbg, "client: child_handle=%lld inherit_flags=%lu\n",
+                             static_cast<long long>(
+                                 reinterpret_cast<intptr_t>(child)),
+                             static_cast<unsigned long>(flags));
+                std::fclose(dbg);
+            }
+        }
         if (sockets[0] < 0 || sockets[1] < 0) {
             if (sockets[0] >= 0) {
                 close(sockets[0]);
