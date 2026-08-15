@@ -371,9 +371,17 @@ private:
             "}\n";
         std::size_t offset = 0;
         while (offset < line.size()) {
+#if defined(_WIN32)
+            // MSVC write() takes an unsigned int count; the READY record
+            // is a single small JSON line, well below UINT_MAX.
+            const ssize_t written = ::write(
+                options_.worker_options.ready_fd, line.data() + offset,
+                static_cast<unsigned int>(line.size() - offset));
+#else
             const ssize_t written = ::write(
                 options_.worker_options.ready_fd, line.data() + offset,
                 line.size() - offset);
+#endif
             if (written < 0 && errno == EINTR) {
                 continue;
             }

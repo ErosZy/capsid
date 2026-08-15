@@ -52,6 +52,14 @@ bool stat_identical(const Stat& before, const Stat& after) {
            CAPSID_KT_CTIME_NSEC(before) == CAPSID_KT_CTIME_NSEC(after);
 }
 
+// Stable operator-facing failure: never includes the path, the key id or
+// any key bytes.
+void set_key_error(std::string* error, const char* stable_message) {
+    if (error != nullptr) {
+        *error = stable_message;
+    }
+}
+
 #if defined(_WIN32)
 // Opens the trusted key with reparse-point rejection: a symlinked key
 // file fails the open instead of being followed (the O_NOFOLLOW
@@ -99,20 +107,20 @@ int open_trusted_key(const std::string& path, std::string* error) {
 }
 #endif
 
-// Stable operator-facing failure: never includes the path, the key id or
-// any key bytes.
-void set_key_error(std::string* error, const char* stable_message) {
-    if (error != nullptr) {
-        *error = stable_message;
-    }
-}
-
 bool read_exactly(int fd, std::array<std::uint8_t, kEd25519PublicKeyBytes>* out,
                   std::string* error) {
     std::size_t filled = 0;
     while (filled < out->size()) {
+#if defined(_WIN32)
+        // MSVC read() takes an unsigned int count; the key is 32 bytes.
+        const ssize_t count = read(
+            fd,
+            out->data() + filled,
+            static_cast<unsigned int>(out->size() - filled));
+#else
         const ssize_t count =
             read(fd, out->data() + filled, out->size() - filled);
+#endif
         if (count < 0) {
             if (errno == EINTR) {
                 continue;
