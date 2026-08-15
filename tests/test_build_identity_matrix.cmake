@@ -130,7 +130,9 @@ function(capsid_matrix_record variant build_dir
             "${compat_file}")
     endif()
     file(READ "${compat_file}" compat_record)
-    file(SHA256 "${compat_file}" compat_digest)
+    # Hash the in-memory record: the generator hashes the canonical string
+    # (string(SHA256)), and the on-disk file carries CRLF on Windows.
+    string(SHA256 compat_digest "${compat_record}")
     if(NOT compat_record MATCHES
        "^schema=capsid-bytecode-compatibility-v2\n")
         message(FATAL_ERROR
@@ -184,7 +186,7 @@ function(capsid_matrix_record variant build_dir
             "variant ${variant} produced no provenance record: ${prov_file}")
     endif()
     file(READ "${prov_file}" prov_record)
-    file(SHA256 "${prov_file}" prov_digest)
+    string(SHA256 prov_digest "${prov_record}")
     # Release fail-closed in a clean worktree: the provenance is clean.
     string(CONCAT prov_regex
         "^schema=capsid-build-provenance-v1\n"
