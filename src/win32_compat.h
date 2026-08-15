@@ -195,6 +195,9 @@ inline unsigned long long geteuid() {
 
 // Non-blocking mode for a CRT fd backed by a socket handle.
 inline bool set_socket_nonblocking(int fd) {
+    if (!ensure_winsock()) {
+        return false;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         return false;
@@ -226,6 +229,10 @@ inline ssize_t send_fd(int fd,
                        const void *data,
                        size_t size,
                        int flags) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -245,6 +252,10 @@ inline ssize_t send_fd(int fd,
 
 // accept() on a CRT listener fd; the accepted socket becomes a CRT fd.
 inline int accept_fd(int listener) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET listener_socket =
         static_cast<SOCKET>(_get_osfhandle(listener));
     if (listener_socket == INVALID_SOCKET) {
@@ -263,6 +274,10 @@ inline int accept_fd(int listener) {
 
 // shutdown(SHUT_RDWR) on a CRT fd.
 inline int shutdown_fd(int fd) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -280,6 +295,9 @@ inline int shutdown_fd(int fd) {
 // Windows pipe() handles cannot be polled by WSAPoll, so stop/wake
 // channels must use this pair instead of pipe().
 inline bool create_socket_pair(int fds[2]) {
+    if (!ensure_winsock()) {
+        return false;
+    }
     const SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listener == INVALID_SOCKET) {
         return false;
@@ -348,6 +366,10 @@ namespace win32 {
 
 // socket(AF_INET, SOCK_STREAM, 0) as a CRT fd.
 inline int create_tcp_socket_fd() {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET handle = socket(AF_INET, SOCK_STREAM, 0);
     if (handle == INVALID_SOCKET) {
         map_winsock_errno();
@@ -359,6 +381,10 @@ inline int create_tcp_socket_fd() {
 
 inline int connect_fd(int fd, const struct sockaddr *address,
                       socklen_t address_size) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -373,6 +399,10 @@ inline int connect_fd(int fd, const struct sockaddr *address,
 
 inline int bind_fd(int fd, const struct sockaddr *address,
                    socklen_t address_size) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -386,6 +416,10 @@ inline int bind_fd(int fd, const struct sockaddr *address,
 }
 
 inline int listen_fd(int fd, int backlog) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -400,6 +434,10 @@ inline int listen_fd(int fd, int backlog) {
 
 inline int getsockname_fd(int fd, struct sockaddr *address,
                           socklen_t *address_size) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -413,6 +451,10 @@ inline int getsockname_fd(int fd, struct sockaddr *address,
 }
 
 inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -441,6 +483,10 @@ inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
 // read() on a CRT fd: Winsock sockets must go through recv — the CRT's
 // own read() does not handle _open_osfhandle socket fds (EINVAL).
 inline ssize_t read_fd(int fd, void *buffer, size_t size) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -466,6 +512,10 @@ inline ssize_t read_fd(int fd, void *buffer, size_t size) {
 // SO_REUSEADDR on a CRT fd (Windows takes the option value as a char
 // pointer; POSIX as an int pointer).
 inline int setsockopt_reuseaddr_fd(int fd) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -484,6 +534,10 @@ inline int setsockopt_reuseaddr_fd(int fd) {
 // SO_RCVTIMEO as a millisecond budget (Windows takes DWORD ms; POSIX
 // takes struct timeval).
 inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
