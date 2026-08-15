@@ -1614,7 +1614,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         // command line the way POSIX passes the dup2 target fd number.
         "%llu",
         static_cast<unsigned long long>(
-            reinterpret_cast<uintptr_t>(_get_osfhandle(sockets[1]))));
+            static_cast<uintptr_t>(_get_osfhandle(sockets[1]))));
 #else
         "%d",
         child_fd);
@@ -1665,8 +1665,12 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     // like CAPSID_PERF_DIAG); nothing else leaks across the boundary.
     // CreateProcess requires the block to be sorted case-insensitively.
     std::vector<std::string> capsid_environment;
-    char **environ = _environ;
-    for (char **env = environ; env != NULL && *env != NULL; ++env) {
+    // "environ" is a macro on MSVC (__p__environ()); use a clean local
+    // name for the block source.
+    char **environment_source = _environ;
+    for (char **env = environment_source;
+         env != NULL && *env != NULL;
+         ++env) {
         if (std::strncmp(*env, "CAPSID_", 7) == 0) {
             capsid_environment.push_back(*env);
         }
@@ -2035,9 +2039,15 @@ capsid_result capsid_worker_set_cpu_affinity(
     uint32_t cpu) {
     return capsid::abi::guard_result(
         [&]() -> capsid_result {
+#if defined(_WIN32)
+    if (!worker || worker->process == NULL) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+#else
     if (!worker || worker->pid <= 0) {
         return CAPSID_INVALID_ARGUMENT;
     }
+#endif
 #if !defined(__linux__)
     (void)cpu;
     errno = ENOTSUP;
