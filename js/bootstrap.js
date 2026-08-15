@@ -634,7 +634,11 @@ const cancelRequest = id => {
     state.chunks.length = 0;
     const reason = new DOMException('Request canceled', 'AbortError');
     state.cancelReason = reason;
+    console.error(`DBG bootstrap cancelRequest id=${id}`);
     state.abortController.abort(reason);
+    console.error(
+        `DBG bootstrap cancelRequest after abort signal=${state.abortController.signal.aborted}`,
+    );
     if (state.responseReader) {
         const reader = state.responseReader;
         state.responseReader = null;
