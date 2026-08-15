@@ -480,7 +480,7 @@ jobs:
       # resolves the toolchain itself; without the VS developer
       # environment CMake cannot find the MSVC compiler.
       - name: Set up the MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@460a772e4cf7358f9f2f23773240813e40e7a894 # v1 (one README-only commit past the v1 tag)
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1 (v1.13.0; default-branch commits carry no node_modules)
 
       # The worker bootstrap bundles via esbuild from the locked txiki.js
       # node_modules; without this the Windows configure fails with
