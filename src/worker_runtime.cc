@@ -575,8 +575,7 @@ public:
         {
             FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
             if (dbg != NULL) {
-                std::fprintf(dbg, "run: before update_poll
-");
+                std::fprintf(dbg, "run: before update_poll\n");
                 std::fclose(dbg);
             }
         }
@@ -584,8 +583,7 @@ public:
         {
             FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
             if (dbg != NULL) {
-                std::fprintf(dbg, "run: after update_poll
-");
+                std::fprintf(dbg, "run: after update_poll\n");
                 std::fclose(dbg);
             }
         }
