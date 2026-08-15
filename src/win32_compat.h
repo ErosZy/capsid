@@ -323,6 +323,13 @@ inline bool create_socket_pair(int fds[2]) {
                 reinterpret_cast<const struct sockaddr *>(&address),
                 sizeof(address)) == 0 &&
         (parent = accept(listener, NULL, NULL)) != INVALID_SOCKET;
+    // The accepted socket must be re-bound to the listener's context
+    // before the listener closes: AFD otherwise recycles the listener's
+    // endpoint name and the accepted socket's I/O collides with it
+    // (ERROR_ALREADY_EXISTS) once the teardown lands.
+    setsockopt(parent, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
+               reinterpret_cast<const char *>(&listener),
+               sizeof(listener));
     closesocket(listener);
     if (!ok) {
         if (child != INVALID_SOCKET) {

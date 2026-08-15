@@ -1506,6 +1506,13 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
             closesocket(listener);
             return CAPSID_SYSTEM_ERROR;
         }
+        // Re-bind the accepted socket to the listener's context before
+        // the listener closes; AFD recycles the listener's endpoint name
+        // and the accepted socket's I/O then collides with it
+        // (ERROR_ALREADY_EXISTS) once the teardown lands.
+        setsockopt(parent, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
+                   reinterpret_cast<const char *>(&listener),
+                   sizeof(listener));
         closesocket(listener);
         if (!SetHandleInformation(reinterpret_cast<HANDLE>(child),
                                   HANDLE_FLAG_INHERIT,
