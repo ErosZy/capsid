@@ -1,0 +1,374 @@
+--- a/src/mod_fs.c
++++ b/src/mod_fs.c
+@@ -928,7 +928,27 @@
+     flags |= read ? (write ? O_RDWR : O_RDONLY) : (write ? O_WRONLY : 0);
+ 
+     return flags;
++}
++
++#ifdef TJS_RESTRICTED_CORE
++/* Capsid Binding v1: the per-origin FS gate decides every filesystem
++ * entry point before the syscall; mutations need the write path. */
++static bool tjs__fs_gate(JSContext *ctx, const char *path, int write_access) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (!qrt || !qrt->capsid_fs.check) {
++        JS_ThrowTypeError(ctx, "fs policy is unavailable");
++        return false;
++    }
++    char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++    if (!qrt->capsid_fs.check(qrt->capsid_fs.opaque, path, write_access,
++                              reason, sizeof(reason))) {
++        JS_ThrowTypeError(ctx, "%s",
++                          reason[0] ? reason : "fs access denied");
++        return false;
++    }
++    return true;
+ }
++#endif
+ 
+ static JSValue tjs_fs_open(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     const char *path;
+@@ -957,23 +977,11 @@
+     }
+ 
+ #ifdef TJS_RESTRICTED_CORE
+-    /* Capsid Binding v1: the per-origin FS gate decides every open before
+-     * the syscall; mutations need the write path. */
+     {
+-        TJSRuntime *qrt = TJS_GetRuntime(ctx);
+-        if (!qrt || !qrt->capsid_fs.check) {
+-            JS_FreeCString(ctx, path);
+-            JS_ThrowTypeError(ctx, "fs policy is unavailable");
+-            return JS_EXCEPTION;
+-        }
+-        char reason[TJS_EGRESS_REASON_MAX] = { 0 };
+         const int write_access =
+             (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND)) != 0;
+-        if (!qrt->capsid_fs.check(qrt->capsid_fs.opaque, path,
+-                                  write_access, reason, sizeof(reason))) {
++        if (!tjs__fs_gate(ctx, path, write_access)) {
+             JS_FreeCString(ctx, path);
+-            JS_ThrowTypeError(ctx, "%s",
+-                              reason[0] ? reason : "fs access denied");
+             return JS_EXCEPTION;
+         }
+     }
+@@ -1025,7 +1033,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 0)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1053,7 +1067,13 @@
+     }
+ 
+     uv_fs_t req;
+-    int r = uv_fs_stat(NULL, &req, path, NULL);
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 0)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++int r = uv_fs_stat(NULL, &req, path, NULL);
+     JS_FreeCString(ctx, path);
+     if (r != 0) {
+         uv_fs_req_cleanup(&req);
+@@ -1072,7 +1092,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 0)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1094,7 +1120,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1122,7 +1154,19 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        JS_FreeCString(ctx, new_path);
++        return JS_EXCEPTION;
++    }
++    if (!tjs__fs_gate(ctx, new_path, 1)) {
++        JS_FreeCString(ctx, path);
++        JS_FreeCString(ctx, new_path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         JS_FreeCString(ctx, new_path);
+@@ -1146,7 +1190,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, tpl, 1)) {
++        JS_FreeCString(ctx, tpl);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, tpl);
+         return JS_EXCEPTION;
+@@ -1168,7 +1218,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, tpl, 1)) {
++        JS_FreeCString(ctx, tpl);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, tpl);
+         return JS_EXCEPTION;
+@@ -1190,7 +1246,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1220,7 +1282,13 @@
+         }
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1257,7 +1325,13 @@
+         }
+     }
+ 
+-    int r = tjs__mkdir_sync(path, mode);
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++int r = tjs__mkdir_sync(path, mode);
+     JS_FreeCString(ctx, path);
+     if (r != 0) {
+         return tjs_throw_errno(ctx, r);
+@@ -1278,7 +1352,19 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 0)) {
++        JS_FreeCString(ctx, path);
++        JS_FreeCString(ctx, new_path);
++        return JS_EXCEPTION;
++    }
++    if (!tjs__fs_gate(ctx, new_path, 1)) {
++        JS_FreeCString(ctx, path);
++        JS_FreeCString(ctx, new_path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         JS_FreeCString(ctx, new_path);
+@@ -1302,7 +1388,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 0)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1380,7 +1472,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSReadFileReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 0)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSReadFileReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1423,7 +1521,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1454,7 +1558,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1490,7 +1600,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1518,7 +1634,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 0)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;
+@@ -1553,7 +1675,19 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 1)) {
++        JS_FreeCString(ctx, path);
++        JS_FreeCString(ctx, path2);
++        return JS_EXCEPTION;
++    }
++    if (!tjs__fs_gate(ctx, path2, 1)) {
++        JS_FreeCString(ctx, path);
++        JS_FreeCString(ctx, path2);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         JS_FreeCString(ctx, path2);
+@@ -1597,7 +1731,14 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path2, 1)) {
++        JS_FreeCString(ctx, path);
++        JS_FreeCString(ctx, path2);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         JS_FreeCString(ctx, path2);
+@@ -1625,7 +1766,13 @@
+         return JS_EXCEPTION;
+     }
+ 
+-    TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
++    #ifdef TJS_RESTRICTED_CORE
++    if (!tjs__fs_gate(ctx, path, 0)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+         return JS_EXCEPTION;

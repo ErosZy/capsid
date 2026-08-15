@@ -7,6 +7,8 @@
 // listener, and only then write one canonical JSON line to --ready-fd.
 // stdout never carries readiness or logs; diagnostics go to stderr.
 
+#include <iostream>
+
 #include "host/single_worker_server.h"
 #include "host/static_pool_server.h"
 

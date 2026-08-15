@@ -25,6 +25,9 @@ int capsid_tjs_set_fs_policy(
     int (*check)(void *opaque, const char *path, int write_access,
                  char *reason, size_t reason_size),
     void *opaque);
+// Binding v1 §4.1: registers the raw core.fs module on a runtime (the
+// Binding Runtime only); every entry point is per-origin gated.
+int capsid_tjs_install_binding_fs(TJSRuntime *runtime);
 int capsid_tjs_set_egress_policy(
     TJSRuntime *runtime,
     int (*check)(void *opaque,
@@ -1249,6 +1252,14 @@ private:
 
         JSValue core = TJS_GetInternalCore(runtime);
         if (binding_runtime) {
+            // §4.1: bindings read/write through the raw core.fs module,
+            // registered here for the Binding Runtime only and gated per
+            // entry point by the binding's FS policy.
+            if (capsid_tjs_install_binding_fs(runtime) != 0) {
+                JS_ThrowInternalError(
+                    ctx, "failed to install Binding fs module");
+                return -1;
+            }
             // §3.3: the Binding Runtime has no User request bridge; the
             // bridge natives throw so bootstrap wiring cannot cross the
             // runtime boundary. Fetch limits stay readable (harmless) and
@@ -4375,11 +4386,16 @@ private:
             "capsid:binding/" + descriptor.name;
         // Mirror the production bundle sequence: compile only, resolve the
         // module graph, evaluate, drain the job queue, then read the
-        // exports from the namespace.
+        // exports from the namespace. The lexer contract is the same as
+        // load_application: end-of-input lookahead expects a readable NUL
+        // sentinel, so compile from a NUL-terminated copy.
+        const std::string source_nul(
+            reinterpret_cast<const char *>(descriptor.source.data()),
+            descriptor.source.size());
         JSValue module = JS_Eval(
             binding_ctx_,
-            reinterpret_cast<const char *>(descriptor.source.data()),
-            descriptor.source.size(),
+            source_nul.c_str(),
+            source_nul.size(),
             module_name.c_str(),
             JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
         if (JS_IsException(module)) {

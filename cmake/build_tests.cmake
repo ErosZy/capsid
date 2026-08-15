@@ -516,6 +516,7 @@ if(BUILD_TESTING)
                         host_managed_executable_active_state_validation_fail_closed
                         host_managed_executable_enforces_global_worker_capacity
                         host_managed_executable_enforces_queue_maximums
+                        host_managed_executable_binding_deploy
                         host_managed_executable_enforces_streaming_maximums
                         host_managed_executable_enforces_write_timeout_maximum
                         host_managed_executable_redeploys_with_capacity_one

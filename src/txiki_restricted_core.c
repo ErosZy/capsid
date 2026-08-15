@@ -65,6 +65,29 @@ int capsid_tjs_set_fs_policy(
     return 0;
 }
 
+int capsid_tjs_install_binding_fs(TJSRuntime *runtime) {
+    if (!runtime) {
+        return -1;
+    }
+    /* The restricted-core bootstrap deliberately omits the fs module; the
+     * Binding Runtime registers it so bindings get the raw core.fs path,
+     * with every entry point gated by the per-origin FS policy (patch
+     * 0019). The User runtime never registers it.
+     *
+     * txiki's fs module registers its functions flat on the namespace it
+     * is given, so it goes on a dedicated sub-object: bindings address it
+     * as core.fs (Binding v1 §4.1), keeping the flat core namespace
+     * identical between User and Binding runtimes. */
+    JSContext *ctx = runtime->ctx;
+    JSValue fs = JS_NewObject(ctx);
+    if (JS_IsException(fs)) {
+        return -1;
+    }
+    tjs__mod_fs_init(ctx, fs);
+    JS_SetPropertyStr(ctx, TJS_GetInternalCore(runtime), "fs", fs);
+    return 0;
+}
+
 static JSValue capsid_serialize(JSContext *ctx,
                               JSValueConst this_val,
                               int argc,

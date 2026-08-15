@@ -912,6 +912,48 @@ int main(int argc, char** argv) {
             "expected mode, capsid-host and capsid-worker paths");
     const std::string mode = argv[1];
     Fixture fixture;
+    if (mode == "host_managed_executable_binding_deploy") {
+        // Binding v1 through the real capsid-host process: the scanned
+        // bindingsRoot snapshot, the effective compile, the worker
+        // LOAD_BINDING load and the READY proof digest must all hold for
+        // the deploy to reach active.
+        const std::string bindings_root = fixture.root + "/bindings";
+        require(mkdir(bindings_root.c_str(), 0700) == 0 &&
+                    mkdir((bindings_root + "/mongo").c_str(), 0700) == 0,
+                "cannot create bindingsRoot fixture");
+        write_file(
+            bindings_root + "/mongo/manifest.json",
+            R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["tjs:internal/core"],"net":{"allow":["127.0.0.1:27017"]},"env":[],"stdio":[]}})json");
+        write_file(
+            bindings_root + "/mongo/index.js",
+            "export default ({ config, secrets, log }) => {"
+            "  return { find(input) {"
+            "    return 'find:' + input.collection;"
+            "  } };"
+            "};");
+        fixture.replace_host_text(
+            "\"apiVersion\":\"capsid/host-v1\",",
+            "\"apiVersion\":\"capsid/host-v2\","
+            "\"bindingsRoot\":\"" + bindings_root + "\",");
+        replace_file(
+            fixture.applications_root + "/orders/v1/capsid.json",
+            R"json({"apiVersion":"capsid/app-v2","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"bindings":{"mongo":{"permissions":{"net":{"allow":["127.0.0.1:27017"]},"env":[],"stdio":[]},"config":{"database":"orders"}}},"pool":{"minReady":1,"maxWorkers":1}})json");
+        replace_file(
+            fixture.applications_root + "/orders/v1/bundle.mjs",
+            "import mongo from 'capsid:binding/mongo';"
+            "export default {"
+            "  fetch: async () => new Response("
+            "    'binding-executable-ok:' +"
+            "    await mongo.find({ collection: 'users' }))"
+            "};");
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        const std::string operation = deploy(fixture);
+        wait_active(fixture, operation);
+        require_active_app(fixture);
+        stop_host(fixture);
+        return 0;
+    }
     if (mode == "host_managed_executable_enforces_queue_maximums") {
         // E-1 §10.3: host.json maximums.pool.queueRequests caps the App
         // queue; an App whose pool.queueRequests exceeds it must fail the

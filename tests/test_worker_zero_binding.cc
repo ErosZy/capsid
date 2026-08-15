@@ -349,7 +349,8 @@ void test_load_binding_after_bundle_is_rejected(const char *worker_path,
 std::vector<uint8_t> mongo_binding_blob(
     const std::string &source = "export default () => ({});",
     const std::vector<std::string> &fs_read = {},
-    const std::vector<std::string> &profiles = {"network-client"}) {
+    const std::vector<std::string> &profiles = {"network-client"},
+    const std::vector<std::string> &modules = {"tjs:internal/core"}) {
     // A minimal valid descriptor: mongo with the network-client profile,
     // tjs:internal/core granted, and a configurable factory source.
     std::vector<uint8_t> descriptor;
@@ -361,8 +362,11 @@ std::vector<uint8_t> mongo_binding_blob(
     for (const std::string &profile : profiles) {
         append_string16(&descriptor, profile);
     }
-    capsid::protocol::append_u32(&descriptor, 1);  // modules
-    append_string16(&descriptor, "tjs:internal/core");
+    capsid::protocol::append_u32(
+        &descriptor, static_cast<uint32_t>(modules.size()));
+    for (const std::string &module : modules) {
+        append_string16(&descriptor, module);
+    }
     capsid::protocol::append_u32(&descriptor, 0);  // net rules
     capsid::protocol::append_u32(
         &descriptor, static_cast<uint32_t>(fs_read.size()));
@@ -837,7 +841,8 @@ void test_binding_async_identity(const char *worker_path,
         "    });"
         "  } };"
         "};",
-        {"/etc/capsid/mongo"});
+        {"/etc/capsid/mongo"},
+        {"network-client", "filesystem-read"});
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
@@ -992,15 +997,15 @@ void test_binding_grantable_modules_exist(const char *worker_path,
     binding.payload = mongo_binding_blob(
         "import assert_mod from 'tjs:assert';"
         "import getopts_mod from 'tjs:getopts';"
-        "import hashing_mod from 'tjs:hashing';"
+        "import * as hashing_mod from 'tjs:hashing';"
         "import core from 'tjs:internal/core';"
         "import internal_path from 'tjs:internal/path';"
         "import ipaddr_mod from 'tjs:ipaddr';"
         "import path_mod from 'tjs:path';"
-        "import socket_mod from 'tjs:posix-socket';"
+        "import * as socket_mod from 'tjs:posix-socket';"
         "import readline_mod from 'tjs:readline';"
-        "import sqlite_mod from 'tjs:sqlite';"
-        "import utils_mod from 'tjs:utils';"
+        "import * as sqlite_mod from 'tjs:sqlite';"
+        "import * as utils_mod from 'tjs:utils';"
         "import uuid_mod from 'tjs:uuid';"
         "import wasi_mod from 'tjs:wasi';"
         "const seen = [assert_mod, getopts_mod, hashing_mod, core,"
@@ -1008,7 +1013,13 @@ void test_binding_grantable_modules_exist(const char *worker_path,
         "  readline_mod, sqlite_mod, utils_mod, uuid_mod, wasi_mod];"
         "export default ({ config, secrets, log }) => {"
         "  return { find() { return 'modules:' + seen.length; } };"
-        "};");
+        "};",
+        {},
+        {"network-client"},
+        {"tjs:assert", "tjs:getopts", "tjs:hashing",
+         "tjs:internal/core", "tjs:internal/path", "tjs:ipaddr",
+         "tjs:path", "tjs:posix-socket", "tjs:readline",
+         "tjs:sqlite", "tjs:utils", "tjs:uuid", "tjs:wasi"});
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 

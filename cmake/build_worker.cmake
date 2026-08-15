@@ -115,7 +115,9 @@ if(CAPSID_BUILD_WORKER)
     )
 
     set(BUILD_WITH_FFI OFF CACHE BOOL "" FORCE)
-    set(BUILD_WITH_SQLITE OFF CACHE BOOL "" FORCE)
+    # Binding v1 §3.3: tjs:sqlite is a grantable module in the restricted
+    # build; its paths stay behind the per-origin FS gate (patch 0018).
+    set(BUILD_WITH_SQLITE ON CACHE BOOL "" FORCE)
     set(BUILD_WITH_MIMALLOC ${CAPSID_USE_MIMALLOC} CACHE BOOL "" FORCE)
     # txiki's QuickJS allocator (vendor/txiki.js/src/mem.c) calls mi_*
     # directly, so the heap benefit does not need mimalloc's global malloc

@@ -1,0 +1,113 @@
+--- a/src/builtins.c
++++ b/src/builtins.c
+@@ -22,9 +22,7 @@
+  * THE SOFTWARE.
+  */
+ 
+-#ifndef TJS_RESTRICTED_CORE
+ #include "bundles/c/internal/path.c"
+-#endif
+ #include "bundles/c/stdlib/assert.c"
+ #if defined(TJS_HAVE_FFI) && !defined(TJS_RESTRICTED_CORE)
+ #include "bundles/c/stdlib/ffi.c"
+@@ -32,17 +30,15 @@
+ #include "bundles/c/stdlib/getopts.c"
+ #include "bundles/c/stdlib/hashing.c"
+ #include "bundles/c/stdlib/ipaddr.c"
+-#ifndef TJS_RESTRICTED_CORE
+ #include "bundles/c/stdlib/path.c"
+ #include "bundles/c/stdlib/posix-socket.c"
+ #include "bundles/c/stdlib/readline.c"
+-#endif
+-#if defined(TJS_HAVE_SQLITE) && (!defined(TJS_RESTRICTED_CORE) || defined(TJS_BENCHMARK_SQLITE_ONLY))
++#if defined(TJS_HAVE_SQLITE)
+ #include "bundles/c/stdlib/sqlite.c"
+ #endif
+ #include "bundles/c/stdlib/utils.c"
+ #include "bundles/c/stdlib/uuid.c"
+-#if defined(TJS_HAVE_WASM) && !defined(TJS_RESTRICTED_CORE)
++#if defined(TJS_HAVE_WASM)
+ #include "bundles/c/stdlib/wasi.c"
+ #endif
+ #include "private.h"
+@@ -61,21 +57,17 @@
+ #endif
+     { "tjs:getopts", tjs__getopts, sizeof(tjs__getopts) },
+     { "tjs:hashing", tjs__hashing, sizeof(tjs__hashing) },
+-#ifndef TJS_RESTRICTED_CORE
+     { "tjs:internal/path", tjs__internal_path, sizeof(tjs__internal_path) },
+-#endif
+     { "tjs:ipaddr", tjs__ipaddr, sizeof(tjs__ipaddr) },
+-#ifndef TJS_RESTRICTED_CORE
+     { "tjs:path", tjs__path, sizeof(tjs__path) },
+     { "tjs:posix-socket", tjs__posix_socket, sizeof(tjs__posix_socket) },
+     { "tjs:readline", tjs__readline, sizeof(tjs__readline) },
+-#endif
+-#if defined(TJS_HAVE_SQLITE) && (!defined(TJS_RESTRICTED_CORE) || defined(TJS_BENCHMARK_SQLITE_ONLY))
++#if defined(TJS_HAVE_SQLITE)
+     { "tjs:sqlite", tjs__sqlite, sizeof(tjs__sqlite) },
+ #endif
+     { "tjs:utils", tjs__utils, sizeof(tjs__utils) },
+     { "tjs:uuid", tjs__uuid, sizeof(tjs__uuid) },
+-#if defined(TJS_HAVE_WASM) && !defined(TJS_RESTRICTED_CORE)
++#if defined(TJS_HAVE_WASM)
+     { "tjs:wasi", tjs__wasi, sizeof(tjs__wasi) },
+ #endif
+     { NULL, NULL, 0 },
+--- a/src/modules.c
++++ b/src/modules.c
+@@ -139,16 +139,39 @@
+ 
+ JSModuleDef *tjs_module_loader(JSContext *ctx, const char *module_name, void *opaque, JSValueConst attributes) {
+ #ifdef TJS_RESTRICTED_CORE
++    /* Binding v1 §3.3: the grantable module set is fixed by this build —
++     * pure tools plus the gated client/resource modules. Importing a
++     * module never grants its native operations, which stay behind the
++     * per-origin policy gates. test_binding_grantable_modules_exist
++     * (CI) locks this exact set, so it cannot drift from the build. */
++    static const char *const tjs_grantable_modules[] = {
++        "tjs:assert",
++        "tjs:getopts",
++        "tjs:hashing",
++        "tjs:internal/core",
++        "tjs:internal/path",
++        "tjs:ipaddr",
++        "tjs:path",
++        "tjs:posix-socket",
++        "tjs:readline",
++        "tjs:sqlite",
++        "tjs:utils",
++        "tjs:uuid",
++        "tjs:wasi",
++        NULL,
++    };
+     if (strcmp(module_name, "tjs:internal/core") == 0) {
+         TJSRuntime *qrt = TJS_GetRuntime(ctx);
+         CHECK_NOT_NULL(qrt);
+         return create_default_module(ctx, module_name, JS_DupValue(ctx, qrt->builtins.internal_core));
+     }
+-#ifdef TJS_BENCHMARK_SQLITE_ONLY
+-    if (strcmp(module_name, "tjs:sqlite") == 0) {
+-        return tjs__load_builtin(ctx, module_name);
++    for (size_t i = 0; tjs_grantable_modules[i] != NULL; i++) {
++        if (strcmp(module_name, tjs_grantable_modules[i]) == 0) {
++            /* The bundle exists only when its feature flag is on (sqlite,
++             * wasi); a missing bundle fails closed. */
++            return tjs__load_builtin(ctx, module_name);
++        }
+     }
+-#endif
+     JS_ThrowReferenceError(ctx, "module '%s' is not available in the restricted runtime", module_name);
+     return NULL;
+ #else
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -258,7 +258,7 @@
+     tjs__mod_httpclient_init(ctx, ns);
+     tjs__mod_miniz_init(ctx, ns);
+     tjs__webcrypto_init(ctx, ns);
+-#ifdef TJS_BENCHMARK_SQLITE_ONLY
++#ifdef TJS_HAVE_SQLITE
+     tjs__mod_sqlite3_init(ctx, ns);
+ #endif
+ #ifdef TJS_HAVE_WASM
