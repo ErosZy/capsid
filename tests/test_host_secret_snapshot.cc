@@ -107,6 +107,7 @@ std::string expected_generation_digest(const GenerationIdentityInput& input) {
         input.host_config_digest,
         input.secret_revision,
         input.runtime_compatibility_id,
+        input.binding_set_digest,
     };
     for (const std::string_view field : fields) {
         append_length_prefixed(message, field);
@@ -614,7 +615,84 @@ void test_rotation_changes_generation_without_mutating_old_snapshot() {
 
 }  // namespace
 
+// Binding v1 §7.8: the binding-set digest is part of the Generation
+// Identity; manifest/source/config/policy/profile or secret-revision
+// changes alter it, entry order does not, and secret VALUES never
+// enter the record.
+void test_binding_set_digest() {
+    const auto entry = [](const std::string &id) {
+        capsid::host::BindingSetDigestEntry value;
+        value.id = id;
+        value.manifest_digest = "sha256:" + std::string(64, 'a');
+        value.source_digest = "sha256:" + std::string(64, 'b');
+        value.config_digest = "sha256:" + std::string(64, 'c');
+        value.permission_digest = "sha256:" + std::string(64, 'd');
+        value.profile_digest = "sha256:" + std::string(64, 'e');
+        value.secret_key_ids = {"password", "username"};
+        value.secret_revision = "rev-1";
+        return value;
+    };
+
+    const std::string empty =
+        capsid::host::compute_binding_set_digest({});
+    require(!empty.empty() && empty.rfind("sha256:", 0) == 0,
+            "empty binding set digest is not a sha256 digest");
+
+    const capsid::host::BindingSetDigestEntry mongo = entry("mongo");
+    const capsid::host::BindingSetDigestEntry redis = entry("redis");
+    const std::string forward =
+        capsid::host::compute_binding_set_digest({mongo, redis});
+    const std::string reversed =
+        capsid::host::compute_binding_set_digest({redis, mongo});
+    require(forward == reversed,
+            "binding set digest depends on entry order");
+    require(forward != empty,
+            "binding set digest equals the zero-binding digest");
+
+    // Every identity component is sensitive.
+    capsid::host::BindingSetDigestEntry changed = mongo;
+    changed.manifest_digest = "sha256:" + std::string(64, 'f');
+    require(capsid::host::compute_binding_set_digest({mongo}) !=
+                capsid::host::compute_binding_set_digest({changed}),
+            "manifest digest change did not alter the set digest");
+    changed = mongo;
+    changed.source_digest = "sha256:" + std::string(64, 'f');
+    require(capsid::host::compute_binding_set_digest({mongo}) !=
+                capsid::host::compute_binding_set_digest({changed}),
+            "source digest change did not alter the set digest");
+    changed = mongo;
+    changed.config_digest = "sha256:" + std::string(64, 'f');
+    require(capsid::host::compute_binding_set_digest({mongo}) !=
+                capsid::host::compute_binding_set_digest({changed}),
+            "config digest change did not alter the set digest");
+    changed = mongo;
+    changed.permission_digest = "sha256:" + std::string(64, 'f');
+    require(capsid::host::compute_binding_set_digest({mongo}) !=
+                capsid::host::compute_binding_set_digest({changed}),
+            "permission digest change did not alter the set digest");
+    changed = mongo;
+    changed.profile_digest = "sha256:" + std::string(64, 'f');
+    require(capsid::host::compute_binding_set_digest({mongo}) !=
+                capsid::host::compute_binding_set_digest({changed}),
+            "profile digest change did not alter the set digest");
+    changed = mongo;
+    changed.secret_revision = "rev-2";
+    require(capsid::host::compute_binding_set_digest({mongo}) !=
+                capsid::host::compute_binding_set_digest({changed}),
+            "secret revision change did not alter the set digest");
+
+    // Secret key ordering is canonical; secret values are not in the
+    // record at all (the entry type has no value field).
+    capsid::host::BindingSetDigestEntry reordered = mongo;
+    reordered.secret_key_ids = {"username", "password"};
+    require(capsid::host::compute_binding_set_digest({mongo}) ==
+                capsid::host::compute_binding_set_digest({reordered}),
+            "secret key order changed the set digest");
+}
+
+
 int main() {
+    test_binding_set_digest();
     test_minimal_snapshot_is_owned_canonical_and_redacted();
     test_empty_snapshot_does_not_require_environment_capability();
     test_safe_secret_metadata_punctuation_is_accepted();

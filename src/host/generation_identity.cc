@@ -14,6 +14,7 @@
 #include <jansson.h>
 #include <openssl/evp.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -103,9 +104,47 @@ std::string compute_generation_digest(const GenerationIdentityInput &input) {
         input.host_config_digest,
         input.secret_revision,
         input.runtime_compatibility_id,
+        input.binding_set_digest,
     };
     for (const std::string_view field : fields) {
         append_length_prefixed(message, field);
+    }
+    return sha256_hex(message);
+
+}
+
+std::string compute_binding_set_digest(
+    const std::vector<BindingSetDigestEntry> &entries) {
+    std::vector<BindingSetDigestEntry> sorted = entries;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const BindingSetDigestEntry &a,
+                 const BindingSetDigestEntry &b) {
+                  return a.id < b.id;
+              });
+    std::vector<std::uint8_t> message;
+    static constexpr char kDomain[] = "capsid-binding-set-v1\0";
+    message.insert(
+        message.end(),
+        reinterpret_cast<const std::uint8_t *>(kDomain),
+        reinterpret_cast<const std::uint8_t *>(kDomain) + sizeof(kDomain) - 1);
+    for (const BindingSetDigestEntry &entry : sorted) {
+        const std::string_view fields[] = {
+            entry.id,
+            entry.manifest_digest,
+            entry.source_digest,
+            entry.config_digest,
+            entry.permission_digest,
+            entry.profile_digest,
+        };
+        for (const std::string_view field : fields) {
+            append_length_prefixed(message, field);
+        }
+        std::vector<std::string> keys = entry.secret_key_ids;
+        std::sort(keys.begin(), keys.end());
+        for (const std::string &key : keys) {
+            append_length_prefixed(message, key);
+        }
+        append_length_prefixed(message, entry.secret_revision);
     }
     return sha256_hex(message);
 }
