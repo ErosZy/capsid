@@ -36,6 +36,17 @@ option(CAPSID_BUILD_HOST "Build the first-party Capsid Host" OFF)
 option(CAPSID_STRICT_WARNINGS "Treat Capsid Runtime warnings as errors" ON)
 option(CAPSID_USE_MIMALLOC "Use mimalloc for the txiki.js worker" OFF)
 option(CAPSID_ENABLE_LTO "Enable interprocedural optimization for production targets" ON)
+if(WIN32 AND CAPSID_ENABLE_LTO)
+    # MSVC /GL binds operator new/delete at compile time, so replaceable
+    # global overrides — which the ABI guard tests use to inject
+    # allocation failures — no longer intercept allocations in IPO'd
+    # translation units. Disable IPO on Windows to keep that contract
+    # testable (GCC/Clang preserve the replaceable symbols under LTO).
+    set(CAPSID_ENABLE_LTO OFF CACHE BOOL
+        "Enable interprocedural optimization for production targets" FORCE)
+    message(STATUS "Disabling CAPSID_ENABLE_LTO on Windows (MSVC /GL binds "
+        "replaceable operator new/delete)")
+endif()
 option(CAPSID_ENABLE_ASAN "Build all runtime targets with AddressSanitizer" OFF)
 option(CAPSID_ENABLE_UBSAN "Build all runtime targets with UndefinedBehaviorSanitizer" OFF)
 option(CAPSID_ENABLE_TSAN "Build all runtime targets with ThreadSanitizer" OFF)
