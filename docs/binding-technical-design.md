@@ -1,7 +1,8 @@
 # Capsid Binding v1 技术设计
 
-> 状态：设计草案，尚未实现。本文定义 Binding v1 的目标契约、安全边界和
-> TDD 实施顺序；当前运行时行为仍以源码和现有测试为准。
+> 状态：已实现（§7.1-§7.9，见下方验收矩阵）；§7.9 的 Linux 特权
+> conformance probe 由 Hosted Validity CI 在 root 下强制执行（skip 即
+> 失败）。WASI profile 以受控 preopen 运行真实 WebAssembly 工作负载。
 
 ## 1. 目标与核心决策
 
