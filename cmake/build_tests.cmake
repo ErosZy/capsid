@@ -45,6 +45,43 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME host_config_model COMMAND test-host-config-model)
 
+        # Binding v1 (docs/binding-technical-design.md §7.1): one target
+        # per contract layer so a schema edit never rebuilds the scanner.
+        function(capsid_add_binding_test name source)
+            add_executable(${name} ${source})
+            target_include_directories(${name} PRIVATE include src)
+            target_link_libraries(${name} PRIVATE
+                capsid_host_core
+                capsid_sanitizers)
+            set_target_properties(${name} PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(${name} PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(${name} PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+        endfunction()
+
+        capsid_add_binding_test(
+            test-host-binding-config
+            tests/test_host_binding_config.cc)
+        add_test(NAME host_binding_config COMMAND test-host-binding-config)
+
+        capsid_add_binding_test(
+            test-host-binding-manifest
+            tests/test_host_binding_manifest.cc)
+        add_test(NAME host_binding_manifest COMMAND test-host-binding-manifest)
+
+        capsid_add_binding_test(
+            test-host-binding-registry
+            tests/test_host_binding_registry.cc)
+        add_test(NAME host_binding_registry COMMAND test-host-binding-registry)
+
         add_executable(
             test-host-trusted-key-store
             tests/test_host_trusted_key_store.cc)

@@ -514,15 +514,17 @@ void test_api_versions_are_exact() {
         ConfigErrorCode::kInvalidValue,
         "/apiVersion",
         "non-string Host apiVersion");
+    // Binding v1 keeps v1/v2 as the exact supported pair; v3 stays the
+    // unsupported future-version example.
     require_error(
         ConfigDocument::kHost,
-        R"json({"apiVersion":"capsid/host-v2"})json",
+        R"json({"apiVersion":"capsid/host-v3"})json",
         ConfigErrorCode::kInvalidValue,
         "/apiVersion",
         "unsupported Host apiVersion");
     require_error(
         ConfigDocument::kApplication,
-        R"json({"apiVersion":"capsid/app-v2","pool":{"minReady":1,"maxWorkers":1}})json",
+        R"json({"apiVersion":"capsid/app-v3","pool":{"minReady":1,"maxWorkers":1}})json",
         ConfigErrorCode::kInvalidValue,
         "/apiVersion",
         "unsupported App apiVersion");

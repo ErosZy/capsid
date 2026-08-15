@@ -12,6 +12,7 @@
 | 把 Runtime 嵌入现有网关 | [宿主嵌入规范](host-integration.md) | [能力策略](capability-policy.md) |
 | 部署第一方 managed Host | [Host 配置参考](host-config.md) | [Host v1 详细设计](host-technical-design-review.md) |
 | 编写并授权应用 | [capsid.json 教程](capsid-json.md) | [模块与权限参考](module-permissions.md) |
+| 设计或实现 Host Binding | [Binding v1 技术设计](binding-technical-design.md) | [Linux 严格沙箱](linux-sandbox.md) |
 | 运行不可信代码 | [Linux 严格沙箱](linux-sandbox.md) | [能力策略](capability-policy.md) |
 | 移植现有 Fetch 框架 | [框架兼容性](framework-compatibility/README.md) | 各框架验证页 |
 | 复现质量或性能结论 | [测试门禁](testing.md) | [性能证据](performance-benchmarks.md) |
@@ -54,6 +55,8 @@
   API→权限映射与配置配方
 - [Linux 严格沙箱](linux-sandbox.md)：strict baseline、cgroup v2、网络
   namespace、出站网络策略与明确限制
+- [Binding v1 技术设计](binding-technical-design.md)：同进程双 Runtime、
+  Package/配置契约、异步 RPC、TJS 能力门禁及 Seccomp/Landlock Profile
 
 ### 正确性与兼容性
 

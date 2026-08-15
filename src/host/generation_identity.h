@@ -1,9 +1,23 @@
 #ifndef CAPSID_HOST_GENERATION_IDENTITY_H
 #define CAPSID_HOST_GENERATION_IDENTITY_H
 
+#include <cstdint>
+#include <span>
 #include <string>
+#include <string_view>
 
 namespace capsid::host {
+
+// "sha256:" plus the lowercase hex SHA-256 of `bytes`. Shared by the
+// generation digest, the binding manifest digest and the binding registry
+// source digest.
+std::string sha256_hex(std::span<const std::uint8_t> bytes);
+
+// Canonical binding manifest digest: "sha256:" over the compact,
+// key-sorted, ASCII-normalized serialization of the validated manifest,
+// so key order in the file never changes the digest. Returns an empty
+// string when `json` fails manifest validation.
+std::string compute_binding_manifest_digest(std::string_view json);
 
 enum class SelectedArtifactKind {
     kSource,

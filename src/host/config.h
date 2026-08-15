@@ -12,6 +12,12 @@ namespace capsid::host {
 inline constexpr std::size_t kMaxConfigBytes = 1024U * 1024U;
 inline constexpr std::size_t kMaxConfigNesting = 64U;
 
+// Binding v1 artifact limits (docs/binding-technical-design.md §2.1/§2.3):
+// manifest.json, index.js and one binding's opaque config member.
+inline constexpr std::size_t kMaxBindingManifestBytes = 1024U * 1024U;
+inline constexpr std::size_t kMaxBindingSourceBytes = 16U * 1024U * 1024U;
+inline constexpr std::size_t kMaxBindingConfigBytes = 256U * 1024U;
+
 enum class ConfigDocument {
     kHost,
     kApplication,
@@ -43,6 +49,18 @@ struct ConfigValidationResult {
 ConfigValidationResult validate_config_json(
     ConfigDocument document,
     std::string_view json);
+
+// Binding manifest validation (docs/binding-technical-design.md §2.2/§4.1):
+// the capsid/binding-v1 document with fixed sandbox profiles, the build's
+// grantable module set, typed net/fs/env/stdio permissions and the
+// profile-permission consistency rule. The byte limit (kMaxBindingManifest
+// bytes) applies before parsing, matching the registry scan limit.
+ConfigValidationResult validate_binding_manifest(std::string_view json);
+
+// Binding ID grammar: exactly [a-z][a-z0-9-]{0,62}, 1..63 bytes (§2.1).
+// Shared by the configuration schema (bindings map keys) and the
+// bindingsRoot scanner (package directory names).
+bool valid_binding_id(std::string_view value);
 
 }  // namespace capsid::host
 

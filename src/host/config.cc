@@ -36,13 +36,18 @@
 
 #include <jansson.h>
 
+#include <algorithm>
+#include <arpa/inet.h>
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 
 namespace capsid::host {
 namespace {
@@ -61,7 +66,15 @@ struct MemberPair {
 };
 
 struct Schema {
-    enum class Kind { kObject, kString, kInteger, kArray, kDynamicMap, kBoolean };
+    enum class Kind {
+        kObject,
+        kString,
+        kInteger,
+        kArray,
+        kDynamicMap,
+        kBoolean,
+        kOpaqueObject,  // any JSON object, any keys; size-bounded in phase 2
+    };
 
     Kind kind;
     // kObject only: the allowed member table. An empty table is a strict
@@ -91,6 +104,13 @@ struct Schema {
     // kDynamicMap only: inclusive member-count cap (0 = unbounded);
     // violations map to kResourceLimit at the map path.
     std::size_t max_members = 0;
+    // kString only: when non-empty, the value must be one of these exact
+    // strings. Replaces expected_string for multi-value contracts
+    // (apiVersion v1/v2 pairs).
+    std::span<const std::string_view> allowed_strings{};
+    // kArray of strings only: element values must be pairwise distinct
+    // ("重复权限" rejection for manifest module/profile lists).
+    bool unique_elements = false;
 };
 
 // --- Leaf schemas ---
@@ -101,11 +121,24 @@ constexpr Schema kBooleanSchema{Schema::Kind::kBoolean};
 constexpr Schema kPositiveIntegerSchema{
     Schema::Kind::kInteger, {}, false, {}, 1};
 
-// Host/App apiVersion values are the only exact-value contract so far.
+// Host/App apiVersion values: Binding v1 enables the v2 pair alongside the
+// frozen v1 documents. Anything else stays "unsupported value".
+constexpr std::string_view kHostApiVersions[] = {
+    "capsid/host-v1",
+    "capsid/host-v2",
+};
+constexpr std::string_view kAppApiVersions[] = {
+    "capsid/app-v1",
+    "capsid/app-v2",
+};
 constexpr Schema kHostApiVersionSchema{
-    Schema::Kind::kString, {}, false, "capsid/host-v1"};
+    .kind = Schema::Kind::kString,
+    .allowed_strings = std::span<const std::string_view>(kHostApiVersions),
+};
 constexpr Schema kAppApiVersionSchema{
-    Schema::Kind::kString, {}, false, "capsid/app-v1"};
+    .kind = Schema::Kind::kString,
+    .allowed_strings = std::span<const std::string_view>(kAppApiVersions),
+};
 
 // array<string>: the most common collection in both documents.
 constexpr Schema kStringArraySchema{
@@ -401,8 +434,171 @@ constexpr std::array kApplicationMembers{
 constexpr Schema kApplicationSchema{
     Schema::Kind::kObject, std::span<const Member>(kApplicationMembers)};
 
-const Schema& root_schema(ConfigDocument document) {
-    return document == ConfigDocument::kHost ? kHostSchema : kApplicationSchema;
+// --- Binding v1 schemas (docs/binding-technical-design.md §2) -----------
+
+constexpr Schema kNetTargetStringSchema{
+    .kind = Schema::Kind::kString,
+    .grammar = "net-target",
+};
+constexpr Schema kNetTargetArraySchema{
+    .kind = Schema::Kind::kArray,
+    .element_schema = &kNetTargetStringSchema,
+};
+constexpr Schema kBindingEnvStringSchema{
+    .kind = Schema::Kind::kString,
+    .grammar = "environment-name",
+};
+constexpr Schema kBindingEnvArraySchema{
+    .kind = Schema::Kind::kArray,
+    .element_schema = &kBindingEnvStringSchema,
+};
+
+// The opaque binding config member: any JSON object, any keys. Bounded by
+// its compact serialized byte size (kMaxBindingConfigBytes) in phase 2;
+// depth is bounded by the parser's document nesting limit.
+constexpr Schema kOpaqueObjectSchema{Schema::Kind::kOpaqueObject};
+
+constexpr std::array kBindingNetMembers{
+    Member{"allow", &kNetTargetArraySchema, false},
+};
+constexpr Schema kBindingNetSchema{
+    Schema::Kind::kObject, std::span<const Member>(kBindingNetMembers)};
+
+constexpr std::array kBindingFsMembers{
+    Member{"read", &kStringArraySchema, false},
+    Member{"write", &kStringArraySchema, false},
+};
+constexpr Schema kBindingFsSchema{
+    Schema::Kind::kObject, std::span<const Member>(kBindingFsMembers)};
+
+constexpr std::array kBindingPermissionsMembers{
+    Member{"net", &kBindingNetSchema, false},
+    Member{"fs", &kBindingFsSchema, false},
+    Member{"env", &kBindingEnvArraySchema, false},
+    Member{"stdio", &kStringArraySchema, false},
+};
+constexpr Schema kBindingPermissionsSchema{
+    Schema::Kind::kObject, std::span<const Member>(kBindingPermissionsMembers)};
+
+constexpr std::array kBindingSecretMembers{
+    Member{"valueFrom", &kSecretKeyIdSchema, true},
+};
+constexpr Schema kBindingSecretSchema{
+    Schema::Kind::kObject, std::span<const Member>(kBindingSecretMembers)};
+constexpr Schema kBindingSecretsSchema{
+    .kind = Schema::Kind::kDynamicMap,
+    .dynamic_value_schema = &kBindingSecretSchema,
+    .grammar = "secret-key",
+};
+
+constexpr std::array kBindingEntryMembers{
+    Member{"permissions", &kBindingPermissionsSchema, false},
+    Member{"config", &kOpaqueObjectSchema, false},
+    Member{"secrets", &kBindingSecretsSchema, false},
+};
+constexpr Schema kBindingEntrySchema{
+    Schema::Kind::kObject, std::span<const Member>(kBindingEntryMembers)};
+constexpr Schema kBindingsSchema{
+    .kind = Schema::Kind::kDynamicMap,
+    .dynamic_value_schema = &kBindingEntrySchema,
+    .grammar = "binding-id",
+};
+
+// v2 roots: the frozen v1 member table plus the one Binding field each.
+constexpr std::array kHostV2Members{
+    Member{"apiVersion", &kHostApiVersionSchema, true},
+    Member{"applicationsRoot", &kStringSchema, false},
+    Member{"stateRoot", &kStringSchema, false},
+    Member{"secretRootTemplate", &kStringSchema, false},
+    Member{"admin", &kAdminSchema, false},
+    Member{"listeners", &kListenerArraySchema, false},
+    Member{"permissions", &kHostPermissionsSchema, false},
+    Member{"isolation", &kIsolationSchema, false},
+    Member{"trustedBytecodeKeys", &kTrustedBytecodeKeysSchema, false},
+    Member{"defaults", &kTierSchema, false},
+    Member{"maximums", &kTierSchema, false},
+    Member{"capacity", &kCapacitySchema, false},
+    Member{"recovery", &kRecoverySchema, false},
+    Member{"bindingsRoot", &kStringSchema, false},
+};
+constexpr Schema kHostV2Schema{
+    Schema::Kind::kObject, std::span<const Member>(kHostV2Members)};
+
+constexpr std::array kAppV2Members{
+    Member{"apiVersion", &kAppApiVersionSchema, true},
+    Member{"entry", &kStringSchema, false},
+    Member{"permissions", &kAppPermissionsSchema, false},
+    Member{"worker", &kWorkerSchema, false},
+    Member{"request", &kRequestSchema, false},
+    Member{"pool", &kAppPoolSchema, true},
+    Member{"healthCheck", &kHealthCheckSchema, false},
+    Member{"bindings", &kBindingsSchema, false},
+};
+constexpr Schema kAppV2Schema{
+    Schema::Kind::kObject, std::span<const Member>(kAppV2Members)};
+
+// --- Binding manifest schemas (§2.2) ------------------------------------
+
+constexpr Schema kBindingManifestApiVersionSchema{
+    Schema::Kind::kString, {}, false, "capsid/binding-v1"};
+constexpr Schema kSandboxProfileStringSchema{
+    .kind = Schema::Kind::kString,
+    .grammar = "sandbox-profile",
+};
+constexpr Schema kSandboxRequiresSchema{
+    .kind = Schema::Kind::kArray,
+    .element_schema = &kSandboxProfileStringSchema,
+    .unique_elements = true,
+};
+constexpr std::array kBindingManifestSandboxMembers{
+    Member{"requires", &kSandboxRequiresSchema, false},
+};
+constexpr Schema kBindingManifestSandboxSchema{
+    Schema::Kind::kObject, std::span<const Member>(kBindingManifestSandboxMembers)};
+
+constexpr Schema kBindingModuleStringSchema{
+    .kind = Schema::Kind::kString,
+    .grammar = "binding-module",
+};
+constexpr Schema kBindingModuleArraySchema{
+    .kind = Schema::Kind::kArray,
+    .element_schema = &kBindingModuleStringSchema,
+    .unique_elements = true,
+};
+constexpr std::array kBindingManifestPermissionsMembers{
+    Member{"modules", &kBindingModuleArraySchema, true},
+    Member{"net", &kBindingNetSchema, false},
+    Member{"fs", &kBindingFsSchema, false},
+    Member{"env", &kBindingEnvArraySchema, false},
+    Member{"stdio", &kStringArraySchema, false},
+};
+constexpr Schema kBindingManifestPermissionsSchema{
+    Schema::Kind::kObject, std::span<const Member>(kBindingManifestPermissionsMembers)};
+constexpr std::array kBindingManifestMembers{
+    Member{"apiVersion", &kBindingManifestApiVersionSchema, true},
+    Member{"sandbox", &kBindingManifestSandboxSchema, false},
+    Member{"permissions", &kBindingManifestPermissionsSchema, true},
+};
+constexpr Schema kBindingManifestSchema{
+    Schema::Kind::kObject, std::span<const Member>(kBindingManifestMembers)};
+
+// The apiVersion member selects the root schema: v2 values pick the v2
+// table, anything else falls back to the frozen v1 table so every v1 error
+// path (missing, wrong type, unsupported value) is byte-identical to the
+// pre-Binding behavior.
+const Schema& root_schema(ConfigDocument document, std::string_view api_version) {
+    if (document == ConfigDocument::kHost) {
+        return api_version == "capsid/host-v2" ? kHostV2Schema : kHostSchema;
+    }
+    return api_version == "capsid/app-v2" ? kAppV2Schema : kApplicationSchema;
+}
+
+std::string_view peek_api_version(const json_t* root) {
+    const json_t* api = json_object_get(root, "apiVersion");
+    if (api == nullptr || !json_is_string(api)) {
+        return {};
+    }
+    return std::string_view(json_string_value(api), json_string_length(api));
 }
 
 const Member* find_member(const Schema& schema, std::string_view key) {
@@ -486,6 +682,176 @@ bool valid_environment_value(std::string_view bytes) {
     return bytes.find('\0') == std::string_view::npos;
 }
 
+// --- Binding v1 grammars (§2.1-§2.3, §3.3, §4.1) ------------------------
+
+// The §4.1 sandbox profile names are fixed by the Capsid build. An unknown
+// name is rejected before it can reach the sandbox launcher.
+constexpr std::string_view kSandboxProfiles[] = {
+    "network-client", "filesystem-read", "filesystem-write",
+    "filesystem-watch", "sqlite", "wasi",
+};
+
+bool is_sandbox_profile(std::string_view value) {
+    return std::find(std::begin(kSandboxProfiles), std::end(kSandboxProfiles),
+                     value) != std::end(kSandboxProfiles);
+}
+
+// The §3.3 grantable-module set, restricted to what this TJS build actually
+// dispatches (the builtins table plus tjs:internal/core). tjs:ffi and
+// tjs:internal/worker are not built/not listed and fail closed. capsid:*
+// user facades are never grantable to the Binding Runtime.
+constexpr std::string_view kBindingKnownModules[] = {
+    "tjs:assert",       "tjs:getopts",     "tjs:hashing",
+    "tjs:internal/core", "tjs:internal/path", "tjs:ipaddr",
+    "tjs:path",         "tjs:posix-socket", "tjs:readline",
+    "tjs:sqlite",       "tjs:utils",       "tjs:uuid",
+    "tjs:wasi",
+};
+
+bool is_binding_module(std::string_view value) {
+    return std::find(std::begin(kBindingKnownModules),
+                     std::end(kBindingKnownModules),
+                     value) != std::end(kBindingKnownModules);
+}
+
+bool valid_port(std::string_view port) {
+    if (port.empty() || port.size() > 5) {
+        return false;
+    }
+    std::uint32_t value = 0;
+    for (const char c : port) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        value = value * 10 + static_cast<std::uint32_t>(c - '0');
+    }
+    return value >= 1 && value <= 65535;
+}
+
+bool valid_hostname(std::string_view host) {
+    // Optional single leading wildcard label.
+    if (!host.empty() && host.front() == '*') {
+        if (host.size() < 2 || host[1] != '.') {
+            return false;
+        }
+        host.remove_prefix(2);
+    }
+    if (host.empty() || host.size() > 253) {
+        return false;
+    }
+    std::size_t start = 0;
+    for (std::size_t index = 0; index <= host.size(); ++index) {
+        if (index < host.size() && host[index] != '.') {
+            continue;
+        }
+        const std::size_t label_size = index - start;
+        if (label_size == 0 || label_size > 63 ||
+            host[start] == '-' || host[index - 1] == '-') {
+            return false;
+        }
+        for (std::size_t label_index = start; label_index < index;
+             ++label_index) {
+            const unsigned char ch =
+                static_cast<unsigned char>(host[label_index]);
+            if (!(std::isalnum(ch) || ch == '-')) {
+                return false;
+            }
+        }
+        start = index + 1;
+    }
+    return true;
+}
+
+// A digit/dot/slash-only host must be a literal IPv4 address or an IPv4
+// CIDR block; an IP-shaped typo can never silently become a hostname.
+bool valid_numeric_host(std::string_view host) {
+    const std::size_t slash = host.find('/');
+    const std::string_view address = host.substr(0, slash);
+    std::uint32_t prefix = 0;
+    if (slash != std::string_view::npos) {
+        std::string_view prefix_text = host.substr(slash + 1);
+        if (prefix_text.empty()) {
+            return false;
+        }
+        for (const char c : prefix_text) {
+            if (c < '0' || c > '9') {
+                return false;
+            }
+            prefix = prefix * 10 + static_cast<std::uint32_t>(c - '0');
+            if (prefix > 32) {
+                return false;
+            }
+        }
+    }
+    struct in_addr parsed;
+    if (inet_pton(AF_INET, std::string(address).c_str(), &parsed) != 1) {
+        return false;
+    }
+    return slash == std::string_view::npos || prefix <= 32;
+}
+
+bool valid_bracketed_ipv6(std::string_view host) {
+    const std::size_t slash = host.find('/');
+    const std::string_view address = host.substr(0, slash);
+    if (slash != std::string_view::npos) {
+        std::uint32_t prefix = 0;
+        for (const char c : host.substr(slash + 1)) {
+            if (c < '0' || c > '9') {
+                return false;
+            }
+            prefix = prefix * 10 + static_cast<std::uint32_t>(c - '0');
+            if (prefix > 128) {
+                return false;
+            }
+        }
+    }
+    struct in6_addr parsed;
+    return inet_pton(AF_INET6, std::string(address).c_str(), &parsed) == 1;
+}
+
+bool valid_host_spec(std::string_view host) {
+    if (host.empty()) {
+        return false;
+    }
+    if (host == "*") {
+        return true;
+    }
+    const bool numeric = std::all_of(host.begin(), host.end(), [](char c) {
+        const unsigned char ch = static_cast<unsigned char>(c);
+        return std::isdigit(ch) || c == '.' || c == '/';
+    });
+    if (numeric) {
+        return valid_numeric_host(host);
+    }
+    return valid_hostname(host);
+}
+
+// Net target: <host>[:<port>] where <host> is "*", a hostname (optional
+// leading "*." label), an IPv4 address, an IPv4 CIDR block, or a bracketed
+// IPv6 address with an optional prefix. The single explicit port is
+// 1..65535; ranges and wildcard ports are rejected.
+bool valid_net_target(std::string_view target) {
+    if (target.empty()) {
+        return false;
+    }
+    if (target.front() == '[') {
+        const std::size_t close = target.find(']');
+        if (close == std::string_view::npos || close + 1 >= target.size() ||
+            target[close + 1] != ':') {
+            return false;
+        }
+        return valid_bracketed_ipv6(target.substr(1, close - 1)) &&
+               valid_port(target.substr(close + 2));
+    }
+    const std::size_t colon = target.find(':');
+    if (colon == std::string_view::npos ||
+        target.find(':', colon + 1) != std::string_view::npos) {
+        return false;
+    }
+    return valid_host_spec(target.substr(0, colon)) &&
+           valid_port(target.substr(colon + 1));
+}
+
 // Dispatches the named grammar; an unknown grammar name fails closed.
 bool matches_grammar(std::string_view grammar, std::string_view value) {
     if (grammar == "environment-name") {
@@ -499,6 +865,18 @@ bool matches_grammar(std::string_view grammar, std::string_view value) {
     }
     if (grammar == "environment-value") {
         return valid_environment_value(value);
+    }
+    if (grammar == "binding-id") {
+        return valid_binding_id(value);
+    }
+    if (grammar == "net-target") {
+        return valid_net_target(value);
+    }
+    if (grammar == "sandbox-profile") {
+        return is_sandbox_profile(value);
+    }
+    if (grammar == "binding-module") {
+        return is_binding_module(value);
     }
     return false;
 }
@@ -594,7 +972,8 @@ bool check_unknown_fields(const Schema& schema,
     case Schema::Kind::kString:
     case Schema::Kind::kInteger:
     case Schema::Kind::kBoolean:
-        return true;  // leaves: type-checked in phase 2
+    case Schema::Kind::kOpaqueObject:
+        return true;  // leaves (opaque objects accept any key)
     }
     return true;
 }
@@ -698,6 +1077,23 @@ bool validate_values(const Schema& schema,
                 return false;
             }
         }
+        if (schema.unique_elements) {
+            std::unordered_set<std::string> seen;
+            for (size_t i = 0; i < json_array_size(node); ++i) {
+                const json_t* element = json_array_get(node, i);
+                if (!json_is_string(element)) {
+                    continue;  // type errors were already reported
+                }
+                const std::string_view value(json_string_value(element),
+                                             json_string_length(element));
+                if (!seen.insert(std::string(value)).second) {
+                    error.code = ConfigErrorCode::kInvalidValue;
+                    error.path = path + "/" + std::to_string(i);
+                    error.message = "duplicate entry";
+                    return false;
+                }
+            }
+        }
         return true;
     case Schema::Kind::kDynamicMap:
         if (!json_is_object(node)) {
@@ -770,6 +1166,15 @@ bool validate_values(const Schema& schema,
             error.message = "unsupported value";
             return false;
         }
+        if (!schema.allowed_strings.empty() &&
+            std::find(schema.allowed_strings.begin(),
+                      schema.allowed_strings.end(),
+                      value) == schema.allowed_strings.end()) {
+            error.code = ConfigErrorCode::kInvalidValue;
+            error.path = path;
+            error.message = "unsupported value";
+            return false;
+        }
         if (!schema.grammar.empty() && !matches_grammar(schema.grammar, value)) {
             error.code = ConfigErrorCode::kInvalidValue;
             error.path = path;
@@ -807,6 +1212,34 @@ bool validate_values(const Schema& schema,
             return false;
         }
         return true;
+    case Schema::Kind::kOpaqueObject:
+        if (!json_is_object(node)) {
+            error.code = ConfigErrorCode::kInvalidValue;
+            error.path = path;
+            error.message = "expected a JSON object";
+            return false;
+        }
+        // Depth is bounded by the parser's document nesting limit; the
+        // member is bounded by its compact serialized byte size.
+        {
+            char* compact =
+                json_dumps(node, JSON_COMPACT | JSON_ENSURE_ASCII);
+            if (compact == nullptr) {
+                error.code = ConfigErrorCode::kResourceLimit;
+                error.path = path;
+                error.message = "value exceeds the size limit";
+                return false;
+            }
+            const std::size_t size = std::strlen(compact);
+            std::free(compact);
+            if (size > kMaxBindingConfigBytes) {
+                error.code = ConfigErrorCode::kResourceLimit;
+                error.path = path;
+                error.message = "value exceeds the size limit";
+                return false;
+            }
+        }
+        return true;
     }
     error.code = ConfigErrorCode::kInvalidValue;
     error.path = path;
@@ -816,12 +1249,36 @@ bool validate_values(const Schema& schema,
 
 }  // namespace
 
-ConfigValidationResult validate_config_json(ConfigDocument document,
-                                            std::string_view json) {
+bool valid_binding_id(std::string_view value) {
+    if (value.empty() || value.size() > 63) {
+        return false;
+    }
+    if (value.front() < 'a' || value.front() > 'z') {
+        return false;
+    }
+    for (const char c : value) {
+        const unsigned char ch = static_cast<unsigned char>(c);
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
+              ch == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+namespace {
+
+// Shared envelope: byte limit -> strict parse -> unknown fields -> values ->
+// optional post-check. Every rejected document reports an RFC 6901 pointer.
+ConfigValidationResult validate_document(
+    std::size_t byte_limit,
+    std::string_view json,
+    const Schema* (*select_schema)(const json_t* root),
+    bool (*post_check)(json_t*, ConfigError&)) {
     ConfigValidationResult result;
 
     // The byte limit is inclusive and applies before any parsing.
-    if (json.size() > kMaxConfigBytes) {
+    if (json.size() > byte_limit) {
         result.ok = false;
         result.error.code = ConfigErrorCode::kResourceLimit;
         result.error.message = "document exceeds the size limit";
@@ -859,15 +1316,104 @@ ConfigValidationResult validate_config_json(ConfigDocument document,
     }
 
     const std::string root_path;
-    const Schema& schema = root_schema(document);
+    const Schema& schema = *select_schema(root);
     if (!check_unknown_fields(schema, root, root_path, result.error)) {
         result.ok = false;
         json_decref(root);
         return result;
     }
     result.ok = validate_values(schema, root, root_path, result.error);
+    if (result.ok && post_check != nullptr) {
+        result.ok = post_check(root, result.error);
+    }
     json_decref(root);
     return result;
+}
+
+const Schema* select_host_root(const json_t* root) {
+    return &root_schema(ConfigDocument::kHost, peek_api_version(root));
+}
+
+const Schema* select_app_root(const json_t* root) {
+    return &root_schema(ConfigDocument::kApplication, peek_api_version(root));
+}
+
+const Schema* select_manifest_root(const json_t* root) {
+    (void)root;
+    return &kBindingManifestSchema;
+}
+
+// §4.1: a non-empty resource permission requires its sandbox profile.
+// An empty allow list grants nothing and needs no profile. Types and
+// member shapes were already validated by the schema phases, so the
+// lookups below cannot fail.
+bool check_manifest_consistency(json_t* root, ConfigError& error) {
+    std::unordered_set<std::string> profiles;
+    const json_t* sandbox = json_object_get(root, "sandbox");
+    const json_t* requires_list =
+        sandbox != nullptr ? json_object_get(sandbox, "requires") : nullptr;
+    if (json_is_array(requires_list)) {
+        for (std::size_t index = 0; index < json_array_size(requires_list);
+             ++index) {
+            profiles.insert(
+                json_string_value(json_array_get(requires_list, index)));
+        }
+    }
+
+    const auto granted = [](const json_t* list) {
+        return json_is_array(list) && json_array_size(list) > 0;
+    };
+
+    const json_t* permissions = json_object_get(root, "permissions");
+    const json_t* net = json_object_get(permissions, "net");
+    if (net != nullptr) {
+        const json_t* allow = json_object_get(net, "allow");
+        if (granted(allow) && !profiles.count("network-client")) {
+            error.code = ConfigErrorCode::kInvalidValue;
+            error.path = "/permissions/net/allow";
+            error.message =
+                "net permissions require the network-client sandbox profile";
+            return false;
+        }
+    }
+
+    const json_t* fs = json_object_get(permissions, "fs");
+    if (fs != nullptr) {
+        const json_t* read = json_object_get(fs, "read");
+        if (granted(read) && !profiles.count("filesystem-read")) {
+            error.code = ConfigErrorCode::kInvalidValue;
+            error.path = "/permissions/fs/read";
+            error.message =
+                "fs read permissions require the filesystem-read sandbox profile";
+            return false;
+        }
+        const json_t* write = json_object_get(fs, "write");
+        if (granted(write) && !profiles.count("filesystem-write")) {
+            error.code = ConfigErrorCode::kInvalidValue;
+            error.path = "/permissions/fs/write";
+            error.message =
+                "fs write permissions require the filesystem-write sandbox profile";
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+ConfigValidationResult validate_config_json(ConfigDocument document,
+                                            std::string_view json) {
+    return validate_document(
+        kMaxConfigBytes, json,
+        document == ConfigDocument::kHost ? &select_host_root
+                                          : &select_app_root,
+        nullptr);
+}
+
+ConfigValidationResult validate_binding_manifest(std::string_view json) {
+    return validate_document(kMaxBindingManifestBytes, json,
+                             &select_manifest_root,
+                             &check_manifest_consistency);
 }
 
 }  // namespace capsid::host

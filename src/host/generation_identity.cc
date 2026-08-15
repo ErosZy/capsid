@@ -8,18 +8,21 @@
 // framing is locale-independent and unambiguous; see the Host design review
 // §6.3.
 
+#include "host/config.h"
 #include "host/generation_identity.h"
 
+#include <jansson.h>
 #include <openssl/evp.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace capsid::host {
-namespace {
 
 std::string sha256_hex(std::span<const std::uint8_t> bytes) {
     unsigned char digest[EVP_MAX_MD_SIZE];
@@ -38,6 +41,34 @@ std::string sha256_hex(std::span<const std::uint8_t> bytes) {
     }
     return result;
 }
+
+std::string compute_binding_manifest_digest(std::string_view json) {
+    // The schema validation is the gate; the digest is computed over the
+    // canonical serialization so key order in the file never changes it.
+    const ConfigValidationResult validation = validate_binding_manifest(json);
+    if (!validation.ok) {
+        return {};
+    }
+    json_error_t parse_error;
+    json_t* root = json_loadb(json.data(), json.size(),
+                              JSON_REJECT_DUPLICATES, &parse_error);
+    if (root == nullptr) {
+        return {};
+    }
+    char* canonical = json_dumps(
+        root, JSON_COMPACT | JSON_SORT_KEYS | JSON_ENSURE_ASCII);
+    json_decref(root);
+    if (canonical == nullptr) {
+        return {};
+    }
+    const std::string digest = sha256_hex(std::span<const std::uint8_t>(
+        reinterpret_cast<const std::uint8_t*>(canonical),
+        std::strlen(canonical)));
+    std::free(canonical);
+    return digest;
+}
+
+namespace {
 
 void append_length_prefixed(std::vector<std::uint8_t> &output,
                             std::string_view value) {
