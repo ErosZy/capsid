@@ -546,7 +546,10 @@ foreach(binary IN LISTS CAPSID_SMOKE_BINARIES)
             "KERNEL32[.]dll" "ntdll[.]dll" "WS2_32[.]dll" "bcrypt[.]dll"
             "CRYPT32[.]dll" "ADVAPI32[.]dll" "USER32[.]dll"
             "IPHLPAPI[.]DLL" "PSAPI[.]DLL" "SHELL32[.]dll" "OLE32[.]dll"
-            "OLEAUT32[.]dll" "dbghelp[.]dll" "api-ms-win-")
+            "OLEAUT32[.]dll" "dbghelp[.]dll" "api-ms-win-"
+            # Boost.Asio imports AcceptEx/ConnectEx from the Winsock
+            # extension provider.
+            "MSWSOCK[.]dll")
         execute_process(
             COMMAND "${CAPSID_SMOKE_DUMPBIN}" /dependents "${binary}"
             RESULT_VARIABLE dumpbin_result
