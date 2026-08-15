@@ -32,6 +32,7 @@ jobs:
           - os: ubuntu-24.04
           - os: macos-15
             deps: brew install ninja boost
+          - os: windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
@@ -55,6 +56,7 @@ jobs:
         run: ${{ matrix.deps }}
 
       - name: Install pinned node modules
+        shell: bash
         run: |
           set -euo pipefail
           # --ignore-scripts: pure JS, no native bindings, so the musl
@@ -180,6 +182,24 @@ jobs:
           fi
           ls -la build/capsid-*
 
+      - name: Configure and build Windows Release
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
+            openssl boost-system --triplet x64-windows-static
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCAPSID_BUILD_HOST=ON `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --target package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem build/capsid-*
+
       - name: Publish package to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -193,12 +213,13 @@ jobs:
           # real gate and fails loudly on anything else.
           gh release create "${tag}" \
             --title "capsid ${tag}" \
-            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. Linux package is fully static (musl, runs on any Linux kernel without a libc version matrix); macOS package is native arm64. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. Linux package is fully static (musl, runs on any Linux kernel without a libc version matrix); macOS package is native arm64; Windows package is native x86_64 (static CRT, ZIP). Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
             --verify-tag || true
+          shopt -s nullglob
           for dir in build build-musl; do
-            if ls "${dir}"/capsid-*.tar.gz >/dev/null 2>&1; then
+            for archive in "${dir}"/capsid-*.tar.gz "${dir}"/capsid-*.zip; do
               gh release upload --clobber "${tag}" \
-                "${dir}"/capsid-*.tar.gz \
-                "${dir}"/capsid-*.tar.gz.sha256
-            fi
+                "${archive}" \
+                "${archive}.sha256"
+            done
           done
