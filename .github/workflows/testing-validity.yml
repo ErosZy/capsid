@@ -512,11 +512,15 @@ jobs:
       # suite is excluded here (the Release job packages Windows).
       # Ninja keeps this single-config like every other job; the Visual
       # Studio generator would default to Debug builds and require ctest
-      # -C <config>, which quietly "Not Run"s the whole matrix.
+      # -C <config>, which quietly "Not Run"s the whole matrix. Pin the
+      # compiler to cl: in a non-vcvars shell Ninja otherwise grabs mingw
+      # gcc off PATH, which cannot build the CRT/winsock port.
       - name: Configure Windows host library and worker contracts
         run: |
           cmake -S . -B build-windows `
             -G Ninja `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl `
             -DCMAKE_BUILD_TYPE=Release `
             -DCAPSID_BUILD_HOST=ON `
             -DCAPSID_BUILD_WORKER=ON `

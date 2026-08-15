@@ -5,6 +5,14 @@ project(capsid_runtime VERSION 0.1.2 LANGUAGES C CXX)
 include(CTest)
 include(GNUInstallDirs)
 
+if(WIN32 AND NOT MSVC)
+    message(FATAL_ERROR
+        "Capsid builds on Windows with MSVC only: the Ninja generator "
+        "otherwise picks mingw gcc off PATH, which cannot build the "
+        "CRT/winsock port. Pass -DCMAKE_C_COMPILER=cl "
+        "-DCMAKE_CXX_COMPILER=cl alongside -G Ninja.")
+endif()
+
 if(MSVC)
     # Static CRT everywhere: the vendored txiki.js build pins
     # CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreaded (its CMakeLists.txt line

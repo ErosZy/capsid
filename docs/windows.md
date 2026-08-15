@@ -36,6 +36,8 @@ npm ci --ignore-scripts --prefix examples/h3-v2-reference
 
 # 3. 配置（静态 CRT 与 x64-windows-static triplet 必须匹配）
 cmake -S . -B build -G Ninja `
+  -DCMAKE_C_COMPILER=cl `
+  -DCMAKE_CXX_COMPILER=cl `
   -DCMAKE_BUILD_TYPE=Release `
   -DCAPSID_BUILD_HOST=ON `
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
@@ -55,6 +57,10 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`。vendored txiki.js 与其依赖
   （libwebsockets/mbedtls 等）同样固定静态 CRT；混用 `/MD` 会在链接期
   LNK2038 失败。
+- **MSVC 编译器**：Ninja 在未 vcvars 的 shell（CI、普通终端）里会从 PATH
+  抓到 MinGW gcc，无法构建 CRT/winsock 移植面；必须显式
+  `-DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl`。配置非 MSVC 编译器时
+  顶层 CMakeLists 会直接 FATAL_ERROR。
 - **iconv**：Windows 没有系统 iconv，构建使用仓库内置的
   [win-iconv](../vendor/win-iconv/VENDOR.txt)（公有领域，Win32
   MultiByteToWideChar 实现）。Linux/macOS 继续使用系统 iconv。
