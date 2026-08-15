@@ -238,15 +238,17 @@ public:
     ~OpenSslRsaPssServer() { stop(); }
 
 private:
-    DWORD child_exit_code() {
 #if defined(_WIN32)
+    DWORD child_exit_code() {
         DWORD exit_code = 0;
         GetExitCodeProcess(process_handle_, &exit_code);
         return exit_code;
-#else
-        return 0;
-#endif
     }
+#else
+    int child_exit_code() {
+        return 0;
+    }
+#endif
 
     bool server_exited_early() {
 #if defined(_WIN32)

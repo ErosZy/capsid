@@ -113,11 +113,18 @@ if(CAPSID_LWS_GIT_RESULT EQUAL 0 AND CAPSID_LWS_GIT_DIR)
     endif()
 endif()
 
+# The patch stack is applied with git apply rather than PATH's patch:
+# patch binaries differ per machine (GNU patch from git-bash, Strawberry
+# Perl's patch — which asserts on mixed line endings), while git is
+# already a hard build requirement. --ignore-whitespace lets the context
+# match across CRLF/LF checkout conventions.
+find_program(CAPSID_GIT_EXECUTABLE git REQUIRED)
 file(GLOB CAPSID_PATCHES "${CMAKE_CURRENT_LIST_DIR}/../patches/txiki/*.patch")
 list(SORT CAPSID_PATCHES)
 foreach(CAPSID_PATCH IN LISTS CAPSID_PATCHES)
     execute_process(
-        COMMAND patch -p1 --forward --batch -i "${CAPSID_PATCH}"
+        COMMAND "${CAPSID_GIT_EXECUTABLE}" -C "${CAPSID_VENDOR_OVERLAY}"
+            apply -p1 --ignore-whitespace "${CAPSID_PATCH}"
         WORKING_DIRECTORY "${CAPSID_VENDOR_OVERLAY}"
         RESULT_VARIABLE CAPSID_PATCH_RESULT
         OUTPUT_VARIABLE CAPSID_PATCH_OUTPUT
