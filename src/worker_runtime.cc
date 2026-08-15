@@ -544,8 +544,22 @@ public:
         }
 
         set_nonblocking();
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: before uv_poll_init\n");
+                std::fclose(dbg);
+            }
+        }
         if (uv_poll_init(TJS_GetLoop(runtime_), &poll_, fd_) != 0) {
             return 1;
+        }
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: after uv_poll_init\n");
+                std::fclose(dbg);
+            }
         }
         poll_.data = this;
         poll_started_ = true;
