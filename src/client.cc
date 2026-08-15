@@ -1528,8 +1528,9 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
                 int type_length = sizeof(so_type);
                 std::fprintf(
                     dbg,
-                    "client: child_handle=%lld inherit_flags=%lu "
+                    "client: pid=%d child_handle=%lld inherit_flags=%lu "
                     "parent_so_type=%d parent_type_err=%d\n",
+                    capsid::win32::getpid(),
                     static_cast<long long>(
                         static_cast<intptr_t>(child)),
                     static_cast<unsigned long>(flags),

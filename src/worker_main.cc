@@ -190,6 +190,14 @@ int main(int argc, char **argv) {
                     ? type
                     : -1,
                 WSAGetLastError());
+            for (int probe_fd = 0; probe_fd <= 5; ++probe_fd) {
+                std::fprintf(dbg, "after TJS: fd=%d handle=%lld\n",
+                             probe_fd,
+                             static_cast<long long>(
+                                 _get_osfhandle(probe_fd)));
+            }
+            std::fprintf(dbg, "after TJS: stdout_fileno=%d stderr_fileno=%d\n",
+                         _fileno(stdout), _fileno(stderr));
             std::fclose(dbg);
         }
     }
