@@ -40,9 +40,11 @@ JSModuleDef *tjs__load_builtin(
 }
 
 #include <errno.h>
-#if defined(_WIN32)
+// Included on every platform: capsid_pollfd/capsid_poll are used
+// unconditionally in read_startup, and the header's POSIX branch is
+// self-contained passthroughs.
 #include "win32_compat.h"
-#else
+#if !defined(_WIN32)
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/socket.h>
