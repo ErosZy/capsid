@@ -119,6 +119,16 @@ endif()
 # already a hard build requirement. --ignore-whitespace lets the context
 # match across CRLF/LF checkout conventions.
 find_program(CAPSID_GIT_EXECUTABLE git REQUIRED)
+# An empty repository inside the overlay stops `git apply` from
+# discovering the parent Capsid repository (the build tree lives inside
+# it), whose root re-roots the patch paths and silently skips hunks.
+execute_process(
+    COMMAND "${CAPSID_GIT_EXECUTABLE}" init -q
+    WORKING_DIRECTORY "${CAPSID_VENDOR_OVERLAY}"
+    RESULT_VARIABLE CAPSID_GIT_INIT_RESULT)
+if(NOT CAPSID_GIT_INIT_RESULT EQUAL 0)
+    message(FATAL_ERROR "Could not initialize the overlay repository")
+endif()
 file(GLOB CAPSID_PATCHES "${CMAKE_CURRENT_LIST_DIR}/../patches/txiki/*.patch")
 list(SORT CAPSID_PATCHES)
 foreach(CAPSID_PATCH IN LISTS CAPSID_PATCHES)
