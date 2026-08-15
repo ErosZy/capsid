@@ -163,8 +163,15 @@ const std::vector<std::uint8_t>& fixture_bundle() {
 void write_all(int fd, const std::string& bytes) {
     std::size_t offset = 0;
     while (offset < bytes.size()) {
+#if defined(_WIN32)
+        const ssize_t count = write(
+            fd,
+            bytes.data() + offset,
+            static_cast<unsigned int>(bytes.size() - offset));
+#else
         const ssize_t count =
             write(fd, bytes.data() + offset, bytes.size() - offset);
+#endif
         require(count > 0, "cannot write delayed worker wrapper");
         offset += static_cast<std::size_t>(count);
     }
