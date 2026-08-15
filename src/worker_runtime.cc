@@ -401,6 +401,13 @@ public:
     }
 
     int run() {
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: entered\n");
+                std::fclose(dbg);
+            }
+        }
         if (!read_startup(false)) {
             return 1;
         }
@@ -446,8 +453,22 @@ public:
             flush_blocking();
             return 1;
         }
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: sandbox applied\n");
+                std::fclose(dbg);
+            }
+        }
         if (!read_startup(true)) {
             return 1;
+        }
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: startup read\n");
+                std::fclose(dbg);
+            }
         }
 
         TJSRunOptions options;
@@ -466,6 +487,13 @@ public:
         runtime_ = TJS_NewRuntimeOptions(&options);
         if (!runtime_ || !ctx_) {
             return 1;
+        }
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: runtime created\n");
+                std::fclose(dbg);
+            }
         }
         JS_SetInterruptHandler(
             JS_GetRuntime(ctx_), interrupt_handler, this);
