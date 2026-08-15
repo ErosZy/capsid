@@ -1093,12 +1093,13 @@ if(BUILD_TESTING)
                 endif()
             endif()
             add_test(
+            # Multi-shard scenarios require SO_REUSEPORT, which Windows
+            # does not provide; only the single-shard scenarios run there
+            # (see docs/windows.md).
+            if(NOT WIN32)
+            add_test(
                 NAME host_static_pool_server_shared_port_lifecycle
                 COMMAND test-host-static-pool-server lifecycle
-                    $<TARGET_FILE:capsid-worker>)
-            add_test(
-                NAME host_static_pool_server_atomic_start_failure
-                COMMAND test-host-static-pool-server atomic-failure
                     $<TARGET_FILE:capsid-worker>)
             add_test(
                 NAME host_static_pool_server_drain_inflight_completes
@@ -1112,6 +1113,18 @@ if(BUILD_TESTING)
                 NAME host_static_pool_server_drain_idle_exits
                 COMMAND test-host-static-pool-server drain-idle-exits
                     $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_static_pool_server_shared_port_lifecycle
+                host_static_pool_server_drain_inflight_completes
+                host_static_pool_server_drain_deadline_forces
+                host_static_pool_server_drain_idle_exits PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+            endif()
+            add_test(
+                NAME host_static_pool_server_atomic_start_failure
+                COMMAND test-host-static-pool-server atomic-failure
+                    $<TARGET_FILE:capsid-worker>)
             add_test(
                 NAME host_static_pool_server_stop_before_start
                 COMMAND test-host-static-pool-server stop-before-start
@@ -1121,11 +1134,7 @@ if(BUILD_TESTING)
                 COMMAND test-host-static-pool-server start-stop-race
                     $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
-                host_static_pool_server_shared_port_lifecycle
                 host_static_pool_server_atomic_start_failure
-                host_static_pool_server_drain_inflight_completes
-                host_static_pool_server_drain_deadline_forces
-                host_static_pool_server_drain_idle_exits
                 host_static_pool_server_stop_before_start
                 host_static_pool_server_start_stop_race PROPERTIES
                 LABELS "host;integration;m2"
@@ -1188,15 +1197,22 @@ if(BUILD_TESTING)
                 host_admission_worker_death_returns_503 PROPERTIES
                 TIMEOUT 30 LABELS "host;integration;m2")
             endif()
+            # pool-forwards runs a multi-shard pool (SO_REUSEPORT is
+            # unavailable on Windows; see docs/windows.md).
+            if(NOT WIN32)
             add_test(
                 NAME host_admission_pool_forwards_options
                 COMMAND test-host-admission pool-forwards-admission
                     $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
+                host_admission_pool_forwards_options PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+            endif()
+            set_tests_properties(
                 host_admission_inflight_full_rejects
                 host_admission_queue_full_rejects
-                host_admission_queue_timeout_returns_504
-                host_admission_pool_forwards_options PROPERTIES
+                host_admission_queue_timeout_returns_504 PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 
@@ -1446,15 +1462,22 @@ if(BUILD_TESTING)
                 NAME host_concurrent_shard_wait
                 COMMAND test-host-concurrent-wait shard
                     $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_concurrent_shard_wait PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+            # The pool variant needs a multi-shard pool (SO_REUSEPORT is
+            # unavailable on Windows; see docs/windows.md).
+            if(NOT WIN32)
             add_test(
                 NAME host_concurrent_pool_wait
                 COMMAND test-host-concurrent-wait pool
                     $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
-                host_concurrent_shard_wait
                 host_concurrent_pool_wait PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
+            endif()
 
             # Metrics-on variant: the same integration run with
             # CAPSID_HOST_IPC_METRICS=1, which arms the per-pump metrics
