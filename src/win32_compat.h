@@ -683,6 +683,11 @@ inline void set_binary_file_defaults() {
 }
 
 inline ssize_t send_fd(int fd, const void *data, size_t size, int flags) {
+#ifdef MSG_NOSIGNAL
+    // The pre-port call sites always sent with MSG_NOSIGNAL: a peer that
+    // closes mid-write must yield EPIPE, not a process-killing SIGPIPE.
+    flags |= MSG_NOSIGNAL;
+#endif
     return send(fd, data, size, flags);
 }
 
