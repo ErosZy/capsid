@@ -52,7 +52,10 @@ enum FrameType {
     kShutdown = 14,
     kAudit = 15,
     kMemoryMetricsRequest = 16,
-    kMemoryMetricsResponse = 17
+    kMemoryMetricsResponse = 17,
+    // Binding v1 (§6): descriptor + source blob chunks between HELLO and
+    // LOAD_BUNDLE. Chunking mirrors kLoadBundle (start/end flags).
+    kLoadBinding = 18
 };
 
 struct Frame {

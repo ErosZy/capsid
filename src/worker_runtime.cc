@@ -442,6 +442,12 @@ public:
         if (!read_startup(true)) {
             return 1;
         }
+        // §7.2: zero LOAD_BINDING keeps the exact single-runtime path — an
+        // empty list allocates nothing beyond the vector itself. The copy
+        // happens after the full startup so every LOAD_BINDING frame is
+        // sealed in before any JavaScript executes.
+        bindings_.assign(startup_state_.bindings().begin(),
+                         startup_state_.bindings().end());
 
         TJSRunOptions options;
         TJS_DefaultOptions(&options);
@@ -3657,6 +3663,27 @@ private:
                 module);
             return js_strdup(ctx, module.c_str());
         }
+        if (module.compare(0, 15, "capsid:binding/") == 0) {
+            // §7.2: Bindings are declared by LOAD_BINDING frames. An
+            // undeclared import fails here — it never lazily creates a
+            // Binding Runtime. The synthetic user facade replaces this
+            // branch when the dual-runtime phases land.
+            self->denied_module_ = module;
+            self->module_error_ =
+                "binding is not declared: " + module;
+            self->emit_audit(
+                CAPSID_AUDIT_STAGE_MODULE,
+                CAPSID_AUDIT_DENY,
+                0,
+                0,
+                module,
+                "binding",
+                "specifier",
+                module);
+            JS_ThrowReferenceError(
+                ctx, "%s", self->module_error_.c_str());
+            return NULL;
+        }
         const capsid::ModuleDecision decision =
             self->config_.capability_policy
                 .module_decision(module);
@@ -5090,6 +5117,9 @@ private:
     std::vector<uint8_t> bundle_;
     bool bundle_is_trusted_bytecode_;
     std::string bundle_name_;
+    // Binding v1 descriptors in arrival order; empty for zero-binding
+    // workers. No Binding Runtime is created when this stays empty.
+    std::vector<capsid::WorkerBindingDescriptor> bindings_;
     std::map<uint64_t, ResponseState> responses_;
     // Round-robin rotation order for pump_response_output (design §3.4):
     // a request is enqueued on begin and rotated to the back after each

@@ -574,6 +574,56 @@ capsid_result capsid_worker_load_bundle_named(capsid_worker *worker,
                                           const uint8_t *bundle,
                                           size_t bundle_size,
                                           const char *source_name);
+
+/*
+ * Binding v1 (docs/binding-technical-design.md §6): additive, versioned
+ * descriptor API. Every field is copied before the call returns; the
+ * descriptor may only be loaded before capsid_worker_load_bundle* — after
+ * the bundle call the sequence is sealed and further loads fail with
+ * CAPSID_INVALID_ARGUMENT. Secret values never appear in logs, digests or
+ * audit output.
+ */
+#define CAPSID_BINDING_DESCRIPTOR_VERSION 1u
+
+typedef struct capsid_binding_secret {
+    const char *key;
+    capsid_bytes value;
+} capsid_binding_secret;
+
+typedef struct capsid_binding_policy {
+    const char *const *net_rules;
+    uint32_t net_rule_count;
+    const char *const *fs_read;
+    uint32_t fs_read_count;
+    const char *const *fs_write;
+    uint32_t fs_write_count;
+    const char *const *env;
+    uint32_t env_count;
+    const char *const *stdio;
+    uint32_t stdio_count;
+} capsid_binding_policy;
+
+typedef struct capsid_sandbox_requirements {
+    const char *const *profiles;
+    uint32_t profile_count;
+} capsid_sandbox_requirements;
+
+typedef struct capsid_binding_descriptor {
+    uint32_t struct_size;
+    uint32_t version;
+    const char *binding_name;
+    capsid_bytes source;
+    capsid_bytes config_json;
+    const capsid_binding_secret *secrets;
+    uint32_t secret_count;
+    const capsid_binding_policy *policy;
+    const capsid_sandbox_requirements *sandbox;
+} capsid_binding_descriptor;
+
+capsid_result capsid_worker_load_binding(
+    capsid_worker *worker,
+    const capsid_binding_descriptor *binding);
+
 /*
  * Loads QuickJS bytecode produced by the exact same trusted Capsid/QuickJS
  * build. QuickJS bytecode is not a portable or hardened input format:

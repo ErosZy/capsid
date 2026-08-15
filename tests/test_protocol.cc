@@ -271,6 +271,44 @@ void test_trusted_bytecode_flag_requires_start() {
         "trusted bytecode flag with start accepted");
 }
 
+void test_load_binding_frame_type() {
+    capsid::protocol::Frame input;
+    input.type = capsid::protocol::kLoadBinding;
+    input.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    input.request_id = 0;
+    input.payload.assign(100, 0x5a);
+
+    std::vector<uint8_t> wire;
+    require(capsid::protocol::encode(input, &wire),
+            "LOAD_BINDING frame encodes");
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame output;
+    require(parser.append(wire.data(), wire.size()),
+            "parser accepts LOAD_BINDING wire");
+    require(parser.next(&output) == capsid::protocol::kParseFrame,
+            "LOAD_BINDING frame parses");
+    require(
+        output.type == capsid::protocol::kLoadBinding &&
+            output.flags == input.flags && output.request_id == 0 &&
+            output.payload == input.payload,
+        "LOAD_BINDING frame round-trips");
+
+    // LOAD_BINDING frames carry only the start/end chunk flags; the bundle
+    // name and trusted-bytecode flags stay bundle-only.
+    capsid::protocol::Frame bad = input;
+    bad.flags = capsid::protocol::kFlagBundleName;
+    require(!capsid::protocol::encode(bad, &wire),
+            "LOAD_BINDING with a bundle name flag rejected");
+    bad.flags = capsid::protocol::kFlagTrustedBytecode;
+    require(!capsid::protocol::encode(bad, &wire),
+            "LOAD_BINDING with a trusted-bytecode flag rejected");
+    bad.flags = 0;
+    require(capsid::protocol::encode(bad, &wire),
+            "mid-sequence LOAD_BINDING frame encodes");
+}
+
 void test_rejects_null_append() {
     capsid::protocol::Parser parser;
     require(!parser.append(NULL, 1), "null parser input rejected");
@@ -342,6 +380,7 @@ int main() {
     test_ready_sandbox_feature_flags();
     test_bundle_name_flag_requires_start();
     test_trusted_bytecode_flag_requires_start();
+    test_load_binding_frame_type();
     test_rejects_null_append();
     test_rejects_unknown_type_and_version();
     test_memory_metrics_frame_types();

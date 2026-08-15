@@ -34,6 +34,27 @@ struct WorkerStartupConfig {
     CapabilityPolicy capability_policy;
 };
 
+// Binding v1 §6: one LOAD_BINDING descriptor, decoded and validated when
+// the binding's final chunk arrives. Source is the raw index.js bytes; the
+// policy fields carry the effective (Manifest ∩ App) resource permissions.
+struct WorkerBindingSecret {
+    std::string key;
+    std::vector<uint8_t> value;
+};
+
+struct WorkerBindingDescriptor {
+    std::string name;
+    std::vector<uint8_t> source;
+    std::string config_json;
+    std::vector<WorkerBindingSecret> secrets;
+    std::vector<std::string> profiles;   // sandbox.requires (fixed set)
+    std::vector<std::string> net_rules;  // effective allow targets
+    std::vector<std::string> fs_read;
+    std::vector<std::string> fs_write;
+    std::vector<std::string> env;
+    std::vector<std::string> stdio;
+};
+
 class WorkerStartupState {
 public:
     WorkerStartupState();
@@ -51,8 +72,15 @@ public:
     bool bundle_is_trusted_bytecode() const {
         return bundle_is_trusted_bytecode_;
     }
+    // Binding descriptors in arrival order; empty for zero-binding workers.
+    const std::vector<WorkerBindingDescriptor> &bindings() const {
+        return bindings_;
+    }
 
 private:
+    bool consume_load_binding(const protocol::Frame &frame,
+                              std::string *error);
+
     WorkerStartupConfig config_;
     bool hello_received_;
     bool bundle_started_;
@@ -60,6 +88,10 @@ private:
     bool bundle_is_trusted_bytecode_;
     std::vector<uint8_t> bundle_;
     std::string bundle_name_;
+    std::vector<WorkerBindingDescriptor> bindings_;
+    // In-flight LOAD_BINDING blob accumulation (descriptor + source).
+    std::vector<uint8_t> binding_blob_;
+    bool binding_inflight_ = false;
 };
 
 struct WorkerRequestHeader {

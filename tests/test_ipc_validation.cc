@@ -390,6 +390,297 @@ void test_hello_and_bundle_state_machine() {
         "trusted bytecode startup flag was not retained");
 }
 
+// Builds one LOAD_BINDING wire blob chunk: a u32 descriptor length, the
+// descriptor sections, then the raw source bytes.
+std::vector<uint8_t> binding_blob(
+    const std::string &name,
+    const std::string &config,
+    const std::vector<std::pair<std::string, std::string>> &secrets,
+    const std::vector<std::string> &profiles,
+    const std::vector<std::string> &net_rules,
+    const std::vector<std::string> &fs_read,
+    const std::vector<std::string> &fs_write,
+    const std::vector<std::string> &env,
+    const std::vector<std::string> &stdio,
+    const std::string &source) {
+    std::vector<uint8_t> descriptor;
+    append_string16(&descriptor, name);
+    append_string32(&descriptor, config);
+    capsid::protocol::append_u32(
+        &descriptor, static_cast<uint32_t>(secrets.size()));
+    for (const auto &secret : secrets) {
+        append_string16(&descriptor, secret.first);
+        append_string32(&descriptor, secret.second);
+    }
+    const auto append_list = [&descriptor](
+                                 const std::vector<std::string> &list) {
+        capsid::protocol::append_u32(
+            &descriptor, static_cast<uint32_t>(list.size()));
+        for (const std::string &item : list) {
+            append_string16(&descriptor, item);
+        }
+    };
+    append_list(profiles);
+    append_list(net_rules);
+    append_list(fs_read);
+    append_list(fs_write);
+    append_list(env);
+    append_list(stdio);
+
+    std::vector<uint8_t> blob;
+    capsid::protocol::append_u32(
+        &blob, static_cast<uint32_t>(descriptor.size()));
+    blob.insert(blob.end(), descriptor.begin(), descriptor.end());
+    blob.insert(blob.end(), source.begin(), source.end());
+    return blob;
+}
+
+capsid::protocol::Frame load_binding_frame(uint32_t flags,
+                                           const std::vector<uint8_t> &blob) {
+    capsid::protocol::Frame frame;
+    frame.type = capsid::protocol::kLoadBinding;
+    frame.flags = flags;
+    frame.request_id = 0;
+    frame.payload = blob;
+    return frame;
+}
+
+void test_binding_startup_state_machine() {
+    const std::vector<uint8_t> blob = binding_blob(
+        "mongo",
+        R"json({"database":"orders"})json",
+        {{"password", "s3cr3t"}},
+        {"network-client"},
+        {"127.0.0.1:27017"},
+        {"/etc/capsid/mongo"},
+        {},
+        {"APP_MODE"},
+        {"stdout"},
+        "export default () => ({});");
+
+    // A LOAD_BINDING before HELLO is an invalid startup frame sequence.
+    {
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               blob),
+                           &error),
+            "LOAD_BINDING before HELLO was accepted");
+        require(
+            !state.hello_received() && state.bindings().empty(),
+            "pre-HELLO LOAD_BINDING mutated startup state");
+    }
+
+    // A single start+end frame commits the descriptor atomically.
+    {
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            state.consume(load_binding_frame(
+                              capsid::protocol::kFlagStart |
+                                  capsid::protocol::kFlagEnd,
+                              blob),
+                          &error),
+            error);
+        require(
+            state.bindings().size() == 1,
+            "single-frame LOAD_BINDING did not commit");
+        const capsid::WorkerBindingDescriptor &binding =
+            state.bindings().front();
+        require(binding.name == "mongo", "binding name decoded wrong");
+        require(
+            binding.config_json == R"json({"database":"orders"})json",
+            "binding config decoded wrong");
+        require(
+            binding.secrets.size() == 1 &&
+                binding.secrets[0].key == "password" &&
+                std::string(binding.secrets[0].value.begin(),
+                            binding.secrets[0].value.end()) == "s3cr3t",
+            "binding secrets decoded wrong");
+        require(
+            binding.profiles.size() == 1 &&
+                binding.profiles[0] == "network-client",
+            "binding profiles decoded wrong");
+        require(
+            binding.net_rules.size() == 1 &&
+                binding.net_rules[0] == "127.0.0.1:27017",
+            "binding net rules decoded wrong");
+        require(
+            binding.fs_read.size() == 1 &&
+                binding.fs_read[0] == "/etc/capsid/mongo" &&
+                binding.fs_write.empty(),
+            "binding fs paths decoded wrong");
+        require(
+            binding.env.size() == 1 && binding.env[0] == "APP_MODE",
+            "binding env decoded wrong");
+        require(
+            binding.stdio.size() == 1 && binding.stdio[0] == "stdout",
+            "binding stdio decoded wrong");
+        require(
+            std::string(binding.source.begin(), binding.source.end()) ==
+                "export default () => ({});",
+            "binding source decoded wrong");
+    }
+
+    // A chunked binding assembles the source in order.
+    {
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            state.consume(
+                load_binding_frame(capsid::protocol::kFlagStart,
+                                   blob),
+                &error),
+            error);
+        capsid::protocol::Frame middle = load_binding_frame(0, {});
+        middle.payload.assign(4, 0x5a);
+        require(
+            state.consume(middle, &error),
+            "chunked LOAD_BINDING middle frame was rejected");
+        capsid::protocol::Frame end = load_binding_frame(
+            capsid::protocol::kFlagEnd, {});
+        end.payload.assign(2, 0x5b);
+        require(
+            state.consume(end, &error),
+            "chunked LOAD_BINDING end frame was rejected");
+        require(
+            state.bindings().size() == 1,
+            "chunked LOAD_BINDING did not commit");
+        const capsid::WorkerBindingDescriptor &binding =
+            state.bindings().front();
+        require(
+            std::string(binding.source.begin(), binding.source.end()) ==
+                "export default () => ({});\x5a\x5a\x5a\x5a\x5b\x5b",
+            "chunked binding source assembled in the wrong order");
+    }
+
+    // Descriptor validation failures reject the whole binding.
+    {
+        const std::vector<uint8_t> bad_name = binding_blob(
+            "Mongo", "{}", {}, {}, {}, {}, {}, {}, {}, "x");
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               bad_name),
+                           &error),
+            "LOAD_BINDING with an invalid name was accepted");
+        require(
+            state.bindings().empty(),
+            "rejected LOAD_BINDING partially committed state");
+    }
+    {
+        const std::vector<uint8_t> bad_profile = binding_blob(
+            "mongo", "{}", {}, {"network-server"}, {}, {}, {}, {}, {}, "x");
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               bad_profile),
+                           &error),
+            "LOAD_BINDING with an unknown sandbox profile was accepted");
+    }
+    {
+        const std::vector<uint8_t> bad_target = binding_blob(
+            "mongo", "{}", {}, {"network-client"}, {"noport"}, {}, {}, {},
+            {}, "x");
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               bad_target),
+                           &error),
+            "LOAD_BINDING with an invalid net target was accepted");
+    }
+    {
+        const std::vector<uint8_t> huge_config = binding_blob(
+            "mongo", std::string(256U * 1024U + 1, 'x'), {}, {}, {}, {},
+            {}, {}, {}, "x");
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               huge_config),
+                           &error),
+            "LOAD_BINDING with an oversized config was accepted");
+    }
+
+    // A LOAD_BINDING after the bundle started is a sealed-sequence error.
+    {
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        capsid::protocol::Frame bundle;
+        bundle.type = capsid::protocol::kLoadBundle;
+        bundle.flags = capsid::protocol::kFlagStart;
+        bundle.request_id = 0;
+        bundle.payload.push_back(0x42);
+        require(state.consume(bundle, &error), error);
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               blob),
+                           &error),
+            "LOAD_BINDING after LOAD_BUNDLE start was accepted");
+    }
+
+    // A LOAD_BUNDLE cannot interleave a LOAD_BINDING sequence.
+    {
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            state.consume(load_binding_frame(
+                              capsid::protocol::kFlagStart,
+                              blob),
+                          &error),
+            error);
+        capsid::protocol::Frame bundle;
+        bundle.type = capsid::protocol::kLoadBundle;
+        bundle.flags = capsid::protocol::kFlagStart;
+        bundle.request_id = 0;
+        bundle.payload.push_back(0x42);
+        require(
+            !state.consume(bundle, &error),
+            "LOAD_BUNDLE interleaved inside a LOAD_BINDING sequence");
+    }
+
+    // Zero LOAD_BINDING keeps the plain bundle path and an empty list.
+    {
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        capsid::protocol::Frame bundle;
+        bundle.type = capsid::protocol::kLoadBundle;
+        bundle.flags =
+            capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+        bundle.request_id = 0;
+        bundle.payload.push_back(0x42);
+        require(state.consume(bundle, &error), error);
+        require(
+            state.bundle_complete() && state.bindings().empty(),
+            "zero-binding startup diverged from the single-runtime path");
+    }
+}
+
 void test_request_head_decoder() {
     capsid::protocol::Frame frame;
     frame.type = capsid::protocol::kRequestHead;
@@ -519,6 +810,7 @@ void test_protocol_version_rejection() {
 
 int main() {
     test_hello_and_bundle_state_machine();
+    test_binding_startup_state_machine();
     test_request_head_decoder();
     test_response_header_decoder();
     test_protocol_version_rejection();

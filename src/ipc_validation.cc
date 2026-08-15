@@ -3,8 +3,11 @@
 #include "capsid/runtime.h"
 
 #include <algorithm>
+#include <arpa/inet.h>
+#include <cctype>
 #include <cstddef>
 #include <limits>
+#include <netinet/in.h>
 
 namespace {
 
@@ -17,6 +20,361 @@ bool reject(std::string *error, const char *message) {
 
 bool contains_nul(const std::string &value) {
     return value.find('\0') != std::string::npos;
+}
+
+// --- Binding v1 wire grammars (docs/binding-technical-design.md §2/§4) ---
+
+// Defined below; the binding blob parser precedes them in this file.
+bool read_string16(const uint8_t **cursor,
+                   const uint8_t *end,
+                   std::string *value);
+bool read_string32(const uint8_t **cursor,
+                   const uint8_t *end,
+                   std::string *value);
+//
+// The worker validates every LOAD_BINDING descriptor defensively even
+// though the Host config layer (host/config.cc) already rejected it: the
+// wire is the last trust boundary before Binding code. These grammars must
+// stay in sync with the Host schema authority.
+
+const size_t kMaxBindingDescriptorBytes = 1024U * 1024U;   // config + lists
+const size_t kMaxBindingSourceBytes = 16U * 1024U * 1024U; // index.js
+const size_t kMaxBindingConfigBytes = 256U * 1024U;
+const size_t kMaxBindingSecrets = 64;
+const size_t kMaxBindingSecretValueBytes = 256U * 1024U;
+const size_t kMaxBindingRules = 1024;
+const size_t kMaxBindingEnvEntries = 256;
+const size_t kMaxBindingStdioEntries = 3;
+const size_t kMaxBindingPathBytes = 4096;
+
+const char *const kBindingSandboxProfiles[] = {
+    "network-client", "filesystem-read", "filesystem-write",
+    "filesystem-watch", "sqlite", "wasi",
+};
+
+bool is_binding_profile(const std::string &value) {
+    for (size_t i = 0;
+         i < sizeof(kBindingSandboxProfiles) /
+                 sizeof(kBindingSandboxProfiles[0]);
+         ++i) {
+        if (value == kBindingSandboxProfiles[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// [a-z][a-z0-9-]{0,62}, 1..63 bytes.
+bool valid_binding_name(const std::string &value) {
+    if (value.empty() || value.size() > 63 ||
+        value[0] < 'a' || value[0] > 'z') {
+        return false;
+    }
+    for (size_t i = 0; i < value.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(value[i]);
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
+              ch == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// [A-Za-z0-9._-], no empty component, 1..256 bytes (mirrors the Host
+// secret-key grammar; a stricter worker-side bound is fine).
+bool valid_binding_secret_key(const std::string &value) {
+    if (value.empty() || value.size() > 256 ||
+        value.find("..") != std::string::npos) {
+        return false;
+    }
+    for (size_t i = 0; i < value.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(value[i]);
+        if (!(std::isalnum(ch) || ch == '.' || ch == '_' || ch == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool valid_binding_path(const std::string &value) {
+    return !value.empty() && value[0] == '/' &&
+           value.size() <= kMaxBindingPathBytes &&
+           !contains_nul(value);
+}
+
+bool valid_binding_env_name(const std::string &value) {
+    if (value.empty() || value.size() > 256 ||
+        value.find('*') != std::string::npos) {
+        return false;
+    }
+    const unsigned char first = static_cast<unsigned char>(value[0]);
+    if (!(std::isalpha(first) || first == '_')) {
+        return false;
+    }
+    for (size_t i = 0; i < value.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(value[i]);
+        if (!(std::isalnum(ch) || ch == '_')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool valid_binding_stdio(const std::string &value) {
+    return value == "stdin" || value == "stdout" || value == "stderr";
+}
+
+bool valid_binding_port(const std::string &port) {
+    if (port.empty() || port.size() > 5) {
+        return false;
+    }
+    unsigned int value = 0;
+    for (size_t i = 0; i < port.size(); ++i) {
+        const char c = port[i];
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        value = value * 10 + static_cast<unsigned int>(c - '0');
+    }
+    return value >= 1 && value <= 65535;
+}
+
+bool valid_binding_hostname(const std::string &host) {
+    size_t start = 0;
+    if (host.size() >= 2 && host[0] == '*' && host[1] == '.') {
+        start = 2;
+    } else if (host.find('*') != std::string::npos) {
+        return false;
+    }
+    if (start == host.size() || host.size() > 253) {
+        return false;
+    }
+    for (size_t index = start; index <= host.size(); ++index) {
+        if (index < host.size() && host[index] != '.') {
+            continue;
+        }
+        const size_t label_size = index - start;
+        if (label_size == 0 || label_size > 63 ||
+            host[start] == '-' || host[index - 1] == '-') {
+            return false;
+        }
+        for (size_t label_index = start; label_index < index;
+             ++label_index) {
+            const unsigned char ch =
+                static_cast<unsigned char>(host[label_index]);
+            if (!(std::isalnum(ch) || ch == '-')) {
+                return false;
+            }
+        }
+        start = index + 1;
+    }
+    return true;
+}
+
+bool valid_binding_numeric_host(const std::string &host) {
+    const size_t slash = host.find('/');
+    const std::string address = host.substr(0, slash);
+    if (slash != std::string::npos) {
+        unsigned int prefix = 0;
+        const std::string prefix_text = host.substr(slash + 1);
+        if (prefix_text.empty()) {
+            return false;
+        }
+        for (size_t i = 0; i < prefix_text.size(); ++i) {
+            const char c = prefix_text[i];
+            if (c < '0' || c > '9') {
+                return false;
+            }
+            prefix = prefix * 10 + static_cast<unsigned int>(c - '0');
+            if (prefix > 32) {
+                return false;
+            }
+        }
+    }
+    struct in_addr parsed;
+    return inet_pton(AF_INET, address.c_str(), &parsed) == 1;
+}
+
+bool valid_binding_host(const std::string &host) {
+    if (host.empty()) {
+        return false;
+    }
+    if (host == "*") {
+        return true;
+    }
+    bool numeric = true;
+    for (size_t i = 0; i < host.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(host[i]);
+        if (!(std::isdigit(ch) || ch == '.' || ch == '/')) {
+            numeric = false;
+            break;
+        }
+    }
+    if (numeric) {
+        return valid_binding_numeric_host(host);
+    }
+    return valid_binding_hostname(host);
+}
+
+bool valid_binding_net_target(const std::string &target) {
+    if (target.empty()) {
+        return false;
+    }
+    if (target[0] == '[') {
+        const size_t close = target.find(']');
+        if (close == std::string::npos || close + 1 >= target.size() ||
+            target[close + 1] != ':') {
+            return false;
+        }
+        const std::string inner = target.substr(1, close - 1);
+        const size_t slash = inner.find('/');
+        struct in6_addr parsed;
+        if (inet_pton(AF_INET6, inner.substr(0, slash).c_str(), &parsed) !=
+            1) {
+            return false;
+        }
+        if (slash != std::string::npos) {
+            unsigned int prefix = 0;
+            for (size_t i = slash + 1; i < inner.size(); ++i) {
+                const char c = inner[i];
+                if (c < '0' || c > '9') {
+                    return false;
+                }
+                prefix = prefix * 10 + static_cast<unsigned int>(c - '0');
+                if (prefix > 128) {
+                    return false;
+                }
+            }
+        }
+        return valid_binding_port(target.substr(close + 2));
+    }
+    const size_t colon = target.find(':');
+    if (colon == std::string::npos ||
+        target.find(':', colon + 1) != std::string::npos) {
+        return false;
+    }
+    return valid_binding_host(target.substr(0, colon)) &&
+           valid_binding_port(target.substr(colon + 1));
+}
+
+// u32 count followed by count x string16 items, each validated, non-empty
+// of duplicates. Error text is static and never contains item content.
+typedef bool (*BindingItemCheck)(const std::string &);
+
+bool read_binding_list(const uint8_t **cursor,
+                       const uint8_t *end,
+                       std::vector<std::string> *out,
+                       size_t max_items,
+                       BindingItemCheck check,
+                       const char *error_label,
+                       std::string *error) {
+    uint32_t count = 0;
+    if (!capsid::protocol::read_u32(cursor, end, &count) ||
+        count > max_items) {
+        return reject(error, "invalid binding list count");
+    }
+    out->clear();
+    for (uint32_t i = 0; i < count; ++i) {
+        std::string item;
+        if (!read_string16(cursor, end, &item) || contains_nul(item) ||
+            !check(item) ||
+            std::find(out->begin(), out->end(), item) != out->end()) {
+            return reject(
+                error,
+                (std::string("invalid binding ") + error_label).c_str());
+        }
+        out->push_back(item);
+    }
+    return true;
+}
+
+bool parse_binding_blob(const std::vector<uint8_t> &blob,
+                        capsid::WorkerBindingDescriptor *out,
+                        std::string *error) {
+    if (blob.size() < sizeof(uint32_t)) {
+        return reject(error, "invalid binding descriptor length");
+    }
+    const uint8_t *cursor = &blob[0];
+    const uint8_t *end = cursor + blob.size();
+    uint32_t descriptor_size = 0;
+    if (!capsid::protocol::read_u32(&cursor, end, &descriptor_size) ||
+        descriptor_size == 0 ||
+        descriptor_size > kMaxBindingDescriptorBytes ||
+        static_cast<uint64_t>(descriptor_size) >
+            static_cast<uint64_t>(end - cursor)) {
+        return reject(error, "invalid binding descriptor length");
+    }
+    const uint8_t *descriptor_end = cursor + descriptor_size;
+    const uint8_t *source_begin = descriptor_end;
+
+    capsid::WorkerBindingDescriptor decoded;
+    if (!read_string16(&cursor, descriptor_end, &decoded.name) ||
+        contains_nul(decoded.name) || !valid_binding_name(decoded.name)) {
+        return reject(error, "invalid binding name");
+    }
+    if (!read_string32(&cursor, descriptor_end, &decoded.config_json) ||
+        contains_nul(decoded.config_json) ||
+        decoded.config_json.size() > kMaxBindingConfigBytes) {
+        return reject(error, "invalid binding config");
+    }
+
+    uint32_t secret_count = 0;
+    if (!capsid::protocol::read_u32(
+            &cursor, descriptor_end, &secret_count) ||
+        secret_count > kMaxBindingSecrets) {
+        return reject(error, "invalid binding secret count");
+    }
+    for (uint32_t i = 0; i < secret_count; ++i) {
+        capsid::WorkerBindingSecret secret;
+        if (!read_string16(&cursor, descriptor_end, &secret.key) ||
+            contains_nul(secret.key) ||
+            !valid_binding_secret_key(secret.key)) {
+            return reject(error, "invalid binding secret key");
+        }
+        uint32_t value_size = 0;
+        if (!capsid::protocol::read_u32(
+                &cursor, descriptor_end, &value_size) ||
+            value_size > kMaxBindingSecretValueBytes ||
+            static_cast<uint64_t>(value_size) >
+                static_cast<uint64_t>(descriptor_end - cursor)) {
+            return reject(error, "invalid binding secret value");
+        }
+        secret.value.assign(cursor, cursor + value_size);
+        cursor += value_size;
+        decoded.secrets.push_back(secret);
+    }
+
+    if (!read_binding_list(&cursor, descriptor_end, &decoded.profiles,
+                           6, is_binding_profile, "sandbox profile",
+                           error) ||
+        !read_binding_list(&cursor, descriptor_end, &decoded.net_rules,
+                           kMaxBindingRules, valid_binding_net_target,
+                           "net target", error) ||
+        !read_binding_list(&cursor, descriptor_end, &decoded.fs_read,
+                           kMaxBindingRules, valid_binding_path,
+                           "fs read path", error) ||
+        !read_binding_list(&cursor, descriptor_end, &decoded.fs_write,
+                           kMaxBindingRules, valid_binding_path,
+                           "fs write path", error) ||
+        !read_binding_list(&cursor, descriptor_end, &decoded.env,
+                           kMaxBindingEnvEntries, valid_binding_env_name,
+                           "environment name", error) ||
+        !read_binding_list(&cursor, descriptor_end, &decoded.stdio,
+                           kMaxBindingStdioEntries, valid_binding_stdio,
+                           "stdio stream", error)) {
+        return false;
+    }
+    if (cursor != descriptor_end) {
+        return reject(error, "binding descriptor has trailing bytes");
+    }
+
+    const size_t source_size = static_cast<size_t>(end - source_begin);
+    if (source_size > kMaxBindingSourceBytes) {
+        return reject(error, "binding source exceeds the size limit");
+    }
+    decoded.source.assign(source_begin, end);
+    *out = decoded;
+    return true;
 }
 
 bool read_string16(const uint8_t **cursor,
@@ -501,6 +859,9 @@ bool WorkerStartupState::consume(const protocol::Frame &frame,
         hello_received_ = true;
         return true;
     }
+    if (frame.type == protocol::kLoadBinding) {
+        return consume_load_binding(frame, error);
+    }
     if (frame.type != protocol::kLoadBundle ||
         frame.request_id != 0 ||
         (frame.flags &
@@ -512,7 +873,10 @@ bool WorkerStartupState::consume(const protocol::Frame &frame,
          (frame.flags & protocol::kFlagStart) == 0) ||
         ((frame.flags & protocol::kFlagTrustedBytecode) != 0 &&
          (frame.flags & protocol::kFlagStart) == 0) ||
-        bundle_complete_) {
+        bundle_complete_ ||
+        // The bundle seals the binding list; it also cannot interleave a
+        // binding sequence in flight.
+        binding_inflight_) {
         return reject(error, "invalid startup frame sequence");
     }
 
@@ -567,6 +931,44 @@ bool WorkerStartupState::consume(const protocol::Frame &frame,
         frame.payload.end());
     if ((frame.flags & protocol::kFlagEnd) != 0) {
         bundle_complete_ = true;
+    }
+    return true;
+}
+
+bool WorkerStartupState::consume_load_binding(const protocol::Frame &frame,
+                                              std::string *error) {
+    if (frame.request_id != 0 ||
+        (frame.flags & ~(protocol::kFlagStart | protocol::kFlagEnd)) != 0) {
+        return reject(error, "invalid binding frame flags");
+    }
+    const bool starts = (frame.flags & protocol::kFlagStart) != 0;
+    if (starts) {
+        if (bundle_started_ || binding_inflight_) {
+            return reject(error, "invalid binding start sequence");
+        }
+    } else if (!binding_inflight_) {
+        return reject(error, "invalid binding continuation sequence");
+    }
+    if (binding_blob_.size() > config_.max_queued_bytes ||
+        frame.payload.size() >
+            config_.max_queued_bytes - binding_blob_.size()) {
+        return reject(error, "binding buffer limit exceeded");
+    }
+    if (starts) {
+        binding_inflight_ = true;
+    }
+    binding_blob_.insert(binding_blob_.end(), frame.payload.begin(),
+                         frame.payload.end());
+    if ((frame.flags & protocol::kFlagEnd) != 0) {
+        WorkerBindingDescriptor descriptor;
+        if (!parse_binding_blob(binding_blob_, &descriptor, error)) {
+            binding_blob_.clear();
+            binding_inflight_ = false;
+            return false;
+        }
+        bindings_.push_back(descriptor);
+        binding_blob_.clear();
+        binding_inflight_ = false;
     }
     return true;
 }

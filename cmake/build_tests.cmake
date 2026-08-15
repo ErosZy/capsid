@@ -1941,6 +1941,24 @@ if(BUILD_TESTING)
         )
         add_custom_target(test-p0-fixture DEPENDS "${CAPSID_P0_FIXTURE}")
 
+        set(CAPSID_BINDING_IMPORT_FIXTURE
+            "${CAPSID_GENERATED_DIR}/test-binding-import.js")
+        add_custom_command(
+            OUTPUT "${CAPSID_BINDING_IMPORT_FIXTURE}"
+            COMMAND "${CAPSID_ESBUILD}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-import.js"
+                --bundle
+                --target=esnext
+                --platform=neutral
+                --format=esm
+                "--external:capsid:binding/*"
+                "--outfile=${CAPSID_BINDING_IMPORT_FIXTURE}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-import.js"
+            VERBATIM
+        )
+        add_custom_target(test-binding-import-fixture
+            DEPENDS "${CAPSID_BINDING_IMPORT_FIXTURE}")
+
         set(CAPSID_P1_PLATFORM_FIXTURE
             "${CAPSID_GENERATED_DIR}/test-p1-platform-contract.js")
         add_custom_command(
@@ -4410,6 +4428,34 @@ if(BUILD_TESTING)
         set_tests_properties(
             worker_rejects_request_credit_violation
             PROPERTIES TIMEOUT 10
+        )
+
+        add_executable(
+            test-worker-zero-binding
+            tests/test_worker_zero_binding.cc
+            src/protocol.cc
+        )
+        target_include_directories(
+            test-worker-zero-binding
+            PRIVATE include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(
+            test-worker-zero-binding
+            PRIVATE capsid_runtime capsid_sanitizers)
+        add_dependencies(
+            test-worker-zero-binding
+            capsid-worker
+            test-p0-fixture
+            test-binding-import-fixture)
+        add_test(
+            NAME worker_zero_binding_regression
+            COMMAND test-worker-zero-binding
+                $<TARGET_FILE:capsid-worker>
+                "${CAPSID_P0_FIXTURE}"
+                "${CAPSID_BINDING_IMPORT_FIXTURE}"
+        )
+        set_tests_properties(
+            worker_zero_binding_regression
+            PROPERTIES TIMEOUT 30
         )
 
         add_executable(test-fetch-cancel tests/test_fetch_cancel.cc)

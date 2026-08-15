@@ -54,6 +54,9 @@ struct capsid_worker {
     int fd;
     pid_t pid;
     bool closed;
+    // Binding v1: set by the first successful capsid_worker_load_bundle*;
+    // capsid_worker_load_binding after it fails with INVALID_ARGUMENT.
+    bool bundle_loaded;
     uint64_t request_timeout_ms;
     uint32_t max_inflight_requests;
     uint32_t max_header_bytes;
@@ -1592,6 +1595,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     worker->fd = sockets[0];
     worker->pid = pid;
     worker->closed = false;
+    worker->bundle_loaded = false;
     worker->request_timeout_ms = config.request_timeout_ms;
     worker->max_inflight_requests = config.max_inflight_requests;
     worker->max_header_bytes = config.max_header_bytes;
@@ -1760,10 +1764,220 @@ capsid_result capsid_worker_set_cpu_affinity(
 capsid_result capsid_worker_load_bundle(capsid_worker *worker, const uint8_t *bundle, size_t bundle_size) {
     return capsid::abi::guard_result(
         [&]() -> capsid_result {
-    return queue_chunked(worker, capsid::protocol::kLoadBundle, 0, bundle, bundle_size, true, true);
+    const capsid_result result =
+        queue_chunked(worker, capsid::protocol::kLoadBundle, 0, bundle, bundle_size, true, true);
+    if (result == CAPSID_OK) {
+        // The bundle seals the binding sequence (§6): further
+        // capsid_worker_load_binding calls fail with INVALID_ARGUMENT.
+        worker->bundle_loaded = true;
+    }
+    return result;
         },
         "capsid_worker_load_bundle: out of memory",
         "capsid_worker_load_bundle: internal error");
+}
+
+namespace {
+
+// Binding v1 API-side sanity checks (docs/binding-technical-design.md §6).
+// The worker's LOAD_BINDING decoder is the wire authority; this layer only
+// rejects structurally hopeless descriptors before any bytes are queued.
+
+const size_t kApiMaxBindingSecrets = 64;
+const size_t kApiMaxBindingSecretValueBytes = 256U * 1024U;
+const size_t kApiMaxBindingRules = 1024;
+const size_t kApiMaxBindingEnvEntries = 256;
+const size_t kApiMaxBindingPathBytes = 4096;
+
+bool valid_api_binding_name(const std::string &name) {
+    if (name.empty() || name.size() > 63 ||
+        name[0] < 'a' || name[0] > 'z') {
+        return false;
+    }
+    for (size_t i = 0; i < name.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(name[i]);
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
+              ch == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool valid_api_secret_key(const std::string &key) {
+    if (key.empty() || key.size() > 256 ||
+        key.find("..") != std::string::npos) {
+        return false;
+    }
+    for (size_t i = 0; i < key.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(key[i]);
+        if (!(std::isalnum(ch) || ch == '.' || ch == '_' || ch == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool valid_api_list(const char *const *items, uint32_t count,
+                    size_t max_count, size_t max_item_bytes,
+                    bool (*check)(const std::string &)) {
+    if (count > max_count) {
+        return false;
+    }
+    if (count != 0 && !items) {
+        return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        if (!items[i]) {
+            return false;
+        }
+        const std::string item(items[i]);
+        if (item.empty() || item.size() > max_item_bytes ||
+            (check != NULL && !check(item))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void append_api_string16(std::vector<uint8_t> *output,
+                         const std::string &value) {
+    capsid::protocol::append_u16(
+        output, static_cast<uint16_t>(value.size()));
+    output->insert(output->end(), value.begin(), value.end());
+}
+
+}  // namespace
+
+capsid_result capsid_worker_load_binding(capsid_worker *worker,
+                                         const capsid_binding_descriptor *binding) {
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+    if (!worker || !binding) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (worker->bundle_loaded) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (binding->version != CAPSID_BINDING_DESCRIPTOR_VERSION ||
+        binding->struct_size < sizeof(capsid_binding_descriptor) ||
+        !binding->binding_name) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    const std::string name(binding->binding_name);
+    if (!valid_api_binding_name(name)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (binding->source.size > 16U * 1024U * 1024U ||
+        (binding->source.size != 0 && !binding->source.data)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (binding->config_json.size > 256U * 1024U ||
+        (binding->config_json.size != 0 && !binding->config_json.data)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (binding->secret_count > kApiMaxBindingSecrets ||
+        (binding->secret_count != 0 && !binding->secrets)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    for (uint32_t i = 0; i < binding->secret_count; ++i) {
+        if (!binding->secrets[i].key) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
+        const std::string key(binding->secrets[i].key);
+        if (!valid_api_secret_key(key) ||
+            binding->secrets[i].value.size >
+                kApiMaxBindingSecretValueBytes ||
+            (binding->secrets[i].value.size != 0 &&
+             !binding->secrets[i].value.data)) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
+    }
+    const capsid_binding_policy *policy = binding->policy;
+    const capsid_sandbox_requirements *sandbox = binding->sandbox;
+    if (!policy || !sandbox) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (!valid_api_list(policy->net_rules, policy->net_rule_count,
+                        kApiMaxBindingRules, 1024, NULL) ||
+        !valid_api_list(policy->fs_read, policy->fs_read_count,
+                        kApiMaxBindingRules, kApiMaxBindingPathBytes, NULL) ||
+        !valid_api_list(policy->fs_write, policy->fs_write_count,
+                        kApiMaxBindingRules, kApiMaxBindingPathBytes, NULL) ||
+        !valid_api_list(policy->env, policy->env_count,
+                        kApiMaxBindingEnvEntries, 256, NULL) ||
+        !valid_api_list(policy->stdio, policy->stdio_count,
+                        3, 16, NULL) ||
+        !valid_api_list(sandbox->profiles, sandbox->profile_count,
+                        6, 64, NULL)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+
+    // Blob: u32 descriptor length, the descriptor sections, then the raw
+    // source bytes (mirrors the worker's LOAD_BINDING decoder).
+    std::vector<uint8_t> descriptor;
+    append_api_string16(&descriptor, name);
+    capsid::protocol::append_u32(
+        &descriptor,
+        static_cast<uint32_t>(binding->config_json.size));
+    if (binding->config_json.size != 0) {
+        descriptor.insert(descriptor.end(), binding->config_json.data,
+                          binding->config_json.data +
+                              binding->config_json.size);
+    }
+    capsid::protocol::append_u32(&descriptor, binding->secret_count);
+    for (uint32_t i = 0; i < binding->secret_count; ++i) {
+        append_api_string16(
+            &descriptor, std::string(binding->secrets[i].key));
+        capsid::protocol::append_u32(
+            &descriptor,
+            static_cast<uint32_t>(binding->secrets[i].value.size));
+        if (binding->secrets[i].value.size != 0) {
+            descriptor.insert(descriptor.end(),
+                              binding->secrets[i].value.data,
+                              binding->secrets[i].value.data +
+                                  binding->secrets[i].value.size);
+        }
+    }
+    const struct {
+        const char *const *items;
+        uint32_t count;
+    } lists[] = {
+        { sandbox->profiles, sandbox->profile_count },
+        { policy->net_rules, policy->net_rule_count },
+        { policy->fs_read, policy->fs_read_count },
+        { policy->fs_write, policy->fs_write_count },
+        { policy->env, policy->env_count },
+        { policy->stdio, policy->stdio_count },
+    };
+    for (size_t list = 0; list < sizeof(lists) / sizeof(lists[0]);
+         ++list) {
+        capsid::protocol::append_u32(&descriptor, lists[list].count);
+        for (uint32_t i = 0; i < lists[list].count; ++i) {
+            append_api_string16(
+                &descriptor, std::string(lists[list].items[i]));
+        }
+    }
+
+    std::vector<uint8_t> blob;
+    capsid::protocol::append_u32(
+        &blob, static_cast<uint32_t>(descriptor.size()));
+    blob.insert(blob.end(), descriptor.begin(), descriptor.end());
+    if (binding->source.size != 0) {
+        blob.insert(blob.end(), binding->source.data,
+                    binding->source.data + binding->source.size);
+    }
+    return queue_chunked(
+        worker,
+        capsid::protocol::kLoadBinding,
+        0,
+        blob.empty() ? NULL : &blob[0],
+        blob.size(),
+        true,
+        true);
+        },
+        "capsid_worker_load_binding: out of memory",
+        "capsid_worker_load_binding: internal error");
 }
 
 capsid_result capsid_worker_load_bundle_named(capsid_worker *worker,
@@ -1799,7 +2013,7 @@ capsid_result capsid_worker_load_bundle_named(capsid_worker *worker,
             bundle,
             bundle_size);
     }
-    return queue_chunked(
+    const capsid_result result = queue_chunked(
         worker,
         capsid::protocol::kLoadBundle,
         0,
@@ -1808,6 +2022,10 @@ capsid_result capsid_worker_load_bundle_named(capsid_worker *worker,
         true,
         true,
         capsid::protocol::kFlagBundleName);
+    if (result == CAPSID_OK) {
+        worker->bundle_loaded = true;
+    }
+    return result;
         },
         "capsid_worker_load_bundle_named: out of memory",
         "capsid_worker_load_bundle_named: internal error");
@@ -1845,7 +2063,7 @@ capsid_result capsid_worker_load_trusted_bytecode_named(
         &named_bytecode[sizeof(uint16_t) + name_size],
         bytecode,
         bytecode_size);
-    return queue_chunked(
+    const capsid_result result = queue_chunked(
         worker,
         capsid::protocol::kLoadBundle,
         0,
@@ -1855,6 +2073,10 @@ capsid_result capsid_worker_load_trusted_bytecode_named(
         true,
         capsid::protocol::kFlagBundleName |
             capsid::protocol::kFlagTrustedBytecode);
+    if (result == CAPSID_OK) {
+        worker->bundle_loaded = true;
+    }
+    return result;
         },
         "capsid_worker_load_trusted_bytecode_named: out of memory",
         "capsid_worker_load_trusted_bytecode_named: internal error");

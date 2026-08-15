@@ -29,7 +29,7 @@ uint64_t load_u64(const uint8_t *input) {
 }
 
 bool valid_type(uint16_t type) {
-    return type >= kHello && type <= kMemoryMetricsResponse;
+    return type >= kHello && type <= kLoadBinding;
 }
 
 bool valid_flags(uint16_t type, uint32_t flags) {
@@ -42,6 +42,10 @@ bool valid_flags(uint16_t type, uint32_t flags) {
                 (flags & kFlagStart) != 0) &&
                ((flags & kFlagTrustedBytecode) == 0 ||
                 (flags & kFlagStart) != 0);
+    }
+    if (type == kLoadBinding) {
+        // The binding blob is opaque: only the chunk start/end flags apply.
+        return (flags & ~(kFlagStart | kFlagEnd)) == 0;
     }
     if (type == kRequestHead) {
         // kFlagRequestEnd: request has no body.
