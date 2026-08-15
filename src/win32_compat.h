@@ -681,6 +681,23 @@ inline int capsid_poll(capsid_pollfd *fds,
         descriptors.empty() ? NULL : &descriptors[0],
         static_cast<ULONG>(count),
         timeout_ms);
+    {
+        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+        if (dbg != NULL) {
+            std::fprintf(dbg,
+                         "capsid_poll: fd=%d handle=%lld events=%d "
+                         "result=%d revents=%d err=%d\n",
+                         static_cast<int>(fds[0].fd),
+                         static_cast<long long>(descriptors[0].fd),
+                         static_cast<int>(descriptors[0].events),
+                         result,
+                         result > 0
+                             ? static_cast<int>(descriptors[0].revents)
+                             : -1,
+                         result == SOCKET_ERROR ? WSAGetLastError() : 0);
+            std::fclose(dbg);
+        }
+    }
     if (result == SOCKET_ERROR) {
         map_winsock_errno();
         return -1;
