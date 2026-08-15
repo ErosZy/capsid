@@ -2635,6 +2635,20 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                 worker->closed = true;
                 close(worker->fd);
                 worker->fd = -1;
+                {
+                    FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+                    if (dbg != NULL) {
+                        std::fprintf(dbg, "client next_event: hard read error errno=%d wsa=%d\n",
+                                     errno,
+#if defined(_WIN32)
+                                     WSAGetLastError()
+#else
+                                     0
+#endif
+                                     );
+                        std::fclose(dbg);
+                    }
+                }
                 return CAPSID_CLOSED;
             }
             parse_result =
