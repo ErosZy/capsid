@@ -104,7 +104,7 @@ std::string read_file(const char *path) {
 }
 
 uint16_t unused_port() {
-    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     if (fd < 0) {
         fail("cannot create TLS port socket");
     }
@@ -112,13 +112,13 @@ uint16_t unused_port() {
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
-    if (bind(fd, reinterpret_cast<const struct sockaddr *>(&address),
+    if (capsid::win32::bind_fd(fd, reinterpret_cast<const struct sockaddr *>(&address),
              sizeof(address)) != 0) {
         close(fd);
         fail("cannot bind TLS port socket");
     }
     socklen_t size = sizeof(address);
-    if (getsockname(fd, reinterpret_cast<struct sockaddr *>(&address), &size) != 0) {
+    if (capsid::win32::getsockname_fd(fd, reinterpret_cast<struct sockaddr *>(&address), &size) != 0) {
         close(fd);
         fail("cannot resolve TLS test port");
     }
@@ -135,6 +135,34 @@ public:
                         uint16_t port)
         : pid_(-1) {
         const std::string port_text = std::to_string(port);
+#if defined(_WIN32)
+        // _spawnv(_P_NOWAIT) launches the same s_server CLI surface.
+        std::vector<char*> spawn_args;
+        auto push_arg = [&spawn_args](const std::string& value) {
+            spawn_args.push_back(const_cast<char*>(value.c_str()));
+        };
+        push_arg(openssl_path);
+        push_arg("s_server");
+        push_arg("-accept");
+        push_arg(port_text);
+        push_arg("-cert");
+        push_arg(certificate);
+        push_arg("-key");
+        push_arg(private_key);
+        push_arg("-tls1_2");
+        push_arg("-sigalgs");
+        push_arg("rsa_pss_rsae_sha256");
+        push_arg("-www");
+        push_arg("-quiet");
+        push_arg("-no_ign_eof");
+        spawn_args.push_back(nullptr);
+        pid_ = static_cast<pid_t>(_spawnv(
+            _P_NOWAIT, openssl_path, spawn_args.data()));
+        if (static_cast<intptr_t>(pid_) < 0) {
+            fail(std::string("cannot launch OpenSSL TLS test server: ") +
+                 std::strerror(errno));
+        }
+#else
         pid_ = fork();
         if (pid_ == 0) {
             execl(openssl_path,
@@ -159,22 +187,20 @@ public:
             fail(std::string("cannot launch OpenSSL TLS test server: ") +
                  std::strerror(errno));
         }
+#endif
 
         for (int attempt = 0; attempt < 100; ++attempt) {
-            int status = 0;
-            if (waitpid(pid_, &status, WNOHANG) == pid_) {
-                pid_ = -1;
-                fail(std::string("OpenSSL TLS test server exited early: ") +
-                     std::to_string(status));
+            if (server_exited_early()) {
+                fail("OpenSSL TLS test server exited early");
             }
 
-            const int probe = socket(AF_INET, SOCK_STREAM, 0);
+            const int probe = capsid::win32::create_tcp_socket_fd();
             if (probe >= 0) {
                 struct sockaddr_in address = {};
                 address.sin_family = AF_INET;
                 address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
                 address.sin_port = htons(port);
-                const int connected = connect(
+                const int connected = capsid::win32::connect_fd(
                     probe,
                     reinterpret_cast<const struct sockaddr *>(&address),
                     sizeof(address));
@@ -195,14 +221,46 @@ public:
     ~OpenSslRsaPssServer() { stop(); }
 
 private:
+    bool server_exited_early() {
+#if defined(_WIN32)
+        HANDLE process = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+            static_cast<DWORD>(pid_));
+        if (process == NULL) {
+            return true;
+        }
+        DWORD exit_code = 0;
+        GetExitCodeProcess(process, &exit_code);
+        CloseHandle(process);
+        return exit_code != STILL_ACTIVE;
+#else
+        int status = 0;
+        if (waitpid(pid_, &status, WNOHANG) == pid_) {
+            pid_ = -1;
+            return true;
+        }
+        return false;
+#endif
+    }
+
     void stop() {
         if (pid_ <= 0) {
             return;
         }
+#if defined(_WIN32)
+        HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE,
+                                     static_cast<DWORD>(pid_));
+        if (process != NULL) {
+            TerminateProcess(process, 1);
+            WaitForSingleObject(process, 5000);
+            CloseHandle(process);
+        }
+#else
         kill(pid_, SIGTERM);
         int status = 0;
         while (waitpid(pid_, &status, 0) < 0 && errno == EINTR) {
         }
+#endif
         pid_ = -1;
     }
 

@@ -316,7 +316,7 @@ public:
             fail("cannot create HTTP matrix socket");
         }
         const int reuse = 1;
-        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        capsid::win32::setsockopt_reuseaddr_fd(fd_);
 #if defined(IPV6_V6ONLY)
         if (ipv6_) {
             setsockopt(
@@ -365,7 +365,7 @@ public:
 
     ~HttpMatrixServer() {
         stopping_ = true;
-        shutdown(fd_, SHUT_RDWR);
+        capsid::win32::shutdown_fd(fd_);
         if (thread_.joinable()) {
             thread_.join();
         }
@@ -621,7 +621,7 @@ private:
 };
 
 uint16_t unused_port() {
-    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     if (fd < 0) {
         fail("cannot create unused-port socket");
     }
@@ -629,13 +629,13 @@ uint16_t unused_port() {
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
-    if (bind(fd, reinterpret_cast<const struct sockaddr *>(&address),
+    if (capsid::win32::bind_fd(fd, reinterpret_cast<const struct sockaddr *>(&address),
              sizeof(address)) != 0) {
         close(fd);
         fail("cannot bind unused-port socket");
     }
     socklen_t size = sizeof(address);
-    getsockname(fd, reinterpret_cast<struct sockaddr *>(&address), &size);
+    capsid::win32::getsockname_fd(fd, reinterpret_cast<struct sockaddr *>(&address), &size);
     const uint16_t port = ntohs(address.sin_port);
     close(fd);
     return port;

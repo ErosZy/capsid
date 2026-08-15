@@ -72,6 +72,22 @@ typedef unsigned int gid_t;
 #define ELOOP EDEADLOCK
 #endif
 
+// waitpid-status accessors: Windows has no signal deaths, so the status
+// value IS the exit code (see graceful_worker_exit.h, which stores the
+// GetExitCodeProcess result there).
+#ifndef WIFSIGNALED
+#define WIFSIGNALED(status) 0
+#endif
+#ifndef WTERMSIG
+#define WTERMSIG(status) 0
+#endif
+#ifndef WIFEXITED
+#define WIFEXITED(status) 1
+#endif
+#ifndef WEXITSTATUS
+#define WEXITSTATUS(status) (status)
+#endif
+
 // rmdir lives in the CRT as _rmdir only.
 #ifndef rmdir
 #define rmdir _rmdir
