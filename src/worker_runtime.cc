@@ -5122,8 +5122,13 @@ private:
             {
                 FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
                 if (dbg != NULL) {
-                    std::fprintf(dbg, "flush_output: FAILED errno=%d\n",
-                                 errno);
+                    std::fprintf(dbg, "flush_output: FAILED errno=%d wsa=%d\n",
+                                 errno,
+#if defined(_WIN32)
+                                 WSAGetLastError());
+#else
+                                 0);
+#endif
                     std::fclose(dbg);
                 }
             }
