@@ -159,7 +159,7 @@ int connect_to(std::uint16_t port) {
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode admission loopback address");
-    require(connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                     sizeof(address)) == 0,
             "cannot connect to admission server");
     return fd;
@@ -174,7 +174,7 @@ void send_request(int fd, const std::string& target, bool keep_alive) {
     std::size_t sent = 0;
     while (sent < request.size()) {
         const ssize_t count =
-            send(fd, request.data() + sent, request.size() - sent, 0);
+            capsid::win32::send_fd(fd, request.data() + sent, request.size() - sent, 0);
         require(count > 0, "cannot write admission HTTP request");
         sent += static_cast<std::size_t>(count);
     }
@@ -195,7 +195,7 @@ std::string read_line(int fd, std::string& buffer, char* scratch,
     while (line_end == std::string::npos) {
         require(std::chrono::steady_clock::now() < deadline,
                 "admission response line timed out");
-        const ssize_t count = recv(fd, scratch, scratch_size, 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         if (count == 0) {
             fail("admission response hit EOF mid-line");
         }
@@ -214,7 +214,7 @@ void require_bytes(int fd, std::string& buffer, std::size_t count,
     while (buffer.size() < count) {
         require(std::chrono::steady_clock::now() < deadline,
                 "admission response body timed out");
-        const ssize_t got = recv(fd, scratch, scratch_size, 0);
+        const ssize_t got = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         require(got > 0, "admission response body recv failed");
         buffer.append(scratch, static_cast<std::size_t>(got));
     }
@@ -306,7 +306,13 @@ RawHttpResponse http_get(std::uint16_t port, const std::string& target) {
 // The server spawns the worker as OUR direct child; find that child by
 // scanning /proc for processes whose parent is this test process, and kill
 // it. The kill is the worker-fault injection for the ④ → 503 path.
+// (Linux-only: the worker-death case is not registered on Windows, where
+// the child-pid scan would need Toolhelp and SIGKILL has no portable
+// form; see docs/windows.md.)
 pid_t find_worker_child_pid() {
+#if defined(_WIN32)
+    return -1;
+#else
     const pid_t self = getpid();
     DIR* directory = opendir("/proc");
     require(directory != nullptr, "cannot open /proc to find the worker");
@@ -339,12 +345,17 @@ pid_t find_worker_child_pid() {
     }
     closedir(directory);
     return found;
+#endif
 }
 
 void kill_worker_child() {
+#if defined(_WIN32)
+    fail("worker-death fault injection is unavailable on Windows");
+#else
     const pid_t worker_pid = find_worker_child_pid();
     require(worker_pid > 0, "cannot find the live worker child process");
     require(kill(worker_pid, SIGKILL) == 0, "cannot SIGKILL the worker");
+#endif
 }
 
 // After the worker exits, the shard closes its acceptor: a refused new
@@ -355,14 +366,14 @@ void require_acceptor_closed(std::uint16_t port) {
     for (;;) {
         require(std::chrono::steady_clock::now() < deadline,
                 "acceptor never closed after the worker was killed");
-        const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        const int fd = capsid::win32::create_tcp_socket_fd();
         struct sockaddr_in address = {};
         address.sin_family = AF_INET;
         address.sin_port = htons(port);
         require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
                 "cannot encode admission loopback address");
         const int connected =
-            connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+            capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                     sizeof(address));
         close(fd);
         if (connected != 0) {
