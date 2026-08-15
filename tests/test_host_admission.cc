@@ -147,12 +147,9 @@ const std::vector<std::uint8_t>& fast_bundle() {
 }
 
 int connect_to(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create admission HTTP socket");
-    struct timeval timeout = {};
-    timeout.tv_sec = 3;
-    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                       sizeof(timeout)) == 0,
+    require(capsid::win32::setsockopt_recv_timeout_fd(fd, 3000) == 0,
             "cannot set admission HTTP receive timeout");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
@@ -406,7 +403,7 @@ capsid::host::SingleWorkerServerOptions make_worker_options(
 // over-commit, but the shard admission never lets one through.
 void test_inflight_full_rejects(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;  // one in-flight slot
@@ -442,7 +439,7 @@ void test_inflight_full_rejects(const char* worker_path) {
 // the queue depth gets 429.
 void test_queue_full_rejects(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
@@ -486,7 +483,7 @@ void test_queue_full_rejects(const char* worker_path) {
 // "queue 或 Host deadline 到期 → 504").
 void test_queue_timeout_returns_504(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
@@ -524,7 +521,7 @@ void test_queue_timeout_returns_504(const char* worker_path) {
 // (not 502) on its next request once the exit has been processed.
 void test_worker_death_returns_503(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     capsid::host::SingleWorkerServer server(std::move(options));
@@ -562,7 +559,7 @@ void test_worker_death_returns_503(const char* worker_path) {
 // queue depth comes from StaticPoolServerOptions, not from per-shard code.
 void test_pool_forwards_admission(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::StaticPoolServerOptions options;
     options.workers = 1;
     options.max_inflight_per_worker = 1;
