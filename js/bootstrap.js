@@ -16,15 +16,6 @@ import 'txiki-polyfills/file.js';
 import './file.js';
 import 'txiki-polyfills/form-data.js';
 import 'txiki-polyfills/abort-controller.js';
-import { HttpClient } from 'txiki-polyfills/http-client.js';
-{
-    // debug probe: trace the fetch abort path on Windows
-    const originalAbort = HttpClient.prototype.abort;
-    HttpClient.prototype.abort = function (...args) {
-        console.error('DBG HttpClient.abort called');
-        return originalAbort.apply(this, args);
-    };
-}
 import 'txiki-polyfills/fetch/polyfill.js';
 import {
     configureFetchLimits,
@@ -643,11 +634,7 @@ const cancelRequest = id => {
     state.chunks.length = 0;
     const reason = new DOMException('Request canceled', 'AbortError');
     state.cancelReason = reason;
-    console.error(`DBG bootstrap cancelRequest id=${id}`);
     state.abortController.abort(reason);
-    console.error(
-        `DBG bootstrap cancelRequest after abort signal=${state.abortController.signal.aborted}`,
-    );
     if (state.responseReader) {
         const reader = state.responseReader;
         state.responseReader = null;

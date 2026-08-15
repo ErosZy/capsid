@@ -4328,15 +4328,12 @@ private:
     }
 
     bool cancel_request(uint64_t id) {
-        std::fprintf(stderr, "DBG cancel_request id=%llu\n",
-                     static_cast<unsigned long long>(id));
         if (id == 0) {
             return false;
         }
         std::map<uint64_t, ResponseState>::iterator state =
             responses_.find(id);
         if (state == responses_.end()) {
-            std::fprintf(stderr, "DBG cancel_request: no state\n");
             return true;
         }
         reject_pending(state->second, "request canceled");
@@ -4344,8 +4341,6 @@ private:
         RequestToken *cancelled_token = state->second.token;
         current_token_ = state->second.token;
         const bool called = call_id_bridge(cancel_request_, id);
-        std::fprintf(stderr, "DBG cancel_request: bridge called=%d\n",
-                     called ? 1 : 0);
         current_token_ = saved_token;
         erase_response(state);
         remember_terminal(id);

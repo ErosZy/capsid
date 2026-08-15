@@ -134,21 +134,12 @@ private:
             return;
         }
         accepted_ = true;
+        // Blocking recv with a receive timeout: WSAPoll cannot be trusted
+        // to report a peer FIN, but a blocking recv returns 0 the moment
+        // the close lands.
+        capsid::win32::setsockopt_recv_timeout_fd(client, 500);
         char buffer[2048];
         for (;;) {
-            descriptor.fd = client;
-            descriptor.events = POLLIN | POLLHUP;
-            descriptor.revents = 0;
-            // Short slices: WSAPoll's POLLHUP reporting is unreliable, and
-            // a single long poll can miss the close entirely.
-            const int polled =
-                capsid::win32::capsid_poll(&descriptor, 1, 250);
-            if (polled <= 0) {
-                if (polled == 0) {
-                    continue;
-                }
-                return;
-            }
 #if defined(_WIN32)
             // accept_fd returns a CRT fd; Winsock recv takes the raw
             // SOCKET handle.
@@ -287,12 +278,6 @@ int main(int argc, char **argv) {
         while (next_event(worker, &event)) {
             if (event.type == CAPSID_EVENT_EXIT) {
                 fail("worker exited while canceling fetch");
-            }
-            if (event.type == CAPSID_EVENT_LOG) {
-                std::fprintf(
-                    stderr, "DBG worker log: %.*s\n",
-                    static_cast<int>(event.payload.size),
-                    event.payload.data);
             }
         }
     }
