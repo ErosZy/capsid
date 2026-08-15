@@ -857,7 +857,7 @@ std::string exercise_environment_worker(
 void test_environment_module_contract(
     const char *worker_path) {
     require(
-        setenv(
+        capsid::win32::setenv(
             "CAPSID_AMBIENT_ONLY",
             "must-not-leak",
             1) == 0,
@@ -924,7 +924,7 @@ void test_environment_module_contract(
                 std::string::npos,
         "environment values crossed worker boundaries");
     capsid_worker_destroy(second);
-    unsetenv("CAPSID_AMBIENT_ONLY");
+    capsid::win32::unsetenv("CAPSID_AMBIENT_ONLY");
 }
 
 void test_system_module_contract(
