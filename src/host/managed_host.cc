@@ -2514,16 +2514,45 @@ PreparedDeployment prepare_deployment(ManagedHostOptions* options,
     // the total snapshot budget are all rejected here, before any staging.
     // A secret root is only required when at least one env entry references
     // valueFrom; pure literal entries need no provider.
-    bool has_secret_requests = false;
+        // Binding v1: parse the declared bindings before the secret read so
+    // their key ids join the provider read below.
+    std::vector<capsid::host::AppBindingRequest> binding_requests;
+    std::vector<capsid::host::BindingSecretRef> binding_secret_refs;
+    if (!options->bindings_root.empty()) {
+        std::string binding_parse_error;
+        if (!capsid::host::parse_app_bindings(
+                artifacts.artifacts.capsid_json.bytes, &binding_requests,
+                &binding_parse_error)) {
+            fail(binding_parse_error);
+            return prepared;
+        }
+        for (const capsid::host::AppBindingRequest& request :
+             binding_requests) {
+            binding_secret_refs.insert(
+                binding_secret_refs.end(),
+                request.secrets.begin(),
+                request.secrets.end());
+        }
+    }
+
+bool has_secret_requests = false;
     for (const AppRequest::EnvRequest& request : app_request.env) {
         if (request.from_secret) {
             has_secret_requests = true;
             break;
         }
     }
+    // Binding v1: the binding secret key ids join the same provider
+    // read (env key ids first, binding key ids appended in declaration
+    // order); values resolve from the outcomes tail in the 5b block.
+    std::vector<std::string> binding_secret_key_ids;
+    for (const capsid::host::BindingSecretRef& secret_ref :
+         binding_secret_refs) {
+        binding_secret_key_ids.push_back(secret_ref.key_id);
+    }
     std::vector<SecretFileOutcome> outcomes;
     int app_secret_fd = -1;
-    if (has_secret_requests) {
+    if (has_secret_requests || !binding_secret_key_ids.empty()) {
         if (options->secret_root_template_fd < 0) {
             fail("secret root not configured");
             return prepared;
@@ -2539,6 +2568,9 @@ PreparedDeployment prepare_deployment(ManagedHostOptions* options,
             if (request.from_secret) {
                 key_ids.push_back(request.secret_key_id);
             }
+        }
+        for (const std::string& key_id : binding_secret_key_ids) {
+            key_ids.push_back(key_id);
         }
         outcomes = read_secret_files(app_secret_fd, key_ids);
         close(app_secret_fd);
@@ -2646,14 +2678,6 @@ PreparedDeployment prepare_deployment(ManagedHostOptions* options,
     // replacement never re-reads bindingsRoot.
     std::string binding_set_digest;
     if (!options->bindings_root.empty()) {
-        std::vector<capsid::host::AppBindingRequest> binding_requests;
-        std::string binding_parse_error;
-        if (!capsid::host::parse_app_bindings(
-                artifacts.artifacts.capsid_json.bytes, &binding_requests,
-                &binding_parse_error)) {
-            fail(binding_parse_error);
-            return prepared;
-        }
         if (!binding_requests.empty()) {
             capsid::host::BindingRegistrySnapshot registry;
             std::string scan_error;
@@ -2679,37 +2703,33 @@ PreparedDeployment prepare_deployment(ManagedHostOptions* options,
                 fail("binding snapshot serialization failed");
                 return prepared;
             }
-            // Resolve binding secret values from the committed snapshot
-            // metadata; an unresolved key id fails the prepare.
+            // Binding secret values resolve from the provider outcomes
+            // tail (env key ids first, binding key ids in declaration
+            // order); the public name comes from the ref.
+            std::size_t binding_outcome_index = 0;
+            for (const AppRequest::EnvRequest& request : app_request.env) {
+                if (request.from_secret) {
+                    ++binding_outcome_index;
+                }
+            }
             for (capsid::host::EffectiveBinding& binding :
                  prepared.bindings) {
-                for (const std::string& key_id :
-                     binding.request.secret_key_ids) {
-                    bool found = false;
-                    for (const EnvironmentSnapshotMetadata& meta :
-                         snapshot.snapshot.metadata()) {
-                        if (meta.source !=
-                                EnvironmentValueSource::kSecret ||
-                            meta.secret_key_id != key_id) {
-                            continue;
-                        }
-                        for (const EnvironmentSnapshotEntry& entry :
-                             snapshot.snapshot.entries()) {
-                            if (entry.name == meta.name) {
-                                binding.secret_values.push_back(
-                                    {key_id, entry.value});
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (found) {
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        fail("binding secret is not resolved: " + key_id);
+                for (const capsid::host::BindingSecretRef& secret_ref :
+                     binding.request.secrets) {
+                    if (binding_outcome_index >= outcomes.size() ||
+                        !outcomes[binding_outcome_index].error.empty()) {
+                        fail("binding secret is not resolved: " +
+                             secret_ref.key_id);
                         return prepared;
                     }
+                    capsid::host::EffectiveBinding::SecretValue value;
+                    value.name = secret_ref.name;
+                    value.key_id = secret_ref.key_id;
+                    value.value.assign(
+                        outcomes[binding_outcome_index].value.begin(),
+                        outcomes[binding_outcome_index].value.end());
+                    binding.secret_values.push_back(std::move(value));
+                    ++binding_outcome_index;
                 }
             }
         }
@@ -2906,6 +2926,19 @@ ValidatedGeneration validate_committed_generation(
             fail("committed generation snapshot is invalid");
             return validated;
         }
+        // Binding v1 §6: recovery rebuilds the binding set from the
+        // committed snapshot — parsed BEFORE the secret resolution below
+        // so the binding key ids join the provider read.
+        if (bindings_status == ReadFileStatus::kOk) {
+            const capsid::host::BindingSnapshotParseResult
+                bindings_parsed =
+                    capsid::host::parse_bindings_snapshot(bindings_json);
+            if (!bindings_parsed.ok) {
+                fail("committed bindings snapshot is invalid");
+                return validated;
+            }
+            validated.bindings = bindings_parsed.bindings;
+        }
     }
     // 3. The committed generation record must match the expected digest.
     std::string recorded_generation;
@@ -3046,8 +3079,9 @@ ValidatedGeneration validate_committed_generation(
     // committed — the current provider is the authority).
     std::vector<std::string> binding_key_ids;
     for (const capsid::host::EffectiveBinding& binding : validated.bindings) {
-        for (const std::string& key_id : binding.request.secret_key_ids) {
-            binding_key_ids.push_back(key_id);
+        for (const capsid::host::BindingSecretRef& secret_ref :
+             binding.request.secrets) {
+            binding_key_ids.push_back(secret_ref.key_id);
         }
     }
     const bool has_binding_secrets = !binding_key_ids.empty();
@@ -3085,17 +3119,21 @@ ValidatedGeneration validate_committed_generation(
             }
         }
         for (capsid::host::EffectiveBinding& binding : validated.bindings) {
-            for (const std::string& key_id :
-                 binding.request.secret_key_ids) {
+            for (const capsid::host::BindingSecretRef& secret_ref :
+                 binding.request.secrets) {
                 if (binding_outcome_index >= outcomes.size() ||
                     !outcomes[binding_outcome_index].error.empty()) {
-                    fail("binding secret resolution failed: " + key_id);
+                    fail("binding secret resolution failed: " +
+                         secret_ref.key_id);
                     return validated;
                 }
-                binding.secret_values.push_back(
-                    { key_id, std::string(
-                                  outcomes[binding_outcome_index].value.begin(),
-                                  outcomes[binding_outcome_index].value.end()) });
+                capsid::host::EffectiveBinding::SecretValue value;
+                value.name = secret_ref.name;
+                value.key_id = secret_ref.key_id;
+                value.value.assign(
+                    outcomes[binding_outcome_index].value.begin(),
+                    outcomes[binding_outcome_index].value.end());
+                binding.secret_values.push_back(std::move(value));
                 ++binding_outcome_index;
             }
         }
@@ -3223,6 +3261,23 @@ ValidatedGeneration validate_committed_generation(
     identity.host_config_digest = host_policy_identity(options.host_policy);
     identity.secret_revision = snapshot.snapshot.secret_revision();
     identity.runtime_compatibility_id = options.runtime_compatibility_id;
+    // §6: the binding set digest joins the identity — recomputed from the
+    // committed snapshot, so a Binding generation re-derives the same
+    // digest it was committed under.
+    {
+        std::vector<capsid::host::BindingSetDigestEntry> digest_entries;
+        for (const capsid::host::EffectiveBinding& binding :
+             validated.bindings) {
+            BindingSetDigestEntry entry = binding.digest_entry;
+            entry.secret_revision =
+                snapshot.snapshot.secret_revision();
+            digest_entries.push_back(std::move(entry));
+        }
+        if (!digest_entries.empty()) {
+            identity.binding_set_digest =
+                capsid::host::compute_binding_set_digest(digest_entries);
+        }
+    }
     const std::string recomputed_digest = compute_generation_digest(identity);
     if (recomputed_digest != generation) {
         fail("committed generation identity mismatch");
@@ -3242,19 +3297,6 @@ ValidatedGeneration validate_committed_generation(
     validated.source_name = derived_source_name;
     validated.bundle_bin = std::move(bundle_bin);
     validated.effective = std::move(compiled.effective);
-    // Binding v1 §6: recovery rebuilds from the committed snapshot, never
-    // from a re-read of bindingsRoot.
-    if (bindings_status == ReadFileStatus::kOk) {
-        const capsid::host::BindingSnapshotParseResult bindings_parsed =
-            capsid::host::parse_bindings_snapshot(bindings_json);
-        if (!bindings_parsed.ok) {
-            fail("committed bindings snapshot is invalid");
-            return validated;
-        }
-        validated.bindings = bindings_parsed.bindings;
-        // Secret values are re-resolved from the current provider below,
-        // like the env snapshot.
-    }
     // The env values come from the recomputed snapshot (the current
     // provider), never from committed metadata.
     for (const EnvironmentSnapshotEntry& entry : snapshot.snapshot.entries()) {

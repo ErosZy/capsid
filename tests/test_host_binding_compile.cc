@@ -62,9 +62,10 @@ void test_parse_app_bindings() {
                 requests[0].env.size() == 1 &&
                 requests[0].env[0] == "APP_MODE",
             "binding permission request parsed wrong");
-    require(requests[0].secret_key_ids.size() == 1 &&
-                requests[0].secret_key_ids[0] == "mongo-password",
-            "binding secret key ids parsed wrong");
+    require(requests[0].secrets.size() == 1 &&
+                requests[0].secrets[0].name == "password" &&
+                requests[0].secrets[0].key_id == "mongo-password",
+            "binding secret refs parsed wrong");
     require(requests[0].config_json.find("\"database\"") !=
                 std::string::npos,
             "binding config parsed wrong");
@@ -92,7 +93,7 @@ void test_compile_effective_bindings() {
     request.fs_read = {"/etc/capsid/mongo/ca.pem"};
     request.env = {"APP_MODE"};
     request.config_json = R"json({"database":"orders"})json";
-    request.secret_key_ids = {"mongo-password"};
+    request.secrets = {{"password", "mongo-password"}};
 
     const capsid::host::BindingCompileResult result =
         compile_effective_bindings(registry, {request}, "rev-1");
@@ -184,7 +185,7 @@ void test_digest_sensitivity_and_immutability() {
     request.id = "mongo";
     request.net_rules = {"127.0.0.1:27017"};
     request.config_json = R"json({"database":"orders"})json";
-    request.secret_key_ids = {"mongo-password"};
+    request.secrets = {{"password", "mongo-password"}};
 
     const std::string baseline =
         compile_effective_bindings(registry, {request}, "rev-1").set_digest;
@@ -219,7 +220,7 @@ void test_snapshot_round_trip() {
     request.net_rules = {"127.0.0.1:27017"};
     request.fs_read = {"/etc/capsid/mongo/ca.pem"};
     request.config_json = R"json({"database":"orders"})json";
-    request.secret_key_ids = {"mongo-password"};
+    request.secrets = {{"password", "mongo-password"}};
 
     const auto compiled =
         compile_effective_bindings(registry, {request}, "rev-1");
@@ -242,7 +243,10 @@ void test_snapshot_round_trip() {
                 parsed.bindings[0].request.config_json ==
                     R"json({"database":"orders"})json" &&
                 parsed.bindings[0].request.net_rules.size() == 1 &&
-                parsed.bindings[0].request.secret_key_ids.size() == 1 &&
+                parsed.bindings[0].request.secrets.size() == 1 &&
+                parsed.bindings[0].request.secrets[0].name == "password" &&
+                parsed.bindings[0].request.secrets[0].key_id ==
+                    "mongo-password" &&
                 parsed.bindings[0].secret_values.empty(),
             "snapshot round-trip is wrong");
     // The parse recomputes digests from the committed bytes — it never

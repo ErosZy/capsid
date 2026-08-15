@@ -225,6 +225,8 @@ bool parse_manifest_fields(const std::string& manifest_json,
 
 }  // namespace
 
+void fill_digest_entry(EffectiveBinding& binding);
+
 bool parse_app_bindings(const std::vector<std::uint8_t>& bytes,
                         std::vector<AppBindingRequest>* out,
                         std::string* error) {
@@ -298,19 +300,23 @@ bool parse_app_bindings(const std::vector<std::uint8_t>& bytes,
             for (; secret_iter != nullptr;
                  secret_iter = json_object_iter_next(secrets,
                                                      secret_iter)) {
-                // The secret reference is the valueFrom key id; the map
-                // key is the name the factory receives.
+                // The map key is the public name the factory receives;
+                // the valueFrom string is the provider key id.
                 json_t* reference =
                     json_object_get(json_object_iter_value(secret_iter),
                                     "valueFrom");
                 if (reference != nullptr && json_is_string(reference)) {
-                    request.secret_key_ids.push_back(
-                        json_string_value(reference));
+                    BindingSecretRef secret_ref;
+                    secret_ref.name = json_object_iter_key(secret_iter);
+                    secret_ref.key_id = json_string_value(reference);
+                    request.secrets.push_back(std::move(secret_ref));
                 }
             }
         }
-        std::sort(request.secret_key_ids.begin(),
-                  request.secret_key_ids.end());
+        std::sort(request.secrets.begin(), request.secrets.end(),
+                  [](const BindingSecretRef& a, const BindingSecretRef& b) {
+                      return a.key_id < b.key_id;
+                  });
         parsed.push_back(std::move(request));
     }
     std::sort(parsed.begin(), parsed.end(),
@@ -425,8 +431,17 @@ std::string serialize_bindings_snapshot(
         json_object_set_new(entry, "stdio", list(binding.request.stdio));
         json_object_set_new(entry, "profiles", list(binding.profiles));
         json_object_set_new(entry, "modules", list(binding.modules));
-        json_object_set_new(entry, "secrets",
-                            list(binding.request.secret_key_ids));
+        json_t* secret_array = json_array();
+        for (const BindingSecretRef& secret_ref :
+             binding.request.secrets) {
+            json_t* pair = json_array();
+            json_array_append_new(
+                pair, json_string(secret_ref.name.c_str()));
+            json_array_append_new(
+                pair, json_string(secret_ref.key_id.c_str()));
+            json_array_append_new(secret_array, pair);
+        }
+        json_object_set_new(entry, "secrets", secret_array);
         json_array_append_new(root, entry);
     }
     char* text = json_dumps(root, JSON_COMPACT | JSON_ENSURE_ASCII);
@@ -497,17 +512,46 @@ BindingSnapshotParseResult parse_bindings_snapshot(const std::string& json) {
             binding.package.source.size()));
         binding.request.id = id;
         binding.request.config_json = config;
+        // §6: recovery re-derives every identity digest from the
+        // committed bytes; it never trusts serialized digest fields.
+        fill_digest_entry(binding);
         if (!read_list(entry, "net", &binding.request.net_rules) ||
             !read_list(entry, "fs_read", &binding.request.fs_read) ||
             !read_list(entry, "fs_write", &binding.request.fs_write) ||
             !read_list(entry, "env", &binding.request.env) ||
             !read_list(entry, "stdio", &binding.request.stdio) ||
             !read_list(entry, "profiles", &binding.profiles) ||
-            !read_list(entry, "modules", &binding.modules) ||
-            !read_list(entry, "secrets", &binding.request.secret_key_ids)) {
+            !read_list(entry, "modules", &binding.modules)) {
             json_decref(root);
             result.error = "bindings snapshot entry is malformed";
             return result;
+        }
+        json_t* secret_array = json_object_get(entry, "secrets");
+        if (secret_array != nullptr) {
+            if (!json_is_array(secret_array)) {
+                json_decref(root);
+                result.error = "bindings snapshot entry is malformed";
+                return result;
+            }
+            std::size_t pair_index = 0;
+            json_t* pair = nullptr;
+            json_array_foreach(secret_array, pair_index, pair) {
+                if (!json_is_array(pair) || json_array_size(pair) != 2 ||
+                    !json_is_string(json_array_get(pair, 0)) ||
+                    !json_is_string(json_array_get(pair, 1))) {
+                    json_decref(root);
+                    result.error =
+                        "bindings snapshot entry is malformed";
+                    return result;
+                }
+                BindingSecretRef secret_ref;
+                secret_ref.name =
+                    json_string_value(json_array_get(pair, 0));
+                secret_ref.key_id =
+                    json_string_value(json_array_get(pair, 1));
+                binding.request.secrets.push_back(
+                    std::move(secret_ref));
+            }
         }
         result.bindings.push_back(std::move(binding));
     }
@@ -594,10 +638,10 @@ bool build_binding_descriptor(const EffectiveBinding& binding,
     for (const auto& value : binding.secret_values) {
         capsid_binding_secret secret;
         std::memset(&secret, 0, sizeof(secret));
-        secret.key = value.first.c_str();
+        secret.key = value.name.c_str();
         secret.value.data = reinterpret_cast<const std::uint8_t*>(
-            value.second.data());
-        secret.value.size = value.second.size();
+            value.value.data());
+        secret.value.size = value.value.size();
         secrets.push_back(secret);
     }
     if (!secrets.empty()) {
@@ -605,6 +649,64 @@ bool build_binding_descriptor(const EffectiveBinding& binding,
         out->secret_count = static_cast<uint32_t>(secrets.size());
     }
     return true;
+}
+
+
+// Rebuilds every identity-relevant digest field from the binding's own
+// committed bytes — used by both the deploy compile and the recovery
+// parse so both re-derive identical digest material.
+void fill_digest_entry(EffectiveBinding& binding) {
+    binding.digest_entry.id = binding.id;
+    binding.digest_entry.manifest_digest =
+        binding.package.manifest_digest;
+    binding.digest_entry.source_digest =
+        binding.package.source_digest;
+    binding.digest_entry.config_digest = sha256_hex(
+        std::span<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(
+                binding.request.config_json.data()),
+            binding.request.config_json.size()));
+    std::string canonical = "net:";
+    for (const std::string& rule : binding.request.net_rules) {
+        canonical += rule + ",";
+    }
+    canonical += ";fs-read:";
+    for (const std::string& path : binding.request.fs_read) {
+        canonical += path + ",";
+    }
+    canonical += ";fs-write:";
+    for (const std::string& path : binding.request.fs_write) {
+        canonical += path + ",";
+    }
+    canonical += ";env:";
+    for (const std::string& name : binding.request.env) {
+        canonical += name + ",";
+    }
+    canonical += ";stdio:";
+    for (const std::string& stream : binding.request.stdio) {
+        canonical += stream + ",";
+    }
+    binding.digest_entry.permission_digest = sha256_hex(
+        std::span<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(canonical.data()),
+            canonical.size()));
+    std::string profile_canonical;
+    std::vector<std::string> sorted_profiles = binding.profiles;
+    std::sort(sorted_profiles.begin(), sorted_profiles.end());
+    for (const std::string& profile : sorted_profiles) {
+        profile_canonical += profile + "\n";
+    }
+    binding.digest_entry.profile_digest = sha256_hex(
+        std::span<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(
+                profile_canonical.data()),
+            profile_canonical.size()));
+    binding.digest_entry.secret_key_ids.clear();
+    for (const BindingSecretRef& secret_ref : binding.request.secrets) {
+        binding.digest_entry.secret_key_ids.push_back(secret_ref.key_id);
+    }
+    std::sort(binding.digest_entry.secret_key_ids.begin(),
+              binding.digest_entry.secret_key_ids.end());
 }
 
 BindingCompileResult compile_effective_bindings(
@@ -729,59 +831,7 @@ BindingCompileResult compile_effective_bindings(
             }
         }
 
-        binding.digest_entry.id = request.id;
-        binding.digest_entry.manifest_digest =
-            package->manifest_digest;
-        binding.digest_entry.source_digest = package->source_digest;
-        binding.digest_entry.config_digest = sha256_hex(
-            std::span<const std::uint8_t>(
-                reinterpret_cast<const std::uint8_t*>(
-                    request.config_json.data()),
-                request.config_json.size()));
-        // Effective permission digest: the proven subset, canonicalized.
-        {
-            std::string canonical = "net:";
-            for (const std::string& rule : request.net_rules) {
-                canonical += rule + ",";
-            }
-            canonical += ";fs-read:";
-            for (const std::string& path : request.fs_read) {
-                canonical += path + ",";
-            }
-            canonical += ";fs-write:";
-            for (const std::string& path : request.fs_write) {
-                canonical += path + ",";
-            }
-            canonical += ";env:";
-            for (const std::string& name : request.env) {
-                canonical += name + ",";
-            }
-            canonical += ";stdio:";
-            for (const std::string& stream : request.stdio) {
-                canonical += stream + ",";
-            }
-            binding.digest_entry.permission_digest = sha256_hex(
-                std::span<const std::uint8_t>(
-                    reinterpret_cast<const std::uint8_t*>(
-                        canonical.data()),
-                    canonical.size()));
-        }
-        // Profile digest: the manifest's sorted requires list.
-        {
-            std::string canonical;
-            std::vector<std::string> sorted_profiles =
-                binding.profiles;
-            std::sort(sorted_profiles.begin(), sorted_profiles.end());
-            for (const std::string& profile : sorted_profiles) {
-                canonical += profile + "\n";
-            }
-            binding.digest_entry.profile_digest = sha256_hex(
-                std::span<const std::uint8_t>(
-                    reinterpret_cast<const std::uint8_t*>(
-                        canonical.data()),
-                    canonical.size()));
-        }
-        binding.digest_entry.secret_key_ids = request.secret_key_ids;
+        fill_digest_entry(binding);
         binding.digest_entry.secret_revision = secret_revision;
         effective.push_back(std::move(binding));
     }

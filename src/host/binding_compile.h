@@ -17,7 +17,14 @@
 namespace capsid::host {
 
 // One App binding declaration (bindings.<id>), extracted from the
-// schema-validated capsid.json. Secret key ids only — never values.
+// schema-validated capsid.json. Secret references keep BOTH the public
+// name the factory receives (password) and the key id (mongo-password);
+// values never appear here.
+struct BindingSecretRef {
+    std::string name;     // the factory-visible key
+    std::string key_id;   // the provider lookup id
+};
+
 struct AppBindingRequest {
     std::string id;
     std::vector<std::string> net_rules;  // allow targets
@@ -26,7 +33,7 @@ struct AppBindingRequest {
     std::vector<std::string> env;
     std::vector<std::string> stdio;
     std::string config_json;  // canonical compact serialization
-    std::vector<std::string> secret_key_ids;
+    std::vector<BindingSecretRef> secrets;  // sorted by key_id
 };
 
 // Parses the app document's bindings map. The document is assumed to have
@@ -45,9 +52,14 @@ struct EffectiveBinding {
     std::vector<std::string> profiles;  // manifest sandbox.requires
     std::vector<std::string> modules;   // manifest permission modules
     BindingSetDigestEntry digest_entry;
-    // key id -> resolved value, filled by the caller from the committed
-    // secret snapshot. Values never enter digests or disk.
-    std::vector<std::pair<std::string, std::string>> secret_values;
+    // Resolved secret values (name, key id, value), filled by the caller
+    // from the secret provider. Values never enter digests or disk.
+    struct SecretValue {
+        std::string name;
+        std::string key_id;
+        std::string value;
+    };
+    std::vector<SecretValue> secret_values;
 };
 
 struct BindingCompileResult {
