@@ -18,6 +18,12 @@ if(MSVC)
     # em-dashes etc.). MSVC otherwise assumes the ANSI codepage, and C4819
     # becomes a hard error under /WX on non-Western-locale machines.
     add_compile_options(/utf-8)
+    # The portability layer deliberately uses the POSIX-named CRT entry
+    # points (open/read/write/close/...); without this define every such
+    # call warns C4996 and fails /WX. The ISO-secure deprecations
+    # (_CRT_SECURE_NO_DEPRECATE) stay ON so unsafe-CRT warnings still
+    # gate.
+    add_compile_definitions(_CRT_NONSTDC_NO_DEPRECATE)
 endif()
 
 option(CAPSID_BUILD_WORKER "Build the txiki.js worker process" ON)
