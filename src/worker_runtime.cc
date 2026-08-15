@@ -598,6 +598,13 @@ public:
                          CAPSID_BUILD_COMPATIBILITY_ID),
                      sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1);
         flush_output();
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: after ready flush\n");
+                std::fclose(dbg);
+            }
+        }
 
         const int run_result = TJS_Run(runtime_);
         // §7.5: a clean exit — not poisoned and with no response state
