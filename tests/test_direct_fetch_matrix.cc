@@ -319,8 +319,14 @@ public:
         capsid::win32::setsockopt_reuseaddr_fd(fd_);
 #if defined(IPV6_V6ONLY)
         if (ipv6_) {
+#if defined(_WIN32)
+            setsockopt(
+                fd_, IPPROTO_IPV6, IPV6_V6ONLY,
+                reinterpret_cast<const char *>(&reuse), sizeof(reuse));
+#else
             setsockopt(
                 fd_, IPPROTO_IPV6, IPV6_V6ONLY, &reuse, sizeof(reuse));
+#endif
         }
 #endif
 

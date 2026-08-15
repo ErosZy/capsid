@@ -331,7 +331,7 @@ public:
     ~MbedTlsServer() {
         stopping_ = true;
         if (listener_.fd >= 0) {
-            shutdown(listener_.fd, SHUT_RDWR);
+            capsid::win32::shutdown_fd(listener_.fd);
         }
         mbedtls_net_free(&listener_);
         if (thread_.joinable()) {

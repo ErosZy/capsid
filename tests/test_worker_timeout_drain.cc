@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
             if (descriptor.fd >= 0) {
                 capsid::win32::capsid_poll(&descriptor, 1, 50);
             } else {
-                usleep(50 * 1000);
+                capsid::win32::usleep(50u * 1000u);
             }
             continue;
         }
