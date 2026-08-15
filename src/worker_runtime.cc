@@ -5212,7 +5212,17 @@ private:
         if (events != poll_events_) {
             poll_events_ = events;
         }
+#if defined(_WIN32)
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "update_poll: SKIPPING uv_poll_start (debug)\n");
+                std::fclose(dbg);
+            }
+        }
+#else
         uv_poll_start(&poll_, poll_events_, poll_callback);
+#endif
     }
 
     void shutdown() {
