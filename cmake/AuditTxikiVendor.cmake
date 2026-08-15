@@ -4,8 +4,8 @@
 #   1. Vendor checkout is clean (no untracked or modified files).
 #   2. Vendor HEAD matches the expected tag (if configured).
 #   3. All 16 patches apply in sequence to a fresh vendor copy, using the
-#      same tool and flags as the build (patch -p1 --forward --batch —
-#      PrepareTxiki.cmake).
+#      same tool and flags as the build (git apply -p1 --ignore-whitespace
+#      — PrepareTxiki.cmake).
 #   4. The overlay stamp matches the key computed from the shared function.
 #
 # CAPSID_TXIKI_PREPARE_SCRIPT and CAPSID_TXIKI_OVERLAY_STAMP are mandatory —
@@ -33,7 +33,6 @@ foreach(CAPSID_REQUIRED_FILE
 endforeach()
 
 find_program(CAPSID_GIT_EXECUTABLE git REQUIRED)
-find_program(CAPSID_PATCH_EXECUTABLE patch REQUIRED)
 set(CAPSID_AUDIT_FAILURES "")
 
 # --- vendor revision ---------------------------------------------------------
@@ -239,14 +238,18 @@ endif()
 
 # --- patch apply verification ------------------------------------------------
 #
-# The build applies patches sequentially with patch(1) into a prepared
+# The build applies patches sequentially with git apply into a prepared
 # overlay copy (PrepareTxiki.cmake). Verify that same sequence applies
-# cleanly to a pristine vendor tree. git apply --check is NOT used: it
-# checks each patch against the pristine tree and does not accumulate,
-# while the real build applies in order and later patches legitimately
-# build on earlier ones.
+# cleanly to a pristine vendor tree. patch(1) is NOT used: its binaries
+# vary per machine (GNU patch from git-bash vs Strawberry Perl's patch,
+# which asserts on mixed line endings), while git is already a hard
+# requirement of the vendor revision/status checks above. --ignore-whitespace
+# lets context match across CRLF/LF checkout conventions, exactly like the
+# build. git apply --check is not used either: it checks each patch against
+# the pristine tree and does not accumulate, while the real build applies
+# in order and later patches legitimately build on earlier ones.
 #
-# Sparse probe: patch(1) only ever reads the files named in its own
+# Sparse probe: git apply only ever reads the files named in its own
 # +++ b/ headers, so the probe copies exactly those pristine files
 # (derived from the patches themselves) and applies all 16 in order —
 # the same result as probing the full 402MB vendor tree in under a
@@ -284,11 +287,24 @@ if(CAPSID_PATCH_COUNT GREATER 0)
                 "${CAPSID_APPLY_PROBE}/${CAPSID_PATCHED_PARENT}")
         endif()
     endforeach()
+    # An empty repository inside the probe stops `git apply` from
+    # discovering the parent Capsid repository (the build tree lives inside
+    # it), whose root re-roots the patch paths and silently skips hunks —
+    # the same hazard PrepareTxiki.cmake solves for the real overlay.
+    execute_process(
+        COMMAND "${CAPSID_GIT_EXECUTABLE}" init -q
+        WORKING_DIRECTORY "${CAPSID_APPLY_PROBE}"
+        RESULT_VARIABLE CAPSID_GIT_INIT_RESULT)
+    if(NOT CAPSID_GIT_INIT_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "Could not initialize the patch probe repository")
+    endif()
     set(CAPSID_PROBE_OK 1)
     foreach(CAPSID_PATCH IN LISTS CAPSID_TXIKI_PATCHES)
         execute_process(
-            COMMAND "${CAPSID_PATCH_EXECUTABLE}" -p1 --forward --batch
-                -d "${CAPSID_APPLY_PROBE}" -i "${CAPSID_PATCH}"
+            COMMAND "${CAPSID_GIT_EXECUTABLE}"
+                apply -p1 --ignore-whitespace "${CAPSID_PATCH}"
+            WORKING_DIRECTORY "${CAPSID_APPLY_PROBE}"
             RESULT_VARIABLE CAPSID_APPLY_RESULT
             OUTPUT_VARIABLE CAPSID_APPLY_OUTPUT
             ERROR_VARIABLE CAPSID_APPLY_ERROR
@@ -298,7 +314,7 @@ if(CAPSID_PATCH_COUNT GREATER 0)
                 CAPSID_PATCH_BASENAME "${CAPSID_PATCH}" NAME)
             string(APPEND CAPSID_AUDIT_FAILURES
                 "\n  ${CAPSID_PATCH_BASENAME} does not apply to pristine "
-                "vendor files with patch -p1 --forward --batch (the "
+                "vendor files with git apply -p1 --ignore-whitespace (the "
                 "build's own sequence):\n"
                 "${CAPSID_APPLY_OUTPUT}${CAPSID_APPLY_ERROR}")
             set(CAPSID_PROBE_OK 0)
