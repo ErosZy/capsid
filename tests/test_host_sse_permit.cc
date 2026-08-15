@@ -146,14 +146,14 @@ const std::vector<std::uint8_t>& sse_open_bundle() {
 // uppercase "Text/Event-Stream" must acquire the permit exactly like the
 // canonical lowercase form. Without case folding the stream would slip
 // onto the ordinary inflight path and a second SSE request would no longer
-// 503 under a 1-slot permit.
+// 503 under a 1-slot permit. The stream never emits and never closes: the
+// permit must stay held while the second request's head arrives, or the
+// second 503 assertion races the first stream's end-block flush (the
+// release-on-completion path of sse_done_bundle).
 const std::vector<std::uint8_t>& sse_uppercase_bundle() {
     static const std::string source =
         "export default { fetch: () => { "
-        "  const stream = new ReadableStream({ start(controller) { "
-        "    controller.enqueue(new TextEncoder().encode('data: hello\\n\\n')); "
-        "    controller.close(); } }); "
-        "  return new Response(stream, "
+        "  return new Response(new ReadableStream({ start() {} }), "
         "    { headers: { 'content-type': 'Text/Event-Stream' } }); } };";
     static const std::vector<std::uint8_t> bundle(source.begin(),
                                                   source.end());
@@ -162,13 +162,12 @@ const std::vector<std::uint8_t>& sse_uppercase_bundle() {
 
 // A parameterized event-stream type ("text/event-stream; charset=utf-8")
 // must also acquire the permit: the semicolon terminates the type token.
+// Same open, never-ending stream as sse_uppercase_bundle: the second
+// request must see the slot still held, not a freed one.
 const std::vector<std::uint8_t>& sse_parameterized_bundle() {
     static const std::string source =
         "export default { fetch: () => { "
-        "  const stream = new ReadableStream({ start(controller) { "
-        "    controller.enqueue(new TextEncoder().encode('data: hello\\n\\n')); "
-        "    controller.close(); } }); "
-        "  return new Response(stream, "
+        "  return new Response(new ReadableStream({ start() {} }), "
         "    { headers: { 'content-type': 'text/event-stream; charset=utf-8' } }); } };";
     static const std::vector<std::uint8_t> bundle(source.begin(),
                                                   source.end());
