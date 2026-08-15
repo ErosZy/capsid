@@ -1968,7 +1968,8 @@ if(BUILD_TESTING)
         # overlay must be classified (context-wired / profile-unreachable /
         # synchronous-reentry / value-only) in
         # tools/audit-txiki-async-context.py; an unclassified site fails.
-        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
+        # Windows Python installs expose python.exe; POSIX exposes python3.
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
         add_test(
             NAME txiki_async_context_inventory_audit
             COMMAND "${CAPSID_PYTHON3_EXECUTABLE}"

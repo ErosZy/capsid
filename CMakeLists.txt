@@ -1,9 +1,20 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(capsid_runtime VERSION 0.1.1 LANGUAGES C CXX)
+project(capsid_runtime VERSION 0.1.2 LANGUAGES C CXX)
 
 include(CTest)
 include(GNUInstallDirs)
+
+if(MSVC)
+    # Static CRT everywhere: the vendored txiki.js build pins
+    # CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreaded (its CMakeLists.txt line
+    # 23), and vcpkg's x64-windows-static triplet links /MT libraries, so
+    # mixing in the default /MD runtime would fail at link time with
+    # LNK2038 mismatches. Capsid's Windows package is fully static for the
+    # same self-containment reason as the musl Linux package.
+    cmake_policy(SET CMP0091 NEW)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 option(CAPSID_BUILD_WORKER "Build the txiki.js worker process" ON)
 option(CAPSID_BUILD_HOST "Build the first-party Capsid Host" OFF)

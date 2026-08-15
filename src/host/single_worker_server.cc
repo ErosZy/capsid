@@ -42,12 +42,16 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 #include <set>
 #include <string>
-#include <sys/socket.h>
 #include <thread>
-#include <unistd.h>
 #include <utility>
 #include <vector>
 

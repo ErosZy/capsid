@@ -5,8 +5,12 @@
 #include "host/static_pool.h"
 #include "host/structured_log.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <signal.h>
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <cerrno>
@@ -21,6 +25,20 @@
 namespace capsid::host {
 
 namespace {
+
+#if defined(_WIN32)
+// Console control events (CTRL_C / CTRL_BREAK / console close) are the
+// Windows stand-in for the SIGTERM/SIGINT sigwait gate in run(): the
+// handler only sets the stop event, never touches C++ objects.
+HANDLE g_static_pool_term_event = nullptr;
+
+BOOL WINAPI static_pool_console_handler(DWORD) {
+    if (g_static_pool_term_event != nullptr) {
+        SetEvent(g_static_pool_term_event);
+    }
+    return TRUE;  // handled: the process stops on its own schedule
+}
+#endif
 
 // M2 item 7 (design §12.2): single write path for pool control events.
 // Null log (fixtures without the process-wide instance) is a no-op.
@@ -431,7 +449,26 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
     // Benchmark-only signal handling: SIGTERM/SIGINT are blocked and
     // waited for with sigwait on the calling thread, so no C++ object is
     // ever touched from a signal handler (shards install no signal wiring
-    // of their own). The bounded stop/wait runs after the signal.
+    // of their own). The bounded stop/wait runs after the signal. Windows
+    // has no sigwait: a console control handler (CTRL_C/CTRL_BREAK/close)
+    // signals the same stop gate instead.
+#if defined(_WIN32)
+    g_static_pool_term_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_static_pool_term_event == nullptr ||
+        SetConsoleCtrlHandler(
+            &static_pool_console_handler, TRUE) == 0) {
+        emit_log(impl_->structured_log(),
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "cannot install stop handler"});
+        impl_->request_stop();
+        impl_->wait(&error);
+        return 1;
+    }
+    const DWORD wait_result =
+        WaitForSingleObject(g_static_pool_term_event, INFINITE);
+    (void)wait_result;
+#else
     sigset_t term_set;
     sigemptyset(&term_set);
     sigaddset(&term_set, SIGTERM);
@@ -455,6 +492,7 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
         impl_->wait(&error);
         return 1;
     }
+#endif
     impl_->request_stop();
     impl_->wait(&error);
     return 0;

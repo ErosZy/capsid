@@ -2,11 +2,14 @@
 
 #include "host/admin_service.h"
 
+#include "win32_compat.h"
+
+#if !defined(_WIN32)
 #include <fcntl.h>
-#include <poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include <cerrno>
 #include <condition_variable>
@@ -17,11 +20,19 @@ namespace {
 
 // Cross-platform stop pipe: BOTH ends get FD_CLOEXEC and O_NONBLOCK.
 // Linux uses pipe2 for the atomic flags; other POSIX systems (macOS) use
-// pipe + fcntl, and any failure closes every fd created so far.
+// pipe + fcntl; Windows uses a loopback socket pair (WSAPoll cannot watch
+// pipe handles), and any failure closes every fd created so far.
 bool create_stop_pipe(int pipe_fds[2]) {
     pipe_fds[0] = -1;
     pipe_fds[1] = -1;
-#if defined(__linux__)
+#if defined(_WIN32)
+    if (capsid::win32::create_socket_pair(pipe_fds)) {
+        return true;
+    }
+    pipe_fds[0] = -1;
+    pipe_fds[1] = -1;
+    return false;
+#elif defined(__linux__)
     if (pipe2(pipe_fds, O_CLOEXEC | O_NONBLOCK) == 0) {
         return true;
     }
@@ -87,12 +98,16 @@ bool AdminService::start(std::string* error) {
         return false;
     }
     // Record the exact inode this service created; cleanup removes ONLY
-    // that inode (a replaced pathname is left untouched).
+    // that inode (a replaced pathname is left untouched). Windows cannot
+    // identity-check socket inodes, so cleanup relies on listener_
+    // ownership there (see wait()).
+#if !defined(_WIN32)
     struct stat st = {};
     if (lstat(options_.socket.path.c_str(), &st) == 0) {
         socket_dev_ = st.st_dev;
         socket_ino_ = st.st_ino;
     }
+#endif
     int created_stop_pipe[2] = {-1, -1};
     if (!create_stop_pipe(created_stop_pipe)) {
         close(listener_);
@@ -188,20 +203,24 @@ void AdminService::request_stop() {
     // number that was closed and reused by the system.
     std::lock_guard<std::mutex> lock(active_mutex_);
     if (active_fd_ >= 0) {
+#if defined(_WIN32)
+        (void)capsid::win32::shutdown_fd(active_fd_);
+#else
         (void)shutdown(active_fd_, SHUT_RDWR);
+#endif
     }
 }
 
 void AdminService::accept_loop() {
     for (;;) {
-        struct pollfd descriptors[2];
+        capsid_pollfd descriptors[2];
         descriptors[0].fd = listener_;
         descriptors[0].events = POLLIN;
         descriptors[0].revents = 0;
         descriptors[1].fd = stop_pipe_[0];
         descriptors[1].events = POLLIN;
         descriptors[1].revents = 0;
-        int result = poll(descriptors, 2, -1);
+        int result = capsid::win32::capsid_poll(descriptors, 2, -1);
         if (result < 0 && errno == EINTR) {
             continue;
         }
@@ -218,7 +237,11 @@ void AdminService::accept_loop() {
         if ((descriptors[0].revents & POLLIN) == 0) {
             continue;
         }
+#if defined(_WIN32)
+        const int fd = capsid::win32::accept_fd(listener_);
+#else
         const int fd = accept(listener_, nullptr, nullptr);
+#endif
         if (fd < 0) {
             if (errno == EINTR) {
                 continue;
@@ -264,7 +287,14 @@ bool AdminService::wait(std::string* error) {
         thread_.join();
     }
     // Remove ONLY the socket inode this service created: a pathname that
-    // was unlinked and replaced meanwhile is left untouched.
+    // was unlinked and replaced meanwhile is left untouched. Windows
+    // cannot identity-check socket inodes; the listener was bound by this
+    // service, so the unlink runs under listener_ ownership instead.
+#if defined(_WIN32)
+    if (listener_ >= 0) {
+        (void)unlink(options_.socket.path.c_str());
+    }
+#else
     if (socket_dev_ != 0 && socket_ino_ != 0) {
         struct stat st = {};
         if (lstat(options_.socket.path.c_str(), &st) == 0 &&
@@ -272,6 +302,7 @@ bool AdminService::wait(std::string* error) {
             (void)unlink(options_.socket.path.c_str());
         }
     }
+#endif
     if (listener_ >= 0) {
         close(listener_);
         listener_ = -1;

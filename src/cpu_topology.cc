@@ -7,6 +7,8 @@
 
 #if defined(__linux__)
 #include <sched.h>
+#elif defined(_WIN32)
+#include "win32_compat.h"
 #endif
 
 namespace capsid {
@@ -22,6 +24,21 @@ std::vector<uint32_t> available_cpus() {
     }
     for (uint32_t cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
         if (CPU_ISSET(cpu, &affinity)) {
+            output.push_back(cpu);
+        }
+    }
+#elif defined(_WIN32)
+    // The process affinity mask reports the CPUs the worker may run on,
+    // mirroring sched_getaffinity on Linux.
+    DWORD_PTR process_mask = 0;
+    DWORD_PTR system_mask = 0;
+    if (!GetProcessAffinityMask(
+            GetCurrentProcess(), &process_mask, &system_mask)) {
+        return output;
+    }
+    const uint32_t width = sizeof(DWORD_PTR) * 8;
+    for (uint32_t cpu = 0; cpu < width; ++cpu) {
+        if ((process_mask & (static_cast<DWORD_PTR>(1) << cpu)) != 0) {
             output.push_back(cpu);
         }
     }

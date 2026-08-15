@@ -203,10 +203,15 @@ void WorkerSupervisor::rearm_probe(GenerationPool* pool,
     // The config is re-read from the committed generation on every arm,
     // so a redeployed healthCheck takes effect with the new generation;
     // an App without a readable lifecycle snapshot is never probed.
+#if !defined(_WIN32)
+    // managed_read_health_check lives in the managed coordinator, which
+    // is not built on Windows (see docs/windows.md); managed_options is
+    // never wired there, so the default (unconfigured) probe applies.
     if (options_.managed_options != nullptr) {
         health_check_ = managed_read_health_check(
             options_.managed_options, anchored_generation_);
     }
+#endif
     // Every new worker gets at least one initial check: the initial
     // probe is due immediately, in parallel with the pool's stability
     // window.

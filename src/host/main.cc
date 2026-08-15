@@ -12,15 +12,21 @@
 
 #include "build_identity.h"
 #include "capsid/runtime.h"
+#if !defined(_WIN32)
 #include "host/admin_service.h"
+#endif
 #include "host/config.h"
 #include "host/generation_pool.h"
+#if !defined(_WIN32)
 #include "host/host_config_model.h"
 #include "host/managed_admin_backend.h"
 #include "host/managed_listener.h"
+#endif
 #include "host/metrics.h"
 #include "host/process_snapshot.h"
+#if !defined(_WIN32)
 #include "host/routing_snapshot.h"
+#endif
 #include "host/structured_log.h"
 #include "host/trusted_key_store.h"
 #include "host/worker_supervisor.h"
@@ -30,9 +36,13 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/system/error_code.hpp>
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <dirent.h>
 #include <signal.h>
 #include <sys/stat.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -236,6 +246,12 @@ std::vector<std::uint8_t> read_bundle(const std::string& path) {
 }
 
 // ---- managed mode: host.json authority, real coordinator, Admin service ----
+#if defined(_WIN32)
+// The managed coordinator is POSIX-only (dirfd-relative openat/mkdirat
+// state walks, uid-based verification, UDS admin plane). Windows builds
+// ship the single-worker and static-pool data planes only; see
+// docs/windows.md for the full capability matrix.
+#else
 
 // Process-level stop signal. SIGTERM is blocked process-wide and waited
 // for with sigwait on the main thread, so no C++ object is ever touched
@@ -1047,7 +1063,7 @@ int run_managed(const std::string& host_config_path,
     structured_log->flush();
     return 0;
 }
-
+#endif  // !defined(_WIN32) managed mode
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1077,6 +1093,7 @@ int main(int argc, char** argv) {
     };
 
     const std::string mode = require("mode");
+#if !defined(_WIN32)
     if (mode == "managed") {
         // Strict managed CLI: only --host-config and --worker are allowed.
         for (const std::pair<const std::string, std::string>& entry :
@@ -1089,6 +1106,12 @@ int main(int argc, char** argv) {
         }
         return run_managed(require("host-config"), require("worker"));
     }
+#else
+    if (mode == "managed") {
+        fail("--mode managed is unavailable on Windows (see "
+             "docs/windows.md)");
+    }
+#endif
     if (mode != "single-worker" && mode != "static-pool") {
         fail("--mode must be single-worker, static-pool or managed");
     }
@@ -1163,9 +1186,15 @@ int main(int argc, char** argv) {
     options.ready_fd = static_cast<int>(ready_fd);
     // The READY record must be deliverable; verify the descriptor is open
     // before spawning the worker.
+#if defined(_WIN32)
+    if (_get_osfhandle(options.ready_fd) < 0) {
+        fail("--ready-fd is not an open descriptor");
+    }
+#else
     if (fcntl(options.ready_fd, F_GETFD) == -1) {
         fail("--ready-fd is not an open descriptor");
     }
+#endif
 
     // Benchmark-only static pool (NOT a managed production path): a fixed
     // 1/2/4-worker pool sharing one SO_REUSEPORT listener, driven by the

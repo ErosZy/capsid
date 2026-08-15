@@ -9,14 +9,19 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <signal.h>
 #include <spawn.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 #if defined(__linux__)
 #include <linux/magic.h>
@@ -27,6 +32,7 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstring>
 #include <deque>
@@ -52,7 +58,13 @@ struct capsid_worker {
     };
 
     int fd;
+#if defined(_WIN32)
+    // Worker process handle; NULL while no process is attached. The
+    // public ABI reports the numeric pid via capsid_worker_pid().
+    HANDLE process;
+#else
     pid_t pid;
+#endif
     bool closed;
     uint64_t request_timeout_ms;
     uint32_t max_inflight_requests;
@@ -138,15 +150,24 @@ bool is_canceled_request_frame(const capsid::protocol::Frame &frame) {
 }
 
 bool set_nonblocking_cloexec(int fd) {
+#if defined(_WIN32)
+    // Windows has no FD_CLOEXEC: handles cross the process boundary only
+    // through the explicit inheritable-handle list at spawn time.
+    return capsid::win32::set_socket_nonblocking(fd);
+#else
     const int status_flags = fcntl(fd, F_GETFL, 0);
     const int descriptor_flags = fcntl(fd, F_GETFD, 0);
     return status_flags >= 0 && descriptor_flags >= 0 &&
            fcntl(fd, F_SETFL, status_flags | O_NONBLOCK) == 0 &&
            fcntl(fd, F_SETFD, descriptor_flags | FD_CLOEXEC) == 0;
+#endif
 }
 
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
-#ifdef MSG_NOSIGNAL
+#if defined(_WIN32)
+    // Winsock send() takes the raw SOCKET handle, not the CRT fd.
+    return capsid::win32::send_fd(fd, data, size, 0);
+#elif defined(MSG_NOSIGNAL)
     return send(fd, data, size, MSG_NOSIGNAL);
 #else
     return send(fd, data, size, 0);
@@ -832,6 +853,42 @@ capsid_result map_frame_to_event(capsid_worker *worker,
     return CAPSID_OK;
 }
 
+#if defined(_WIN32)
+bool wait_for_child(HANDLE process, uint32_t timeout_ms) {
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(timeout_ms);
+    for (;;) {
+        const DWORD result = WaitForSingleObject(process, 0);
+        if (result == WAIT_OBJECT_0) {
+            return true;
+        }
+        if (result == WAIT_FAILED) {
+            return false;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+}
+
+bool terminate_process(HANDLE process) {
+    return TerminateProcess(process, 1) != 0;
+}
+
+void kill_and_reap(HANDLE process) {
+    if (!process) {
+        return;
+    }
+    // TerminateProcess is not async-signal-like; unlike POSIX SIGKILL the
+    // target cannot defer its death past the termination call itself, so
+    // the bounded wait below always reaps a terminated process.
+    TerminateProcess(process, 1);
+    WaitForSingleObject(process, 250);
+    CloseHandle(process);
+}
+#else
 bool wait_for_child(pid_t pid, uint32_t timeout_ms) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() +
@@ -851,6 +908,16 @@ bool wait_for_child(pid_t pid, uint32_t timeout_ms) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
+
+bool terminate_process(pid_t pid) {
+    return kill(pid, SIGKILL) == 0;
+}
+
+void kill_and_reap(pid_t pid) {
+    kill(pid, SIGKILL);
+    waitpid(pid, NULL, 0);
+}
+#endif
 
 bool decode_header_at(const capsid_event *event,
                       size_t wanted_index,
@@ -1347,6 +1414,14 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
            resource_limits.cgroup_cpu_quota_us < 1000)))) {
         return CAPSID_INVALID_ARGUMENT;
     }
+#if defined(_WIN32)
+    // Strict sandbox has no Windows equivalent (no seccomp/Landlock;
+    // see docs/windows.md). Reject at spawn so the worker never starts
+    // under a configuration it cannot enforce.
+    if (config.strict_sandbox) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+#endif
     if (config.sandbox_network_namespace_fd >= 0) {
 #if defined(__linux__)
         if (!config.strict_sandbox ||
@@ -1392,6 +1467,81 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
 #endif
 
     int sockets[2];
+#if defined(_WIN32)
+    // Windows worker IPC: a loopback TCP socket pair replaces
+    // socketpair(AF_UNIX, SOCK_STREAM). Both ends become CRT fds so the
+    // shared read()/send() paths below stay identical to POSIX. Only the
+    // child end is marked inheritable, and it is the only handle passed
+    // through CreateProcess's explicit handle list — no other parent
+    // descriptor crosses the process boundary (stdio is added to the list
+    // only when --close-stdio is absent).
+    if (!capsid::win32::ensure_winsock()) {
+        return CAPSID_SYSTEM_ERROR;
+    }
+    {
+        const SOCKET listener =
+            socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (listener == INVALID_SOCKET) {
+            return CAPSID_SYSTEM_ERROR;
+        }
+        SOCKET child = INVALID_SOCKET;
+        SOCKET parent = INVALID_SOCKET;
+        struct sockaddr_in address = {};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        address.sin_port = 0;
+        socklen_t address_size = sizeof(address);
+        if (bind(listener,
+                 reinterpret_cast<const struct sockaddr *>(&address),
+                 sizeof(address)) != 0 ||
+            listen(listener, 1) != 0 ||
+            getsockname(listener,
+                        reinterpret_cast<struct sockaddr *>(&address),
+                        &address_size) != 0 ||
+            (child = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) ==
+                INVALID_SOCKET ||
+            connect(child,
+                    reinterpret_cast<const struct sockaddr *>(&address),
+                    sizeof(address)) != 0 ||
+            (parent = accept(listener, NULL, NULL)) ==
+                INVALID_SOCKET) {
+            if (child != INVALID_SOCKET) {
+                closesocket(child);
+            }
+            if (parent != INVALID_SOCKET) {
+                closesocket(parent);
+            }
+            closesocket(listener);
+            return CAPSID_SYSTEM_ERROR;
+        }
+        closesocket(listener);
+        if (!SetHandleInformation(reinterpret_cast<HANDLE>(child),
+                                  HANDLE_FLAG_INHERIT,
+                                  HANDLE_FLAG_INHERIT)) {
+            closesocket(child);
+            closesocket(parent);
+            return CAPSID_SYSTEM_ERROR;
+        }
+        sockets[0] = _open_osfhandle(
+            reinterpret_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
+        sockets[1] = _open_osfhandle(
+            reinterpret_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
+        if (sockets[0] < 0 || sockets[1] < 0) {
+            if (sockets[0] >= 0) {
+                close(sockets[0]);
+            }
+            if (sockets[1] >= 0) {
+                close(sockets[1]);
+            }
+            return CAPSID_SYSTEM_ERROR;
+        }
+    }
+    if (!set_nonblocking_cloexec(sockets[0])) {
+        close(sockets[0]);
+        close(sockets[1]);
+        return CAPSID_SYSTEM_ERROR;
+    }
+#else
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
         return CAPSID_SYSTEM_ERROR;
     }
@@ -1452,11 +1602,41 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         posix_spawn_file_actions_addclose(
             &actions, network_namespace_source_fd);
     }
+#endif
 
     const char *worker_path = config.worker_path ? config.worker_path : CAPSID_WORKER_DEFAULT_PATH;
     char fd_argument[32];
+    std::snprintf(
+        fd_argument,
+        sizeof(fd_argument),
+#if defined(_WIN32)
+        // The child inherits the same OS handle value; pass it through the
+        // command line the way POSIX passes the dup2 target fd number.
+        "%llu",
+        static_cast<unsigned long long>(
+            reinterpret_cast<uintptr_t>(_get_osfhandle(sockets[1]))));
+#else
+        "%d",
+        child_fd);
+#endif
+#if defined(_WIN32)
+    // CreateProcessA takes the command line as one string. Every argument
+    // here is a bareword (--ipc-fd, the numeric fd, --close-stdio), and the
+    // worker path is quoted with embedded quotes doubled.
+    std::string command_line = "\"";
+    for (const char *cursor = worker_path; *cursor != '\0'; ++cursor) {
+        command_line.push_back(*cursor);
+        if (*cursor == '"') {
+            command_line.push_back('"');
+        }
+    }
+    command_line += "\" --ipc-fd ";
+    command_line += fd_argument;
+    if (config.strict_sandbox) {
+        command_line += " --close-stdio";
+    }
+#else
     char network_namespace_fd_argument[32];
-    std::snprintf(fd_argument, sizeof(fd_argument), "%d", child_fd);
     std::snprintf(
         network_namespace_fd_argument,
         sizeof(network_namespace_fd_argument),
@@ -1478,6 +1658,117 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
             const_cast<char *>("--close-stdio");
     }
     arguments[argument_count] = NULL;
+#endif
+
+#if defined(_WIN32)
+    // Forward CAPSID_* environment to the worker (diagnostic controls
+    // like CAPSID_PERF_DIAG); nothing else leaks across the boundary.
+    // CreateProcess requires the block to be sorted case-insensitively.
+    std::vector<std::string> capsid_environment;
+    char **environ = _environ;
+    for (char **env = environ; env != NULL && *env != NULL; ++env) {
+        if (std::strncmp(*env, "CAPSID_", 7) == 0) {
+            capsid_environment.push_back(*env);
+        }
+    }
+    std::sort(
+        capsid_environment.begin(),
+        capsid_environment.end(),
+        [](const std::string &left, const std::string &right) {
+            const size_t limit = std::min(left.size(), right.size());
+            for (size_t i = 0; i < limit; ++i) {
+                const char left_character =
+                    std::tolower(static_cast<unsigned char>(left[i]));
+                const char right_character =
+                    std::tolower(static_cast<unsigned char>(right[i]));
+                if (left_character != right_character) {
+                    return left_character < right_character;
+                }
+            }
+            return left.size() < right.size();
+        });
+    std::string environment_block;
+    for (size_t index = 0; index < capsid_environment.size(); ++index) {
+        environment_block += capsid_environment[index];
+        environment_block.push_back('\0');
+    }
+
+    // EXTENDED_STARTUPINFO_PRESENT + PROC_THREAD_ATTRIBUTE_HANDLE_LIST:
+    // only the listed inheritable handles cross the process boundary.
+    STARTUPINFOEXA startup;
+    std::memset(&startup, 0, sizeof(startup));
+    startup.StartupInfo.cb = sizeof(startup);
+    HANDLE inherited_handles[4];
+    SIZE_T inherited_count = 0;
+    inherited_handles[inherited_count++] =
+        reinterpret_cast<HANDLE>(_get_osfhandle(sockets[1]));
+    if (!config.strict_sandbox) {
+        // Preserve stdio inheritance parity with POSIX spawn (no
+        // --close-stdio): the worker's stderr diagnostics stay visible.
+        const HANDLE standard_handles[3] = {
+            GetStdHandle(STD_INPUT_HANDLE),
+            GetStdHandle(STD_OUTPUT_HANDLE),
+            GetStdHandle(STD_ERROR_HANDLE)};
+        for (size_t index = 0; index < 3; ++index) {
+            if (standard_handles[index] != NULL &&
+                standard_handles[index] != INVALID_HANDLE_VALUE) {
+                inherited_handles[inherited_count++] =
+                    standard_handles[index];
+            }
+        }
+    }
+    SIZE_T attribute_size = 0;
+    (void)InitializeProcThreadAttributeList(NULL, 1, 0, &attribute_size);
+    startup.lpAttributeList =
+        reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+            HeapAlloc(GetProcessHeap(), 0, attribute_size));
+    if (startup.lpAttributeList == NULL ||
+        !InitializeProcThreadAttributeList(
+            startup.lpAttributeList, 1, 0, &attribute_size) ||
+        !UpdateProcThreadAttribute(
+            startup.lpAttributeList,
+            0,
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            inherited_handles,
+            inherited_count * sizeof(HANDLE),
+            NULL,
+            NULL)) {
+        if (startup.lpAttributeList != NULL) {
+            DeleteProcThreadAttributeList(startup.lpAttributeList);
+            HeapFree(GetProcessHeap(), 0, startup.lpAttributeList);
+        }
+        close(sockets[0]);
+        close(sockets[1]);
+        return CAPSID_SYSTEM_ERROR;
+    }
+    PROCESS_INFORMATION process_info;
+    std::memset(&process_info, 0, sizeof(process_info));
+    const BOOL created = CreateProcessA(
+        worker_path,
+        &command_line[0],
+        NULL,
+        NULL,
+        TRUE,
+        EXTENDED_STARTUPINFO_PRESENT,
+        environment_block.empty()
+            ? NULL
+            : reinterpret_cast<LPVOID>(&environment_block[0]),
+        NULL,
+        &startup.StartupInfo,
+        &process_info);
+    DeleteProcThreadAttributeList(startup.lpAttributeList);
+    HeapFree(GetProcessHeap(), 0, startup.lpAttributeList);
+    close(sockets[1]);
+    if (!created) {
+        close(sockets[0]);
+        return CAPSID_CHILD_ERROR;
+    }
+    CloseHandle(process_info.hThread);
+    // Named "pid" like the POSIX branch so the shared post-spawn paths
+    // (cgroup rejection, worker construction, reap-on-failure) compile
+    // against one identifier: a HANDLE here, pid_t elsewhere.
+    HANDLE pid = process_info.hProcess;
+#else
     extern char **environ;
     // Forward CAPSID_* environment to the worker (diagnostic controls
     // like CAPSID_PERF_DIAG); nothing else leaks across the boundary.
@@ -1520,6 +1811,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         close(sockets[0]);
         return CAPSID_CHILD_ERROR;
     }
+#endif
 
     uint32_t preinstalled_sandbox_features = 0;
     if (cgroup_path_size != 0) {
@@ -1534,22 +1826,19 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
             // WP-06: an allocating failure inside cgroup attach must not
             // leak the freshly forked child.
             close(sockets[0]);
-            kill(pid, SIGKILL);
-            waitpid(pid, NULL, 0);
+            kill_and_reap(pid);
             throw;
         }
         if (!cgroup_attached) {
             close(sockets[0]);
-            kill(pid, SIGKILL);
-            waitpid(pid, NULL, 0);
+            kill_and_reap(pid);
             return CAPSID_SYSTEM_ERROR;
         }
         preinstalled_sandbox_features |=
             CAPSID_SANDBOX_FEATURE_CGROUP_V2;
 #else
         close(sockets[0]);
-        kill(pid, SIGKILL);
-        waitpid(pid, NULL, 0);
+        kill_and_reap(pid);
         return CAPSID_INVALID_ARGUMENT;
 #endif
     }
@@ -1572,8 +1861,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         worker = new (std::nothrow) capsid_worker();
     } catch (const std::bad_alloc &) {
         close(sockets[0]);
-        kill(pid, SIGKILL);
-        waitpid(pid, NULL, 0);
+        kill_and_reap(pid);
         // Uniform OOM contract: same code and detail the ABI guard would
         // have produced.
         capsid::abi::set_error("capsid_worker_spawn: out of memory");
@@ -1581,8 +1869,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     }
     if (!worker) {
         close(sockets[0]);
-        kill(pid, SIGKILL);
-        waitpid(pid, NULL, 0);
+        kill_and_reap(pid);
         // WP-06: a nothrow allocation failure is an OOM; report it with
         // the same code and detail the ABI guard would have produced, so
         // callers see a uniform CAPSID_OUT_OF_MEMORY contract.
@@ -1590,7 +1877,11 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         return CAPSID_OUT_OF_MEMORY;
     }
     worker->fd = sockets[0];
+#if defined(_WIN32)
+    worker->process = pid;
+#else
     worker->pid = pid;
+#endif
     worker->closed = false;
     worker->request_timeout_ms = config.request_timeout_ms;
     worker->max_inflight_requests = config.max_inflight_requests;
@@ -1613,8 +1904,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
             preinstalled_sandbox_features);
     } catch (...) {
         close(sockets[0]);
-        kill(pid, SIGKILL);
-        waitpid(pid, NULL, 0);
+        kill_and_reap(pid);
         delete worker;
         throw;
     }
@@ -1646,6 +1936,18 @@ void capsid_worker_destroy(capsid_worker *worker) {
         worker->fd = -1;
     }
     worker->closed = true;
+#if defined(_WIN32)
+    if (worker->process != NULL) {
+        // A short natural-exit window keeps the reap cheap for workers that
+        // are already gone; anything still alive is terminated and reaped.
+        if (!wait_for_child(worker->process, 50)) {
+            terminate_process(worker->process);
+            wait_for_child(worker->process, 250);
+        }
+        CloseHandle(worker->process);
+        worker->process = NULL;
+    }
+#else
     if (worker->pid > 0) {
         // A short natural-exit window keeps the reap cheap for workers that
         // are already gone; anything still alive is SIGKILLed and reaped.
@@ -1654,6 +1956,7 @@ void capsid_worker_destroy(capsid_worker *worker) {
             wait_for_child(worker->pid, 250);
         }
     }
+#endif
     delete worker;
 }
 
@@ -1662,7 +1965,13 @@ int capsid_worker_fd(const capsid_worker *worker) {
 }
 
 int64_t capsid_worker_pid(const capsid_worker *worker) {
+#if defined(_WIN32)
+    return worker && worker->process != NULL
+        ? static_cast<int64_t>(GetProcessId(worker->process))
+        : -1;
+#else
     return worker ? static_cast<int64_t>(worker->pid) : -1;
+#endif
 }
 
 static uint32_t capsid_available_cpu_count_impl(void);
@@ -2255,7 +2564,12 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                         ++it) {
                         if (now >= it->second.deadline) {
                             const uint64_t timed_out_id = it->first;
-                            kill(worker->pid, SIGKILL);
+                            terminate_process(
+#if defined(_WIN32)
+                                worker->process);
+#else
+                                worker->pid);
+#endif
                             close(worker->fd);
                             worker->fd = -1;
                             worker->closed = true;
@@ -2338,10 +2652,19 @@ capsid_result capsid_worker_shutdown(capsid_worker *worker) {
 }
 
 capsid_result capsid_worker_terminate(capsid_worker *worker) {
+#if defined(_WIN32)
+    if (!worker || worker->process == NULL) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    return terminate_process(worker->process)
+        ? CAPSID_OK
+        : CAPSID_SYSTEM_ERROR;
+#else
     if (!worker || worker->pid <= 0) {
         return CAPSID_INVALID_ARGUMENT;
     }
     return kill(worker->pid, SIGKILL) == 0 ? CAPSID_OK : CAPSID_SYSTEM_ERROR;
+#endif
 }
 
 capsid_result capsid_response_header_count(const capsid_event *event,

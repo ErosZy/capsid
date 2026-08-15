@@ -2,18 +2,20 @@
 
 #include "host/artifact_safe_read.h"
 
-#include <sys/stat.h>
-
 #include <cerrno>
 #include <cstring>
 
-#if defined(__linux__)
+#if defined(_WIN32)
+#include "win32_compat.h"
+#elif defined(__linux__)
 #include <fcntl.h>
 #include <linux/openat2.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #elif defined(__APPLE__)
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -64,6 +66,14 @@ bool valid_relative_path(std::string_view path) {
 #define CAPSID_STAT_MTIME_NSEC(st) ((st).st_mtimespec.tv_nsec)
 #define CAPSID_STAT_CTIME_SEC(st) ((st).st_ctimespec.tv_sec)
 #define CAPSID_STAT_CTIME_NSEC(st) ((st).st_ctimespec.tv_nsec)
+#elif defined(_WIN32)
+// Windows stat carries whole-second timestamps only; nsec fields are 0.
+// The identity re-check below still detects concurrent replacement via
+// dev/ino/size/mtime.
+#define CAPSID_STAT_MTIME_SEC(st) ((st).st_mtime)
+#define CAPSID_STAT_MTIME_NSEC(st) 0
+#define CAPSID_STAT_CTIME_SEC(st) ((st).st_ctime)
+#define CAPSID_STAT_CTIME_NSEC(st) 0
 #else
 #define CAPSID_STAT_MTIME_SEC(st) ((st).st_mtim.tv_sec)
 #define CAPSID_STAT_MTIME_NSEC(st) ((st).st_mtim.tv_nsec)
@@ -71,7 +81,8 @@ bool valid_relative_path(std::string_view path) {
 #define CAPSID_STAT_CTIME_NSEC(st) ((st).st_ctim.tv_nsec)
 #endif
 
-void snapshot_identity(const struct stat& st, FileIdentity* identity) {
+template <typename Stat>
+void snapshot_identity(const Stat& st, FileIdentity* identity) {
     identity->dev = static_cast<std::uint64_t>(st.st_dev);
     identity->inode = static_cast<std::uint64_t>(st.st_ino);
     identity->size = static_cast<std::uint64_t>(st.st_size);
@@ -135,17 +146,134 @@ int open_beneath(int root_fd, const char* path) {
     return -1;
 }
 
+#elif defined(_WIN32)
+
+// Component-wise walk with reparse-point rejection: every intermediate
+// directory is opened with FILE_FLAG_OPEN_REPARSE_POINT so a
+// symlink/junction is detected (via its reparse attribute) instead of
+// being followed; the final component is opened with the same flag, so a
+// symlinked file is rejected too. Deployment reads never traverse out of
+// the verified root.
+int open_beneath(int root_fd, const char* path) {
+    const HANDLE root_handle =
+        reinterpret_cast<HANDLE>(_get_osfhandle(root_fd));
+    if (root_handle == INVALID_HANDLE_VALUE) {
+        errno = EBADF;
+        return -1;
+    }
+    DWORD needed = GetFinalPathNameByHandleW(
+        root_handle, nullptr, 0, FILE_NAME_NORMALIZED);
+    if (needed == 0) {
+        errno = EIO;
+        return -1;
+    }
+    std::wstring root_path(needed, L'\0');
+    if (GetFinalPathNameByHandleW(
+            root_handle, &root_path[0], needed,
+            FILE_NAME_NORMALIZED) == 0) {
+        errno = EIO;
+        return -1;
+    }
+    // The relative path is validated UTF-8 text (valid_relative_path
+    // rejects NULs and traversals); convert it to wide for the Win32 APIs.
+    const int wide_size = MultiByteToWideChar(
+        CP_UTF8, 0, path, -1, nullptr, 0);
+    if (wide_size <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    std::wstring wide_path(static_cast<std::size_t>(wide_size - 1), L'\0');
+    if (MultiByteToWideChar(
+            CP_UTF8, 0, path, -1, &wide_path[0], wide_size) <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    for (wchar_t& character : wide_path) {
+        if (character == L'/') {
+            character = L'\\';
+        }
+    }
+    std::wstring current = root_path;
+    if (!current.empty() && current.back() != L'\\') {
+        current.push_back(L'\\');
+    }
+    std::size_t begin = 0;
+    HANDLE final_handle = INVALID_HANDLE_VALUE;
+    while (begin < wide_path.size()) {
+        const std::size_t end = wide_path.find(L'\\', begin);
+        const std::wstring component = wide_path.substr(
+            begin, end == std::wstring::npos ? std::wstring::npos
+                                             : end - begin);
+        const bool last = end == std::wstring::npos;
+        if (!current.empty() && current.back() != L'\\') {
+            current.push_back(L'\\');
+        }
+        current += component;
+        const HANDLE handle = CreateFileW(
+            current.c_str(),
+            last ? GENERIC_READ : FILE_LIST_DIRECTORY,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr,
+            OPEN_EXISTING,
+            (last ? FILE_ATTRIBUTE_NORMAL : FILE_FLAG_BACKUP_SEMANTICS) |
+                FILE_FLAG_OPEN_REPARSE_POINT,
+            nullptr);
+        if (handle == INVALID_HANDLE_VALUE) {
+            errno = GetLastError() == ERROR_FILE_NOT_FOUND ||
+                            GetLastError() == ERROR_PATH_NOT_FOUND
+                        ? ENOENT
+                        : EIO;
+            return -1;
+        }
+        FILE_ATTRIBUTE_TAG_INFO attributes = {};
+        const bool reparse =
+            GetFileInformationByHandleEx(
+                handle, FileAttributeTagInfo, &attributes,
+                sizeof(attributes)) != 0 &&
+            (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+        if (reparse) {
+            CloseHandle(handle);
+            errno = ELOOP;
+            return -1;
+        }
+        if (last) {
+            final_handle = handle;
+            break;
+        }
+        CloseHandle(handle);
+        begin = end + 1;
+    }
+    if (final_handle == INVALID_HANDLE_VALUE) {
+        errno = ENOENT;
+        return -1;
+    }
+    const int fd = _open_osfhandle(
+        reinterpret_cast<intptr_t>(final_handle), _O_RDONLY | _O_BINARY);
+    if (fd < 0) {
+        CloseHandle(final_handle);
+    }
+    return fd;
+}
+
 #else
-#error "capsid host safe-read requires Linux or macOS"
+#error "capsid host safe-read requires Linux, macOS or Windows"
 #endif
 
 SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
+#if defined(_WIN32)
+    struct _stat64 before = {};
+    const bool stat_ok = _fstat64(fd, &before) == 0;
+    const bool regular = (before.st_mode & _S_IFREG) != 0;
+#else
     struct stat before = {};
-    if (fstat(fd, &before) != 0) {
+    const bool stat_ok = fstat(fd, &before) == 0;
+    const bool regular = S_ISREG(before.st_mode);
+#endif
+    if (!stat_ok) {
         return fail_result(SafeReadErrorCode::kIoError,
                            "cannot stat deployment file");
     }
-    if (!S_ISREG(before.st_mode)) {
+    if (!regular) {
         return fail_result(SafeReadErrorCode::kNotRegularFile,
                            "deployment path is not a regular file");
     }
@@ -159,9 +287,17 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
     file.bytes.resize(static_cast<std::size_t>(size));
     std::size_t offset = 0;
     while (offset < file.bytes.size()) {
+#if defined(_WIN32)
+        // No pread on Windows: the fd is freshly opened and read exactly
+        // once, so sequential reads are position-stable; the identity
+        // re-check below still catches concurrent replacement.
+        const ssize_t count = read(
+            fd, file.bytes.data() + offset, file.bytes.size() - offset);
+#else
         const ssize_t count = pread(
             fd, file.bytes.data() + offset, file.bytes.size() - offset,
             static_cast<off_t>(offset));
+#endif
         if (count < 0) {
             if (errno == EINTR) {
                 continue;
@@ -179,8 +315,14 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
                            "deployment file changed while reading");
     }
 
+#if defined(_WIN32)
+    struct _stat64 after = {};
+    const bool recheck_ok = _fstat64(fd, &after) == 0;
+#else
     struct stat after = {};
-    if (fstat(fd, &after) != 0) {
+    const bool recheck_ok = fstat(fd, &after) == 0;
+#endif
+    if (!recheck_ok) {
         return fail_result(SafeReadErrorCode::kIoError,
                            "cannot re-stat deployment file");
     }
@@ -255,13 +397,16 @@ SafeReadResult safe_read_regular_file(int root_fd,
         // by probing the node type instead of trusting either errno, so
         // the mapping is platform-independent (§13.5). The probe is
         // diagnostic only: open already failed, so either way the deploy
-        // is rejected fail-closed.
+        // is rejected fail-closed. (Windows has no fstatat; the open
+        // failure itself is the verdict there.)
+#if !defined(_WIN32)
         struct stat node = {};
         if (fstatat(root_fd, path.c_str(), &node, AT_SYMLINK_NOFOLLOW) == 0 &&
             S_ISSOCK(node.st_mode)) {
             return fail_result(SafeReadErrorCode::kNotRegularFile,
                                "deployment path is not a regular file");
         }
+#endif
         return fail_result(SafeReadErrorCode::kIoError,
                            "cannot open deployment file");
     }

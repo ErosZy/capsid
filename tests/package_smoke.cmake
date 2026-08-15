@@ -175,7 +175,7 @@ foreach(info_line IN LISTS CAPSID_SMOKE_INFO_LINES)
 endforeach()
 # CMake's regex engine has no {n} quantifier, so the fixed widths are checked
 # with explicit lengths (40-hex commit, 64-hex sha256 digests).
-if(NOT CAPSID_SMOKE_VERSION STREQUAL "0.1.1")
+if(NOT CAPSID_SMOKE_VERSION STREQUAL "0.1.2")
     message(FATAL_ERROR "build-info version=${CAPSID_SMOKE_VERSION}")
 endif()
 string(LENGTH "${CAPSID_SMOKE_COMMIT}" commit_len)
@@ -229,7 +229,7 @@ execute_process(
         --source "${CAPSID_SMOKE_BUNDLE}"
         --source-name "smoke.mjs"
         --application "package-smoke"
-        --version "0.1.1"
+        --version "0.1.2"
         --key-id "smoke-key"
         --bytecode-out "${CAPSID_WORK_DIR}/smoke.qjsb"
         --attestation-out "${CAPSID_WORK_DIR}/smoke-bytecode.json"
@@ -467,6 +467,63 @@ foreach(binary IN LISTS CAPSID_SMOKE_BINARIES)
             endif()
             message(FATAL_ERROR "${binary_name} has an undeclared dynamic "
                 "dependency: ${stripped}")
+        endforeach()
+    elseif(CAPSID_SMOKE_SYSTEM_NAME STREQUAL "Windows")
+        # PE import scan via dumpbin (VS toolchain). When dumpbin is not on
+        # PATH (ctest without the dev environment), the scan is skipped
+        # with a warning: the static /MT CRT policy and the Release job's
+        # static vcpkg triplet are the packaging-time gates instead. CRT
+        # DLLs (VCRUNTIME/MSVCP/ucrtbase) are intentionally NOT allowlisted
+        # — their presence would prove a static-CRT regression.
+        find_program(CAPSID_SMOKE_DUMPBIN NAMES dumpbin)
+        if(NOT CAPSID_SMOKE_DUMPBIN)
+            message(WARNING "dumpbin not found; skipping the Windows "
+                "dynamic-dependency scan for ${binary_name}")
+            continue()
+        endif()
+        set(CAPSID_SMOKE_DYNAMIC_ALLOWLIST_WINDOWS
+            "KERNEL32[.]dll" "ntdll[.]dll" "WS2_32[.]dll" "bcrypt[.]dll"
+            "CRYPT32[.]dll" "ADVAPI32[.]dll" "USER32[.]dll"
+            "IPHLPAPI[.]DLL" "PSAPI[.]DLL" "SHELL32[.]dll" "OLE32[.]dll"
+            "OLEAUT32[.]dll" "dbghelp[.]dll" "api-ms-win-")
+        execute_process(
+            COMMAND "${CAPSID_SMOKE_DUMPBIN}" /dependents "${binary}"
+            RESULT_VARIABLE dumpbin_result
+            OUTPUT_VARIABLE dumpbin_out
+            ERROR_VARIABLE dumpbin_err)
+        if(NOT dumpbin_result EQUAL 0)
+            message(FATAL_ERROR "dumpbin /dependents failed for "
+                "${binary_name}:\n${dumpbin_err}")
+        endif()
+        string(REPLACE "\n" ";" dumpbin_lines "${dumpbin_out}")
+        set(in_dependencies "OFF")
+        foreach(line IN LISTS dumpbin_lines)
+            string(STRIP "${line}" stripped)
+            if(stripped STREQUAL "Image has the following dependencies:")
+                set(in_dependencies "ON")
+                continue()
+            endif()
+            if(NOT in_dependencies)
+                continue()
+            endif()
+            if(NOT stripped MATCHES "^([A-Za-z0-9_.-]+[.]dll)$")
+                continue()
+            endif()
+            set(needed_name "${CMAKE_MATCH_1}")
+            string(TOUPPER "${needed_name}" needed_name_upper)
+            set(needed_allowed "OFF")
+            foreach(allowed IN LISTS
+                    CAPSID_SMOKE_DYNAMIC_ALLOWLIST_WINDOWS)
+                string(TOUPPER "${allowed}" allowed_upper)
+                if(needed_name_upper MATCHES "^${allowed_upper}")
+                    set(needed_allowed "ON")
+                    break()
+                endif()
+            endforeach()
+            if(NOT needed_allowed)
+                message(FATAL_ERROR "${binary_name} has an undeclared "
+                    "dynamic dependency: ${needed_name}")
+            endif()
         endforeach()
     elseif(CAPSID_SMOKE_SYSTEM_NAME STREQUAL "Linux")
         execute_process(

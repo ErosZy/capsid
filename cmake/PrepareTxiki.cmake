@@ -24,11 +24,22 @@ foreach(CAPSID_VENDOR_DEP IN LISTS CAPSID_VENDOR_DEPS)
        AND NOT CAPSID_VENDOR_DEP STREQUAL "wamr"
        AND NOT CAPSID_VENDOR_DEP STREQUAL "quickjs"
        AND NOT CAPSID_VENDOR_DEP STREQUAL "mbedtls")
-        file(CREATE_LINK
-            "${CAPSID_VENDOR_SOURCE}/deps/${CAPSID_VENDOR_DEP}"
-            "${CAPSID_VENDOR_OVERLAY}/deps/${CAPSID_VENDOR_DEP}"
-            SYMBOLIC
-        )
+        if(WIN32)
+            # Windows without Developer Mode cannot create symlinks, and
+            # CMake's COPY_ON_ERROR fallback does not populate directories;
+            # copy the dependency tree outright (content-identical, and the
+            # overlay key hashes files, not link topology).
+            file(COPY
+                "${CAPSID_VENDOR_SOURCE}/deps/${CAPSID_VENDOR_DEP}"
+                DESTINATION "${CAPSID_VENDOR_OVERLAY}/deps"
+            )
+        else()
+            file(CREATE_LINK
+                "${CAPSID_VENDOR_SOURCE}/deps/${CAPSID_VENDOR_DEP}"
+                "${CAPSID_VENDOR_OVERLAY}/deps/${CAPSID_VENDOR_DEP}"
+                SYMBOLIC
+            )
+        endif()
     endif()
 endforeach()
 
@@ -63,6 +74,13 @@ foreach(CAPSID_LWS_ENTRY IN LISTS CAPSID_LWS_ENTRIES)
             "${CAPSID_LWS_SOURCE}/${CAPSID_LWS_ENTRY}"
             DESTINATION "${CAPSID_LWS_OVERLAY}"
         )
+    elseif(WIN32)
+        # See the dependency loop above: no Developer Mode -> no symlinks,
+        # and COPY_ON_ERROR does not populate directories, so copy.
+        file(COPY
+            "${CAPSID_LWS_SOURCE}/${CAPSID_LWS_ENTRY}"
+            DESTINATION "${CAPSID_LWS_OVERLAY}"
+        )
     else()
         file(CREATE_LINK
             "${CAPSID_LWS_SOURCE}/${CAPSID_LWS_ENTRY}"
@@ -78,11 +96,21 @@ execute_process(
     RESULT_VARIABLE CAPSID_LWS_GIT_RESULT
 )
 if(CAPSID_LWS_GIT_RESULT EQUAL 0 AND CAPSID_LWS_GIT_DIR)
-    file(CREATE_LINK
-        "${CAPSID_LWS_GIT_DIR}"
-        "${CAPSID_LWS_OVERLAY}/.git"
-        SYMBOLIC
+    # The .git link keeps git tooling working inside the overlay. It is an
+    # optimization, not a build input: when the platform cannot create
+    # symlinks (Windows without Developer Mode), the overlay simply runs
+    # without it.
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E create_symlink
+            "${CAPSID_LWS_GIT_DIR}"
+            "${CAPSID_LWS_OVERLAY}/.git"
+        RESULT_VARIABLE CAPSID_LWS_GIT_LINK_RESULT
+        OUTPUT_QUIET
+        ERROR_QUIET
     )
+    if(NOT CAPSID_LWS_GIT_LINK_RESULT EQUAL 0)
+        file(REMOVE "${CAPSID_LWS_OVERLAY}/.git")
+    endif()
 endif()
 
 file(GLOB CAPSID_PATCHES "${CMAKE_CURRENT_LIST_DIR}/../patches/txiki/*.patch")

@@ -34,7 +34,8 @@ file(MAKE_DIRECTORY "${CAPSID_WORK_DIR}")
 # an earlier build) must never be confused with this run's output.
 set(CAPSID_PREEXISTING_ARCHIVES)
 file(GLOB CAPSID_ALL_ARCHIVES_BEFORE
-    "${CAPSID_BUILD_DIR}/*.tar.gz")
+    "${CAPSID_BUILD_DIR}/*.tar.gz"
+    "${CAPSID_BUILD_DIR}/*.zip")
 foreach(archive IN LISTS CAPSID_ALL_ARCHIVES_BEFORE)
     file(TIMESTAMP "${archive}" archive_mtime "%s" UTC)
     list(APPEND CAPSID_PREEXISTING_ARCHIVES "${archive}|${archive_mtime}")
@@ -54,7 +55,9 @@ endif()
 
 set(CAPSID_PACKAGE_ARCHIVES)
 set(CAPSID_NEW_ARCHIVES)
-file(GLOB CAPSID_ALL_ARCHIVES "${CAPSID_BUILD_DIR}/*.tar.gz")
+file(GLOB CAPSID_ALL_ARCHIVES
+    "${CAPSID_BUILD_DIR}/*.tar.gz"
+    "${CAPSID_BUILD_DIR}/*.zip")
 foreach(archive IN LISTS CAPSID_ALL_ARCHIVES)
     file(TIMESTAMP "${archive}" archive_mtime "%s" UTC)
     set(CAPSID_PREEXISTING "OFF")

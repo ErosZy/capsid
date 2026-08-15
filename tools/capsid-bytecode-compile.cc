@@ -31,11 +31,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <set>
 #include <string>
-#include <unistd.h>
 #include <vector>
+
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #if defined(__linux__)
 #include <sys/syscall.h>
@@ -280,18 +285,119 @@ struct OutputTarget {
 
 bool split_output_path(const std::string& path, OutputTarget* target,
                        const std::string& suffix) {
-    const std::string::size_type slash = path.find_last_of('/');
+    const std::string::size_type slash = path.find_last_of("/\\");
     target->dir = slash == std::string::npos ? "." : path.substr(0, slash);
     target->name =
         slash == std::string::npos ? path : path.substr(slash + 1);
     if (target->name.empty() || target->name == "." || target->name == ".." ||
-        target->name.find('/') != std::string::npos) {
+        target->name.find('/') != std::string::npos ||
+        target->name.find('\\') != std::string::npos) {
         return false;
     }
     target->temp = target->name + ".tmp." + suffix;
     return true;
 }
 
+#if defined(_WIN32)
+// Windows output pipeline. CREATE_NEW is the O_CREAT|O_EXCL equivalent;
+// FILE_FLAG_OPEN_REPARSE_POINT rejects symlink temps; FlushFileBuffers is
+// fsync; MoveFileEx without MOVEFILE_REPLACE_EXISTING is the
+// rename-without-replace contract (ERROR_ALREADY_EXISTS on a present
+// final name); DeleteFileW is unlink.
+std::wstring widen_output_path(const std::string& value) {
+    const int wide_size =
+        MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
+    if (wide_size <= 0) {
+        return std::wstring();
+    }
+    std::wstring wide(static_cast<std::size_t>(wide_size - 1), L'\0');
+    if (MultiByteToWideChar(
+            CP_UTF8, 0, value.c_str(), -1, &wide[0], wide_size) <= 0) {
+        return std::wstring();
+    }
+    return wide;
+}
+
+std::wstring output_path(const OutputTarget& target,
+                         const std::string& name) {
+    return widen_output_path(
+        target.dir + (target.dir.empty() ? "" : "\\") + name);
+}
+
+bool write_temp_file(const OutputTarget& target, std::string* error) {
+    const std::wstring temp_path = output_path(target, target.temp);
+    const HANDLE handle = CreateFileW(
+        temp_path.c_str(),
+        GENERIC_WRITE,
+        0,
+        nullptr,
+        CREATE_NEW,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+        nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        *error = "cannot create temporary output";
+        return false;
+    }
+    FILE_ATTRIBUTE_TAG_INFO attributes = {};
+    if (GetFileInformationByHandleEx(
+            handle, FileAttributeTagInfo, &attributes,
+            sizeof(attributes)) != 0 &&
+        (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+        CloseHandle(handle);
+        (void)DeleteFileW(temp_path.c_str());
+        *error = "cannot create temporary output";
+        return false;
+    }
+    const std::uint8_t* data =
+        static_cast<const std::uint8_t*>(target.data);
+    std::size_t offset = 0;
+    bool ok = true;
+    while (offset < target.size) {
+        DWORD written = 0;
+        const DWORD chunk = target.size - offset > MAXDWORD
+            ? MAXDWORD
+            : static_cast<DWORD>(target.size - offset);
+        if (!WriteFile(handle, data + offset, chunk, &written, nullptr) ||
+            written == 0) {
+            ok = false;
+            break;
+        }
+        offset += static_cast<std::size_t>(written);
+    }
+    if (ok) {
+        ok = FlushFileBuffers(handle) != 0;
+    }
+    CloseHandle(handle);
+    if (!ok) {
+        (void)DeleteFileW(temp_path.c_str());
+        *error = "cannot write temporary output";
+        return false;
+    }
+    return true;
+}
+
+// No-replace publish: MoveFileEx refuses to replace an existing final
+// name (MOVEFILE_REPLACE_EXISTING is intentionally absent).
+bool publish_no_replace(const OutputTarget& target, std::string* error) {
+    const std::wstring temp_path = output_path(target, target.temp);
+    const std::wstring final_path = output_path(target, target.name);
+    if (MoveFileExW(temp_path.c_str(), final_path.c_str(),
+                    MOVEFILE_WRITE_THROUGH)) {
+        return true;
+    }
+    const DWORD saved = GetLastError();
+    if (saved == ERROR_ALREADY_EXISTS || saved == ERROR_FILE_EXISTS) {
+        *error = "output already exists";
+    }
+    return false;
+}
+
+bool remove_output_file(const OutputTarget& target,
+                        const std::string& name) {
+    const std::wstring path = output_path(target, name);
+    return DeleteFileW(path.c_str()) != 0;
+}
+#else
 bool write_temp_file(const OutputTarget& target, std::string* error) {
     const int dir_fd = open(target.dir.c_str(),
                             O_RDONLY | O_DIRECTORY | O_CLOEXEC);
@@ -374,6 +480,19 @@ bool publish_no_replace(const OutputTarget& target, std::string* error) {
     return published;
 }
 
+bool remove_output_file(const OutputTarget& target,
+                        const std::string& name) {
+    const int dir_fd = open(target.dir.c_str(),
+                            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir_fd < 0) {
+        return false;
+    }
+    const bool removed = unlinkat(dir_fd, name.c_str(), 0) == 0;
+    close(dir_fd);
+    return removed;
+}
+#endif
+
 struct AtomicOutputs {
     OutputTarget bytecode;
     OutputTarget attestation;
@@ -410,38 +529,25 @@ bool commit_outputs(const AtomicOutputs& outputs) {
                      error.c_str());
     }
     // Rollback: temps always; finals only if this invocation renamed them.
-    const int dir_fd = open(outputs.bytecode.dir.c_str(),
-                            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (dir_fd >= 0) {
-        if (!ok || !published_bytecode) {
-            unlinkat(dir_fd, outputs.bytecode.temp.c_str(), 0);
-        }
-        if (published_bytecode && !ok) {
-            unlinkat(dir_fd, outputs.bytecode.name.c_str(), 0);
-        }
-        close(dir_fd);
+    if (!ok || !published_bytecode) {
+        (void)remove_output_file(outputs.bytecode, outputs.bytecode.temp);
     }
-    const int dir_fd_att = open(outputs.attestation.dir.c_str(),
-                                O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (dir_fd_att >= 0) {
-        if (!ok || !published_attestation) {
-            unlinkat(dir_fd_att, outputs.attestation.temp.c_str(), 0);
-        }
-        if (published_attestation && !ok) {
-            unlinkat(dir_fd_att, outputs.attestation.name.c_str(), 0);
-        }
-        close(dir_fd_att);
+    if (published_bytecode && !ok) {
+        (void)remove_output_file(outputs.bytecode, outputs.bytecode.name);
     }
-    const int dir_fd_msg = open(outputs.message.dir.c_str(),
-                                O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (dir_fd_msg >= 0) {
-        if (!ok || !published_message) {
-            unlinkat(dir_fd_msg, outputs.message.temp.c_str(), 0);
-        }
-        if (published_message && !ok) {
-            unlinkat(dir_fd_msg, outputs.message.name.c_str(), 0);
-        }
-        close(dir_fd_msg);
+    if (!ok || !published_attestation) {
+        (void)remove_output_file(outputs.attestation,
+                                 outputs.attestation.temp);
+    }
+    if (published_attestation && !ok) {
+        (void)remove_output_file(outputs.attestation,
+                                 outputs.attestation.name);
+    }
+    if (!ok || !published_message) {
+        (void)remove_output_file(outputs.message, outputs.message.temp);
+    }
+    if (published_message && !ok) {
+        (void)remove_output_file(outputs.message, outputs.message.name);
     }
     return ok;
 }
@@ -579,7 +685,11 @@ int main(int argc, char** argv) {
     // pre-place a temp symlink at the exact temp path of the child it
     // forks. O_EXCL|O_NOFOLLOW then rejects it.
     const std::string suffix =
+#if defined(_WIN32)
+        std::to_string(static_cast<long long>(capsid::win32::getpid()));
+#else
         std::to_string(static_cast<long long>(getpid()));
+#endif
     AtomicOutputs outputs;
     if (!split_output_path(bytecode_out, &outputs.bytecode, suffix) ||
         !split_output_path(attestation_out, &outputs.attestation, suffix) ||
