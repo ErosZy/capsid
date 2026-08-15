@@ -2171,6 +2171,12 @@ private:
                     const std::string &capability,
                     const std::string &resource_kind,
                     const std::string &resource) {
+#if defined(_WIN32)
+        // debug: drop startup audits to isolate ERROR_ALREADY_EXISTS
+        if (!poll_started_) {
+            return;
+        }
+#endif
         const uint64_t now = uv_hrtime();
         if (audit_window_started_ns_ == 0 ||
             now - audit_window_started_ns_ >=
