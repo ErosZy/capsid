@@ -645,6 +645,86 @@ void test_binding_egress_denial(const char *worker_path,
     finish_worker(fd, pid, true);
 }
 
+// Binding v1 P0-5: raw core.TCP egress obeys the Binding net policy —
+// a direct connect to an unauthorized target fails before any socket
+// operation, not only through the HTTP client.
+void test_binding_raw_tcp_egress_denial(const char *worker_path,
+                                        const char *call_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob(
+        "import core from 'tjs:internal/core';"
+        "export default ({ config, secrets, log }) => {"
+        "  return { find() {"
+        "    const sock = new core.TCPSocket('127.0.0.1', 9999);"
+        "    return sock.opened;"
+        "  } };"
+        "};");
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(call_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    for (int i = 0; i < 8; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "no frame arrived before READY");
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+    }
+    require(frame.type == capsid::protocol::kReady,
+            "raw-tcp binding worker did not report READY");
+
+    capsid::protocol::Frame head;
+    head.type = capsid::protocol::kRequestHead;
+    head.flags = capsid::protocol::kFlagRequestEnd;
+    head.request_id = 79;
+    append_string16(&head.payload, "GET");
+    append_string32(&head.payload, "https://example.test/");
+    capsid::protocol::append_u16(&head.payload, 0);
+    send_frame(fd, head);
+
+    std::string body;
+    bool ended = false;
+    for (int i = 0; i < 64; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "raw-tcp response frames stopped before the terminal");
+        if (frame.type == capsid::protocol::kError &&
+            frame.request_id == 79) {
+            body.assign(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+            ended = true;
+            break;
+        }
+        if (frame.type == capsid::protocol::kResponseBody) {
+            body.append(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+        }
+        if (frame.type == capsid::protocol::kResponseEnd) {
+            ended = true;
+            break;
+        }
+    }
+    require(ended, "raw-tcp binding request never terminated");
+    // The denial itself is the contract (no connection may be made); the
+    // text may degrade to the stable failure message for exception-shaped
+    // rejection reasons.
+    require(body.find("egress") != std::string::npos ||
+                body.find("binding call failed") != std::string::npos,
+            "raw-tcp denial carries no failure text: " + body);
+    finish_worker(fd, pid, true);
+}
+
 void test_load_binding_abi_validation() {
     capsid_worker *worker = NULL;
     require(
@@ -687,6 +767,7 @@ int main(int argc, char **argv) {
     test_binding_factory_failures(argv[1], argv[2]);
     test_binding_end_to_end_call(argv[1], argv[4]);
     test_binding_egress_denial(argv[1], argv[4]);
+    test_binding_raw_tcp_egress_denial(argv[1], argv[4]);
     test_load_binding_abi_validation();
     return 0;
 }

@@ -4912,16 +4912,28 @@ private:
                 }
             } else {
                 // Errors cross as message text only.
-                const char *text =
-                    JS_ToCString(binding_ctx_, call.binding_error);
+                // A raw rejection reason may arrive as an exception
+                // placeholder whose text is unrecoverable; fail with a
+                // stable message in that case.
+                std::string error_text;
+                if (JS_IsException(call.binding_error)) {
+                    error_text = "binding call failed";
+                    JS_FreeValue(binding_ctx_, call.binding_error);
+                    call.binding_error = JS_UNDEFINED;
+                } else {
+                    const char *text =
+                        JS_ToCString(binding_ctx_, call.binding_error);
+                    error_text = text ? text : "binding call failed";
+                    if (text != NULL) {
+                        JS_FreeCString(binding_ctx_, text);
+                    }
+                }
+
                 payload = JS_NewError(ctx_);
                 JS_DefinePropertyValueStr(
                     ctx_, payload, "message",
-                    JS_NewString(ctx_, text ? text : "binding call failed"),
+                    JS_NewString(ctx_, error_text.c_str()),
                     JS_PROP_C_W_E);
-                if (text != NULL) {
-                    JS_FreeCString(binding_ctx_, text);
-                }
             }
             JSValue settle = JS_Call(ctx_, handler, JS_UNDEFINED, 1,
                                      &payload);

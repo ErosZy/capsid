@@ -1,0 +1,113 @@
+--- a/src/private.h	2026-08-15 18:31:25
++++ b/src/private.h	2026-08-15 18:31:25
+@@ -111,6 +111,9 @@
+         int active_conns;
+     } lws;
+ #ifdef TJS_RESTRICTED_CORE
++/* Capsid Binding v1: shared deny-reason buffer size for the egress gate
++ * (httpclient, raw TCP and raw UDP all report through this). */
++#define TJS_EGRESS_REASON_MAX 192
+     struct {
+         int (*check)(void *opaque, const char *host, uint16_t port,
+                      const struct sockaddr *address,
+--- a/src/utils.c	2026-08-15 18:31:25
++++ b/src/utils.c	2026-08-15 18:31:25
+@@ -80,6 +80,28 @@
+     }
+ 
+     memset(ss, 0, sizeof(*ss));
++
++#ifdef TJS_RESTRICTED_CORE
++    /* Capsid Binding v1: hostname-stage egress gate for raw TCP/UDP
++     * targets. The per-origin policy decides before any resolution or
++     * connect syscall. */
++    {
++        TJSRuntime *qrt = TJS_GetRuntime(ctx);
++        if (!qrt || !qrt->egress.check) {
++            JS_ThrowTypeError(ctx, "egress policy is unavailable");
++            ret = -1;
++            goto end;
++        }
++        char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++        if (!qrt->egress.check(qrt->egress.opaque, ip, (uint16_t) port,
++                               NULL, 0, reason, sizeof(reason))) {
++            JS_ThrowTypeError(ctx, "%s",
++                              reason[0] ? reason : "egress denied");
++            ret = -1;
++            goto end;
++        }
++    }
++#endif
+ 
+     if (uv_inet_pton(AF_INET, ip, &((struct sockaddr_in *) ss)->sin_addr) == 0) {
+         ss->ss_family = AF_INET;
+--- a/src/mod_streams.c	2026-08-15 18:31:25
++++ b/src/mod_streams.c	2026-08-15 18:31:25
+@@ -637,6 +637,27 @@
+         return JS_EXCEPTION;
+     }
+ 
++#ifdef TJS_RESTRICTED_CORE
++    /* Capsid Binding v1: resolved-address egress gate for raw TCP. */
++    {
++        TJSRuntime *qrt = TJS_GetRuntime(ctx);
++        if (!qrt || !qrt->egress.check) {
++            js_free(ctx, req);
++            JS_ThrowTypeError(ctx, "egress policy is unavailable");
++            return JS_EXCEPTION;
++        }
++        char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++        if (!qrt->egress.check(qrt->egress.opaque, NULL, 0,
++                               (struct sockaddr *) &ss, sizeof(ss),
++                               reason, sizeof(reason))) {
++            js_free(ctx, req);
++            JS_ThrowTypeError(ctx, "%s",
++                              reason[0] ? reason : "egress denied");
++            return JS_EXCEPTION;
++        }
++    }
++#endif
++
+     r = uv_tcp_connect(req, &t->h.tcp, (struct sockaddr *) &ss, uv__stream_connect_cb);
+     if (r != 0) {
+         js_free(ctx, req);
+--- a/src/mod_udp.c	2026-08-15 18:31:25
++++ b/src/mod_udp.c	2026-08-15 18:31:25
+@@ -282,7 +282,27 @@
+             return JS_EXCEPTION;
+         }
+         sa = (struct sockaddr *) &ss;
++    }
++
++#ifdef TJS_RESTRICTED_CORE
++    /* Capsid Binding v1: resolved-address egress gate for raw UDP. */
++    if (sa != NULL) {
++        TJSRuntime *qrt = TJS_GetRuntime(ctx);
++        if (!qrt || !qrt->egress.check) {
++            tjs_buf_ref_release(ctx, &buf_ref);
++            JS_ThrowTypeError(ctx, "egress policy is unavailable");
++            return JS_EXCEPTION;
++        }
++        char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++        if (!qrt->egress.check(qrt->egress.opaque, NULL, 0,
++                               sa, sizeof(ss), reason, sizeof(reason))) {
++            tjs_buf_ref_release(ctx, &buf_ref);
++            JS_ThrowTypeError(ctx, "%s",
++                              reason[0] ? reason : "egress denied");
++            return JS_EXCEPTION;
++        }
+     }
++#endif
+ 
+     /* First try to do the write inline */
+     uv_buf_t b;
+--- a/src/httpclient.c	2026-08-15 18:31:25
++++ b/src/httpclient.c	2026-08-15 18:31:25
+@@ -36,7 +36,6 @@
+ 
+ /* Deny-reason buffer filled by the host-side egress hook; the connection
+  * error path reports it so the app sees why a fetch was blocked. */
+-#define TJS_EGRESS_REASON_MAX 192
+ 
+ enum {
+     HC_CALLBACK_STATUS = 0,
