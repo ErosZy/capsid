@@ -46,9 +46,7 @@ typedef int socklen_t;
 #ifndef pid_t
 typedef DWORD pid_t;
 #endif
-#ifndef off_t
-typedef int64_t off_t;
-#endif
+/* off_t: provided by MSVC sys/types.h (pulled in by io.h). */
 
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
@@ -115,7 +113,6 @@ inline void map_winsock_errno() {
         case WSAEACCES: errno = EACCES; break;
         case WSAEADDRNOTAVAIL: errno = EADDRNOTAVAIL; break;
         case WSAEINVAL: errno = EINVAL; break;
-        case WSAENOENT: errno = ENOENT; break;
         default: errno = EIO; break;
     }
 }
@@ -155,8 +152,9 @@ inline int accept_fd(int listener) {
         map_winsock_errno();
         return -1;
     }
+    // SOCKET is an integer handle type: integer-to-integer cast.
     return _open_osfhandle(
-        reinterpret_cast<intptr_t>(accepted), _O_RDWR | _O_BINARY);
+        static_cast<intptr_t>(accepted), _O_RDWR | _O_BINARY);
 }
 
 // shutdown(SHUT_RDWR) on a CRT fd.
@@ -214,9 +212,9 @@ inline bool create_socket_pair(int fds[2]) {
         return false;
     }
     fds[0] = _open_osfhandle(
-        reinterpret_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
+        static_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
     fds[1] = _open_osfhandle(
-        reinterpret_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
+        static_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
     if (fds[0] < 0 || fds[1] < 0) {
         if (fds[0] >= 0) {
             close(fds[0]);

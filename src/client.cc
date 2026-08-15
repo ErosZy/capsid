@@ -1523,9 +1523,9 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
             return CAPSID_SYSTEM_ERROR;
         }
         sockets[0] = _open_osfhandle(
-            reinterpret_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
+            static_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
         sockets[1] = _open_osfhandle(
-            reinterpret_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
+            static_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
         if (sockets[0] < 0 || sockets[1] < 0) {
             if (sockets[0] >= 0) {
                 close(sockets[0]);

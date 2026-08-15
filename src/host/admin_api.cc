@@ -41,7 +41,7 @@ int create_cloexec_unix_socket() {
         return -1;
     }
     return _open_osfhandle(
-        reinterpret_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
+        static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
 #elif defined(__linux__) && defined(SOCK_CLOEXEC)
     return socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 #else
