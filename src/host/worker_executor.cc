@@ -647,19 +647,29 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
     }
     switch (event.type) {
     case CAPSID_EVENT_READY: {
-        std::string payload(
-            reinterpret_cast<const char*>(event.payload.data),
-            event.payload.size);
+        // §4.3: the payload is the 71-byte compatibility id plus, for
+        // workers with bindings, the sandbox proof. The id prefix must
+        // match exactly; a malformed extension fails the ready match.
+        capsid::WorkerReadyProof proof;
+        std::string compat_id;
+        std::string proof_error;
+        const bool parsed = capsid::parse_ready_proof(
+            std::vector<uint8_t>(
+                event.payload.data,
+                event.payload.data + event.payload.size),
+            &compat_id, &proof, &proof_error);
         capsid_build_info info;
         capsid_build_info_init(&info);
         const capsid_result result = capsid_runtime_build_info(&info);
         bool match = false;
-        if (result == CAPSID_OK && info.compatibility_id != nullptr) {
-            match = payload == info.compatibility_id;
+        if (parsed && result == CAPSID_OK &&
+            info.compatibility_id != nullptr) {
+            match = compat_id == info.compatibility_id;
         }
         std::unique_lock<std::mutex> lock(mutex_);
         ready_ = true;
         ready_match_ = match;
+        ready_proof_ = proof;
         cv_.notify_all();
         return true;
     }

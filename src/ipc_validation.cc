@@ -1005,4 +1005,103 @@ bool decode_worker_request_head(const protocol::Frame &frame,
     return true;
 }
 
+bool append_ready_proof(std::vector<uint8_t> *payload,
+                        uint32_t applied_feature_bits,
+                        uint32_t seccomp_mode,
+                        uint32_t landlock_abi,
+                        const std::string &network_namespace_identity,
+                        const std::string &sandbox_profile_digest) {
+    if (!payload ||
+        (!sandbox_profile_digest.empty() &&
+         (sandbox_profile_digest.size() != 71 ||
+          sandbox_profile_digest.rfind("sha256:", 0) != 0))) {
+        return false;
+    }
+    if (sandbox_profile_digest.empty()) {
+        return true;  // zero-binding baseline stays byte-identical
+    }
+    if (network_namespace_identity.size() > 65535) {
+        return false;
+    }
+    capsid::protocol::append_u32(payload, applied_feature_bits);
+    capsid::protocol::append_u32(payload, seccomp_mode);
+    capsid::protocol::append_u32(payload, landlock_abi);
+    capsid::protocol::append_u16(
+        payload,
+        static_cast<uint16_t>(network_namespace_identity.size()));
+    payload->insert(payload->end(),
+                    network_namespace_identity.begin(),
+                    network_namespace_identity.end());
+    payload->insert(payload->end(),
+                    sandbox_profile_digest.begin(),
+                    sandbox_profile_digest.end());
+    return true;
+}
+
+bool parse_ready_proof(const std::vector<uint8_t> &payload,
+                       std::string *compatibility_id,
+                       WorkerReadyProof *proof,
+                       std::string *error) {
+    if (error) {
+        error->clear();
+    }
+    if (!compatibility_id || !proof) {
+        return false;
+    }
+    if (payload.size() < 71) {
+        if (error) {
+            *error = "truncated READY payload";
+        }
+        return false;
+    }
+    compatibility_id->assign(
+        reinterpret_cast<const char *>(&payload[0]), 71);
+    *proof = WorkerReadyProof();
+    if (payload.size() == 71) {
+        return true;
+    }
+    const uint8_t *cursor = &payload[71];
+    const uint8_t *end = &payload[0] + payload.size();
+    if (!capsid::protocol::read_u32(
+            &cursor, end, &proof->applied_feature_bits) ||
+        !capsid::protocol::read_u32(
+            &cursor, end, &proof->seccomp_mode) ||
+        !capsid::protocol::read_u32(
+            &cursor, end, &proof->landlock_abi)) {
+        if (error) {
+            *error = "truncated READY proof";
+        }
+        return false;
+    }
+    uint16_t namespace_size = 0;
+    if (!capsid::protocol::read_u16(
+            &cursor, end, &namespace_size) ||
+        static_cast<size_t>(end - cursor) <
+            static_cast<size_t>(namespace_size) + 71) {
+        if (error) {
+            *error = "truncated READY namespace identity";
+        }
+        return false;
+    }
+    proof->network_namespace_identity.assign(
+        reinterpret_cast<const char *>(cursor), namespace_size);
+    cursor += namespace_size;
+    if (static_cast<size_t>(end - cursor) != 71) {
+        if (error) {
+            *error = "invalid READY profile digest length";
+        }
+        return false;
+    }
+    proof->sandbox_profile_digest.assign(
+        reinterpret_cast<const char *>(cursor), 71);
+    if (proof->sandbox_profile_digest.rfind("sha256:", 0) != 0) {
+        if (error) {
+            *error = "invalid READY profile digest";
+        }
+        return false;
+    }
+    proof->extended = true;
+    return true;
+}
+
 }  // namespace capsid

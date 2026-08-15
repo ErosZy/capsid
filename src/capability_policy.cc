@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstring>
 #include <set>
+#include <vector>
 
 extern "C" {
 
@@ -880,6 +881,98 @@ bool binding_module_forbidden(const std::string &name) {
                     sizeof(forbidden) / sizeof(forbidden[0]), name);
 }
 
+// Minimal SHA-256 (FIPS 180-4) so the worker-side digest has no OpenSSL
+// link dependency (the Host verifies digests with OpenSSL independently).
+void sha256_bytes(const uint8_t *data, size_t size, uint8_t out[32]) {
+    static const uint32_t k[64] = {
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+        0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+        0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+        0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+        0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+        0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+        0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+        0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+    };
+    std::vector<uint8_t> message(data, data + size);
+    message.push_back(0x80);
+    while (message.size() % 64 != 56) {
+        message.push_back(0);
+    }
+    const uint64_t bit_length = static_cast<uint64_t>(size) * 8;
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        message.push_back(
+            static_cast<uint8_t>((bit_length >> shift) & 0xff));
+    }
+    uint32_t h[8] = {
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    };
+    for (size_t offset = 0; offset < message.size(); offset += 64) {
+        uint32_t w[64];
+        for (int index = 0; index < 16; ++index) {
+            w[index] =
+                (static_cast<uint32_t>(message[offset + index * 4]) << 24) |
+                (static_cast<uint32_t>(message[offset + index * 4 + 1])
+                 << 16) |
+                (static_cast<uint32_t>(message[offset + index * 4 + 2])
+                 << 8) |
+                static_cast<uint32_t>(message[offset + index * 4 + 3]);
+        }
+        for (int index = 16; index < 64; ++index) {
+            const uint32_t s0 =
+                ((w[index - 15] >> 7) | (w[index - 15] << 25)) ^
+                ((w[index - 15] >> 18) | (w[index - 15] << 14)) ^
+                (w[index - 15] >> 3);
+            const uint32_t s1 =
+                ((w[index - 2] >> 17) | (w[index - 2] << 15)) ^
+                ((w[index - 2] >> 19) | (w[index - 2] << 13)) ^
+                (w[index - 2] >> 10);
+            w[index] = w[index - 16] + s0 + w[index - 7] + s1;
+        }
+        uint32_t a = h[0], b = h[1], c = h[2], d = h[3];
+        uint32_t e = h[4], f = h[5], g = h[6], hh = h[7];
+        for (int index = 0; index < 64; ++index) {
+            const uint32_t S1 =
+                ((e >> 6) | (e << 26)) ^
+                ((e >> 11) | (e << 21)) ^
+                ((e >> 25) | (e << 7));
+            const uint32_t ch = (e & f) ^ ((~e) & g);
+            const uint32_t temp1 = hh + S1 + ch + k[index] + w[index];
+            const uint32_t S0 =
+                ((a >> 2) | (a << 30)) ^
+                ((a >> 13) | (a << 19)) ^
+                ((a >> 22) | (a << 10));
+            const uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+            const uint32_t temp2 = S0 + maj;
+            hh = g;
+            g = f;
+            f = e;
+            e = d + temp1;
+            d = c;
+            c = b;
+            b = a;
+            a = temp1 + temp2;
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d;
+        h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+    }
+    for (int index = 0; index < 8; ++index) {
+        out[index * 4] = static_cast<uint8_t>(h[index] >> 24);
+        out[index * 4 + 1] = static_cast<uint8_t>(h[index] >> 16);
+        out[index * 4 + 2] = static_cast<uint8_t>(h[index] >> 8);
+        out[index * 4 + 3] = static_cast<uint8_t>(h[index]);
+    }
+}
+
 bool split_net_target(const std::string &net_target,
                       std::string *host,
                       uint16_t *port) {
@@ -958,6 +1051,46 @@ bool binding_profile_known(const std::string &name) {
                     name);
 }
 
+std::string compute_binding_profile_digest(
+    const std::vector<WorkerBindingDescriptor> &bindings) {
+    if (bindings.empty()) {
+        return {};
+    }
+    std::set<std::string> profiles;
+    for (size_t binding_index = 0;
+         binding_index < bindings.size();
+         ++binding_index) {
+        const WorkerBindingDescriptor &descriptor =
+            bindings[binding_index];
+        for (size_t index = 0;
+             index < descriptor.profiles.size();
+             ++index) {
+            profiles.insert(descriptor.profiles[index]);
+        }
+    }
+    std::string canonical;
+    for (std::set<std::string>::const_iterator profile =
+             profiles.begin();
+         profile != profiles.end();
+         ++profile) {
+        canonical += *profile;
+        canonical += '\n';
+    }
+    uint8_t digest[32];
+    sha256_bytes(
+        reinterpret_cast<const uint8_t *>(canonical.data()),
+        canonical.size(),
+        digest);
+    static const char kHex[] = "0123456789abcdef";
+    std::string result = "sha256:";
+    result.reserve(71);
+    for (unsigned int index = 0; index < 32; ++index) {
+        result.push_back(kHex[digest[index] >> 4]);
+        result.push_back(kHex[digest[index] & 0x0f]);
+    }
+    return result;
+}
+
 ModuleDecision BindingPolicy::module_decision(
     const std::string &name) const {
     for (size_t index = 0; index < modules.size(); ++index) {
@@ -1009,6 +1142,52 @@ bool BindingPolicySet::configure(
             if (!binding_module_known(descriptor.modules[index])) {
                 if (error) {
                     *error = "binding module is not grantable";
+                }
+                return false;
+            }
+        }
+        // §4.1: a non-empty resource permission requires its sandbox
+        // profile. Empty allow lists grant nothing and need no profile.
+        {
+            const bool has_network_client =
+                std::find(descriptor.profiles.begin(),
+                          descriptor.profiles.end(),
+                          "network-client") !=
+                descriptor.profiles.end();
+            if (!descriptor.net_rules.empty() &&
+                !has_network_client) {
+                if (error) {
+                    *error =
+                        "net rules require the network-client sandbox "
+                        "profile";
+                }
+                return false;
+            }
+            const bool has_filesystem_read =
+                std::find(descriptor.profiles.begin(),
+                          descriptor.profiles.end(),
+                          "filesystem-read") !=
+                descriptor.profiles.end();
+            if (!descriptor.fs_read.empty() &&
+                !has_filesystem_read) {
+                if (error) {
+                    *error =
+                        "fs read requires the filesystem-read sandbox "
+                        "profile";
+                }
+                return false;
+            }
+            const bool has_filesystem_write =
+                std::find(descriptor.profiles.begin(),
+                          descriptor.profiles.end(),
+                          "filesystem-write") !=
+                descriptor.profiles.end();
+            if (!descriptor.fs_write.empty() &&
+                !has_filesystem_write) {
+                if (error) {
+                    *error =
+                        "fs write requires the filesystem-write sandbox "
+                        "profile";
                 }
                 return false;
             }

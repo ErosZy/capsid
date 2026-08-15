@@ -143,6 +143,13 @@ bool binding_module_known(const std::string &name);
 // wire and at policy compilation.
 bool binding_profile_known(const std::string &name);
 
+// §7.4: the READY sandbox profile digest — "sha256:" over the canonical
+// (sorted, de-duplicated, newline-joined) union of every binding's
+// sandbox.requires profiles. Empty for zero-binding workers. Independent
+// of descriptor arrival order.
+std::string compute_binding_profile_digest(
+    const std::vector<WorkerBindingDescriptor> &bindings);
+
 // Per-binding policy: the Manifest ∩ App intersection for one Binding ID.
 // Module grants use Binding semantics (granted set vs the permanently
 // forbidden set); the User facade modules are never granted here.

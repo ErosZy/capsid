@@ -720,6 +720,97 @@ void test_binding_startup_state_machine() {
     }
 }
 
+// Binding v1 §7.4: the READY v4 proof is the 71-byte compatibility id
+// plus an additive proof section; without bindings the payload stays the
+// exact baseline.
+void test_ready_proof_payload() {
+    const std::string compat(
+        "sha256:" +
+        std::string(64, 'a'));
+    const std::string digest(
+        "sha256:" +
+        std::string(64, 'b'));
+
+    std::vector<uint8_t> baseline;
+    require(
+        capsid::append_ready_proof(
+            &baseline, 7, 0, 0, "", ""),
+        "baseline ready proof did not build");
+    require(baseline.empty(),
+            "zero-binding proof appended bytes");
+
+    std::vector<uint8_t> extended;
+    require(
+        capsid::append_ready_proof(
+            &extended, 0x123, 2, 3, "", digest),
+        "extended ready proof did not build");
+    capsid::WorkerReadyProof proof;
+    std::string out_compat;
+    std::string error;
+    std::vector<uint8_t> payload(
+        compat.begin(), compat.end());
+    payload.insert(payload.end(), extended.begin(), extended.end());
+    require(
+        capsid::parse_ready_proof(payload, &out_compat, &proof, &error),
+        "valid extended ready proof was rejected: " + error);
+    require(out_compat == compat,
+            "ready compat id parsed wrong");
+    require(proof.extended && proof.applied_feature_bits == 0x123 &&
+                proof.seccomp_mode == 2 && proof.landlock_abi == 3 &&
+                proof.network_namespace_identity.empty() &&
+                proof.sandbox_profile_digest == digest,
+            "ready proof fields parsed wrong");
+
+    // Namespace identity round-trips.
+    std::vector<uint8_t> ns_payload(compat.begin(), compat.end());
+    require(
+        capsid::append_ready_proof(
+            &ns_payload, 0, 0, 0, "ns-identity", digest),
+        "namespace proof did not build");
+    capsid::WorkerReadyProof ns_proof;
+    require(
+        capsid::parse_ready_proof(
+            ns_payload, &out_compat, &ns_proof, &error),
+        "namespace ready proof was rejected");
+    require(ns_proof.network_namespace_identity == "ns-identity",
+            "namespace identity parsed wrong");
+
+    // The plain 71-byte baseline parses with no extension.
+    capsid::WorkerReadyProof plain_proof;
+    require(
+        capsid::parse_ready_proof(
+            std::vector<uint8_t>(compat.begin(), compat.end()),
+            &out_compat,
+            &plain_proof,
+            &error),
+        "baseline ready payload was rejected");
+    require(!plain_proof.extended && out_compat == compat,
+            "baseline ready payload parsed as extended");
+
+    // Malformed extensions fail closed.
+    std::vector<uint8_t> truncated = payload;
+    truncated.pop_back();
+    require(
+        !capsid::parse_ready_proof(
+            truncated, &out_compat, &proof, &error) &&
+            !error.empty(),
+        "truncated ready proof was accepted");
+    std::vector<uint8_t> short_compat(
+        compat.begin(), compat.begin() + 70);
+    require(
+        !capsid::parse_ready_proof(
+            short_compat, &out_compat, &proof, &error),
+        "short compat id was accepted");
+    std::vector<uint8_t> bad_ns = payload;
+    // Corrupt the namespace length field (first u16 after the three u32s).
+    bad_ns[71 + 12] = 0xff;
+    bad_ns[71 + 13] = 0xff;
+    require(
+        !capsid::parse_ready_proof(
+            bad_ns, &out_compat, &proof, &error),
+        "oversized namespace identity was accepted");
+}
+
 void test_request_head_decoder() {
     capsid::protocol::Frame frame;
     frame.type = capsid::protocol::kRequestHead;
@@ -850,6 +941,7 @@ void test_protocol_version_rejection() {
 int main() {
     test_hello_and_bundle_state_machine();
     test_binding_startup_state_machine();
+    test_ready_proof_payload();
     test_request_head_decoder();
     test_response_header_decoder();
     test_protocol_version_rejection();

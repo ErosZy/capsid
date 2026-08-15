@@ -7,7 +7,9 @@
 // LOAD_BINDING after the bundle sealed the sequence is rejected.
 
 #include "build_identity.h"
+#include "capability_policy.h"
 #include "capsid/runtime.h"
+#include "ipc_validation.h"
 #include "protocol.h"
 
 #include <poll.h>
@@ -35,7 +37,7 @@ void fail(const std::string &message) {
     std::exit(1);
 }
 
-void require(bool condition, const char *message) {
+void require(bool condition, const std::string &message) {
     if (!condition) {
         fail(message);
     }
@@ -166,6 +168,13 @@ void append_string16(std::vector<uint8_t> *output,
                      const std::string &value) {
     capsid::protocol::append_u16(
         output, static_cast<uint16_t>(value.size()));
+    output->insert(output->end(), value.begin(), value.end());
+}
+
+void append_string32(std::vector<uint8_t> *output,
+                     const std::string &value) {
+    capsid::protocol::append_u32(
+        output, static_cast<uint32_t>(value.size()));
     output->insert(output->end(), value.begin(), value.end());
 }
 
@@ -337,6 +346,75 @@ void test_load_binding_after_bundle_is_rejected(const char *worker_path,
             "sealed LOAD_BINDING worker did not terminate");
 }
 
+std::vector<uint8_t> mongo_binding_blob() {
+    // A minimal valid descriptor: mongo with the network-client profile,
+    // tjs:internal/core granted, and no source-side behavior.
+    std::vector<uint8_t> descriptor;
+    append_string16(&descriptor, "mongo");
+    append_string32(&descriptor, "{}");
+    capsid::protocol::append_u32(&descriptor, 0);  // secrets
+    capsid::protocol::append_u32(&descriptor, 1);  // profiles
+    append_string16(&descriptor, "network-client");
+    capsid::protocol::append_u32(&descriptor, 1);  // modules
+    append_string16(&descriptor, "tjs:internal/core");
+    capsid::protocol::append_u32(&descriptor, 0);  // net rules
+    capsid::protocol::append_u32(&descriptor, 0);  // fs read
+    capsid::protocol::append_u32(&descriptor, 0);  // fs write
+    capsid::protocol::append_u32(&descriptor, 0);  // env
+    capsid::protocol::append_u32(&descriptor, 0);  // stdio
+    std::vector<uint8_t> blob;
+    capsid::protocol::append_u32(
+        &blob, static_cast<uint32_t>(descriptor.size()));
+    blob.insert(blob.end(), descriptor.begin(), descriptor.end());
+    blob.insert(blob.end(), 3, 0x5a);
+    return blob;
+}
+
+// Binding v1 §7.4: a worker with one binding reports the v4 READY proof —
+// the compat id prefix plus the canonical profile digest; the zero-binding
+// baseline (tested above) stays untouched.
+void test_binding_ready_proof(const char *worker_path,
+                              const char *p0_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob();
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(p0_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    require(
+        read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame &&
+            frame.type == capsid::protocol::kReady,
+        "binding worker did not report READY");
+    capsid::WorkerReadyProof proof;
+    std::string compat_id;
+    std::string error;
+    require(
+        capsid::parse_ready_proof(
+            frame.payload, &compat_id, &proof, &error),
+        "binding READY proof was rejected: " + error);
+    require(compat_id == CAPSID_BUILD_COMPATIBILITY_ID &&
+                proof.extended,
+            "binding READY did not extend the baseline identity");
+    capsid::WorkerBindingDescriptor expected;
+    expected.name = "mongo";
+    expected.profiles.push_back("network-client");
+    require(
+        proof.sandbox_profile_digest ==
+            capsid::compute_binding_profile_digest(
+                std::vector<capsid::WorkerBindingDescriptor>{expected}),
+        "binding READY profile digest diverged from the worker's union");
+    finish_worker(fd, pid, true);
+}
+
 void test_load_binding_abi_validation() {
     capsid_worker *worker = NULL;
     require(
@@ -374,6 +452,7 @@ int main(int argc, char **argv) {
     test_zero_binding_ready_baseline(argv[1], argv[2]);
     test_undeclared_binding_import_fails(argv[1], argv[3]);
     test_load_binding_after_bundle_is_rejected(argv[1], argv[2]);
+    test_binding_ready_proof(argv[1], argv[2]);
     test_load_binding_abi_validation();
     return 0;
 }

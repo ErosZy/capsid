@@ -115,6 +115,38 @@ bool decode_worker_request_head(const protocol::Frame &frame,
                                 WorkerRequestHead *output,
                                 std::string *error);
 
+// --- Binding v1 READY proof (docs/binding-technical-design.md §4.3) ------
+
+// The READY v4 proof carried after the 71-byte compatibility id. Workers
+// with at least one binding extend the payload; zero-binding workers keep
+// the exact 71-byte baseline.
+struct WorkerReadyProof {
+    bool extended = false;
+    uint32_t applied_feature_bits = 0;
+    uint32_t seccomp_mode = 0;
+    uint32_t landlock_abi = 0;
+    std::string network_namespace_identity;  // empty when no namespace fd
+    std::string sandbox_profile_digest;      // "sha256:" + 64 hex
+};
+
+// Appends the proof sections to a READY payload (after the caller's
+// compatibility id). With an empty profile digest this is a no-op — the
+// baseline payload stays byte-identical.
+bool append_ready_proof(std::vector<uint8_t> *payload,
+                        uint32_t applied_feature_bits,
+                        uint32_t seccomp_mode,
+                        uint32_t landlock_abi,
+                        const std::string &network_namespace_identity,
+                        const std::string &sandbox_profile_digest);
+
+// Parses a READY payload: the first 71 bytes are the compatibility id; a
+// longer payload must decode the full proof. Any malformed extension
+// fails closed with a static diagnostic.
+bool parse_ready_proof(const std::vector<uint8_t> &payload,
+                       std::string *compatibility_id,
+                       WorkerReadyProof *proof,
+                       std::string *error);
+
 }  // namespace capsid
 
 #endif

@@ -26,6 +26,11 @@ struct SandboxConfig {
     uint32_t preinstalled_features;
     int network_namespace_fd;
     std::vector<std::string> read_only_paths;
+    // Binding v1 §4.1: the union of every Binding's sandbox.requires
+    // profiles. The process-level filter is the union; per-origin gates
+    // stay separate. Consumed by the Linux launcher (Binding §7.9);
+    // ignored on platforms without kernel-level profiles.
+    std::vector<std::string> binding_profiles;
 };
 
 bool apply_sandbox(const SandboxConfig &config,

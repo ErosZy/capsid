@@ -1158,6 +1158,114 @@ void test_binding_policy_origin_isolation() {
             "an invalid caller origin touched the handle");
 }
 
+// Binding v1 §7.4: the READY sandbox profile digest is computed over the
+// canonical union of the worker's binding profiles — sorted, de-duplicated,
+// and independent of the descriptor arrival order.
+
+void test_binding_profile_digest_and_consistency() {
+    const capsid::WorkerBindingDescriptor mongo = binding_descriptor(
+        "mongo",
+        {"tjs:internal/core"},
+        {"network-client", "filesystem-write"},
+        {"127.0.0.1:27017"},
+        {"/var/lib/capsid/mongo"});
+    const capsid::WorkerBindingDescriptor redis = binding_descriptor(
+        "redis",
+        {"tjs:utils"},
+        {"network-client", "filesystem-read"},
+        {"127.0.0.1:6379"},
+        {});
+
+    require(
+        capsid::compute_binding_profile_digest(
+            std::vector<capsid::WorkerBindingDescriptor>())
+            .empty(),
+        "zero-binding profile digest is not empty");
+
+    const std::string mongo_digest =
+        capsid::compute_binding_profile_digest(
+            std::vector<capsid::WorkerBindingDescriptor>{mongo});
+    require(mongo_digest.size() == 71 &&
+                mongo_digest.rfind("sha256:", 0) == 0,
+            "binding profile digest is not a sha256 hex digest");
+    require(
+        mongo_digest ==
+            capsid::compute_binding_profile_digest(
+                std::vector<capsid::WorkerBindingDescriptor>{mongo}),
+        "binding profile digest is not deterministic");
+
+    const std::string union_digest =
+        capsid::compute_binding_profile_digest(
+            std::vector<capsid::WorkerBindingDescriptor>{mongo, redis});
+    require(
+        union_digest ==
+            capsid::compute_binding_profile_digest(
+                std::vector<capsid::WorkerBindingDescriptor>{redis, mongo}),
+        "binding profile digest depends on descriptor order");
+    require(union_digest != mongo_digest,
+            "profile union digest equals a single-binding digest");
+
+    // A second binding that shares every profile adds nothing to the union.
+    const capsid::WorkerBindingDescriptor mongo_tls = binding_descriptor(
+        "mongo-tls",
+        {"tjs:internal/core"},
+        {"network-client", "filesystem-write"},
+        {"db.example.com:27017"},
+        {"/var/lib/capsid/mongo"});
+    require(
+        mongo_digest ==
+            capsid::compute_binding_profile_digest(
+                std::vector<capsid::WorkerBindingDescriptor>{
+                    mongo, mongo_tls}),
+        "duplicate profiles changed the union digest");
+
+    // §4.1: resource permissions require their sandbox profiles; the
+    // policy set rejects an inconsistent descriptor atomically.
+    const capsid::WorkerBindingDescriptor net_without_profile =
+        binding_descriptor(
+            "net-bad", {"tjs:utils"}, {}, {"127.0.0.1:27017"}, {});
+    capsid::BindingPolicySet net_set;
+    std::string error;
+    require(!net_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{
+                    net_without_profile},
+                &error) &&
+                !error.empty(),
+            "net rules without the network-client profile were accepted");
+
+    const capsid::WorkerBindingDescriptor write_without_profile =
+        binding_descriptor(
+            "fs-bad", {"tjs:utils"}, {}, {}, {"/var/lib/capsid/mongo"});
+    capsid::BindingPolicySet fs_set;
+    require(!fs_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{
+                    write_without_profile},
+                &error) &&
+                !error.empty(),
+            "fs write without the filesystem-write profile was accepted");
+
+    capsid::WorkerBindingDescriptor read_without_profile =
+        binding_descriptor(
+            "fs-read-bad", {"tjs:utils"}, {}, {}, {});
+    read_without_profile.fs_read.push_back("/etc/capsid/mongo");
+    capsid::BindingPolicySet read_set;
+    require(!read_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{
+                    read_without_profile},
+                &error) &&
+                !error.empty(),
+            "fs read without the filesystem-read profile was accepted");
+
+    // An empty allow list needs no profile.
+    const capsid::WorkerBindingDescriptor empty_net = binding_descriptor(
+        "empty-net", {"tjs:utils"}, {}, {}, {});
+    capsid::BindingPolicySet empty_set;
+    require(empty_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{empty_net},
+                &error),
+            "empty net allow list without a profile was rejected");
+}
+
 }  // namespace
 
 int main() {
@@ -1171,5 +1279,6 @@ int main() {
     test_version_1_policy_compatibility();
     test_malformed_rules();
     test_binding_policy_origin_isolation();
+    test_binding_profile_digest_and_consistency();
     return 0;
 }

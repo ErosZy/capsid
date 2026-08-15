@@ -33,6 +33,7 @@
 #include "capsid/runtime.h"
 #include "host/request_normalization.h"
 #include "host/worker_event_source.h"
+#include "ipc_validation.h"
 
 #include <atomic>
 #include <chrono>
@@ -303,6 +304,9 @@ private:
     std::atomic<std::uint64_t> inflight_ = 0;
     bool ready_ = false;
     bool ready_match_ = false;
+    // Binding v1 §4.3: the parsed READY sandbox proof (default-constructed
+    // for a baseline payload).
+    capsid::WorkerReadyProof ready_proof_;
     bool exited_ = false;
     bool exit_event_queued_ = false;
     capsid_worker* worker_ = nullptr;

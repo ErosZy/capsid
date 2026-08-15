@@ -163,6 +163,9 @@ add_library(capsid_runtime STATIC
     src/client.cc
     src/cpu_topology.cc
     src/egress_policy.cc
+    # Binding v1: the READY proof codec and the startup state machine are
+    # shared by the Host ABI surface and its consumers.
+    src/ipc_validation.cc
     src/memory_metrics.cc
     src/protocol.cc
     src/response_headers.cc

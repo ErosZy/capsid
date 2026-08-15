@@ -397,6 +397,28 @@ public:
         if (!read_startup(false)) {
             return 1;
         }
+        // §4.3 startup order: every LOAD_BINDING and the App bundle are
+        // received (as bounded bytes, no JavaScript) before the sandbox
+        // installs, so Binding sandbox profiles can widen the worker's
+        // kernel-level union.
+        if (!read_startup(true)) {
+            return 1;
+        }
+        // §7.2: zero LOAD_BINDING keeps the exact single-runtime path — an
+        // empty list allocates nothing beyond the vector itself.
+        bindings_.assign(startup_state_.bindings().begin(),
+                         startup_state_.bindings().end());
+        // §7.3: compile the per-Binding policies before any JavaScript
+        // runs. The User policy stays exactly as the HELLO compiled it;
+        // Binding grants can never widen it.
+        std::string binding_policy_error;
+        if (!binding_policies_.configure(
+                bindings_, &binding_policy_error)) {
+            send_error(0, std::string("binding policy setup failed: ") +
+                              binding_policy_error);
+            flush_blocking();
+            return 1;
+        }
 
         capsid::SandboxConfig sandbox_config;
         sandbox_config.address_space_limit = config_.process_memory_limit;
@@ -431,31 +453,23 @@ public:
                 }
             }
         }
+        // §4.2: the process-level sandbox is the union of the User
+        // requirements and every Binding's profile. Profiles never widen
+        // the per-origin Native gates compiled above.
+        for (std::vector<capsid::WorkerBindingDescriptor>::const_iterator
+                 binding = bindings_.begin();
+             binding != bindings_.end();
+             ++binding) {
+            sandbox_config.binding_profiles.insert(
+                sandbox_config.binding_profiles.end(),
+                binding->profiles.begin(),
+                binding->profiles.end());
+        }
         uint32_t sandbox_features = 0;
         std::string sandbox_error;
         if (!capsid::apply_sandbox(
                 sandbox_config, &sandbox_features, &sandbox_error)) {
             send_error(0, std::string("sandbox setup failed: ") + sandbox_error);
-            flush_blocking();
-            return 1;
-        }
-        if (!read_startup(true)) {
-            return 1;
-        }
-        // §7.2: zero LOAD_BINDING keeps the exact single-runtime path — an
-        // empty list allocates nothing beyond the vector itself. The copy
-        // happens after the full startup so every LOAD_BINDING frame is
-        // sealed in before any JavaScript executes.
-        bindings_.assign(startup_state_.bindings().begin(),
-                         startup_state_.bindings().end());
-        // §7.3: compile the per-Binding policies before any JavaScript
-        // runs. The User policy stays exactly as the HELLO compiled it;
-        // Binding grants can never widen it.
-        std::string binding_policy_error;
-        if (!binding_policies_.configure(
-                bindings_, &binding_policy_error)) {
-            send_error(0, std::string("binding policy setup failed: ") +
-                              binding_policy_error);
             flush_blocking();
             return 1;
         }
@@ -531,12 +545,28 @@ public:
         // generated identity source, so a host can compare the running
         // worker against the linked library and the bytecode compiler
         // without trusting either side. sandbox features stay in flags.
+        // §4.3: workers with bindings append the sandbox proof; zero
+        // binding workers keep the exact baseline payload.
         static_assert(sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1 == 71,
                       "compatibility ID must be sha256: plus 64 hex digits");
+        std::vector<uint8_t> ready_payload(
+            reinterpret_cast<const std::uint8_t *>(
+                CAPSID_BUILD_COMPATIBILITY_ID),
+            reinterpret_cast<const std::uint8_t *>(
+                CAPSID_BUILD_COMPATIBILITY_ID) +
+                sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1);
+        // seccomp_mode/landlock_abi and the namespace identity are filled
+        // by the Linux launcher (Binding §7.9); the digest is computed
+        // from the canonical profile union either way.
+        capsid::append_ready_proof(
+            &ready_payload,
+            sandbox_features,
+            0,  // seccomp_mode: Linux profile conformance reports it
+            0,  // landlock_abi: Linux profile conformance reports it
+            "",
+            capsid::compute_binding_profile_digest(bindings_));
         send_payload(capsid::protocol::kReady, 0, sandbox_features,
-                     reinterpret_cast<const std::uint8_t *>(
-                         CAPSID_BUILD_COMPATIBILITY_ID),
-                     sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1);
+                     ready_payload.data(), ready_payload.size());
         flush_output();
 
         const int run_result = TJS_Run(runtime_);
