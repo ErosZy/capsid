@@ -4,17 +4,29 @@
 
 #include "host/single_worker_server.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
+#endif
 #include <fcntl.h>
-#include <poll.h>
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
 // macOS does not define SOCK_CLOEXEC; the IPC pair does not cross exec on
 // this test path, so a plain socket type is the portable fallback.
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
 #include <sys/time.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <concepts>
@@ -45,10 +57,10 @@ std::string read_ready_line(int fd) {
     while (line.find('\n') == std::string::npos) {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not publish READY after start returned");
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
-        const int polled = poll(&descriptor, 1, 50);
+        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
         require(polled >= 0, "cannot poll READY pipe");
         if (polled == 0) {
             continue;

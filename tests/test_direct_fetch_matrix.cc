@@ -2,11 +2,27 @@
 #include "egress_test_policy.h"
 #include "graceful_worker_exit.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <netinet/in.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <algorithm>
@@ -519,10 +535,10 @@ private:
                 "Transfer-Encoding: chunked\r\n"
                 "Connection: keep-alive\r\n\r\n"
                 "5\r\nfirst\r\n");
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = client;
             descriptor.events = POLLIN | POLLHUP;
-            poll(&descriptor, 1, 5000);
+            capsid::win32::capsid_poll(&descriptor, 1, 5000);
             return false;
         }
         if (path == "/close") {
@@ -578,10 +594,10 @@ private:
     void serve() {
         std::vector<std::thread> workers;
         while (!stopping_) {
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = fd_;
             descriptor.events = POLLIN;
-            if (poll(&descriptor, 1, 100) <= 0) {
+            if (capsid::win32::capsid_poll(&descriptor, 1, 100) <= 0) {
                 continue;
             }
             const int client = accept(fd_, NULL, NULL);
@@ -652,10 +668,10 @@ uint32_t wait_for_ready(capsid_worker *worker) {
             std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for READY");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -734,10 +750,10 @@ Result run_request(capsid_worker *worker, const std::string &url) {
             std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for matrix response");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 

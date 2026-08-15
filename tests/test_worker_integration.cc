@@ -2,11 +2,27 @@
 #include "egress_test_policy.h"
 #include "wpt_report.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <netinet/in.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <cerrno>
@@ -111,10 +127,10 @@ public:
 
 private:
     void serve() {
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd_;
         descriptor.events = POLLIN;
-        if (poll(&descriptor, 1, 15000) <= 0) {
+        if (capsid::win32::capsid_poll(&descriptor, 1, 15000) <= 0) {
             return;
         }
 
@@ -212,10 +228,10 @@ void wait_for_ready(capsid_worker *worker) {
             fail("timed out waiting for READY");
         }
 
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -262,11 +278,11 @@ void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
                  "no error event surfaced");
         }
 
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events =
             POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -326,11 +342,11 @@ void invalid_request_header_fails_closed(capsid_worker *worker,
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("invalid incoming header did not fail closed");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events =
             POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -403,10 +419,10 @@ std::string run_request(capsid_worker *worker,
             fail("timed out waiting for response");
         }
 
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 

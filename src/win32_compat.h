@@ -62,6 +62,20 @@ typedef DWORD pid_t;
 #define ELOOP EDEADLOCK
 #endif
 
+// access() constants: MSVC io.h defines only F_OK.
+#ifndef F_OK
+#define F_OK 0
+#endif
+#ifndef R_OK
+#define R_OK 4
+#endif
+#ifndef W_OK
+#define W_OK 2
+#endif
+#ifndef X_OK
+#define X_OK 1
+#endif
+
 namespace capsid {
 namespace win32 {
 
@@ -84,6 +98,26 @@ inline void set_binary_file_defaults() {
 
 inline int getpid() {
     return static_cast<int>(_getpid());
+}
+
+// gettimeofday via the precision file-time clock (struct timeval comes
+// from winsock2.h above). The timezone argument is ignored.
+inline int gettimeofday(struct timeval *tv, void * /*timezone*/) {
+    if (tv == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    FILETIME file_time;
+    GetSystemTimePreciseAsFileTime(&file_time);
+    ULARGE_INTEGER value;
+    value.LowPart = file_time.dwLowDateTime;
+    value.HighPart = file_time.dwHighDateTime;
+    const unsigned long long unix_epoch_offset = 116444736000000000ull;
+    const unsigned long long usecs =
+        (value.QuadPart - unix_epoch_offset) / 10ull;
+    tv->tv_sec = static_cast<long>(usecs / 1000000ull);
+    tv->tv_usec = static_cast<long>(usecs % 1000000ull);
+    return 0;
 }
 
 // Process-identity checks are uid-based on POSIX; Windows has no uid

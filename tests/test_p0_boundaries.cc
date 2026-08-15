@@ -1,10 +1,14 @@
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 
 #if defined(__linux__)
 #include <fcntl.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 #endif
 
 #include <chrono>
@@ -53,11 +57,11 @@ void pump(capsid_worker *worker) {
     }
     const int fd = capsid_worker_fd(worker);
     if (fd >= 0) {
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events =
             POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 10);
+        capsid::win32::capsid_poll(&descriptor, 1, 10);
     }
 }
 
@@ -677,10 +681,10 @@ void test_crash_then_respawn(const char *worker_path,
         }
         const int fd = capsid_worker_fd(worker);
         if (fd >= 0) {
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = fd;
             descriptor.events = POLLIN;
-            poll(&descriptor, 1, 10);
+            capsid::win32::capsid_poll(&descriptor, 1, 10);
         }
     }
     require(exited, "worker crash must surface as EXIT");

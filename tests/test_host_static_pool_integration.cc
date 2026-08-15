@@ -3,22 +3,42 @@
 
 #include "host/static_pool_server.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <dirent.h>
+#endif
 #include <fcntl.h>
 #include <limits.h>
-#include <poll.h>
+#include "win32_compat.h"
 #include <signal.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
 
 // macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
 // on the test paths, so a plain socket type is the portable fallback.
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/stat.h>
+#endif
 #include <sys/types.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdint>
@@ -93,10 +113,10 @@ bool http_succeeds(std::uint16_t port, int timeout_ms) {
     while (std::chrono::steady_clock::now() < deadline) {
         const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
             deadline - std::chrono::steady_clock::now());
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
-        const int polled = poll(
+        const int polled = capsid::win32::capsid_poll(
             &descriptor, 1,
             static_cast<int>(remaining.count() > 0 ? remaining.count() : 1));
         if (polled <= 0) {

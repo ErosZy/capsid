@@ -14,10 +14,14 @@
 
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 #include <signal.h>
 #include <sys/types.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdint>
@@ -82,10 +86,10 @@ void wait_for_ready(capsid_worker *worker) {
             fail("timed out waiting for READY");
         }
 
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -153,10 +157,10 @@ int main(int argc, char **argv) {
             break;
         }
         if (result == CAPSID_WOULD_BLOCK) {
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = capsid_worker_fd(worker);
             descriptor.events = POLLIN;
-            poll(&descriptor, 1, 50);
+            capsid::win32::capsid_poll(&descriptor, 1, 50);
             continue;
         }
         fail(std::string("post-kill event: ") + capsid_result_string(result));

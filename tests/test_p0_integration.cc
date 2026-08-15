@@ -1,6 +1,6 @@
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -44,10 +44,10 @@ void pump(capsid_worker *worker, int timeout_ms) {
     if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
         fail(std::string("flush: ") + capsid_result_string(flush));
     }
-    struct pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
     descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-    poll(&descriptor, 1, timeout_ms);
+    capsid::win32::capsid_poll(&descriptor, 1, timeout_ms);
 }
 
 bool next_event(capsid_worker *worker, capsid_event *event) {

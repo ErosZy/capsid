@@ -7,11 +7,19 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <poll.h>
+#include "win32_compat.h"
 #include <string>
 #include <sys/types.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/wait.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -251,7 +259,7 @@ std::string read_worker_identity(const char* worker_path) {
         const capsid_result next = capsid_worker_next_event(worker, &event);
         if (next == CAPSID_WOULD_BLOCK) {
             pollfd descriptor = {capsid_worker_fd(worker), POLLIN, 0};
-            require(poll(&descriptor, 1, 100) >= 0 || errno == EINTR,
+            require(capsid::win32::capsid_poll(&descriptor, 1, 100) >= 0 || errno == EINTR,
                     "worker identity poll failed");
             continue;
         }

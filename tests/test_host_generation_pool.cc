@@ -19,9 +19,17 @@
 
 #include "capsid/runtime.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <dirent.h>
+#endif
 #include <signal.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <chrono>

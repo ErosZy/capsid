@@ -1,4 +1,10 @@
 if(BUILD_TESTING)
+    # Test sources include "win32_compat.h" and other src/-relative
+    # internals; expose the directory scope once instead of duplicating
+    # the include dir on every test target. (build_tests.cmake is
+    # included from the top-level scope, so this applies to the test
+    # targets created below only.)
+    include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
     if(CAPSID_BUILD_HOST)
         find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 

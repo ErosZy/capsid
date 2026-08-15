@@ -18,11 +18,27 @@
 #include <jansson.h>
 #include <openssl/evp.h>
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/wait.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdlib>
@@ -143,10 +159,10 @@ void wait_for_ready(capsid_worker* worker) {
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for READY");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -213,10 +229,10 @@ std::string run_request(capsid_worker* worker) {
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for the response");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 

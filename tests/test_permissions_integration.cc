@@ -1,6 +1,6 @@
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -10,8 +10,16 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/stat.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -85,11 +93,11 @@ Audit decode_audit(const capsid_event &event) {
 }
 
 void wait_io(capsid_worker *worker, bool writable) {
-    struct pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
     descriptor.events =
         POLLIN | (writable ? POLLOUT : 0);
-    poll(&descriptor, 1, 50);
+    capsid::win32::capsid_poll(&descriptor, 1, 50);
 }
 
 std::string event_text(const capsid_event &event) {

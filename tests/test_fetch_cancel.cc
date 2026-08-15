@@ -1,11 +1,27 @@
 #include "capsid/runtime.h"
 #include "egress_test_policy.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <netinet/in.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -107,10 +123,10 @@ public:
 
 private:
     void serve() {
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = listener_;
         descriptor.events = POLLIN;
-        if (poll(&descriptor, 1, 5000) <= 0) {
+        if (capsid::win32::capsid_poll(&descriptor, 1, 5000) <= 0) {
             return;
         }
         const int client = accept(listener_, NULL, NULL);
@@ -124,7 +140,7 @@ private:
             descriptor.fd = client;
             descriptor.events = POLLIN | POLLHUP;
             descriptor.revents = 0;
-            if (poll(&descriptor, 1, 5000) <= 0) {
+            if (capsid::win32::capsid_poll(&descriptor, 1, 5000) <= 0) {
                 return;
             }
             const ssize_t count = recv(client, buffer, sizeof(buffer), 0);
@@ -151,11 +167,11 @@ void pump(capsid_worker *worker) {
     if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
         fail("worker flush failed");
     }
-    struct pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
     descriptor.events =
         POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-    poll(&descriptor, 1, 10);
+    capsid::win32::capsid_poll(&descriptor, 1, 10);
 }
 
 bool next_event(capsid_worker *worker, capsid_event *event) {

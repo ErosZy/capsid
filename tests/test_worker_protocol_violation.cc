@@ -1,12 +1,28 @@
 #include "protocol.h"
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 #include <signal.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <spawn.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/wait.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdlib>
@@ -84,14 +100,14 @@ bool read_frame(int fd,
         if (now >= deadline) {
             return false;
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
         const int remaining = static_cast<int>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 deadline - now)
                 .count());
-        if (poll(&descriptor, 1, remaining) <= 0) {
+        if (capsid::win32::capsid_poll(&descriptor, 1, remaining) <= 0) {
             return false;
         }
         uint8_t buffer[4096];

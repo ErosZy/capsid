@@ -21,9 +21,17 @@
 #define CAPSID_HAS_SINGLE_WORKER_SERVER 0
 #endif
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
 
 // macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
 // on the test paths, so a plain socket type is the portable fallback.
@@ -31,7 +39,11 @@
 #define SOCK_CLOEXEC 0
 #endif
 #include <sys/time.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdint>
@@ -62,10 +74,10 @@ std::string read_one_ready_line(int fd) {
     while (line.empty() || line.back() != '\n') {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not publish READY after start returned");
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
-        const int polled = poll(&descriptor, 1, 50);
+        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
         require(polled >= 0, "cannot poll server READY pipe");
         if (polled == 0) {
             continue;
@@ -169,10 +181,10 @@ long require_connection_closed_after_ignoring(int fd) {
     for (;;) {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not close the hung-write connection");
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
-        const int polled = poll(&descriptor, 1, 50);
+        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
         require(polled >= 0, "cannot poll hung-write connection");
         if (polled == 0) {
             continue;

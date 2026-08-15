@@ -14,11 +14,23 @@
 #include "host/artifact_safe_read.h"
 
 #include <fcntl.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/stat.h>
+#endif
 #include <sys/types.h>
 #include <sys/un.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <chrono>
