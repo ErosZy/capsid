@@ -211,6 +211,10 @@ jobs:
           Get-ChildItem build/capsid-*
 
       - name: Publish package to GitHub Release
+        # The bash script must not run under the Windows default shell:
+        # pwsh parses `--title` as the unary `--` operator and the step
+        # dies with a ParserError before gh even runs.
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
