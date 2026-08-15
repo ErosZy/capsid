@@ -94,10 +94,10 @@ void wait_for_ready(capsid_worker *worker) {
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for READY");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -137,10 +137,10 @@ bool request_metrics(capsid_worker *worker, capsid_memory_metrics *out,
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for memory metrics");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 20);
+        capsid::win32::capsid_poll(&descriptor, 1, 20);
     }
 }
 
@@ -209,10 +209,10 @@ void run_wave(capsid_worker *worker, std::uint64_t first_id,
             if (result != CAPSID_WOULD_BLOCK) {
                 fail(std::string("wave event: ") + capsid_result_string(result));
             }
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = capsid_worker_fd(worker);
             descriptor.events = POLLIN;
-            const int ready = poll(&descriptor, 1, 20);
+            const int ready = capsid::win32::capsid_poll(&descriptor, 1, 20);
             if (ready == 0) {
                 quiet_rounds += 1;
                 if (quiet_rounds >= 2) {

@@ -130,6 +130,13 @@ inline int getpid() {
     return static_cast<int>(_getpid());
 }
 
+// usleep: millisecond-resolution sleep (test scaffolding; the ceiling
+// round matches POSIX "sleep at least this long").
+inline int usleep(unsigned long usec) {
+    Sleep((usec + 999u) / 1000u);
+    return 0;
+}
+
 // gettimeofday via the precision file-time clock (struct timeval comes
 // from winsock2.h above). The timezone argument is ignored.
 inline int gettimeofday(struct timeval *tv, void * /*timezone*/) {
@@ -406,6 +413,10 @@ inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
 
 namespace capsid {
 namespace win32 {
+
+inline bool create_socket_pair(int fds[2]) {
+    return socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0;
+}
 
 inline int create_tcp_socket_fd() {
     return socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
