@@ -31,10 +31,16 @@ struct SandboxConfig {
     // stay separate. Consumed by the Linux launcher (Binding §7.9);
     // ignored on platforms without kernel-level profiles.
     std::vector<std::string> binding_profiles;
+    // Binding fs paths entering the process-level Landlock union; the
+    // per-origin Native gates stay separate and authoritative.
+    std::vector<std::string> binding_read_paths;
+    std::vector<std::string> binding_write_paths;
 };
 
 bool apply_sandbox(const SandboxConfig &config,
                    uint32_t *applied_features,
+                   uint32_t *landlock_abi,
+                   uint32_t *seccomp_mode,
                    std::string *error);
 
 }  // namespace capsid

@@ -4381,6 +4381,31 @@ if(BUILD_TESTING)
         target_link_libraries(test-sandbox PRIVATE capsid_sanitizers)
         add_test(NAME worker_sandbox_enforcement COMMAND test-sandbox)
         set_tests_properties(worker_sandbox_enforcement PROPERTIES TIMEOUT 10)
+
+        # Binding v1 §7.9: the privileged profile conformance probes. Skip
+        # 77 (unprivileged / non-Linux) is a failure in the Hosted
+        # Validity workflow.
+        set(CAPSID_BINDING_SANDBOX_DIR
+            "${CMAKE_CURRENT_BINARY_DIR}/capsid-binding-sandbox-dir")
+        add_test(NAME worker_binding_sandbox_write
+            COMMAND test-sandbox --binding-write
+                "${CAPSID_BINDING_SANDBOX_DIR}")
+        set_tests_properties(worker_binding_sandbox_write PROPERTIES
+            TIMEOUT 15
+            LABELS "sandbox"
+            SKIP_RETURN_CODE 77)
+        add_test(NAME worker_binding_sandbox_network
+            COMMAND test-sandbox --binding-network)
+        set_tests_properties(worker_binding_sandbox_network PROPERTIES
+            TIMEOUT 15
+            LABELS "sandbox"
+            SKIP_RETURN_CODE 77)
+        add_test(NAME worker_binding_sandbox_wasi
+            COMMAND test-sandbox --binding-wasi)
+        set_tests_properties(worker_binding_sandbox_wasi PROPERTIES
+            TIMEOUT 15
+            LABELS "sandbox"
+            SKIP_RETURN_CODE 77)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_executable(
                 test-sandbox-fd-hygiene

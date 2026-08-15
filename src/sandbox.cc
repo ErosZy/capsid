@@ -229,6 +229,7 @@ uint64_t landlock_access_for_abi(int abi) {
 bool add_landlock_path(int ruleset_fd,
                        const std::string &path,
                        bool optional,
+                       uint64_t allowed_access,
                        std::string *error) {
     int path_fd =
         open(path.c_str(), O_PATH | O_CLOEXEC | O_NOFOLLOW);
@@ -273,10 +274,13 @@ bool add_landlock_path(int ruleset_fd,
     }
     struct landlock_path_beneath_attr rule = {};
     rule.parent_fd = path_fd;
-    rule.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE;
-    if (S_ISDIR(info.st_mode)) {
-        rule.allowed_access |= LANDLOCK_ACCESS_FS_READ_DIR;
+    if (allowed_access == 0) {
+        allowed_access = LANDLOCK_ACCESS_FS_READ_FILE;
+        if (S_ISDIR(info.st_mode)) {
+            allowed_access |= LANDLOCK_ACCESS_FS_READ_DIR;
+        }
     }
+    rule.allowed_access = allowed_access;
     const int result = static_cast<int>(syscall(
         SYS_landlock_add_rule,
         ruleset_fd,
@@ -293,6 +297,7 @@ bool add_landlock_path(int ruleset_fd,
 }
 
 bool install_landlock(const std::vector<std::string> &required_paths,
+                      const std::vector<std::string> &write_paths,
                       std::string *error) {
 #if defined(SYS_landlock_create_ruleset) && \
     defined(SYS_landlock_add_rule) && \
@@ -304,6 +309,14 @@ bool install_landlock(const std::vector<std::string> &required_paths,
         LANDLOCK_CREATE_RULESET_VERSION));
     if (abi < 1) {
         return fail_errno("query Landlock ABI", error);
+    }
+    // Binding v1 §4.2: filesystem-write needs the access mask the ABI can
+    // express; an older kernel fails the worker startup, never degrades.
+    if (!write_paths.empty() && abi < 3) {
+        if (error) {
+            *error = "kernel Landlock ABI is too old for filesystem-write";
+        }
+        return false;
     }
 
     struct landlock_ruleset_attr attr = {};
@@ -330,14 +343,40 @@ bool install_landlock(const std::vector<std::string> &required_paths,
          i < sizeof(optional_paths) / sizeof(optional_paths[0]);
          ++i) {
         if (!add_landlock_path(
-                ruleset_fd, optional_paths[i], true, error)) {
+                ruleset_fd, optional_paths[i], true, 0, error)) {
             close(ruleset_fd);
             return false;
         }
     }
     for (size_t i = 0; i < required_paths.size(); ++i) {
         if (!add_landlock_path(
-                ruleset_fd, required_paths[i], false, error)) {
+                ruleset_fd, required_paths[i], false, 0, error)) {
+            close(ruleset_fd);
+            return false;
+        }
+    }
+    // Binding write paths: Landlock allows the file mutations the profile
+    // promises (regular files, dirs, remove) but never devices, FIFOs or
+    // sockets (MAKE_CHAR/MAKE_FIFO/MAKE_SOCK are not granted).
+    uint64_t write_access =
+        LANDLOCK_ACCESS_FS_WRITE_FILE |
+        LANDLOCK_ACCESS_FS_MAKE_REG |
+        LANDLOCK_ACCESS_FS_REMOVE_FILE |
+        LANDLOCK_ACCESS_FS_MAKE_DIR |
+        LANDLOCK_ACCESS_FS_REMOVE_DIR;
+#ifdef LANDLOCK_ACCESS_FS_REFER
+    if (abi >= 2) {
+        write_access |= LANDLOCK_ACCESS_FS_REFER;
+    }
+#endif
+#ifdef LANDLOCK_ACCESS_FS_TRUNCATE
+    if (abi >= 3) {
+        write_access |= LANDLOCK_ACCESS_FS_TRUNCATE;
+    }
+#endif
+    for (size_t i = 0; i < write_paths.size(); ++i) {
+        if (!add_landlock_path(
+                ruleset_fd, write_paths[i], false, write_access, error)) {
             close(ruleset_fd);
             return false;
         }
@@ -352,6 +391,7 @@ bool install_landlock(const std::vector<std::string> &required_paths,
     return true;
 #else
     (void)required_paths;
+    (void)write_paths;
     if (error) {
         *error = "Landlock syscall numbers are unavailable in Linux headers";
     }
@@ -497,7 +537,24 @@ void filter_prctl_syscall(std::vector<struct sock_filter> *filter) {
 #endif
 }
 
-bool install_seccomp(std::string *error) {
+bool has_binding_profile(const std::vector<std::string> &profiles,
+                          const char *name) {
+    for (const std::string &profile : profiles) {
+        if (profile == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool install_seccomp(const std::vector<std::string> &binding_profiles,
+                     std::string *error) {
+    const bool allow_fs_write =
+        has_binding_profile(binding_profiles, "filesystem-write");
+    const bool allow_fs_watch =
+        has_binding_profile(binding_profiles, "filesystem-watch");
+    const bool allow_sqlite =
+        has_binding_profile(binding_profiles, "sqlite");
     std::vector<struct sock_filter> filter;
     bpf_statement(
         &filter, BPF_LD | BPF_W | BPF_ABS,
@@ -620,6 +677,10 @@ bool install_seccomp(std::string *error) {
 #ifdef __NR_io_uring_register
     CAPSID_DENY_SYSCALL(io_uring_register);
 #endif
+// Binding v1 §4.2: filesystem-write lifts the frozen deny set for the
+// exact mutation syscalls its profile promises. The permanent denies
+// above (exec, clone, ptrace, mount, raw sockets, io_uring, ...) stay.
+if (!allow_fs_write) {
 #ifdef __NR_creat
     CAPSID_DENY_SYSCALL(creat);
 #endif
@@ -647,13 +708,22 @@ bool install_seccomp(std::string *error) {
 #ifdef __NR_rmdir
     CAPSID_DENY_SYSCALL(rmdir);
 #endif
+}
 #undef CAPSID_DENY_SYSCALL
 
 #ifdef __NR_open
-    filter_open_syscall(&filter, __NR_open, 1);
+    if (allow_fs_write) {
+        allow_syscall(&filter, __NR_open);
+    } else {
+        filter_open_syscall(&filter, __NR_open, 1);
+    }
 #endif
 #ifdef __NR_openat
-    filter_open_syscall(&filter, __NR_openat, 2);
+    if (allow_fs_write) {
+        allow_syscall(&filter, __NR_openat);
+    } else {
+        filter_open_syscall(&filter, __NR_openat, 2);
+    }
 #endif
 #ifdef __NR_openat2
     /*
@@ -959,6 +1029,61 @@ bool install_seccomp(std::string *error) {
 #endif
 #undef CAPSID_ALLOW_SYSCALL
 
+#define CAPSID_PROFILE_ALLOW_SYSCALL(name) \
+    do { allow_syscall(&filter, __NR_##name); } while (0)
+    if (allow_fs_write) {
+#ifdef __NR_fsync
+        CAPSID_PROFILE_ALLOW_SYSCALL(fsync);
+#endif
+#ifdef __NR_fdatasync
+        CAPSID_PROFILE_ALLOW_SYSCALL(fdatasync);
+#endif
+#ifdef __NR_truncate
+        CAPSID_PROFILE_ALLOW_SYSCALL(truncate);
+#endif
+#ifdef __NR_ftruncate
+        CAPSID_PROFILE_ALLOW_SYSCALL(ftruncate);
+#endif
+    }
+    if (allow_fs_watch) {
+#ifdef __NR_inotify_init
+        CAPSID_PROFILE_ALLOW_SYSCALL(inotify_init);
+#endif
+#ifdef __NR_inotify_init1
+        CAPSID_PROFILE_ALLOW_SYSCALL(inotify_init1);
+#endif
+#ifdef __NR_inotify_add_watch
+        CAPSID_PROFILE_ALLOW_SYSCALL(inotify_add_watch);
+#endif
+#ifdef __NR_inotify_rm_watch
+        CAPSID_PROFILE_ALLOW_SYSCALL(inotify_rm_watch);
+#endif
+    }
+    if (allow_sqlite) {
+#ifdef __NR_pwrite64
+        CAPSID_PROFILE_ALLOW_SYSCALL(pwrite64);
+#endif
+#ifdef __NR_pwritev
+        CAPSID_PROFILE_ALLOW_SYSCALL(pwritev);
+#endif
+#ifdef __NR_pwritev2
+        CAPSID_PROFILE_ALLOW_SYSCALL(pwritev2);
+#endif
+#ifdef __NR_fsync
+        CAPSID_PROFILE_ALLOW_SYSCALL(fsync);
+#endif
+#ifdef __NR_fdatasync
+        CAPSID_PROFILE_ALLOW_SYSCALL(fdatasync);
+#endif
+#ifdef __NR_ftruncate
+        CAPSID_PROFILE_ALLOW_SYSCALL(ftruncate);
+#endif
+#ifdef __NR_flock
+        CAPSID_PROFILE_ALLOW_SYSCALL(flock);
+#endif
+    }
+#undef CAPSID_PROFILE_ALLOW_SYSCALL
+
     bpf_statement(&filter, BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
 
     struct sock_fprog program;
@@ -980,7 +1105,15 @@ bool install_seccomp(std::string *error) {
 
 bool apply_sandbox(const SandboxConfig &config,
                    uint32_t *applied_features,
+                   uint32_t *landlock_abi,
+                   uint32_t *seccomp_mode,
                    std::string *error) {
+    if (landlock_abi) {
+        *landlock_abi = 0;
+    }
+    if (seccomp_mode) {
+        *seccomp_mode = 0;
+    }
     uint32_t features = config.preinstalled_features;
     if (!set_limit("RLIMIT_CORE", RLIMIT_CORE, 0, 0, error)) {
         return false;
@@ -1045,14 +1178,42 @@ bool apply_sandbox(const SandboxConfig &config,
         return fail_errno("PR_SET_NO_NEW_PRIVS", error);
     }
     features |= CAPSID_SANDBOX_FEATURE_NO_NEW_PRIVS;
-    if (!install_landlock(config.read_only_paths, error)) {
+    // Binding v1 §4.1: unimplemented profiles fail the worker startup —
+    // a manifest can name a profile this build cannot honor, never a
+    // silent degradation.
+    if (has_binding_profile(config.binding_profiles, "wasi")) {
+        if (error) {
+            *error = "wasi sandbox profile is not implemented";
+        }
+        return false;
+    }
+    std::vector<std::string> landlock_read_paths =
+        config.read_only_paths;
+    for (const std::string &path : config.binding_read_paths) {
+        landlock_read_paths.push_back(path);
+    }
+    if (!install_landlock(landlock_read_paths,
+                          config.binding_write_paths, error)) {
         return false;
     }
     features |= CAPSID_SANDBOX_FEATURE_LANDLOCK;
-    if (!install_seccomp(error)) {
+    if (landlock_abi) {
+#if defined(SYS_landlock_create_ruleset)
+        const int abi = static_cast<int>(syscall(
+            SYS_landlock_create_ruleset,
+            NULL,
+            0,
+            LANDLOCK_CREATE_RULESET_VERSION));
+        *landlock_abi = abi > 0 ? static_cast<uint32_t>(abi) : 0;
+#endif
+    }
+    if (!install_seccomp(config.binding_profiles, error)) {
         return false;
     }
     features |= CAPSID_SANDBOX_FEATURE_SECCOMP;
+    if (seccomp_mode) {
+        *seccomp_mode = SECCOMP_SET_MODE_FILTER;
+    }
     const uint32_t missing = config.required_features & ~features;
     if (missing != 0) {
         if (error) {

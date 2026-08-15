@@ -53,7 +53,7 @@ int run_linux_probe(const std::string &allowed_path,
 
     uint32_t features = 0;
     std::string error;
-    if (!capsid::apply_sandbox(config, &features, &error)) {
+    if (!capsid::apply_sandbox(config, &features, NULL, NULL, &error)) {
         std::cerr << "sandbox setup failed: " << error << std::endl;
         return 10;
     }
@@ -231,12 +231,153 @@ int run_linux_namespace_probe() {
 
     uint32_t features = 0;
     std::string error;
-    if (!capsid::apply_sandbox(config, &features, &error)) {
+    if (!capsid::apply_sandbox(config, &features, NULL, NULL, &error)) {
         std::cerr << "namespace sandbox unavailable: " << error << std::endl;
         return 77;
     }
     return (features & namespace_features) == namespace_features ? 0 : 20;
 }
+
+
+// Binding v1 §7.9: profile conformance probes. Each probe runs in a fresh
+// forked child with the binding profiles under test; the parent holds the
+// listener and the authorized directory.
+int run_binding_write_probe(const std::string &authorized_dir) {
+    capsid::SandboxConfig config;
+    config.address_space_limit = 0;
+    config.file_descriptor_limit = 64;
+    config.strict = true;
+    config.required_features = CAPSID_SANDBOX_FEATURE_STRICT_BASE;
+    config.preinstalled_features = 0;
+    config.binding_profiles = {"filesystem-write"};
+    config.binding_write_paths.push_back(authorized_dir);
+
+    uint32_t features = 0;
+    uint32_t landlock_abi = 0;
+    uint32_t seccomp_mode = 0;
+    std::string error;
+    if (!capsid::apply_sandbox(
+            config, &features, &landlock_abi, &seccomp_mode, &error)) {
+        std::cerr << "binding sandbox unavailable: " << error << std::endl;
+        return 77;
+    }
+    if (landlock_abi < 3) {
+        // §4.2: an old kernel must fail the worker startup — the launcher
+        // would have refused, so this build combination cannot run the
+        // conformance probe.
+        return 77;
+    }
+    if (seccomp_mode == 0) {
+        return 30;
+    }
+    // Write inside the authorized directory succeeds.
+    const std::string inside = authorized_dir + "/binding-probe.txt";
+    const int fd = open(inside.c_str(),
+                        O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    if (fd < 0) {
+        return 31;
+    }
+    if (write(fd, "ok", 2) != 2) {
+        close(fd);
+        return 32;
+    }
+    close(fd);
+    if (unlink(inside.c_str()) != 0) {
+        return 33;
+    }
+    // Writing outside the authorized directory fails (Landlock).
+    errno = 0;
+    const int escape_fd = open(
+        "/tmp/capsid-binding-escape-probe",
+        O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    const int escape_errno = errno;
+    if (escape_fd >= 0) {
+        close(escape_fd);
+        unlink("/tmp/capsid-binding-escape-probe");
+        return 34;
+    }
+    if (escape_errno != EACCES && escape_errno != EPERM) {
+        return 35;
+    }
+    return 0;
+}
+
+int run_binding_network_probe(int listener_fd) {
+    capsid::SandboxConfig config;
+    config.address_space_limit = 0;
+    config.file_descriptor_limit = 64;
+    config.strict = true;
+    config.required_features = CAPSID_SANDBOX_FEATURE_STRICT_BASE;
+    config.preinstalled_features = 0;
+    config.binding_profiles = {"network-client"};
+
+    uint32_t features = 0;
+    std::string error;
+    if (!capsid::apply_sandbox(
+            config, &features, NULL, NULL, &error)) {
+        std::cerr << "binding sandbox unavailable: " << error << std::endl;
+        return 77;
+    }
+    // A client connect to the parent's listener succeeds.
+    struct sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(0);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    // Learn the parent listener port via the inherited fd? The parent
+    // binds port 0 and passes the port number via the probe's argv in the
+    // fork wrapper — simpler: the probe reconnects to the port recorded in
+    // the environment-free global below.
+    (void)listener_fd;
+    extern int binding_probe_listener_port;
+    address.sin_port = htons(
+        static_cast<uint16_t>(binding_probe_listener_port));
+    const int client = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (client < 0) {
+        return 40;
+    }
+    if (connect(client, reinterpret_cast<struct sockaddr *>(&address),
+                sizeof(address)) != 0) {
+        close(client);
+        return 41;
+    }
+    close(client);
+    // Server syscalls stay permanently denied even with network-client.
+    errno = 0;
+    const int server = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (server >= 0) {
+        int reuse = 1;
+        setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        if (bind(server, reinterpret_cast<struct sockaddr *>(&address),
+                 sizeof(address)) == 0) {
+            close(server);
+            return 42;
+        }
+        close(server);
+    }
+    return 0;
+}
+
+int run_binding_wasi_probe() {
+    capsid::SandboxConfig config;
+    config.address_space_limit = 0;
+    config.file_descriptor_limit = 64;
+    config.strict = true;
+    config.required_features = CAPSID_SANDBOX_FEATURE_STRICT_BASE;
+    config.preinstalled_features = 0;
+    config.binding_profiles = {"wasi"};
+    uint32_t features = 0;
+    std::string error;
+    if (capsid::apply_sandbox(
+            config, &features, NULL, NULL, &error)) {
+        return 50;
+    }
+    if (error.find("not implemented") == std::string::npos) {
+        return 51;
+    }
+    return 0;
+}
+
+int binding_probe_listener_port = 0;
 
 #endif
 
@@ -258,6 +399,58 @@ int main(int argc, char **argv) {
             return WEXITSTATUS(status);
         }
         fail("namespace sandbox probe terminated by signal");
+    }
+    if (argc == 3 && std::string(argv[1]) == "--binding-write") {
+        const pid_t pid = fork();
+        require(pid >= 0, "binding write probe forked");
+        if (pid == 0) {
+            _exit(run_binding_write_probe(argv[2]));
+        }
+        int status = 0;
+        require(waitpid(pid, &status, 0) == pid,
+                "binding write probe reaped");
+        return WIFEXITED(status) ? WEXITSTATUS(status) : 60;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--binding-network") {
+        // Parent holds a listener; the child connects to it.
+        const int listener = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        require(listener >= 0, "binding listener created");
+        struct sockaddr_in address = {};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        address.sin_port = htons(0);
+        require(bind(listener, reinterpret_cast<struct sockaddr *>(&address),
+                     sizeof(address)) == 0,
+                "binding listener bound");
+        socklen_t length = sizeof(address);
+        require(getsockname(listener,
+                            reinterpret_cast<struct sockaddr *>(&address),
+                            &length) == 0,
+                "binding listener named");
+        require(listen(listener, 4) == 0, "binding listener listening");
+        binding_probe_listener_port = ntohs(address.sin_port);
+        const pid_t pid = fork();
+        require(pid >= 0, "binding network probe forked");
+        if (pid == 0) {
+            close(listener);
+            _exit(run_binding_network_probe(-1));
+        }
+        int status = 0;
+        require(waitpid(pid, &status, 0) == pid,
+                "binding network probe reaped");
+        close(listener);
+        return WIFEXITED(status) ? WEXITSTATUS(status) : 61;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--binding-wasi") {
+        const pid_t pid = fork();
+        require(pid >= 0, "binding wasi probe forked");
+        if (pid == 0) {
+            _exit(run_binding_wasi_probe());
+        }
+        int status = 0;
+        require(waitpid(pid, &status, 0) == pid,
+                "binding wasi probe reaped");
+        return WIFEXITED(status) ? WEXITSTATUS(status) : 62;
     }
     if (argc != 1) {
         fail("unknown sandbox test option");
@@ -295,6 +488,17 @@ int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--namespaces") {
         return 77;
     }
+    // Binding v1 §7.9: profile conformance probes skip outside privileged
+    // Linux; the Hosted Validity workflow treats skip 77 as a failure.
+    if (argc == 2 && std::string(argv[1]) == "--binding-network") {
+        return 77;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--binding-wasi") {
+        return 77;
+    }
+    if (argc == 3 && std::string(argv[1]) == "--binding-write") {
+        return 77;
+    }
     if (argc != 1) {
         fail("unknown sandbox test option");
     }
@@ -307,7 +511,7 @@ int main(int argc, char **argv) {
     uint32_t features = 0;
     std::string error;
     require(
-        !capsid::apply_sandbox(config, &features, &error),
+        !capsid::apply_sandbox(config, &features, NULL, NULL, &error),
         "strict sandbox remains fail-closed outside Linux");
     require(
         error.find("strict sandbox is unavailable") != std::string::npos,

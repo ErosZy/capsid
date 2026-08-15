@@ -547,10 +547,28 @@ public:
                 binding->profiles.begin(),
                 binding->profiles.end());
         }
+        // Binding fs paths enter the process-level Landlock union; the
+        // per-origin Native gates stay authoritative.
+        for (std::vector<capsid::WorkerBindingDescriptor>::const_iterator
+                 binding = bindings_.begin();
+             binding != bindings_.end();
+             ++binding) {
+            sandbox_config.binding_read_paths.insert(
+                sandbox_config.binding_read_paths.end(),
+                binding->fs_read.begin(),
+                binding->fs_read.end());
+            sandbox_config.binding_write_paths.insert(
+                sandbox_config.binding_write_paths.end(),
+                binding->fs_write.begin(),
+                binding->fs_write.end());
+        }
         uint32_t sandbox_features = 0;
+        uint32_t sandbox_landlock_abi = 0;
+        uint32_t sandbox_seccomp_mode = 0;
         std::string sandbox_error;
         if (!capsid::apply_sandbox(
-                sandbox_config, &sandbox_features, &sandbox_error)) {
+                sandbox_config, &sandbox_features, &sandbox_landlock_abi,
+                &sandbox_seccomp_mode, &sandbox_error)) {
             send_error(0, std::string("sandbox setup failed: ") + sandbox_error);
             flush_blocking();
             return 1;
@@ -654,8 +672,8 @@ public:
         capsid::append_ready_proof(
             &ready_payload,
             sandbox_features,
-            0,  // seccomp_mode: Linux profile conformance reports it
-            0,  // landlock_abi: Linux profile conformance reports it
+            sandbox_seccomp_mode,
+            sandbox_landlock_abi,
             "",
             capsid::compute_binding_profile_digest(bindings_));
         send_payload(capsid::protocol::kReady, 0, sandbox_features,
