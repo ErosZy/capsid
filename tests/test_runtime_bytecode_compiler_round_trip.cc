@@ -18,6 +18,8 @@
 #include <jansson.h>
 #include <openssl/evp.h>
 
+#include <filesystem>
+
 #if defined(_WIN32)
 #include "win32_compat.h"
 #else
@@ -441,12 +443,23 @@ int main(int argc, char** argv) {
     const char* worker_path = argv[2];
     const char* fixture_path = argv[3];
 
-    const std::string work_dir = "/tmp/capsid-roundtrip";
+    // A per-run scratch directory under the current working directory:
+    // /tmp and shell rm/mkdir do not exist in the Windows command
+    // interpreter, and the same tree works on every platform.
+    std::string work_dir;
+#if defined(_WIN32)
+    work_dir = "capsid-roundtrip";
+    std::error_code ignored;
+    std::filesystem::remove_all(work_dir, ignored);
+    std::filesystem::create_directories(work_dir);
+#else
+    work_dir = "/tmp/capsid-roundtrip";
     const std::string command =
         std::string("rm -rf ") + work_dir + " && mkdir -p " + work_dir;
     if (system(command.c_str()) != 0) {
         fail("cannot prepare work dir");
     }
+#endif
 
     // 1. Compile the fixture with the frozen CLI.
     const std::string source_name = "file:///app/sync-app.js";
@@ -593,13 +606,21 @@ int main(int argc, char** argv) {
         if (pos == std::string::npos) {
             fail("cannot locate sourceSha256 in attestation");
         }
-        // First hex digit after the frozen "sha256:" prefix.
-        bad_attestation.replace(pos + 24, 1, "0");
+        // The frozen prefix "\"sourceSha256\":\"sha256:" is 23 characters;
+        // the first hex digit follows it. Flip it to a guaranteed-different
+        // digit (a blind write could be a no-op when the digit already
+        // matches, silently skipping the tamper).
+        const char first_digit = bad_attestation.at(pos + 23);
+        bad_attestation.replace(pos + 23, 1,
+                                first_digit == '0' ? "1" : "0");
         const capsid::host::BytecodeAttestationResult unsigned_result = verify(
             source, bytecode, bad_attestation, signature, key);
         if (unsigned_result.code !=
             capsid::host::BytecodeAttestationErrorCode::kInvalidSignature) {
-            fail("tampered digest claim was not rejected");
+            fail(std::string("tampered digest claim was not rejected: ") +
+                 std::to_string(static_cast<int>(unsigned_result.code)) +
+                 " claim=" + parse_attestation(attestation).source_sha256 +
+                 " tampered=" + parse_attestation(bad_attestation).source_sha256);
         }
         // A digest claim tamper with a matching signature is impossible to
         // produce without a recompiled message; the artifact-hash path is
