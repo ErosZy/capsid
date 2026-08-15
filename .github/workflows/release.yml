@@ -1,10 +1,11 @@
 name: Release
 
 # Tag pushes (v*) package the pinned checkout and attach the CPack TGZ +
-# SHA256 to a GitHub Release. Two platform packages ship:
-#   - linux-x86_64: fully static (musl) built in an Alpine container —
+# SHA256 to a GitHub Release. Three platform packages ship:
+#   - linux-musl: fully static (musl) built in an Alpine container —
 #     one portable binary, no libc version matrix to manage;
-#   - darwin-arm64: native macOS build (Apple ships no static libSystem).
+#   - darwin-arm64: native macOS build (Apple ships no static libSystem);
+#   - windows-x86_64: MSVC static-CRT ZIP (see docs/windows.md).
 # testing-validity does not run on tags (scoped to main/PR), so the tag
 # must point at a commit whose main-branch checks already passed.
 
