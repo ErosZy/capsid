@@ -151,7 +151,14 @@ private:
         char buffer[2048];
         while (request.find("\r\n\r\n") == std::string::npos &&
                request.size() < 64u * 1024u) {
+#if defined(_WIN32)
+            // accept_fd returns a CRT fd; Winsock recv takes the raw
+            // SOCKET handle.
+            const ssize_t count =
+                capsid::win32::recv_fd(client, buffer, sizeof(buffer), 0);
+#else
             const ssize_t count = recv(client, buffer, sizeof(buffer), 0);
+#endif
             if (count <= 0) {
                 close(client);
                 return;
@@ -169,7 +176,10 @@ private:
             "capsid-fetch-ok";
         size_t offset = 0;
         while (offset < sizeof(response) - 1) {
-#ifdef MSG_NOSIGNAL
+#if defined(_WIN32)
+            const ssize_t count = capsid::win32::send_fd(
+                client, response + offset, sizeof(response) - 1 - offset, 0);
+#elif defined(MSG_NOSIGNAL)
             const ssize_t count = send(
                 client,
                 response + offset,

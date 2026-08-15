@@ -142,7 +142,14 @@ private:
             if (capsid::win32::capsid_poll(&descriptor, 1, 5000) <= 0) {
                 return;
             }
+#if defined(_WIN32)
+            // accept_fd returns a CRT fd; Winsock recv takes the raw
+            // SOCKET handle.
+            const ssize_t count =
+                capsid::win32::recv_fd(client, buffer, sizeof(buffer), 0);
+#else
             const ssize_t count = recv(client, buffer, sizeof(buffer), 0);
+#endif
             if (count == 0) {
                 closed_ = true;
                 return;
