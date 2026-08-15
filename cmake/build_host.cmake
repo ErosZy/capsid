@@ -130,6 +130,21 @@ if(CAPSID_BUILD_HOST)
                 INTERFACE_LINK_LIBRARIES Boost::headers)
         endif()
     endif()
+    if(Boost_FOUND AND TARGET Boost::system)
+        # CMake 4.1 removed the FindBoost module; the config-package
+        # targets (vcpkg in particular) do not always carry the include
+        # directory. Attach it explicitly when missing so the data-plane
+        # sources find <boost/asio.hpp>.
+        get_target_property(CAPSID_BOOST_INCLUDE_DIRS Boost::system
+            INTERFACE_INCLUDE_DIRECTORIES)
+        if(NOT CAPSID_BOOST_INCLUDE_DIRS)
+            find_path(CAPSID_BOOST_SYSTEM_INCLUDE_DIR
+                NAMES boost/version.hpp REQUIRED)
+            set_target_properties(Boost::system PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES
+                "${CAPSID_BOOST_SYSTEM_INCLUDE_DIR}")
+        endif()
+    endif()
     if(Boost_FOUND)
         # M1A design gate (design review §4.3): only the WorkerEventSource
         # adapter may call capsid_worker_fd(); every other Host module
