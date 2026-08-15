@@ -2478,12 +2478,13 @@ bool Impl::write_ready_line() {
     std::size_t offset = 0;
     while (offset < line.size()) {
 #if defined(_WIN32)
-        // MSVC write() takes an unsigned int count; the READY record is
-        // a single small JSON line.
-        const ssize_t written = ::write(
+        // The ready channel is a loopback socketpair on Windows; the
+        // CRT's write() is invalid on socket fds.
+        const ssize_t written = capsid::win32::send_fd(
             options_.ready_fd,
             line.data() + offset,
-            static_cast<unsigned int>(line.size() - offset));
+            line.size() - offset,
+            0);
 #else
         const ssize_t written = ::write(options_.ready_fd,
                                         line.data() + offset,

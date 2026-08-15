@@ -92,7 +92,11 @@ std::string read_one_ready_line(int fd) {
             continue;
         }
         char byte = 0;
+#if defined(_WIN32)
+        require(capsid::win32::read_fd(fd, &byte, 1) == 1,
+#else
         require(read(fd, &byte, 1) == 1,
+#endif
                 "server READY pipe closed without a complete record");
         line.push_back(byte);
         require(line.size() <= 1024, "server READY record is unbounded");

@@ -231,7 +231,7 @@ const args = parseArgs(process.argv.slice(2));
     // fd 3 is a read-only descriptor: the READY record write fails after
     // the worker spawned and became READY, and the Host must exit with
     // code 1 instead of hanging on the worker thread.
-    const readOnly = fs.openSync('/dev/null', 'r');
+    const readOnly = fs.openSync(process.platform === 'win32' ? '\\\\.\\NUL' : '/dev/null', 'r');
     try {
         const brokenReady = spawn(args.get('host'),
             hostArgs(args, { requestTimeoutMs: 10000 }),
