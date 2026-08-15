@@ -194,6 +194,7 @@ if(CAPSID_BUILD_WORKER)
         VERBATIM
     )
     add_executable(capsid-worker
+        src/binding_rpc.cc
         src/capability_policy.cc
         src/egress_policy.cc
         src/ipc_validation.cc

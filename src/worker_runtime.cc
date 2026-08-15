@@ -1,5 +1,6 @@
 #include "worker_runtime.h"
 
+#include "binding_rpc.h"
 #include "build_identity.h"
 #include "capability_policy.h"
 #include <array>
@@ -303,6 +304,42 @@ enum class WorkerPhase {
 };
 
 class WorkerRuntime {
+    // §7.6: the user_to_binding / binding_to_user call queues. Calls carry
+    // an id; the pending table owns the JSValues so the queues stay
+    // relocatable.
+    struct PendingBindingCall {
+        PendingBindingCall()
+            : method(JS_ATOM_NULL),
+              request_id(0),
+              user_resolve(JS_UNDEFINED),
+              user_reject(JS_UNDEFINED),
+              abort_controller(JS_UNDEFINED),
+              binding_result(JS_UNDEFINED),
+              binding_error(JS_UNDEFINED),
+              canceled(false),
+              dispatched(false),
+              settled(false) {}
+        std::string binding_id;
+        size_t table_index = 0;
+        JSAtom method;
+        capsid::NeutralValue input;
+        uint64_t request_id;
+        JSValue user_resolve;      // user ctx
+        JSValue user_reject;       // user ctx
+        JSValue abort_controller;  // binding ctx
+        JSValue binding_result;    // binding ctx (fulfillment value)
+        JSValue binding_error;     // binding ctx (rejection reason)
+        bool canceled;
+        bool dispatched;
+        bool settled;
+    };
+    std::deque<uint64_t> user_to_binding_;
+    std::deque<uint64_t> binding_to_user_;
+    std::map<uint64_t, PendingBindingCall> pending_binding_calls_;
+    uint64_t next_binding_call_id_ = 0;
+    size_t inflight_binding_calls_ = 0;
+    // binding id -> index into binding_tables_.
+    std::map<std::string, size_t> binding_table_index_;
 public:
     WorkerRuntime(int fd, int network_namespace_fd)
         : fd_(fd),
@@ -364,6 +401,14 @@ public:
             }
             free_bridge_functions();
         }
+        // §7.6: free every pending binding call before the runtimes go.
+        for (std::map<uint64_t, PendingBindingCall>::iterator it =
+                 pending_binding_calls_.begin();
+             it != pending_binding_calls_.end();
+             ++it) {
+            self_finish_binding_call(it->second);
+        }
+        pending_binding_calls_.clear();
         if (binding_runtime_) {
             // §7.5: free the Binding Runtime first so its handles close on
             // the shared loop while the User runtime still owns the loop.
@@ -555,6 +600,7 @@ public:
 
         std::string load_error;
         if (!load_application(&load_error)) {
+
             send_error(0, load_error);
             flush_blocking();
             return 1;
@@ -1035,6 +1081,10 @@ private:
         if (!self) {
             return;
         }
+        // Binding v1 §5.2: dispatch queued binding calls and settle their
+        // user promises on the same single-threaded tick.
+        self->pump_binding_calls();
+        self->pump_binding_results();
         // §7.4: settle leaves no drain on the normal path, so the tick
         // performs the post-settle reclaim (may poison), then checks the
         // poison deadline before expiring requests.
@@ -3740,6 +3790,10 @@ private:
             }
             return module;
         }
+        if (name &&
+            std::strncmp(name, "capsid:binding/", 15) == 0) {
+            return binding_facade_load(ctx, name, NULL, attributes);
+        }
         if (!name ||
             std::strcmp(name, "capsid:permissions") != 0) {
             JS_ThrowReferenceError(
@@ -3753,6 +3807,23 @@ private:
         if (!module ||
             JS_AddModuleExport(
                 ctx, module, "permissions") < 0) {
+            return NULL;
+        }
+        return module;
+    }
+
+    static JSModuleDef *binding_facade_load(
+        JSContext *ctx,
+        const char *name,
+        void *opaque,
+        JSValueConst attributes) {
+        (void)opaque;
+        (void)attributes;
+        // normalize_module already verified the binding is declared.
+        JSModuleDef *module =
+            JS_NewCModule(ctx, name, binding_facade_init);
+        if (module == NULL ||
+            JS_AddModuleExport(ctx, module, "default") < 0) {
             return NULL;
         }
         return module;
@@ -3799,25 +3870,38 @@ private:
             return js_strdup(ctx, module.c_str());
         }
         if (module.compare(0, 15, "capsid:binding/") == 0) {
-            // §7.2: Bindings are declared by LOAD_BINDING frames. An
-            // undeclared import fails here — it never lazily creates a
-            // Binding Runtime. The synthetic user facade replaces this
-            // branch when the dual-runtime phases land.
-            self->denied_module_ = module;
-            self->module_error_ =
-                "binding is not declared: " + module;
+            // §2.4/§7.6: Bindings are declared by LOAD_BINDING frames. A
+            // declared import resolves to the synthetic facade; an
+            // undeclared one fails here — it never lazily creates a
+            // Binding Runtime.
+            if (self->binding_table_index_.count(module.substr(15)) ==
+                0) {
+                self->denied_module_ = module;
+                self->module_error_ =
+                    "binding is not declared: " + module;
+                self->emit_audit(
+                    CAPSID_AUDIT_STAGE_MODULE,
+                    CAPSID_AUDIT_DENY,
+                    0,
+                    0,
+                    module,
+                    "binding",
+                    "specifier",
+                    module);
+                JS_ThrowReferenceError(
+                    ctx, "%s", self->module_error_.c_str());
+                return NULL;
+            }
             self->emit_audit(
                 CAPSID_AUDIT_STAGE_MODULE,
-                CAPSID_AUDIT_DENY,
+                CAPSID_AUDIT_ALLOW,
                 0,
                 0,
                 module,
                 "binding",
                 "specifier",
                 module);
-            JS_ThrowReferenceError(
-                ctx, "%s", self->module_error_.c_str());
-            return NULL;
+            return js_strdup(ctx, module.c_str());
         }
         const capsid::ModuleDecision decision =
             self->config_.capability_policy
@@ -4309,8 +4393,488 @@ private:
             if (!loaded) {
                 return false;
             }
+            binding_table_index_[bindings_[index].name] =
+                binding_tables_.size() - 1;
         }
         return true;
+    }
+
+    // --- Binding v1 RPC (§5.2, §7.6) ------------------------------------
+
+    // The synthetic user facade: capsid:binding/<id> resolves to a frozen
+    // default export whose methods enqueue neutral-value calls.
+    static JSValue rejected_promise(JSContext *ctx, JSValue error) {
+        JSValue resolving[2];
+        JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+        if (JS_IsException(promise)) {
+            JS_FreeValue(ctx, error);
+            return promise;
+        }
+        JSValue ignored =
+            JS_Call(ctx, resolving[1], JS_UNDEFINED, 1, &error);
+        JS_FreeValue(ctx, ignored);
+        JS_FreeValue(ctx, error);
+        JS_FreeValue(ctx, resolving[1]);
+        JS_FreeValue(ctx, resolving[0]);
+        return promise;
+    }
+
+    static int binding_facade_init(JSContext *ctx, JSModuleDef *module) {
+        WorkerRuntime *self = g_worker;
+        if (self == NULL) {
+            return -1;
+        }
+        const JSAtom name_atom = JS_GetModuleName(ctx, module);
+        const char *name = JS_AtomToCString(ctx, name_atom);
+        if (name == NULL) {
+            return -1;
+        }
+        const std::string module_name(name);
+        JS_FreeCString(ctx, name);
+        JS_FreeAtom(ctx, name_atom);
+        if (module_name.compare(0, 15, "capsid:binding/") != 0) {
+            return -1;
+        }
+        const std::string binding_id = module_name.substr(15);
+        const std::map<std::string, size_t>::const_iterator found =
+            self->binding_table_index_.find(binding_id);
+        if (found == self->binding_table_index_.end()) {
+            return -1;
+        }
+        const size_t table_index = found->second;
+        const BindingRuntimeMethodTable &table =
+            self->binding_tables_[table_index];
+        JSValue facade = JS_NewObjectProto(ctx, JS_NULL);
+        for (size_t index = 0; index < table.method_names.size(); ++index) {
+            const char *method_name =
+                JS_AtomToCString(ctx, table.method_names[index]);
+            if (method_name == NULL) {
+                JS_FreeValue(ctx, facade);
+                return -1;
+            }
+            JSValue data = JS_NewInt32(
+                ctx, static_cast<int32_t>(table_index));
+            JSValue function = JS_NewCFunctionData2(
+                ctx, binding_facade_call, method_name, 1,
+                static_cast<int>(index), 1, &data);
+            JS_FreeValue(ctx, data);
+            JS_FreeCString(ctx, method_name);
+            JS_SetPropertyStr(ctx, facade, method_name, function);
+        }
+        JS_FreezeObject(ctx, facade);
+        if (JS_SetModuleExport(ctx, module, "default", facade) < 0) {
+            return -1;
+        }
+        return 0;
+    }
+
+    static JSValue binding_facade_call(JSContext *ctx,
+                                       JSValueConst this_val,
+                                       int argc,
+                                       JSValueConst *argv,
+                                       int magic,
+                                       JSValueConst *func_data) {
+        (void)this_val;
+        (void)argc;
+        WorkerRuntime *self = g_worker;
+        if (self == NULL || func_data == NULL) {
+            return JS_ThrowInternalError(ctx, "worker is not available");
+        }
+        int table_index = -1;
+        if (JS_ToInt32(ctx, &table_index, func_data[0]) != 0 ||
+            table_index < 0 ||
+            static_cast<size_t>(table_index) >=
+                self->binding_tables_.size()) {
+            return JS_ThrowInternalError(ctx, "binding facade is corrupt");
+        }
+        const size_t method_index = static_cast<size_t>(magic);
+        const BindingRuntimeMethodTable &table =
+            self->binding_tables_[table_index];
+        if (method_index >= table.method_names.size()) {
+            return JS_ThrowInternalError(ctx, "binding method is corrupt");
+        }
+
+        // §2.4: calls require an active request context; anything else
+        // resolves to a rejected promise.
+        RequestToken *token =
+            self->require_active_request(ctx, 0, false, true);
+        if (token == NULL) {
+            JSValue error = JS_NewError(ctx);
+            JS_DefinePropertyValueStr(
+                ctx, error, "message",
+                JS_NewString(ctx,
+                             "binding calls require an active request"),
+                JS_PROP_C_W_E);
+            return rejected_promise(ctx, error);
+        }
+        // §5.3 quotas: 64 per request, 1024 per worker.
+        if (self->inflight_binding_calls_ >= 1024) {
+            JSValue error = JS_NewError(ctx);
+            JS_DefinePropertyValueStr(
+                ctx, error, "message",
+                JS_NewString(ctx, "binding call quota exceeded"),
+                JS_PROP_C_W_E);
+            return rejected_promise(ctx, error);
+        }
+        size_t request_calls = 0;
+        for (std::map<uint64_t, PendingBindingCall>::const_iterator it =
+                 self->pending_binding_calls_.begin();
+             it != self->pending_binding_calls_.end();
+             ++it) {
+            if (it->second.request_id == token->request_id) {
+                ++request_calls;
+            }
+        }
+        if (request_calls >= 64) {
+            JSValue error = JS_NewError(ctx);
+            JS_DefinePropertyValueStr(
+                ctx, error, "message",
+                JS_NewString(ctx, "binding request quota exceeded"),
+                JS_PROP_C_W_E);
+            return rejected_promise(ctx, error);
+        }
+
+        // §5.3: the input is cloned to a C++ neutral value; a rejected
+        // value fails the call before anything crosses.
+        capsid::NeutralValue input;
+        std::string clone_error;
+        JSValueConst input_value =
+            argc > 0 ? argv[0] : JS_UNDEFINED;
+        if (!capsid::neutral_from_js(
+                ctx, input_value, &input, &clone_error)) {
+            JSValue error = JS_NewError(ctx);
+            JS_DefinePropertyValueStr(
+                ctx, error, "message",
+                JS_NewString(ctx, clone_error.c_str()),
+                JS_PROP_C_W_E);
+            return rejected_promise(ctx, error);
+        }
+
+        JSValue resolving[2];
+        JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+        if (JS_IsException(promise)) {
+            return promise;
+        }
+
+        PendingBindingCall call;
+        call.binding_id = table.id;
+        call.table_index = static_cast<size_t>(table_index);
+        call.method = JS_DupAtom(ctx, table.method_names[method_index]);
+        call.input = std::move(input);
+        call.request_id = token->request_id;
+        call.user_resolve = resolving[0];
+        call.user_reject = resolving[1];
+        call.abort_controller = self->new_binding_abort_controller();
+        const uint64_t call_id = self->next_binding_call_id_++;
+        self->pending_binding_calls_[call_id] = call;
+        self->user_to_binding_.push_back(call_id);
+        ++self->inflight_binding_calls_;
+        return promise;
+    }
+
+    // Creates an AbortController inside the Binding Runtime; cancel and
+    // deadline abort it, and the call object exposes its signal.
+    JSValue new_binding_abort_controller() {
+        JSValue global = JS_GetGlobalObject(binding_ctx_);
+        JSValue ctor = JS_GetPropertyStr(binding_ctx_, global, "AbortController");
+        JS_FreeValue(binding_ctx_, global);
+        if (JS_IsException(ctor) || !JS_IsConstructor(binding_ctx_, ctor)) {
+            JS_FreeValue(binding_ctx_, ctor);
+            return JS_UNDEFINED;
+        }
+        JSValue controller =
+            JS_CallConstructor(binding_ctx_, ctor, 0, NULL);
+        JS_FreeValue(binding_ctx_, ctor);
+        return controller;
+    }
+
+    static JSValue binding_fulfilled(JSContext *ctx,
+                                     JSValueConst this_val,
+                                     int argc,
+                                     JSValueConst *argv,
+                                     int magic,
+                                     JSValueConst *func_data) {
+        (void)this_val;
+        (void)magic;
+        WorkerRuntime *self = g_worker;
+        if (self == NULL || func_data == NULL) {
+            return JS_UNDEFINED;
+        }
+        int call_id = -1;
+        if (JS_ToInt32(ctx, &call_id, func_data[0]) != 0 ||
+            call_id < 0) {
+            return JS_UNDEFINED;
+        }
+        std::map<uint64_t, PendingBindingCall>::iterator found =
+            self->pending_binding_calls_.find(
+                static_cast<uint64_t>(call_id));
+        if (found == self->pending_binding_calls_.end()) {
+            return JS_UNDEFINED;
+        }
+        PendingBindingCall &call = found->second;
+        JS_FreeValue(ctx, call.binding_result);
+        call.binding_result =
+            argc > 0 ? JS_DupValue(ctx, argv[0]) : JS_UNDEFINED;
+        JS_FreeValue(ctx, call.binding_error);
+        call.binding_error = JS_UNDEFINED;
+        call.settled = true;
+        self->binding_to_user_.push_back(
+            static_cast<uint64_t>(call_id));
+        return JS_UNDEFINED;
+    }
+
+    static JSValue binding_rejected(JSContext *ctx,
+                                    JSValueConst this_val,
+                                    int argc,
+                                    JSValueConst *argv,
+                                    int magic,
+                                    JSValueConst *func_data) {
+        (void)this_val;
+        (void)magic;
+        WorkerRuntime *self = g_worker;
+        if (self == NULL || func_data == NULL) {
+            return JS_UNDEFINED;
+        }
+        int call_id = -1;
+        if (JS_ToInt32(ctx, &call_id, func_data[0]) != 0 ||
+            call_id < 0) {
+            return JS_UNDEFINED;
+        }
+        std::map<uint64_t, PendingBindingCall>::iterator found =
+            self->pending_binding_calls_.find(
+                static_cast<uint64_t>(call_id));
+        if (found == self->pending_binding_calls_.end()) {
+            return JS_UNDEFINED;
+        }
+        PendingBindingCall &call = found->second;
+        JS_FreeValue(ctx, call.binding_error);
+        call.binding_error =
+            argc > 0 ? JS_DupValue(ctx, argv[0]) : JS_UNDEFINED;
+        JS_FreeValue(ctx, call.binding_result);
+        call.binding_result = JS_UNDEFINED;
+        call.settled = true;
+        self->binding_to_user_.push_back(
+            static_cast<uint64_t>(call_id));
+        return JS_UNDEFINED;
+    }
+
+    // Dispatches one queued call inside the Binding Runtime (this runs on
+    // the worker's single thread, between User phases — the same-thread
+    // sequential entry the scheduler guarantees).
+    void pump_binding_calls() {
+        if (binding_ctx_ == NULL || user_to_binding_.empty()) {
+            return;
+        }
+        const uint64_t call_id = user_to_binding_.front();
+        user_to_binding_.pop_front();
+        std::map<uint64_t, PendingBindingCall>::iterator found =
+            pending_binding_calls_.find(call_id);
+        if (found == pending_binding_calls_.end()) {
+            return;
+        }
+        PendingBindingCall &call = found->second;
+        if (call.canceled) {
+            return;  // dropped before dispatch
+        }
+        call.dispatched = true;
+        const BindingRuntimeMethodTable &table =
+            binding_tables_[call.table_index];
+        JSValue method =
+            JS_GetProperty(binding_ctx_, table.factory_object, call.method);
+        if (!JS_IsFunction(binding_ctx_, method)) {
+            JS_FreeValue(binding_ctx_, method);
+            call.binding_error = JS_NewError(binding_ctx_);
+            call.settled = true;
+            binding_to_user_.push_back(call_id);
+            return;
+        }
+        JSValue input = capsid::neutral_to_js(binding_ctx_, call.input);
+        JSValue call_object = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        JS_SetPropertyStr(
+            binding_ctx_, call_object, "requestId",
+            JS_NewInt64(binding_ctx_,
+                        static_cast<int64_t>(call.request_id)));
+        JS_SetPropertyStr(
+            binding_ctx_, call_object, "deadline",
+            JS_NewFloat64(
+                binding_ctx_,
+                static_cast<double>(config_.timeout_ms)));
+        if (!JS_IsUndefined(call.abort_controller)) {
+            JSValue signal = JS_GetPropertyStr(
+                binding_ctx_, call.abort_controller, "signal");
+            JS_SetPropertyStr(binding_ctx_, call_object, "signal", signal);
+        } else {
+            JS_SetPropertyStr(binding_ctx_, call_object, "signal",
+                              JS_UNDEFINED);
+        }
+        JS_FreezeObject(binding_ctx_, call_object);
+        JSValue args[2] = { input, call_object };
+        JSValue result = JS_Call(
+            binding_ctx_, method, table.factory_object, 2, args);
+        JS_FreeValue(binding_ctx_, input);
+        JS_FreeValue(binding_ctx_, call_object);
+        JS_FreeValue(binding_ctx_, method);
+        if (JS_IsException(result)) {
+            call.binding_error = result;  // own the exception
+            call.settled = true;
+            binding_to_user_.push_back(call_id);
+            return;
+        }
+        // §5.2: Promise.resolve() unifies sync and async returns.
+        JSValue global = JS_GetGlobalObject(binding_ctx_);
+        JSValue promise_ctor =
+            JS_GetPropertyStr(binding_ctx_, global, "Promise");
+        JS_FreeValue(binding_ctx_, global);
+        JSValue resolved = JS_Call(
+            binding_ctx_,
+            JS_GetPropertyStr(binding_ctx_, promise_ctor, "resolve"),
+            promise_ctor, 1, &result);
+        JS_FreeValue(binding_ctx_, result);
+        JS_FreeValue(binding_ctx_, promise_ctor);
+        if (JS_IsException(resolved)) {
+            call.binding_error = resolved;
+            call.settled = true;
+            binding_to_user_.push_back(call_id);
+            return;
+        }
+        JSValue data = JS_NewInt32(
+            binding_ctx_, static_cast<int32_t>(call_id));
+        JSValue on_fulfilled = JS_NewCFunctionData2(
+            binding_ctx_, binding_fulfilled, "onFulfilled", 1, 0, 1,
+            &data);
+        JSValue on_rejected = JS_NewCFunctionData2(
+            binding_ctx_, binding_rejected, "onRejected", 1, 0, 1, &data);
+        JS_FreeValue(binding_ctx_, data);
+        JSValue handlers[2] = { on_fulfilled, on_rejected };
+        JSValue then_result = JS_Call(
+            binding_ctx_,
+            JS_GetPropertyStr(binding_ctx_, resolved, "then"),
+            resolved, 2, handlers);
+        JS_FreeValue(binding_ctx_, on_fulfilled);
+        JS_FreeValue(binding_ctx_, on_rejected);
+        JS_FreeValue(binding_ctx_, resolved);
+        JS_FreeValue(binding_ctx_, then_result);
+        // The .then handlers settle the call on a later job tick.
+    }
+
+    // Resolves/rejects the User-side promise from a settled Binding call
+    // (runs in the User phase; values are cloned across runtimes).
+    void pump_binding_results() {
+        while (!binding_to_user_.empty()) {
+            const uint64_t call_id = binding_to_user_.front();
+            binding_to_user_.pop_front();
+            std::map<uint64_t, PendingBindingCall>::iterator found =
+                pending_binding_calls_.find(call_id);
+            if (found == pending_binding_calls_.end()) {
+                continue;
+            }
+            PendingBindingCall &call = found->second;
+            if (call.canceled) {
+                // §5.2: late results from canceled calls are dropped.
+                self_finish_binding_call(call);
+                pending_binding_calls_.erase(found);
+                if (inflight_binding_calls_ > 0) {
+                    --inflight_binding_calls_;
+                }
+                continue;
+            }
+            JSValue handler =
+                JS_IsUndefined(call.binding_error)
+                    ? call.user_resolve
+                    : call.user_reject;
+            JSValue payload = JS_UNDEFINED;
+            if (JS_IsUndefined(call.binding_error)) {
+                // Clone the Binding value into the User runtime.
+                capsid::NeutralValue neutral;
+                std::string clone_error;
+                if (!capsid::neutral_from_js(
+                        binding_ctx_, call.binding_result, &neutral,
+                        &clone_error)) {
+                    payload = JS_NewError(ctx_);
+                    JS_DefinePropertyValueStr(
+                        ctx_, payload, "message",
+                        JS_NewString(
+                            ctx_,
+                            ("binding result is not cloneable: " +
+                             clone_error)
+                                .c_str()),
+                        JS_PROP_C_W_E);
+                    handler = call.user_reject;
+                } else {
+                    payload =
+                        capsid::neutral_to_js(ctx_, neutral);
+                }
+            } else {
+                // Errors cross as message text only.
+                const char *text =
+                    JS_ToCString(binding_ctx_, call.binding_error);
+                payload = JS_NewError(ctx_);
+                JS_DefinePropertyValueStr(
+                    ctx_, payload, "message",
+                    JS_NewString(ctx_, text ? text : "binding call failed"),
+                    JS_PROP_C_W_E);
+                if (text != NULL) {
+                    JS_FreeCString(binding_ctx_, text);
+                }
+            }
+            JSValue settle = JS_Call(ctx_, handler, JS_UNDEFINED, 1,
+                                     &payload);
+            JS_FreeValue(ctx_, settle);
+            JS_FreeValue(ctx_, payload);
+            self_finish_binding_call(call);
+            pending_binding_calls_.erase(found);
+            if (inflight_binding_calls_ > 0) {
+                --inflight_binding_calls_;
+            }
+        }
+    }
+
+    // Frees every cross-runtime JSValue a pending call owns.
+    void self_finish_binding_call(PendingBindingCall &call) {
+        if (binding_ctx_ != NULL) {
+            JS_FreeAtom(binding_ctx_, call.method);
+            if (!JS_IsUndefined(call.abort_controller)) {
+                JS_FreeValue(binding_ctx_, call.abort_controller);
+            }
+            JS_FreeValue(binding_ctx_, call.binding_result);
+            JS_FreeValue(binding_ctx_, call.binding_error);
+        }
+        JS_FreeValue(ctx_, call.user_resolve);
+        JS_FreeValue(ctx_, call.user_reject);
+    }
+
+    // §5.2: request cancel/deadline aborts matching calls — undispatched
+    // calls are dropped, dispatched ones have their controllers aborted
+    // and their late results discarded.
+    void cancel_binding_calls(uint64_t request_id) {
+        for (std::map<uint64_t, PendingBindingCall>::iterator it =
+                 pending_binding_calls_.begin();
+             it != pending_binding_calls_.end();
+             ++it) {
+            PendingBindingCall &call = it->second;
+            if (call.request_id != request_id || call.canceled) {
+                continue;
+            }
+            call.canceled = true;
+            if (binding_ctx_ != NULL &&
+                !JS_IsUndefined(call.abort_controller)) {
+                JSValue ignored = JS_Call(
+                    binding_ctx_,
+                    JS_GetPropertyStr(
+                        binding_ctx_, call.abort_controller, "abort"),
+                    call.abort_controller, 0, NULL);
+                JS_FreeValue(binding_ctx_, ignored);
+            }
+            JSValue error = JS_NewError(ctx_);
+            JS_DefinePropertyValueStr(
+                ctx_, error, "message",
+                JS_NewString(ctx_, "binding call was canceled"),
+                JS_PROP_C_W_E);
+            JSValue settle =
+                JS_Call(ctx_, call.user_reject, JS_UNDEFINED, 1, &error);
+            JS_FreeValue(ctx_, settle);
+            JS_FreeValue(ctx_, error);
+        }
     }
 
     bool load_application(std::string *error) {
@@ -4847,6 +5411,8 @@ private:
         if (id == 0) {
             return false;
         }
+        // §5.2: cancel/deadline aborts every binding call of the request.
+        cancel_binding_calls(id);
         std::map<uint64_t, ResponseState>::iterator state =
             responses_.find(id);
         if (state == responses_.end()) {

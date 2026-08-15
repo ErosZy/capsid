@@ -506,6 +506,70 @@ void test_binding_factory_failures(const char *worker_path,
         "method is not a function");
 }
 
+
+// Binding v1 §7.6 end-to-end: the App's fetch calls mongo.find through
+// the facade; the response body must carry the Binding's return value.
+void test_binding_end_to_end_call(const char *worker_path,
+                                  const char *call_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob(
+        "export default ({ config, secrets, log }) => {"
+        "  return { find(input) { return 'find:' + input.collection; } };"
+        "};");
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(call_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    for (int i = 0; i < 8; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "no frame arrived before READY");
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+    }
+    require(frame.type == capsid::protocol::kReady,
+            "binding call worker did not report READY");
+
+    capsid::protocol::Frame head;
+    head.type = capsid::protocol::kRequestHead;
+    head.flags = capsid::protocol::kFlagRequestEnd;
+    head.request_id = 77;
+    append_string16(&head.payload, "GET");
+    append_string32(&head.payload, "https://example.test/");
+    capsid::protocol::append_u16(&head.payload, 0);
+    send_frame(fd, head);
+
+    std::string body;
+    bool ended = false;
+    for (int i = 0; i < 64; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "response frames stopped before ResponseEnd");
+        if (frame.type == capsid::protocol::kResponseBody) {
+            body.append(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+        }
+        if (frame.type == capsid::protocol::kResponseEnd) {
+            ended = true;
+            break;
+        }
+    }
+    require(ended, "binding call response never ended");
+    require(body == "result:find:users",
+            "binding call response body is wrong: " + body);
+    finish_worker(fd, pid, true);
+}
+
 void test_load_binding_abi_validation() {
     capsid_worker *worker = NULL;
     require(
@@ -537,14 +601,16 @@ void test_load_binding_abi_validation() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 4) {
-        fail("expected worker path, p0 fixture and binding-import fixture");
+    if (argc != 5) {
+        fail("expected worker path, p0 fixture, binding-import fixture "
+             "and binding-call fixture");
     }
     test_zero_binding_ready_baseline(argv[1], argv[2]);
     test_undeclared_binding_import_fails(argv[1], argv[3]);
     test_load_binding_after_bundle_is_rejected(argv[1], argv[2]);
     test_binding_ready_proof(argv[1], argv[2]);
     test_binding_factory_failures(argv[1], argv[2]);
+    test_binding_end_to_end_call(argv[1], argv[4]);
     test_load_binding_abi_validation();
     return 0;
 }

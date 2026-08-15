@@ -1959,6 +1959,24 @@ if(BUILD_TESTING)
         add_custom_target(test-binding-import-fixture
             DEPENDS "${CAPSID_BINDING_IMPORT_FIXTURE}")
 
+        set(CAPSID_BINDING_CALL_FIXTURE
+            "${CAPSID_GENERATED_DIR}/test-binding-call.js")
+        add_custom_command(
+            OUTPUT "${CAPSID_BINDING_CALL_FIXTURE}"
+            COMMAND "${CAPSID_ESBUILD}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-call.js"
+                --bundle
+                --target=esnext
+                --platform=neutral
+                --format=esm
+                "--external:capsid:binding/*"
+                "--outfile=${CAPSID_BINDING_CALL_FIXTURE}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-call.js"
+            VERBATIM
+        )
+        add_custom_target(test-binding-call-fixture
+            DEPENDS "${CAPSID_BINDING_CALL_FIXTURE}")
+
         set(CAPSID_P1_PLATFORM_FIXTURE
             "${CAPSID_GENERATED_DIR}/test-p1-platform-contract.js")
         add_custom_command(
@@ -4161,6 +4179,25 @@ if(BUILD_TESTING)
         )
         set_tests_properties(tjs_shared_loop PROPERTIES TIMEOUT 20)
 
+        # Binding v1 §7.6: the neutral-value structured clone between the
+        # User and Binding Runtimes.
+        add_executable(
+            test-binding-rpc
+            tests/test_binding_rpc.cc
+            src/binding_rpc.cc
+        )
+        target_include_directories(test-binding-rpc PRIVATE
+            include src
+            "${CAPSID_TXIKI_OVERLAY}/src"
+            "${CAPSID_TXIKI_OVERLAY}/deps/quickjs"
+            "${CAPSID_TXIKI_OVERLAY}/deps/libuv/include")
+        target_link_libraries(test-binding-rpc PRIVATE tjs)
+        add_test(
+            NAME binding_rpc
+            COMMAND test-binding-rpc
+        )
+        set_tests_properties(binding_rpc PROPERTIES TIMEOUT 20)
+
         # WP-00/PR-01 RED gates. All three worker tests are expected to
         # FAIL on the pre-fix bridge (identity collapse P0-1, request
         # context loss P0-2, terminal continuation survival P0-3); the
@@ -4458,17 +4495,19 @@ if(BUILD_TESTING)
             test-worker-zero-binding
             capsid-worker
             test-p0-fixture
-            test-binding-import-fixture)
+            test-binding-import-fixture
+            test-binding-call-fixture)
         add_test(
             NAME worker_zero_binding_regression
             COMMAND test-worker-zero-binding
                 $<TARGET_FILE:capsid-worker>
                 "${CAPSID_P0_FIXTURE}"
                 "${CAPSID_BINDING_IMPORT_FIXTURE}"
+                "${CAPSID_BINDING_CALL_FIXTURE}"
         )
         set_tests_properties(
             worker_zero_binding_regression
-            PROPERTIES TIMEOUT 30
+            PROPERTIES TIMEOUT 60
         )
 
         add_executable(test-fetch-cancel tests/test_fetch_cancel.cc)
