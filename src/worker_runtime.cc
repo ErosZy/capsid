@@ -2159,6 +2159,18 @@ private:
                 continue;
             }
             uint8_t buffer[64 * 1024];
+#if defined(_WIN32)
+            {
+                FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+                if (dbg != NULL) {
+                    std::fprintf(dbg, "read_startup: fd_=%d osfhandle=%lld\n",
+                                 fd_,
+                                 static_cast<long long>(
+                                     _get_osfhandle(fd_)));
+                    std::fclose(dbg);
+                }
+            }
+#endif
             const ssize_t count =
 #if defined(_WIN32)
                 capsid::win32::read_fd(fd_, buffer, sizeof(buffer));
