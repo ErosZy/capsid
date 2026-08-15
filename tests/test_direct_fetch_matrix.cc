@@ -2,11 +2,27 @@
 #include "egress_test_policy.h"
 #include "graceful_worker_exit.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <netinet/in.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <algorithm>
@@ -137,9 +153,9 @@ bool send_all(int fd, const char *data, size_t size) {
     size_t offset = 0;
     while (offset < size) {
 #ifdef MSG_NOSIGNAL
-        const ssize_t count = send(fd, data + offset, size - offset, MSG_NOSIGNAL);
+        const ssize_t count = capsid::win32::send_fd(fd, data + offset, size - offset, 0);
 #else
-        const ssize_t count = send(fd, data + offset, size - offset, 0);
+        const ssize_t count = capsid::win32::send_fd(fd, data + offset, size - offset, 0);
 #endif
         if (count < 0 && errno == EINTR) {
             continue;
@@ -166,7 +182,7 @@ struct HttpRequest {
 bool receive_more(int fd, std::string *wire) {
     char buffer[8192];
     for (;;) {
-        const ssize_t count = recv(fd, buffer, sizeof(buffer), 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, buffer, sizeof(buffer), 0);
         if (count < 0 && errno == EINTR) {
             continue;
         }
@@ -295,16 +311,22 @@ public:
           ipv6_(ipv6),
           stopping_(false),
           requests_(0) {
-        fd_ = socket(ipv6_ ? AF_INET6 : AF_INET, SOCK_STREAM, 0);
+        fd_ = capsid::win32::create_socket_fd(ipv6_ ? AF_INET6 : AF_INET);
         if (fd_ < 0) {
             fail("cannot create HTTP matrix socket");
         }
         const int reuse = 1;
-        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        capsid::win32::setsockopt_reuseaddr_fd(fd_);
 #if defined(IPV6_V6ONLY)
         if (ipv6_) {
+#if defined(_WIN32)
+            setsockopt(
+                fd_, IPPROTO_IPV6, IPV6_V6ONLY,
+                reinterpret_cast<const char *>(&reuse), sizeof(reuse));
+#else
             setsockopt(
                 fd_, IPPROTO_IPV6, IPV6_V6ONLY, &reuse, sizeof(reuse));
+#endif
         }
 #endif
 
@@ -325,15 +347,15 @@ public:
             address->sin_port = 0;
             size = sizeof(*address);
         }
-        if (bind(fd_,
+        if (capsid::win32::bind_fd(fd_,
                  reinterpret_cast<const struct sockaddr *>(&storage),
                  size) != 0 ||
-            listen(fd_, 16) != 0) {
+            capsid::win32::listen_fd(fd_, 16) != 0) {
             fail(std::string("cannot start HTTP matrix server: ") +
                  std::strerror(errno));
         }
         size = sizeof(storage);
-        if (getsockname(
+        if (capsid::win32::getsockname_fd(
                 fd_,
                 reinterpret_cast<struct sockaddr *>(&storage),
                 &size) != 0) {
@@ -349,7 +371,7 @@ public:
 
     ~HttpMatrixServer() {
         stopping_ = true;
-        shutdown(fd_, SHUT_RDWR);
+        capsid::win32::shutdown_fd(fd_);
         if (thread_.joinable()) {
             thread_.join();
         }
@@ -519,10 +541,10 @@ private:
                 "Transfer-Encoding: chunked\r\n"
                 "Connection: keep-alive\r\n\r\n"
                 "5\r\nfirst\r\n");
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = client;
             descriptor.events = POLLIN | POLLHUP;
-            poll(&descriptor, 1, 5000);
+            capsid::win32::capsid_poll(&descriptor, 1, 5000);
             return false;
         }
         if (path == "/close") {
@@ -542,9 +564,10 @@ private:
 
     void serve_client(int client) {
 #ifdef SO_NOSIGPIPE
+        // Linux/macOS only: suppress SIGPIPE on the accepted socket.
         const int no_sigpipe = 1;
-        setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE,
-                   &no_sigpipe, sizeof(no_sigpipe));
+        setsockopt(
+            client, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
 #endif
         for (;;) {
             HttpRequest request;
@@ -578,13 +601,13 @@ private:
     void serve() {
         std::vector<std::thread> workers;
         while (!stopping_) {
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = fd_;
             descriptor.events = POLLIN;
-            if (poll(&descriptor, 1, 100) <= 0) {
+            if (capsid::win32::capsid_poll(&descriptor, 1, 100) <= 0) {
                 continue;
             }
-            const int client = accept(fd_, NULL, NULL);
+            const int client = capsid::win32::accept_fd(fd_);
             if (client < 0) {
                 continue;
             }
@@ -605,7 +628,7 @@ private:
 };
 
 uint16_t unused_port() {
-    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     if (fd < 0) {
         fail("cannot create unused-port socket");
     }
@@ -613,13 +636,13 @@ uint16_t unused_port() {
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
-    if (bind(fd, reinterpret_cast<const struct sockaddr *>(&address),
+    if (capsid::win32::bind_fd(fd, reinterpret_cast<const struct sockaddr *>(&address),
              sizeof(address)) != 0) {
         close(fd);
         fail("cannot bind unused-port socket");
     }
     socklen_t size = sizeof(address);
-    getsockname(fd, reinterpret_cast<struct sockaddr *>(&address), &size);
+    capsid::win32::getsockname_fd(fd, reinterpret_cast<struct sockaddr *>(&address), &size);
     const uint16_t port = ntohs(address.sin_port);
     close(fd);
     return port;
@@ -652,10 +675,10 @@ uint32_t wait_for_ready(capsid_worker *worker) {
             std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for READY");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -734,10 +757,10 @@ Result run_request(capsid_worker *worker, const std::string &url) {
             std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for matrix response");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 

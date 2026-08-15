@@ -27,21 +27,15 @@ if(CAPSID_BUILD_HOST)
 
     add_library(capsid_host_core STATIC
         src/host/active_state.cc
-        src/host/admin_api.cc
         src/host/artifact_safe_read.cc
         src/host/bytecode_attestation.cc
         src/host/config.cc
         src/host/generation_identity.cc
         src/host/generation_pool.cc
-        src/host/host_config_model.cc
-        src/host/managed_admin_backend.cc
-        src/host/managed_host.cc
-        src/host/managed_registry.cc
         src/host/metrics.cc
         src/host/policy_compiler.cc
         src/host/process_snapshot.cc
         src/host/request_normalization.cc
-        src/host/secret_file_provider.cc
         src/host/secret_snapshot.cc
         src/host/service_lifecycle.cc
         src/host/static_pool.cc
@@ -54,6 +48,20 @@ if(CAPSID_BUILD_HOST)
         src/host/worker_recovery.cc
         src/host/worker_supervisor.cc
     )
+    if(NOT WIN32)
+        # The managed coordinator is POSIX-only (dirfd-relative openat/
+        # mkdirat state walks, uid-based verification, UDS admin plane);
+        # Windows builds ship the single-worker and static-pool data
+        # planes only (see docs/windows.md).
+        target_sources(capsid_host_core PRIVATE
+            src/host/admin_api.cc
+            src/host/host_config_model.cc
+            src/host/managed_admin_backend.cc
+            src/host/managed_host.cc
+            src/host/managed_registry.cc
+            src/host/secret_file_provider.cc
+        )
+    endif()
     # managed_host.cc and the Admin adapters call the worker API; the
     # dependency is PUBLIC so every consumer of the core links the worker
     # runtime, including adapters whose own test code never touches
@@ -120,6 +128,21 @@ if(CAPSID_BUILD_HOST)
             add_library(Boost::system INTERFACE IMPORTED)
             set_target_properties(Boost::system PROPERTIES
                 INTERFACE_LINK_LIBRARIES Boost::headers)
+        endif()
+    endif()
+    if(Boost_FOUND AND TARGET Boost::system)
+        # CMake 4.1 removed the FindBoost module; the config-package
+        # targets (vcpkg in particular) do not always carry the include
+        # directory. Attach it explicitly when missing so the data-plane
+        # sources find <boost/asio.hpp>.
+        get_target_property(CAPSID_BOOST_INCLUDE_DIRS Boost::system
+            INTERFACE_INCLUDE_DIRECTORIES)
+        if(NOT CAPSID_BOOST_INCLUDE_DIRS)
+            find_path(CAPSID_BOOST_SYSTEM_INCLUDE_DIR
+                NAMES boost/version.hpp REQUIRED)
+            set_target_properties(Boost::system PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES
+                "${CAPSID_BOOST_SYSTEM_INCLUDE_DIR}")
         endif()
     endif()
     if(Boost_FOUND)
@@ -197,10 +220,13 @@ if(CAPSID_BUILD_HOST)
         # authority; it joins the host core only when Boost is available,
         # so a Boost-less platform still builds the pure Admin dispatcher.
         # The long-lived Admin service depends on the accepted-connection
-        # transport, so it joins in the same gate.
-        target_sources(capsid_host_core PRIVATE
-            src/host/admin_http.cc
-            src/host/admin_service.cc)
+        # transport, so it joins in the same gate. (Managed-only sources;
+        # excluded on Windows with the rest of the coordinator.)
+        if(NOT WIN32)
+            target_sources(capsid_host_core PRIVATE
+                src/host/admin_http.cc
+                src/host/admin_service.cc)
+        endif()
         # The WP-05 data plane joins the same gate: the Managed listener
         # is Boost.Asio. (RoutingTable publishes through the C++11 shared_ptr
         # atomic free functions, so it no longer needs C++20
@@ -209,9 +235,11 @@ if(CAPSID_BUILD_HOST)
         # §9.6-10) builds the pure coordinator surface and skips the data
         # plane; the data-plane tests are already registered under UNIX AND
         # Boost_FOUND.
-        target_sources(capsid_host_core PRIVATE
-            src/host/managed_listener.cc
-            src/host/routing_snapshot.cc)
+        if(NOT WIN32)
+            target_sources(capsid_host_core PRIVATE
+                src/host/managed_listener.cc
+                src/host/routing_snapshot.cc)
+        endif()
         target_link_libraries(capsid_host_core PRIVATE Boost::system)
     else()
         message(STATUS "capsid-host skipped: system Boost not found")

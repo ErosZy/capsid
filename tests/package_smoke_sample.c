@@ -17,7 +17,11 @@
 
 #include "capsid/runtime.h"
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <poll.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,11 +33,17 @@ static void fail(const char *message) {
 }
 
 static double now_seconds(void) {
+#if defined(_WIN32)
+    /* GetTickCount64 is monotonic at millisecond resolution, which the
+     * deadline pacing here only needs as a coarse clock. */
+    return (double)GetTickCount64() / 1000.0;
+#else
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         fail("clock_gettime");
     }
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+#endif
 }
 
 static char *read_file(const char *path, size_t *out_size) {
@@ -88,10 +98,16 @@ static void drain_until_exit(capsid_worker *worker) {
         if (now_seconds() >= deadline) {
             fail("timed out draining EXIT after shutdown");
         }
+#if defined(_WIN32)
+        /* next_event above polls the channel; the sleep only paces the
+         * loop, so a plain Sleep stands in for poll(). */
+        Sleep(50);
+#else
         struct pollfd descriptor;
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
         poll(&descriptor, 1, 50);
+#endif
     }
 }
 
@@ -156,10 +172,14 @@ int main(int argc, char **argv) {
         if (now_seconds() >= startup_deadline) {
             fail("timed out waiting for READY");
         }
+#if defined(_WIN32)
+        Sleep(50);
+#else
         struct pollfd descriptor;
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
         poll(&descriptor, 1, 50);
+#endif
     }
     if (!ready) {
         fail("worker never became READY");
@@ -228,10 +248,14 @@ int main(int argc, char **argv) {
         if (now_seconds() >= request_deadline) {
             fail("timed out waiting for the response");
         }
+#if defined(_WIN32)
+        Sleep(50);
+#else
         struct pollfd descriptor;
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
         poll(&descriptor, 1, 50);
+#endif
     }
     if (!received_end) {
         fail("no RESPONSE_END");

@@ -40,16 +40,20 @@ JSModuleDef *tjs__load_builtin(
 }
 
 #include <errno.h>
-#include <fcntl.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <dirent.h>
-#ifdef __linux__
-#include <linux/openat2.h>
-#include <sys/syscall.h>
-#endif
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#endif
+#if defined(__linux__)
+#include <linux/openat2.h>
+#include <sys/syscall.h>
+#endif
 
 #include <algorithm>
 #include <cstdlib>
@@ -93,7 +97,10 @@ static const uint64_t kPoisonGraceNs = 100 * 1000000ull;  // 100ms
 static const uint64_t kReclaimSettleWindowNs = 2 * 1000000000ull;  // 2s
 
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
-#ifdef MSG_NOSIGNAL
+#if defined(_WIN32)
+    // Winsock send() takes the raw SOCKET handle, not the CRT fd.
+    return capsid::win32::send_fd(fd, data, size, 0);
+#elif defined(MSG_NOSIGNAL)
     return send(fd, data, size, MSG_NOSIGNAL);
 #else
     return send(fd, data, size, 0);
@@ -2073,7 +2080,11 @@ private:
             &frame.payload, static_cast<uint32_t>(decision));
         capsid::protocol::append_u64(
             &frame.payload,
+#if defined(_WIN32)
+            static_cast<uint64_t>(capsid::win32::getpid()));
+#else
             static_cast<uint64_t>(getpid()));
+#endif
         capsid::protocol::append_u32(&frame.payload, rule_id);
         capsid::protocol::append_u32(
             &frame.payload,
@@ -2120,7 +2131,12 @@ private:
                 continue;
             }
             uint8_t buffer[64 * 1024];
-            const ssize_t count = read(fd_, buffer, sizeof(buffer));
+            const ssize_t count =
+#if defined(_WIN32)
+                capsid::win32::read_fd(fd_, buffer, sizeof(buffer));
+#else
+                read(fd_, buffer, sizeof(buffer));
+#endif
             if (count > 0) {
                 if (!parser_.append(buffer, static_cast<size_t>(count))) {
                     return false;
@@ -2129,6 +2145,20 @@ private:
             }
             if (count < 0 && errno == EINTR) {
                 continue;
+            }
+            if (count < 0 && errno == EAGAIN) {
+                // The channel may arrive nonblocking on Windows before
+                // set_nonblocking() has been reached (line 532); wait for
+                // readability instead of treating the transient state as
+                // a dead worker.
+                capsid_pollfd descriptor = {};
+                descriptor.fd = fd_;
+                descriptor.events = POLLIN;
+                const int polled =
+                    capsid::win32::capsid_poll(&descriptor, 1, 2000);
+                if (polled > 0 && (descriptor.revents & POLLIN) != 0) {
+                    continue;
+                }
             }
             return false;
         }
@@ -2151,10 +2181,14 @@ private:
     }
 
     void set_nonblocking() {
+#if defined(_WIN32)
+        capsid::win32::set_socket_nonblocking(fd_);
+#else
         const int flags = fcntl(fd_, F_GETFL, 0);
         if (flags >= 0) {
             fcntl(fd_, F_SETFL, flags | O_NONBLOCK);
         }
+#endif
     }
 
     bool load_bridge_functions(std::string *error) {
@@ -3254,6 +3288,15 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
+#if defined(_WIN32)
+        // The filesystem permission module requires openat2 path semantics
+        // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
+        (void)ctx;
+        (void)argc;
+        (void)argv;
+        return JS_ThrowInternalError(
+            ctx, "filesystem module is unavailable on this platform");
+#else
         std::string path;
         capsid::PermissionDecision decision;
         if (!fs_path(
@@ -3323,6 +3366,7 @@ private:
         close(descriptor);
         return JS_NewStringLen(
             ctx, contents.data(), contents.size());
+#endif  // !defined(_WIN32)
     }
 
     static JSValue js_fs_stat(
@@ -3330,6 +3374,15 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
+#if defined(_WIN32)
+        // The filesystem permission module requires openat2 path semantics
+        // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
+        (void)ctx;
+        (void)argc;
+        (void)argv;
+        return JS_ThrowInternalError(
+            ctx, "filesystem module is unavailable on this platform");
+#else
         std::string path;
         capsid::PermissionDecision decision;
         if (!fs_path(
@@ -3378,6 +3431,7 @@ private:
             return JS_EXCEPTION;
         }
         return result;
+#endif  // !defined(_WIN32)
     }
 
     static JSValue js_fs_list(
@@ -3385,6 +3439,15 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
+#if defined(_WIN32)
+        // The filesystem permission module requires openat2 path semantics
+        // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
+        (void)ctx;
+        (void)argc;
+        (void)argv;
+        return JS_ThrowInternalError(
+            ctx, "filesystem module is unavailable on this platform");
+#else
         std::string path;
         capsid::PermissionDecision decision;
         if (!fs_path(
@@ -3464,6 +3527,7 @@ private:
             return JS_EXCEPTION;
         }
         return result;
+#endif  // !defined(_WIN32)
     }
 
     static int fs_module_init(
@@ -3940,7 +4004,12 @@ private:
         PhaseGuard guard(this, WorkerPhase::kRead);
         uint8_t buffer[64 * 1024];
         for (;;) {
-            const ssize_t count = read(fd_, buffer, sizeof(buffer));
+            const ssize_t count =
+#if defined(_WIN32)
+                capsid::win32::read_fd(fd_, buffer, sizeof(buffer));
+#else
+                read(fd_, buffer, sizeof(buffer));
+#endif
             if (count > 0) {
                 if (!parser_.append(buffer, static_cast<size_t>(count))) {
                     shutdown();

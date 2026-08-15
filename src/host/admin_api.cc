@@ -7,10 +7,15 @@
 
 #include <jansson.h>
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#include <afunix.h>
+#else
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+#endif
 
 #include <cerrno>
 #include <cctype>
@@ -27,7 +32,17 @@ namespace {
 // other POSIX platforms (including macOS) require a separate fcntl pass.
 // Every failure path closes the descriptor before returning.
 int create_cloexec_unix_socket() {
-#if defined(__linux__) && defined(SOCK_CLOEXEC)
+#if defined(_WIN32)
+    // Winsock AF_UNIX (Windows 10 1803+) replaces the POSIX AF_UNIX
+    // listener; the handle becomes a CRT fd. Winsock sockets are
+    // non-inheritable by default, so the CLOEXEC pass is unnecessary.
+    const SOCKET handle = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (handle == INVALID_SOCKET) {
+        return -1;
+    }
+    return _open_osfhandle(
+        static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
+#elif defined(__linux__) && defined(SOCK_CLOEXEC)
     return socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 #else
     const int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -44,6 +59,52 @@ int create_cloexec_unix_socket() {
     return fd;
 #endif
 }
+
+#if defined(_WIN32)
+// Winsock takes the raw SOCKET handle; these wrappers translate CRT fds
+// and winsock errno so the shared bind/connect/listen call sites below
+// stay source-identical with POSIX.
+int bind_unix_fd(int fd, const struct sockaddr *address,
+                 socklen_t address_size) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int result = bind(socket_handle, address, address_size);
+    if (result != 0) {
+        capsid::win32::map_winsock_errno();
+    }
+    return result;
+}
+
+int listen_unix_fd(int fd, int backlog) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int result = listen(socket_handle, backlog);
+    if (result != 0) {
+        capsid::win32::map_winsock_errno();
+    }
+    return result;
+}
+
+int connect_unix_fd(int fd, const struct sockaddr *address,
+                    socklen_t address_size) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int result = connect(socket_handle, address, address_size);
+    if (result != 0) {
+        capsid::win32::map_winsock_errno();
+    }
+    return result;
+}
+#endif
 
 // Static redacted diagnostics only; never a path, errno text or backend
 // material.
@@ -315,7 +376,15 @@ bool query_admin_peer_credentials(int fd, AdminPeerCredentials* peer,
         }
         return false;
     }
-#if defined(__APPLE__)
+#if defined(_WIN32)
+    // Windows AF_UNIX carries no peer uid/gid. Access control is the
+    // containing directory's NTFS ACL (see docs/windows.md), and the
+    // authorization check below matches the reported identity 0/0.
+    (void)fd;
+    peer->uid = 0;
+    peer->gid = 0;
+    return true;
+#elif defined(__APPLE__)
     uid_t uid = 0;
     gid_t gid = 0;
     if (getpeereid(fd, &uid, &gid) != 0) {
@@ -361,12 +430,23 @@ bool verify_socket_parent(const std::string& path) {
         slash == std::string::npos
             ? std::string(".")
             : (slash == 0 ? std::string("/") : path.substr(0, slash));
+#if defined(_WIN32)
+    // Windows has no uid/mode on socket inodes: the parent just has to be
+    // a real directory. NTFS ACLs on it are the access-control boundary
+    // (see docs/windows.md).
+    struct _stat64 st = {};
+    if (_stat64(parent.c_str(), &st) != 0) {
+        return false;
+    }
+    return (st.st_mode & _S_IFDIR) != 0;
+#else
     struct stat st = {};
     if (lstat(parent.c_str(), &st) != 0) {
         return false;
     }
     return S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode) &&
            st.st_uid == geteuid() && (st.st_mode & 0022) == 0;
+#endif
 }
 
 // Removes a crash-residue socket ONLY when all three pieces of evidence
@@ -375,6 +455,25 @@ bool verify_socket_parent(const std::string& path) {
 // re-checked before the unlink (the pathname was not swapped in between).
 // An active socket, a regular file or a symlink is left untouched.
 bool remove_stale_socket(const std::string& path) {
+#if defined(_WIN32)
+    // Windows cannot lstat a socket inode (no S_ISSOCK/st_uid): the
+    // connect-refused probe is the only piece of evidence available.
+    const int probe = create_cloexec_unix_socket();
+    if (probe < 0) {
+        return false;
+    }
+    struct sockaddr_un address = {};
+    address.sun_family = AF_UNIX;
+    std::strncpy(address.sun_path, path.c_str(),
+                 sizeof(address.sun_path) - 1);
+    const bool refused =
+        connect_unix_fd(probe,
+                        reinterpret_cast<const struct sockaddr*>(&address),
+                        sizeof(address)) != 0 &&
+        errno == ECONNREFUSED;
+    close(probe);
+    return refused && unlink(path.c_str()) == 0;
+#else
     struct stat before = {};
     if (lstat(path.c_str(), &before) != 0 || !S_ISSOCK(before.st_mode) ||
         before.st_uid != geteuid()) {
@@ -402,6 +501,7 @@ bool remove_stale_socket(const std::string& path) {
         return false;
     }
     return unlink(path.c_str()) == 0;
+#endif
 }
 
 bool open_admin_listener(const AdminSocketOptions& options, int* listener,
@@ -425,16 +525,6 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     // apply after that on Linux and macOS alike, so the dirfd pass below
     // is the authority for the exact mode and the management group, with
     // a final fstatat re-verification on every platform.
-    const std::string::size_type final_slash = options.path.rfind('/');
-    const std::string parent_path =
-        final_slash == std::string::npos
-            ? std::string(".")
-            : (final_slash == 0 ? std::string("/")
-                                : options.path.substr(0, final_slash));
-    const std::string socket_name =
-        final_slash == std::string::npos
-            ? options.path
-            : options.path.substr(final_slash + 1);
     const int fd = create_cloexec_unix_socket();
     if (fd < 0) {
         if (error != nullptr) {
@@ -446,6 +536,46 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     address.sun_family = AF_UNIX;
     std::strncpy(address.sun_path, options.path.c_str(),
                  sizeof(address.sun_path) - 1);
+#if defined(_WIN32)
+    // Windows socket inodes have no mode/uid/gid to manage: the parent
+    // directory's NTFS ACL is the access-control boundary (see
+    // docs/windows.md). Bind, with the same one-shot stale-socket retry
+    // as POSIX.
+    int bind_result = bind_unix_fd(
+        fd, reinterpret_cast<const struct sockaddr*>(&address),
+        sizeof(address));
+    if (bind_result != 0 && errno == EADDRINUSE &&
+        remove_stale_socket(options.path)) {
+        bind_result = bind_unix_fd(
+            fd, reinterpret_cast<const struct sockaddr*>(&address),
+            sizeof(address));
+    }
+    if (bind_result != 0) {
+        close(fd);
+        if (error != nullptr) {
+            *error = "cannot bind admin listener";
+        }
+        return false;
+    }
+    if (listen_unix_fd(fd, options.backlog) != 0) {
+        (void) unlink(options.path.c_str());
+        close(fd);
+        if (error != nullptr) {
+            *error = "cannot prepare admin listener";
+        }
+        return false;
+    }
+#else
+    const std::string::size_type final_slash = options.path.rfind('/');
+    const std::string parent_path =
+        final_slash == std::string::npos
+            ? std::string(".")
+            : (final_slash == 0 ? std::string("/")
+                                : options.path.substr(0, final_slash));
+    const std::string socket_name =
+        final_slash == std::string::npos
+            ? options.path
+            : options.path.substr(final_slash + 1);
     // The socket inode's mode is fixed at bind time as 0777 & ~umask, so
     // the creating umask is narrowed to the exact requested mode for the
     // bind window and restored immediately after (a Linux fchmod on a
@@ -547,6 +677,7 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
         }
         return false;
     }
+#endif
     *listener = fd;
     if (error != nullptr) {
         error->clear();

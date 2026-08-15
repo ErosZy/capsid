@@ -1,6 +1,6 @@
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -10,8 +10,16 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/stat.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -85,11 +93,11 @@ Audit decode_audit(const capsid_event &event) {
 }
 
 void wait_io(capsid_worker *worker, bool writable) {
-    struct pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
     descriptor.events =
         POLLIN | (writable ? POLLOUT : 0);
-    poll(&descriptor, 1, 50);
+    capsid::win32::capsid_poll(&descriptor, 1, 50);
 }
 
 std::string event_text(const capsid_event &event) {
@@ -849,7 +857,7 @@ std::string exercise_environment_worker(
 void test_environment_module_contract(
     const char *worker_path) {
     require(
-        setenv(
+        capsid::win32::setenv(
             "CAPSID_AMBIENT_ONLY",
             "must-not-leak",
             1) == 0,
@@ -916,7 +924,7 @@ void test_environment_module_contract(
                 std::string::npos,
         "environment values crossed worker boundaries");
     capsid_worker_destroy(second);
-    unsetenv("CAPSID_AMBIENT_ONLY");
+    capsid::win32::unsetenv("CAPSID_AMBIENT_ONLY");
 }
 
 void test_system_module_contract(
@@ -971,7 +979,7 @@ void test_system_module_contract(
         "JSON.stringify(['system']),\n"
         "    JSON.stringify(Object.keys(system)) === "
         "JSON.stringify(['get']),\n"
-        "    Object.isFrozen(system), version === '0.1.1',\n"
+        "    Object.isFrozen(system), version === '0.1.2',\n"
         "    Object.isFrozen(flags),\n"
         "    JSON.stringify(Object.keys(flags).sort()) === "
         "JSON.stringify(['capabilityPolicyVersion','profile',"
@@ -1275,6 +1283,13 @@ void test_stdio_module_contract(
 
 void test_fs_module_contract(
     const char *worker_path) {
+#if defined(_WIN32)
+    // capsid:fs requires openat2 path semantics (Linux-only; the module
+    // reports "unavailable" on other platforms). The contract is not
+    // exercised on Windows — see docs/windows.md.
+    (void)worker_path;
+    return;
+#else
     char directory_template[] =
         "/tmp/capsid-fs-contract.XXXXXX";
     char *directory_value = mkdtemp(directory_template);
@@ -1418,6 +1433,7 @@ void test_fs_module_contract(
     unlink(denied.c_str());
     unlink(allowed.c_str());
     rmdir(directory.c_str());
+#endif  // !defined(_WIN32)
 }
 
 }  // namespace

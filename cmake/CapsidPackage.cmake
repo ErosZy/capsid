@@ -163,7 +163,13 @@ set(CPACK_PACKAGE_VENDOR "Capsid")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Capsid restricted JavaScript runtime worker + host")
 set(CPACK_PACKAGE_FILE_NAME "${CAPSID_PACKAGE_BASENAME}")
-set(CPACK_GENERATOR "TGZ")
+if(WIN32)
+    # Windows packages ship as ZIP archives (the native archive form for
+    # windows-x86_64); Linux/macOS keep the TGZ form.
+    set(CPACK_GENERATOR "ZIP")
+else()
+    set(CPACK_GENERATOR "TGZ")
+endif()
 set(CPACK_THREADS 0)
 set(CPACK_PACKAGE_CHECKSUM "SHA256")
 

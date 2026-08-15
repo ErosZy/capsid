@@ -34,7 +34,12 @@ const documents = new Map();
 for (const relativePath of documentPaths) {
   documents.set(
     relativePath,
-    await readFile(path.join(root, relativePath), "utf8"),
+    // Normalize CRLF checkouts (git autocrlf on Windows) so the frozen
+    // fragment matching below is line-ending agnostic.
+    (await readFile(path.join(root, relativePath), "utf8")).replace(
+      /\r\n/g,
+      "\n",
+    ),
   );
 }
 

@@ -29,19 +29,39 @@
 #define CAPSID_HAS_STATIC_POOL_SERVER 0
 #endif
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <dirent.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
 #include <signal.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
 
 // macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
 // on the test paths, so a plain socket type is the portable fallback.
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/time.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdint>
@@ -76,17 +96,22 @@ std::string read_one_ready_line(int fd) {
     while (line.empty() || line.back() != '\n') {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not publish READY after start returned");
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
-        const int polled = poll(&descriptor, 1, 50);
+        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
         require(polled >= 0, "cannot poll server READY pipe");
         if (polled == 0) {
             continue;
         }
         char byte = 0;
+#if defined(_WIN32)
+        require(capsid::win32::read_fd(fd, &byte, 1) == 1,
+                "server READY pipe closed without a complete record");
+#else
         require(read(fd, &byte, 1) == 1,
                 "server READY pipe closed without a complete record");
+#endif
         line.push_back(byte);
         require(line.size() <= 1024, "server READY record is unbounded");
     }
@@ -127,19 +152,16 @@ const std::vector<std::uint8_t>& fast_bundle() {
 }
 
 int connect_to(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create admission HTTP socket");
-    struct timeval timeout = {};
-    timeout.tv_sec = 3;
-    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                       sizeof(timeout)) == 0,
+    require(capsid::win32::setsockopt_recv_timeout_fd(fd, 3000) == 0,
             "cannot set admission HTTP receive timeout");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode admission loopback address");
-    require(connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                     sizeof(address)) == 0,
             "cannot connect to admission server");
     return fd;
@@ -154,7 +176,7 @@ void send_request(int fd, const std::string& target, bool keep_alive) {
     std::size_t sent = 0;
     while (sent < request.size()) {
         const ssize_t count =
-            send(fd, request.data() + sent, request.size() - sent, 0);
+            capsid::win32::send_fd(fd, request.data() + sent, request.size() - sent, 0);
         require(count > 0, "cannot write admission HTTP request");
         sent += static_cast<std::size_t>(count);
     }
@@ -175,7 +197,7 @@ std::string read_line(int fd, std::string& buffer, char* scratch,
     while (line_end == std::string::npos) {
         require(std::chrono::steady_clock::now() < deadline,
                 "admission response line timed out");
-        const ssize_t count = recv(fd, scratch, scratch_size, 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         if (count == 0) {
             fail("admission response hit EOF mid-line");
         }
@@ -194,7 +216,7 @@ void require_bytes(int fd, std::string& buffer, std::size_t count,
     while (buffer.size() < count) {
         require(std::chrono::steady_clock::now() < deadline,
                 "admission response body timed out");
-        const ssize_t got = recv(fd, scratch, scratch_size, 0);
+        const ssize_t got = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         require(got > 0, "admission response body recv failed");
         buffer.append(scratch, static_cast<std::size_t>(got));
     }
@@ -286,7 +308,13 @@ RawHttpResponse http_get(std::uint16_t port, const std::string& target) {
 // The server spawns the worker as OUR direct child; find that child by
 // scanning /proc for processes whose parent is this test process, and kill
 // it. The kill is the worker-fault injection for the ④ → 503 path.
+// (Linux-only: the worker-death case is not registered on Windows, where
+// the child-pid scan would need Toolhelp and SIGKILL has no portable
+// form; see docs/windows.md.)
 pid_t find_worker_child_pid() {
+#if defined(_WIN32)
+    return static_cast<pid_t>(0);
+#else
     const pid_t self = getpid();
     DIR* directory = opendir("/proc");
     require(directory != nullptr, "cannot open /proc to find the worker");
@@ -319,12 +347,17 @@ pid_t find_worker_child_pid() {
     }
     closedir(directory);
     return found;
+#endif
 }
 
 void kill_worker_child() {
+#if defined(_WIN32)
+    fail("worker-death fault injection is unavailable on Windows");
+#else
     const pid_t worker_pid = find_worker_child_pid();
     require(worker_pid > 0, "cannot find the live worker child process");
     require(kill(worker_pid, SIGKILL) == 0, "cannot SIGKILL the worker");
+#endif
 }
 
 // After the worker exits, the shard closes its acceptor: a refused new
@@ -335,14 +368,14 @@ void require_acceptor_closed(std::uint16_t port) {
     for (;;) {
         require(std::chrono::steady_clock::now() < deadline,
                 "acceptor never closed after the worker was killed");
-        const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        const int fd = capsid::win32::create_tcp_socket_fd();
         struct sockaddr_in address = {};
         address.sin_family = AF_INET;
         address.sin_port = htons(port);
         require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
                 "cannot encode admission loopback address");
         const int connected =
-            connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+            capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                     sizeof(address));
         close(fd);
         if (connected != 0) {
@@ -375,7 +408,7 @@ capsid::host::SingleWorkerServerOptions make_worker_options(
 // over-commit, but the shard admission never lets one through.
 void test_inflight_full_rejects(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;  // one in-flight slot
@@ -411,7 +444,7 @@ void test_inflight_full_rejects(const char* worker_path) {
 // the queue depth gets 429.
 void test_queue_full_rejects(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
@@ -455,7 +488,7 @@ void test_queue_full_rejects(const char* worker_path) {
 // "queue 或 Host deadline 到期 → 504").
 void test_queue_timeout_returns_504(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
@@ -493,7 +526,7 @@ void test_queue_timeout_returns_504(const char* worker_path) {
 // (not 502) on its next request once the exit has been processed.
 void test_worker_death_returns_503(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
     capsid::host::SingleWorkerServer server(std::move(options));
@@ -531,7 +564,7 @@ void test_worker_death_returns_503(const char* worker_path) {
 // queue depth comes from StaticPoolServerOptions, not from per-shard code.
 void test_pool_forwards_admission(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create admission READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::StaticPoolServerOptions options;
     options.workers = 1;
     options.max_inflight_per_worker = 1;

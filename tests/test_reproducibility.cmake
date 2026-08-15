@@ -193,7 +193,11 @@ endif()
 function(capsid_repro_newest_archive build_dir out_var)
     set(newest_path)
     set(newest_mtime -1)
-    file(GLOB archives "${build_dir}/capsid-*.tar.gz")
+    # The Windows CPack generator produces a ZIP archive; POSIX builds a
+    # tar.gz. Accept whichever the platform produced.
+    file(GLOB archives
+        "${build_dir}/capsid-*.tar.gz"
+        "${build_dir}/capsid-*.zip")
     foreach(archive IN LISTS archives)
         file(TIMESTAMP "${archive}" archive_mtime "%s" UTC)
         if(archive_mtime GREATER newest_mtime)

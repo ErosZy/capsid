@@ -1,0 +1,45 @@
+Vendored win-iconv 0.0.8
+========================
+
+Locked dependency providing the POSIX iconv API (iconv_open/iconv/
+iconv_close) on Windows, where the platform ships no system iconv. Used by
+src/txiki_restricted_core.c for the restricted TextDecoder encoding path
+(arbitrary codepage -> UTF-8). Linux and macOS keep their system iconv
+via find_package(Iconv); this tree is authoritative and the build never
+downloads it at configure time.
+
+Provenance
+----------
+
+- Upstream:   https://github.com/win-iconv/win-iconv
+- Locked tag: v0.0.8
+- Files:      https://github.com/win-iconv/win-iconv/tree/v0.0.8
+
+Copied verbatim from the tag, unmodified:
+
+- iconv.h
+- win_iconv.c
+- readme.txt
+
+License: public domain ("win_iconv is placed in the public domain",
+readme.txt). The upstream implementation converts via the Win32
+MultiByteToWideChar/WideCharToMultiByte APIs and does NOT perform strict
+encoding validation (readme.txt: "This implementation cannot be used for
+encoding validation purpose") — Capsid uses it for decoding only, never
+as a byte-validity authority.
+
+Build contract
+--------------
+
+- Built only on WIN32 (cmake/build_worker.cmake) as the `capsid_winiconv`
+  static library aliased to Iconv::Iconv; never built on POSIX platforms.
+- Compiled with the project's C baseline; vendor sources are intentionally
+  NOT built with the project's strict-warnings regime, so upstream
+  warnings can never block the build.
+
+Upgrade checklist
+-----------------
+
+1. Replace iconv.h, win_iconv.c and readme.txt from the new tag.
+2. Update this file (tag) before committing.
+3. Re-run the Windows build and the TextDecoder-related worker tests.

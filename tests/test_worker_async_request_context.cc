@@ -19,7 +19,7 @@
 
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 
 #include <chrono>
 #include <cstdint>
@@ -54,10 +54,10 @@ std::string payload(const capsid_event &event) {
 }
 
 void wait_io(capsid_worker *worker, bool writable) {
-    pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
     descriptor.events = POLLIN | (writable ? POLLOUT : 0);
-    (void)poll(&descriptor, 1, 20);
+    (void)capsid::win32::capsid_poll(&descriptor, 1, 20);
 }
 
 capsid_event next_event(capsid_worker *worker,

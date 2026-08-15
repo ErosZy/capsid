@@ -1,12 +1,28 @@
 #include "protocol.h"
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 #include <signal.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <spawn.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/wait.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdlib>
@@ -44,7 +60,10 @@ std::string read_file(const char *path) {
 void write_all(int fd, const std::vector<uint8_t> &data) {
     size_t offset = 0;
     while (offset < data.size()) {
-#ifdef MSG_NOSIGNAL
+#if defined(_WIN32)
+        const ssize_t count = capsid::win32::send_fd(
+            fd, &data[offset], data.size() - offset, 0);
+#elif defined(MSG_NOSIGNAL)
         const ssize_t count =
             send(fd, &data[offset], data.size() - offset, MSG_NOSIGNAL);
 #else
@@ -84,18 +103,23 @@ bool read_frame(int fd,
         if (now >= deadline) {
             return false;
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
         const int remaining = static_cast<int>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 deadline - now)
                 .count());
-        if (poll(&descriptor, 1, remaining) <= 0) {
+        if (capsid::win32::capsid_poll(&descriptor, 1, remaining) <= 0) {
             return false;
         }
         uint8_t buffer[4096];
-        const ssize_t count = read(fd, buffer, sizeof(buffer));
+        const ssize_t count =
+#if defined(_WIN32)
+            capsid::win32::read_fd(fd, buffer, sizeof(buffer));
+#else
+            read(fd, buffer, sizeof(buffer));
+#endif
         if (count <= 0) {
             return false;
         }
@@ -106,6 +130,59 @@ bool read_frame(int fd,
 }
 
 pid_t spawn_worker(const char *path, int *parent_fd) {
+#if defined(_WIN32)
+    // Windows manual spawn: socket pair + CreateProcess with the child
+    // socket in the explicit inheritable-handle list (the test needs to
+    // control the worker fd directly to inject protocol violations).
+    if (!capsid::win32::ensure_winsock()) {
+        fail("winsock init failed");
+    }
+    int sockets[2];
+    if (!capsid::win32::create_socket_pair(sockets)) {
+        fail("socket pair failed");
+    }
+    HANDLE child_handle = reinterpret_cast<HANDLE>(
+        static_cast<intptr_t>(_get_osfhandle(sockets[1])));
+    if (!SetHandleInformation(child_handle, HANDLE_FLAG_INHERIT,
+                              HANDLE_FLAG_INHERIT)) {
+        fail("handle inheritance failed");
+    }
+    const std::string fd_text = std::to_string(
+        static_cast<unsigned long long>(
+            reinterpret_cast<uintptr_t>(child_handle)));
+    std::string command_line =
+        std::string("\"") + path + "\" --ipc-fd " + fd_text;
+    STARTUPINFOEXA startup;
+    std::memset(&startup, 0, sizeof(startup));
+    startup.StartupInfo.cb = sizeof(startup);
+    SIZE_T attribute_size = 0;
+    (void)InitializeProcThreadAttributeList(NULL, 1, 0, &attribute_size);
+    startup.lpAttributeList =
+        reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+            HeapAlloc(GetProcessHeap(), 0, attribute_size));
+    if (startup.lpAttributeList == NULL ||
+        !InitializeProcThreadAttributeList(
+            startup.lpAttributeList, 1, 0, &attribute_size) ||
+        !UpdateProcThreadAttribute(
+            startup.lpAttributeList, 0,
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &child_handle,
+            sizeof(child_handle), NULL, NULL)) {
+        fail("spawn attribute list failed");
+    }
+    PROCESS_INFORMATION info;
+    std::memset(&info, 0, sizeof(info));
+    if (!CreateProcessA(path, &command_line[0], NULL, NULL, TRUE,
+                        EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
+                        &startup.StartupInfo, &info)) {
+        fail("worker spawn failed");
+    }
+    DeleteProcThreadAttributeList(startup.lpAttributeList);
+    HeapFree(GetProcessHeap(), 0, startup.lpAttributeList);
+    CloseHandle(info.hThread);
+    close(sockets[1]);
+    *parent_fd = sockets[0];
+    return static_cast<pid_t>(info.dwProcessId);
+#else
     int sockets[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
         fail("socketpair failed");
@@ -138,6 +215,7 @@ pid_t spawn_worker(const char *path, int *parent_fd) {
     }
     *parent_fd = sockets[0];
     return pid;
+#endif
 }
 
 void send_startup(int fd, const std::string &bundle) {
@@ -239,7 +317,17 @@ int main(int argc, char **argv) {
         "worker rejects request body beyond credit");
 
     close(fd);
+#if defined(_WIN32)
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE,
+                                 static_cast<DWORD>(pid));
+    if (process != NULL) {
+        TerminateProcess(process, 1);
+        WaitForSingleObject(process, 5000);
+        CloseHandle(process);
+    }
+#else
     kill(pid, SIGKILL);
     waitpid(pid, NULL, 0);
+#endif
     return 0;
 }

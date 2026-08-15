@@ -1,8 +1,5 @@
 #include "egress_policy.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>

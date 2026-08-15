@@ -4,7 +4,11 @@
 #include "capsid/runtime.h"
 
 #include <stdint.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
 
 #include <string>
 #include <vector>

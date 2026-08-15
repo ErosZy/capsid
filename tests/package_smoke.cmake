@@ -52,9 +52,13 @@ file(MAKE_DIRECTORY "${CAPSID_WORK_DIR}")
 # ---- locate the newest Capsid archive ----------------------------------------
 set(CAPSID_SMOKE_ARCHIVE)
 set(CAPSID_SMOKE_NEWEST_MTIME -1)
-file(GLOB CAPSID_SMOKE_ALL_ARCHIVES "${CAPSID_BUILD_DIR}/capsid-*.tar.gz")
+# The Windows CPack generator produces a ZIP archive; POSIX builds a
+# tar.gz. Accept whichever the platform produced.
+file(GLOB CAPSID_SMOKE_ALL_ARCHIVES
+    "${CAPSID_BUILD_DIR}/capsid-*.tar.gz"
+    "${CAPSID_BUILD_DIR}/capsid-*.zip")
 if(NOT CAPSID_SMOKE_ALL_ARCHIVES)
-    message(FATAL_ERROR "no capsid-*.tar.gz in ${CAPSID_BUILD_DIR}")
+    message(FATAL_ERROR "no capsid archive in ${CAPSID_BUILD_DIR}")
 endif()
 foreach(archive IN LISTS CAPSID_SMOKE_ALL_ARCHIVES)
     file(TIMESTAMP "${archive}" archive_mtime "%s" UTC)
@@ -145,6 +149,8 @@ if(NOT CAPSID_SMOKE_SBOM_PKGS EQUAL 4)
 endif()
 string(REPLACE ".tar.gz" "" CAPSID_SMOKE_BASENAME
     "${CAPSID_SMOKE_ARCHIVE_NAME}")
+string(REPLACE ".zip" "" CAPSID_SMOKE_BASENAME
+    "${CAPSID_SMOKE_BASENAME}")
 string(JSON CAPSID_SMOKE_SBOM_NAME GET "${CAPSID_SMOKE_SBOM_TEXT}" name)
 if(NOT CAPSID_SMOKE_SBOM_NAME STREQUAL "${CAPSID_SMOKE_BASENAME}-sbom")
     message(FATAL_ERROR "SBOM name=${CAPSID_SMOKE_SBOM_NAME} expected "
@@ -175,7 +181,7 @@ foreach(info_line IN LISTS CAPSID_SMOKE_INFO_LINES)
 endforeach()
 # CMake's regex engine has no {n} quantifier, so the fixed widths are checked
 # with explicit lengths (40-hex commit, 64-hex sha256 digests).
-if(NOT CAPSID_SMOKE_VERSION STREQUAL "0.1.1")
+if(NOT CAPSID_SMOKE_VERSION STREQUAL "0.1.2")
     message(FATAL_ERROR "build-info version=${CAPSID_SMOKE_VERSION}")
 endif()
 string(LENGTH "${CAPSID_SMOKE_COMMIT}" commit_len)
@@ -229,7 +235,7 @@ execute_process(
         --source "${CAPSID_SMOKE_BUNDLE}"
         --source-name "smoke.mjs"
         --application "package-smoke"
-        --version "0.1.1"
+        --version "0.1.2"
         --key-id "smoke-key"
         --bytecode-out "${CAPSID_WORK_DIR}/smoke.qjsb"
         --attestation-out "${CAPSID_WORK_DIR}/smoke-bytecode.json"
@@ -263,55 +269,110 @@ get_filename_component(CAPSID_SMOKE_SAMPLE_CC_NAME
 
 set(CAPSID_PACKAGE_INCLUDE "${CAPSID_PACKAGE_ROOT}/include")
 set(CAPSID_PACKAGE_LIB "${CAPSID_PACKAGE_ROOT}/lib")
-set(CAPSID_SMOKE_WORKER "${CAPSID_PACKAGE_ROOT}/bin/capsid-worker")
+if(WIN32)
+    set(CAPSID_SMOKE_WORKER
+        "${CAPSID_PACKAGE_ROOT}/bin/capsid-worker.exe")
+    set(CAPSID_SMOKE_RUNTIME_LIB
+        "${CAPSID_PACKAGE_LIB}/capsid_runtime.lib")
+else()
+    set(CAPSID_SMOKE_WORKER "${CAPSID_PACKAGE_ROOT}/bin/capsid-worker")
+    set(CAPSID_SMOKE_RUNTIME_LIB
+        "${CAPSID_PACKAGE_LIB}/libcapsid_runtime.a")
+endif()
 
 # capsid_runtime is a C++ static library; the C sample is compiled by the C
 # compiler but must be LINKED by the C++ driver (CMake's target machinery
-# infers this in-tree; script mode makes it explicit).
-execute_process(
-    COMMAND "${CAPSID_C_COMPILER}"
-        -std=c11 -Wall -Wextra
-        "-I${CAPSID_PACKAGE_INCLUDE}"
-        -c "${CAPSID_WORK_DIR}/${CAPSID_SMOKE_SAMPLE_C_NAME}"
-        -o "${CAPSID_WORK_DIR}/sample_c.o"
-    RESULT_VARIABLE c_compile_result
-    OUTPUT_VARIABLE c_compile_out
-    ERROR_VARIABLE c_compile_err)
-if(NOT c_compile_result EQUAL 0)
-    message(FATAL_ERROR "C sample compile failed against the package:\n"
-        "${c_compile_out}\n${c_compile_err}")
-endif()
-execute_process(
-    COMMAND "${CAPSID_CXX_COMPILER}"
-        "${CAPSID_WORK_DIR}/sample_c.o"
-        "${CAPSID_PACKAGE_LIB}/libcapsid_runtime.a"
-        -pthread
-        -o "${CAPSID_WORK_DIR}/sample_c"
-    RESULT_VARIABLE c_link_result
-    OUTPUT_VARIABLE c_link_out
-    ERROR_VARIABLE c_link_err)
-if(NOT c_link_result EQUAL 0)
-    message(FATAL_ERROR "C sample link failed against the package:\n"
-        "${c_link_out}\n${c_link_err}")
+# infers this in-tree; script mode makes it explicit). Compile/link flags
+# are platform-specific (cl vs gcc/clang).
+if(WIN32)
+    execute_process(
+        COMMAND "${CAPSID_C_COMPILER}"
+            /std:c11 /W4
+            "-I${CAPSID_PACKAGE_INCLUDE}"
+            /c "${CAPSID_WORK_DIR}/${CAPSID_SMOKE_SAMPLE_C_NAME}"
+            "/Fo${CAPSID_WORK_DIR}/sample_c.obj"
+        RESULT_VARIABLE c_compile_result
+        OUTPUT_VARIABLE c_compile_out
+        ERROR_VARIABLE c_compile_err)
+    if(NOT c_compile_result EQUAL 0)
+        message(FATAL_ERROR "C sample compile failed against the package:\n"
+            "${c_compile_out}\n${c_compile_err}")
+    endif()
+    execute_process(
+        COMMAND "${CAPSID_CXX_COMPILER}"
+            "${CAPSID_WORK_DIR}/sample_c.obj"
+            "${CAPSID_SMOKE_RUNTIME_LIB}"
+            ws2_32.lib
+            "/Fe${CAPSID_WORK_DIR}/sample_c.exe"
+        RESULT_VARIABLE c_link_result
+        OUTPUT_VARIABLE c_link_out
+        ERROR_VARIABLE c_link_err)
+    if(NOT c_link_result EQUAL 0)
+        message(FATAL_ERROR "C sample link failed against the package:\n"
+            "${c_link_out}\n${c_link_err}")
+    endif()
+    execute_process(
+        COMMAND "${CAPSID_CXX_COMPILER}"
+            /std:c++17 /W4
+            "-I${CAPSID_PACKAGE_INCLUDE}"
+            "${CAPSID_WORK_DIR}/${CAPSID_SMOKE_SAMPLE_CC_NAME}"
+            "${CAPSID_SMOKE_RUNTIME_LIB}"
+            ws2_32.lib
+            "/Fe${CAPSID_WORK_DIR}/sample_cpp.exe"
+        RESULT_VARIABLE cxx_compile_result
+        OUTPUT_VARIABLE cxx_compile_out
+        ERROR_VARIABLE cxx_compile_err)
+    if(NOT cxx_compile_result EQUAL 0)
+        message(FATAL_ERROR "C++ sample compile failed against the package:\n"
+            "${cxx_compile_out}\n${cxx_compile_err}")
+    endif()
+    set(CAPSID_SMOKE_SAMPLES sample_c.exe sample_cpp.exe)
+else()
+    execute_process(
+        COMMAND "${CAPSID_C_COMPILER}"
+            -std=c11 -Wall -Wextra
+            "-I${CAPSID_PACKAGE_INCLUDE}"
+            -c "${CAPSID_WORK_DIR}/${CAPSID_SMOKE_SAMPLE_C_NAME}"
+            -o "${CAPSID_WORK_DIR}/sample_c.o"
+        RESULT_VARIABLE c_compile_result
+        OUTPUT_VARIABLE c_compile_out
+        ERROR_VARIABLE c_compile_err)
+    if(NOT c_compile_result EQUAL 0)
+        message(FATAL_ERROR "C sample compile failed against the package:\n"
+            "${c_compile_out}\n${c_compile_err}")
+    endif()
+    execute_process(
+        COMMAND "${CAPSID_CXX_COMPILER}"
+            "${CAPSID_WORK_DIR}/sample_c.o"
+            "${CAPSID_PACKAGE_LIB}/libcapsid_runtime.a"
+            -pthread
+            -o "${CAPSID_WORK_DIR}/sample_c"
+        RESULT_VARIABLE c_link_result
+        OUTPUT_VARIABLE c_link_out
+        ERROR_VARIABLE c_link_err)
+    if(NOT c_link_result EQUAL 0)
+        message(FATAL_ERROR "C sample link failed against the package:\n"
+            "${c_link_out}\n${c_link_err}")
+    endif()
+    execute_process(
+        COMMAND "${CAPSID_CXX_COMPILER}"
+            -std=c++17 -Wall -Wextra
+            "-I${CAPSID_PACKAGE_INCLUDE}"
+            "${CAPSID_WORK_DIR}/${CAPSID_SMOKE_SAMPLE_CC_NAME}"
+            "${CAPSID_PACKAGE_LIB}/libcapsid_runtime.a"
+            -pthread
+            -o "${CAPSID_WORK_DIR}/sample_cpp"
+        RESULT_VARIABLE cxx_compile_result
+        OUTPUT_VARIABLE cxx_compile_out
+        ERROR_VARIABLE cxx_compile_err)
+    if(NOT cxx_compile_result EQUAL 0)
+        message(FATAL_ERROR "C++ sample compile failed against the package:\n"
+            "${cxx_compile_out}\n${cxx_compile_err}")
+    endif()
+    set(CAPSID_SMOKE_SAMPLES sample_c sample_cpp)
 endif()
 
-execute_process(
-    COMMAND "${CAPSID_CXX_COMPILER}"
-        -std=c++17 -Wall -Wextra
-        "-I${CAPSID_PACKAGE_INCLUDE}"
-        "${CAPSID_WORK_DIR}/${CAPSID_SMOKE_SAMPLE_CC_NAME}"
-        "${CAPSID_PACKAGE_LIB}/libcapsid_runtime.a"
-        -pthread
-        -o "${CAPSID_WORK_DIR}/sample_cpp"
-    RESULT_VARIABLE cxx_compile_result
-    OUTPUT_VARIABLE cxx_compile_out
-    ERROR_VARIABLE cxx_compile_err)
-if(NOT cxx_compile_result EQUAL 0)
-    message(FATAL_ERROR "C++ sample compile failed against the package:\n"
-        "${cxx_compile_out}\n${cxx_compile_err}")
-endif()
-
-foreach(sample_binary sample_c sample_cpp)
+foreach(sample_binary IN LISTS CAPSID_SMOKE_SAMPLES)
     execute_process(
         COMMAND "${CAPSID_WORK_DIR}/${sample_binary}"
             "${CAPSID_SMOKE_WORKER}" "${CAPSID_SMOKE_BUNDLE}"
@@ -467,6 +528,66 @@ foreach(binary IN LISTS CAPSID_SMOKE_BINARIES)
             endif()
             message(FATAL_ERROR "${binary_name} has an undeclared dynamic "
                 "dependency: ${stripped}")
+        endforeach()
+    elseif(CAPSID_SMOKE_SYSTEM_NAME STREQUAL "Windows")
+        # PE import scan via dumpbin (VS toolchain). When dumpbin is not on
+        # PATH (ctest without the dev environment), the scan is skipped
+        # with a warning: the static /MT CRT policy and the Release job's
+        # static vcpkg triplet are the packaging-time gates instead. CRT
+        # DLLs (VCRUNTIME/MSVCP/ucrtbase) are intentionally NOT allowlisted
+        # — their presence would prove a static-CRT regression.
+        find_program(CAPSID_SMOKE_DUMPBIN NAMES dumpbin)
+        if(NOT CAPSID_SMOKE_DUMPBIN)
+            message(WARNING "dumpbin not found; skipping the Windows "
+                "dynamic-dependency scan for ${binary_name}")
+            continue()
+        endif()
+        set(CAPSID_SMOKE_DYNAMIC_ALLOWLIST_WINDOWS
+            "KERNEL32[.]dll" "ntdll[.]dll" "WS2_32[.]dll" "bcrypt[.]dll"
+            "CRYPT32[.]dll" "ADVAPI32[.]dll" "USER32[.]dll"
+            "IPHLPAPI[.]DLL" "PSAPI[.]DLL" "SHELL32[.]dll" "OLE32[.]dll"
+            "OLEAUT32[.]dll" "dbghelp[.]dll" "api-ms-win-"
+            # Boost.Asio imports AcceptEx/ConnectEx from the Winsock
+            # extension provider.
+            "MSWSOCK[.]dll")
+        execute_process(
+            COMMAND "${CAPSID_SMOKE_DUMPBIN}" /dependents "${binary}"
+            RESULT_VARIABLE dumpbin_result
+            OUTPUT_VARIABLE dumpbin_out
+            ERROR_VARIABLE dumpbin_err)
+        if(NOT dumpbin_result EQUAL 0)
+            message(FATAL_ERROR "dumpbin /dependents failed for "
+                "${binary_name}:\n${dumpbin_err}")
+        endif()
+        string(REPLACE "\n" ";" dumpbin_lines "${dumpbin_out}")
+        set(in_dependencies "OFF")
+        foreach(line IN LISTS dumpbin_lines)
+            string(STRIP "${line}" stripped)
+            if(stripped STREQUAL "Image has the following dependencies:")
+                set(in_dependencies "ON")
+                continue()
+            endif()
+            if(NOT in_dependencies)
+                continue()
+            endif()
+            if(NOT stripped MATCHES "^([A-Za-z0-9_.-]+[.]dll)$")
+                continue()
+            endif()
+            set(needed_name "${CMAKE_MATCH_1}")
+            string(TOUPPER "${needed_name}" needed_name_upper)
+            set(needed_allowed "OFF")
+            foreach(allowed IN LISTS
+                    CAPSID_SMOKE_DYNAMIC_ALLOWLIST_WINDOWS)
+                string(TOUPPER "${allowed}" allowed_upper)
+                if(needed_name_upper MATCHES "^${allowed_upper}")
+                    set(needed_allowed "ON")
+                    break()
+                endif()
+            endforeach()
+            if(NOT needed_allowed)
+                message(FATAL_ERROR "${binary_name} has an undeclared "
+                    "dynamic dependency: ${needed_name}")
+            endif()
         endforeach()
     elseif(CAPSID_SMOKE_SYSTEM_NAME STREQUAL "Linux")
         execute_process(

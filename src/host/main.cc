@@ -12,15 +12,21 @@
 
 #include "build_identity.h"
 #include "capsid/runtime.h"
+#if !defined(_WIN32)
 #include "host/admin_service.h"
+#endif
 #include "host/config.h"
 #include "host/generation_pool.h"
+#if !defined(_WIN32)
 #include "host/host_config_model.h"
 #include "host/managed_admin_backend.h"
 #include "host/managed_listener.h"
+#endif
 #include "host/metrics.h"
 #include "host/process_snapshot.h"
+#if !defined(_WIN32)
 #include "host/routing_snapshot.h"
+#endif
 #include "host/structured_log.h"
 #include "host/trusted_key_store.h"
 #include "host/worker_supervisor.h"
@@ -30,9 +36,13 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/system/error_code.hpp>
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <dirent.h>
 #include <signal.h>
 #include <sys/stat.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -235,15 +245,9 @@ std::vector<std::uint8_t> read_bundle(const std::string& path) {
     return bytes;
 }
 
-// ---- managed mode: host.json authority, real coordinator, Admin service ----
-
-// Process-level stop signal. SIGTERM is blocked process-wide and waited
-// for with sigwait on the main thread, so no C++ object is ever touched
-// inside a signal handler.
-std::atomic<bool> g_stop{false};
-
 // "256MiB" style size with explicit suffix (same grammar as the managed
-// coordinator's worker.memoryMax).
+// coordinator's worker.memoryMax; also used by the single-worker /
+// static-pool CLI, so it stays outside the managed-only section).
 bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
     if (text.empty()) {
         return false;
@@ -277,6 +281,19 @@ bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
     *out = static_cast<std::uint64_t>(base) * multiplier;
     return true;
 }
+
+// ---- managed mode: host.json authority, real coordinator, Admin service ----
+#if defined(_WIN32)
+// The managed coordinator is POSIX-only (dirfd-relative openat/mkdirat
+// state walks, uid-based verification, UDS admin plane). Windows builds
+// ship the single-worker and static-pool data planes only; see
+// docs/windows.md for the full capability matrix.
+#else
+
+// Process-level stop signal. SIGTERM is blocked process-wide and waited
+// for with sigwait on the main thread, so no C++ object is ever touched
+// inside a signal handler.
+std::atomic<bool> g_stop{false};
 
 // Safe open of a Host-owned directory: O_NOFOLLOW, directory, euid owner,
 // no group/other bits.
@@ -1047,7 +1064,7 @@ int run_managed(const std::string& host_config_path,
     structured_log->flush();
     return 0;
 }
-
+#endif  // !defined(_WIN32) managed mode
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1077,6 +1094,7 @@ int main(int argc, char** argv) {
     };
 
     const std::string mode = require("mode");
+#if !defined(_WIN32)
     if (mode == "managed") {
         // Strict managed CLI: only --host-config and --worker are allowed.
         for (const std::pair<const std::string, std::string>& entry :
@@ -1089,6 +1107,12 @@ int main(int argc, char** argv) {
         }
         return run_managed(require("host-config"), require("worker"));
     }
+#else
+    if (mode == "managed") {
+        fail("--mode managed is unavailable on Windows (see "
+             "docs/windows.md)");
+    }
+#endif
     if (mode != "single-worker" && mode != "static-pool") {
         fail("--mode must be single-worker, static-pool or managed");
     }
@@ -1163,9 +1187,15 @@ int main(int argc, char** argv) {
     options.ready_fd = static_cast<int>(ready_fd);
     // The READY record must be deliverable; verify the descriptor is open
     // before spawning the worker.
+#if defined(_WIN32)
+    if (_get_osfhandle(options.ready_fd) < 0) {
+        fail("--ready-fd is not an open descriptor");
+    }
+#else
     if (fcntl(options.ready_fd, F_GETFD) == -1) {
         fail("--ready-fd is not an open descriptor");
     }
+#endif
 
     // Benchmark-only static pool (NOT a managed production path): a fixed
     // 1/2/4-worker pool sharing one SO_REUSEPORT listener, driven by the
@@ -1251,8 +1281,17 @@ int main(int argc, char** argv) {
     // the single active worker, which these modes publish at spawn.
     auto structured_log = std::make_unique<capsid::host::StructuredLog>(
         [](const std::string& line) {
+#if defined(_WIN32)
+            // MSVC write() takes an unsigned int count; structured log
+            // lines are single small JSON objects.
+            const ssize_t written = ::write(
+                STDERR_FILENO,
+                line.data(),
+                static_cast<unsigned int>(line.size()));
+#else
             const ssize_t written = ::write(STDERR_FILENO, line.data(),
                                             line.size());
+#endif
             (void)written;
         });
     auto metrics = std::make_unique<capsid::host::MetricsRegistry>();

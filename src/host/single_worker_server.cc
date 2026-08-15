@@ -42,12 +42,16 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 #include <set>
 #include <string>
-#include <sys/socket.h>
 #include <thread>
-#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -2394,8 +2398,17 @@ bool Impl::bind_listener() {
     // address:port. SO_REUSEPORT is set before bind and is mandatory — an
     // unsupported platform is rejected with a static, redacted message
     // instead of silently degrading to a fake multi-process pool. The
-    // default (single-worker) path never asks for it.
+    // default (single-worker) path never asks for it. Windows has no
+    // SO_REUSEPORT: the multi-shard static pool is rejected there with
+    // the same message (a one-worker pool never asks for the option).
     if (options_.so_reuseport) {
+#if defined(_WIN32)
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "listener reuse_port option is unavailable"});
+        return false;
+#else
         const int enable = 1;
         if (::setsockopt(acceptor_->native_handle(), SOL_SOCKET,
                          SO_REUSEPORT, &enable, sizeof(enable)) != 0) {
@@ -2406,6 +2419,7 @@ bool Impl::bind_listener() {
                           "listener reuse_port option is unavailable"});
             return false;
         }
+#endif
     }
     acceptor_->bind(endpoint, ec);
     if (ec) {
@@ -2463,9 +2477,19 @@ bool Impl::write_ready_line() {
         "\",\"port\":" + std::to_string(bound_port_) + "}\n";
     std::size_t offset = 0;
     while (offset < line.size()) {
+#if defined(_WIN32)
+        // The ready channel may be a loopback socketpair (in-process
+        // harnesses) or a stdio pipe (process harnesses); write_any_fd
+        // covers both.
+        const ssize_t written = capsid::win32::write_any_fd(
+            options_.ready_fd,
+            line.data() + offset,
+            line.size() - offset);
+#else
         const ssize_t written = ::write(options_.ready_fd,
                                         line.data() + offset,
                                         line.size() - offset);
+#endif
         if (written < 0 && errno == EINTR) {
             continue;
         }
@@ -2837,7 +2861,7 @@ void Impl::write_metrics_line() {
         (unsigned long)client_metrics.socket_read_calls,
         (unsigned long)client_metrics.socket_read_bytes,
         (unsigned long)client_metrics.socket_read_eagain,
-        (unsigned long)client_metrics.queued_bytes_high_water);
+        (size_t)client_metrics.queued_bytes_high_water);
 }
 
 SingleWorkerServer::SingleWorkerServer(SingleWorkerServerOptions options)

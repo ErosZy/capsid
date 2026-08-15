@@ -292,10 +292,13 @@ function(capsid_generate_build_identity)
         "bytecodeFormatIdentity=${CGBI_BYTECODE_FORMAT}\n")
 
     # The compatibility ID is the SHA-256 of exactly the record bytes above.
+    # Hash the in-memory string: file(SHA256) hashes the on-disk file, and
+    # file(WRITE) translates the record's \n to CRLF on Windows, which would
+    # make the ID cover bytes no runtime-visible field can reproduce.
     set(CGBI_RECORD_FILE
         "${CMAKE_CURRENT_BINARY_DIR}/generated/build-identity-record.txt")
     file(WRITE "${CGBI_RECORD_FILE}" "${CGBI_RECORD}")
-    file(SHA256 "${CGBI_RECORD_FILE}" CGBI_DIGEST)
+    string(SHA256 CGBI_DIGEST "${CGBI_RECORD}")
     set(CGBI_COMPATIBILITY_ID "sha256:${CGBI_DIGEST}")
 
     # WP-07, spec §11.3: the build provenance record. Feature flags are one

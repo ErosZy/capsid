@@ -13,6 +13,7 @@
 | 部署第一方 managed Host | [Host 配置参考](host-config.md) | [Host v1 详细设计](host-technical-design-review.md) |
 | 编写并授权应用 | [capsid.json 教程](capsid-json.md) | [模块与权限参考](module-permissions.md) |
 | 运行不可信代码 | [Linux 严格沙箱](linux-sandbox.md) | [能力策略](capability-policy.md) |
+| 在 Windows 上构建或评估平台能力 | [Windows 构建与平台能力](windows.md) | [Linux 严格沙箱](linux-sandbox.md) |
 | 移植现有 Fetch 框架 | [框架兼容性](framework-compatibility/README.md) | 各框架验证页 |
 | 复现质量或性能结论 | [测试门禁](testing.md) | [性能证据](performance-benchmarks.md) |
 
@@ -54,6 +55,8 @@
   API→权限映射与配置配方
 - [Linux 严格沙箱](linux-sandbox.md)：strict baseline、cgroup v2、网络
   namespace、出站网络策略与明确限制
+- [Windows 构建与平台能力](windows.md)：MSVC 构建前置条件与步骤、平台
+  能力矩阵、worker 沙箱语义与 managed 模式限制
 
 ### 正确性与兼容性
 

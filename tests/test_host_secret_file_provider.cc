@@ -12,9 +12,17 @@
 #include "host/secret_file_provider.h"
 
 #include <fcntl.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/stat.h>
+#endif
 #include <sys/types.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <cstdio>
 #include <cstdlib>

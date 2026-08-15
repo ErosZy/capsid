@@ -19,6 +19,12 @@
 #include <cstdint>
 #include <vector>
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
+#include <sys/types.h>
+#endif
+
 #include "protocol.h"
 
 namespace capsid {

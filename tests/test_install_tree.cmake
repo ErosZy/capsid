@@ -37,9 +37,17 @@ if(NOT install_result EQUAL 0)
         "cmake --install failed:\n${install_output}\n${install_error}")
 endif()
 
+# Executable names carry the platform suffix on Windows (.exe); the
+# manifest is platform-aware so a Windows install tree is verified
+# against the names Windows actually produces.
+if(WIN32)
+    set(CAPSID_BIN_SUFFIX ".exe")
+else()
+    set(CAPSID_BIN_SUFFIX "")
+endif()
 set(CAPSID_MANIFEST
-    "bin/capsid-worker"
-    "bin/capsid-bytecode-compile"
+    "bin/capsid-worker${CAPSID_BIN_SUFFIX}"
+    "bin/capsid-bytecode-compile${CAPSID_BIN_SUFFIX}"
     "include/capsid/runtime.h"
     "include/capsid/runtime.hpp"
     "lib/cmake/Capsid/CapsidTargets.cmake"
@@ -47,7 +55,7 @@ set(CAPSID_MANIFEST
     "share/capsid/build-info.txt"
     "share/capsid/SBOM.spdx.json")
 if(CAPSID_HOST_TARGET)
-    list(APPEND CAPSID_MANIFEST "bin/capsid-host")
+    list(APPEND CAPSID_MANIFEST "bin/capsid-host${CAPSID_BIN_SUFFIX}")
 endif()
 
 set(missing)
@@ -57,11 +65,13 @@ foreach(entry IN LISTS CAPSID_MANIFEST)
     endif()
 endforeach()
 
-# Libraries may be static or shared; accept any libcapsid_runtime.* name.
+# Libraries may be static or shared; accept any runtime-library name the
+# platform produces (libcapsid_runtime.* on POSIX, capsid_runtime.* on
+# MSVC).
 file(GLOB CAPSID_RUNTIME_LIBS
-    "${CAPSID_PREFIX}/lib/libcapsid_runtime.*")
+    "${CAPSID_PREFIX}/lib/*capsid_runtime.*")
 if(NOT CAPSID_RUNTIME_LIBS)
-    list(APPEND missing "lib/libcapsid_runtime.*")
+    list(APPEND missing "lib/*capsid_runtime.*")
 endif()
 
 # Support documentation must be a non-empty directory.

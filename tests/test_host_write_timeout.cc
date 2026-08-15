@@ -21,17 +21,33 @@
 #define CAPSID_HAS_SINGLE_WORKER_SERVER 0
 #endif
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
 
 // macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
 // on the test paths, so a plain socket type is the portable fallback.
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/time.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdint>
@@ -62,16 +78,20 @@ std::string read_one_ready_line(int fd) {
     while (line.empty() || line.back() != '\n') {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not publish READY after start returned");
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
-        const int polled = poll(&descriptor, 1, 50);
+        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
         require(polled >= 0, "cannot poll server READY pipe");
         if (polled == 0) {
             continue;
         }
         char byte = 0;
+#if defined(_WIN32)
+        require(capsid::win32::read_fd(fd, &byte, 1) == 1,
+#else
         require(read(fd, &byte, 1) == 1,
+#endif
                 "server READY pipe closed without a complete record");
         line.push_back(byte);
         require(line.size() <= 1024, "server READY record is unbounded");
@@ -124,19 +144,16 @@ const std::vector<std::uint8_t>& fast_bundle() {
 }
 
 int connect_to(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create write-timeout HTTP socket");
-    struct timeval timeout = {};
-    timeout.tv_sec = 3;
-    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                       sizeof(timeout)) == 0,
+    require(capsid::win32::setsockopt_recv_timeout_fd(fd, 3000) == 0,
             "cannot set write-timeout HTTP receive timeout");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode write-timeout loopback address");
-    require(connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                     sizeof(address)) == 0,
             "cannot connect to write-timeout server");
     return fd;
@@ -151,7 +168,7 @@ void send_request(int fd, const std::string& target, bool keep_alive) {
     std::size_t sent = 0;
     while (sent < request.size()) {
         const ssize_t count =
-            send(fd, request.data() + sent, request.size() - sent, 0);
+            capsid::win32::send_fd(fd, request.data() + sent, request.size() - sent, 0);
         require(count > 0, "cannot write HTTP request");
         sent += static_cast<std::size_t>(count);
     }
@@ -169,10 +186,10 @@ long require_connection_closed_after_ignoring(int fd) {
     for (;;) {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not close the hung-write connection");
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
-        const int polled = poll(&descriptor, 1, 50);
+        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
         require(polled >= 0, "cannot poll hung-write connection");
         if (polled == 0) {
             continue;
@@ -181,7 +198,7 @@ long require_connection_closed_after_ignoring(int fd) {
         // Consuming data here is fine — the teardown already happened or
         // is about to fire.
         for (;;) {
-            const ssize_t count = recv(fd, scratch, sizeof(scratch), 0);
+            const ssize_t count = capsid::win32::recv_fd(fd, scratch, sizeof(scratch), 0);
             if (count == 0) {
                 const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - start);
@@ -216,7 +233,7 @@ std::string read_line(int fd, std::string& buffer, char* scratch,
             buffer.erase(0, end + 2);
             return line;
         }
-        const ssize_t count = recv(fd, scratch, scratch_size, 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         require(count > 0, "response recv failed");
         buffer.append(scratch, static_cast<std::size_t>(count));
     }
@@ -228,7 +245,7 @@ void require_bytes(int fd, std::string& buffer, std::size_t count,
     while (buffer.size() < count) {
         require(std::chrono::steady_clock::now() < deadline,
                 "response body timed out");
-        const ssize_t received = recv(fd, scratch, scratch_size, 0);
+        const ssize_t received = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         require(received > 0, "response body recv failed");
         buffer.append(scratch, static_cast<std::size_t>(received));
     }
@@ -326,7 +343,7 @@ capsid::host::SingleWorkerServerOptions make_options(
 // fail its 3s bound.
 void test_write_timeout_cancels(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create write-timeout READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create write-timeout READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_options(worker_path, ready[1]);
     options.write_timeout_ms = 250;  // well below the worker deadline
@@ -362,7 +379,7 @@ void test_write_timeout_cancels(const char* worker_path) {
 // timers — neither deadline replaces the other).
 void test_worker_deadline_independent(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create write-timeout READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create write-timeout READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_options(worker_path, ready[1]);
     options.write_timeout_ms = 5000;   // long: must NOT be the trigger
@@ -388,7 +405,7 @@ void test_worker_deadline_independent(const char* worker_path) {
 // A fast response is never touched by a short write deadline.
 void test_fast_response_untouched(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create write-timeout READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create write-timeout READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_options(worker_path, ready[1]);
     options.write_timeout_ms = 250;

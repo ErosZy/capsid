@@ -1,4 +1,16 @@
 if(BUILD_TESTING)
+    # Test sources include "win32_compat.h" and other src/-relative
+    # internals; expose the directory scope once instead of duplicating
+    # the include dir on every test target. (build_tests.cmake is
+    # included from the top-level scope, so this applies to the test
+    # targets created below only.)
+    include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
+    if(WIN32)
+        # Many test targets compile runtime sources (egress_policy.cc ...)
+        # directly instead of linking capsid_runtime; each of them needs
+        # the Winsock import library for inet_pton/ntohs/htons.
+        link_libraries(ws2_32)
+    endif()
     if(CAPSID_BUILD_HOST)
         find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 
@@ -21,6 +33,10 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME host_config COMMAND test-host-config)
 
+        # host_config_model.cc is part of the managed coordinator and not
+        # built on Windows (docs/windows.md); the model test SKIPs by
+        # absence there.
+        if(NOT WIN32)
         add_executable(
             test-host-config-model
             tests/test_host_config_model.cc)
@@ -44,6 +60,7 @@ if(BUILD_TESTING)
             endif()
         endif()
         add_test(NAME host_config_model COMMAND test-host-config-model)
+        endif()
 
         add_executable(
             test-host-trusted-key-store
@@ -147,32 +164,43 @@ if(BUILD_TESTING)
                 capsid-worker)
         endif()
 
-        add_executable(
-            test-host-artifact-safe-read
-            tests/test_host_artifact_safe_read.cc)
-        target_include_directories(
-            test-host-artifact-safe-read PRIVATE include src)
-        target_link_libraries(test-host-artifact-safe-read PRIVATE
-            capsid_host_core
-            capsid_sanitizers)
-        set_target_properties(test-host-artifact-safe-read PROPERTIES
-            CXX_STANDARD 20
-            CXX_STANDARD_REQUIRED ON
-            CXX_EXTENSIONS OFF)
-        if(CAPSID_STRICT_WARNINGS)
-            if(MSVC)
-                target_compile_options(
-                    test-host-artifact-safe-read PRIVATE /W4 /WX)
-            else()
-                target_compile_options(
-                    test-host-artifact-safe-read PRIVATE
-                    -Wall -Wextra -Wpedantic -Werror)
+        # The safe-read fixture builder uses dirfd-relative POSIX
+        # primitives (openat/mkdirat/symlinkat/mkfifoat) and unix-domain
+        # socket nodes throughout; the Windows open_beneath path is
+        # exercised via the runtime compile-time contract and documented
+        # in docs/windows.md (SKIP by absence, never FAIL).
+        if(NOT WIN32)
+            add_executable(
+                test-host-artifact-safe-read
+                tests/test_host_artifact_safe_read.cc)
+            target_include_directories(
+                test-host-artifact-safe-read PRIVATE include src)
+            target_link_libraries(test-host-artifact-safe-read PRIVATE
+                capsid_host_core
+                capsid_sanitizers)
+            set_target_properties(test-host-artifact-safe-read PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-artifact-safe-read PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-artifact-safe-read PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
             endif()
+            add_test(
+                NAME host_artifact_safe_read
+                COMMAND test-host-artifact-safe-read)
         endif()
-        add_test(
-            NAME host_artifact_safe_read
-            COMMAND test-host-artifact-safe-read)
 
+        # Secret files belong to the managed coordinator (POSIX-only,
+        # docs/windows.md); the driver's openat/mkfifoat fixtures skip by
+        # absence on Windows.
+        if(NOT WIN32)
         add_executable(
             test-host-secret-file-provider
             tests/test_host_secret_file_provider.cc)
@@ -198,6 +226,7 @@ if(BUILD_TESTING)
         add_test(
             NAME host_secret_file_provider
             COMMAND test-host-secret-file-provider)
+        endif()
 
         if(UNIX)
             # M1D Unix Admin API frozen RED suite. This is deliberately
@@ -391,11 +420,12 @@ if(BUILD_TESTING)
             endforeach()
         endif()
 
-        if(CAPSID_BUILD_WORKER)
+        if(CAPSID_BUILD_WORKER AND NOT WIN32)
             # M1D Admin/coordinator bridge: the real managed adapter and its
             # bounded asynchronous submission wrapper are separate from the
             # HTTP transport so operation progress remains independently
-            # testable.
+            # testable. (The managed coordinator is POSIX-only;
+            # docs/windows.md.)
             find_package(Threads REQUIRED)
             add_executable(
                 test-host-managed-admin-backend
@@ -828,6 +858,9 @@ if(BUILD_TESTING)
                 PROPERTIES TIMEOUT 10)
         endforeach()
 
+        # The operation registry lives in the managed coordinator, which
+        # is not built on Windows (docs/windows.md); SKIP by absence.
+        if(NOT WIN32)
         add_executable(
             test-host-managed-registry
             tests/test_managed_registry.cc)
@@ -864,6 +897,7 @@ if(BUILD_TESTING)
                 "host_managed_registry_${CAPSID_REGISTRY_TEST_ID}"
                 PROPERTIES TIMEOUT 30)
         endforeach()
+        endif()
 
         # WP-09 §13.6 soak platform: the memory-wave client is a real
         # binary so the CI gates build it and the smoke test proves the
@@ -1058,13 +1092,13 @@ if(BUILD_TESTING)
                     endif()
                 endif()
             endif()
+            # Multi-shard scenarios require SO_REUSEPORT, which Windows
+            # does not provide; only the single-shard scenarios run there
+            # (see docs/windows.md).
+            if(NOT WIN32)
             add_test(
                 NAME host_static_pool_server_shared_port_lifecycle
                 COMMAND test-host-static-pool-server lifecycle
-                    $<TARGET_FILE:capsid-worker>)
-            add_test(
-                NAME host_static_pool_server_atomic_start_failure
-                COMMAND test-host-static-pool-server atomic-failure
                     $<TARGET_FILE:capsid-worker>)
             add_test(
                 NAME host_static_pool_server_drain_inflight_completes
@@ -1078,6 +1112,18 @@ if(BUILD_TESTING)
                 NAME host_static_pool_server_drain_idle_exits
                 COMMAND test-host-static-pool-server drain-idle-exits
                     $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_static_pool_server_shared_port_lifecycle
+                host_static_pool_server_drain_inflight_completes
+                host_static_pool_server_drain_deadline_forces
+                host_static_pool_server_drain_idle_exits PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+            endif()
+            add_test(
+                NAME host_static_pool_server_atomic_start_failure
+                COMMAND test-host-static-pool-server atomic-failure
+                    $<TARGET_FILE:capsid-worker>)
             add_test(
                 NAME host_static_pool_server_stop_before_start
                 COMMAND test-host-static-pool-server stop-before-start
@@ -1087,11 +1133,7 @@ if(BUILD_TESTING)
                 COMMAND test-host-static-pool-server start-stop-race
                     $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
-                host_static_pool_server_shared_port_lifecycle
                 host_static_pool_server_atomic_start_failure
-                host_static_pool_server_drain_inflight_completes
-                host_static_pool_server_drain_deadline_forces
-                host_static_pool_server_drain_idle_exits
                 host_static_pool_server_stop_before_start
                 host_static_pool_server_start_stop_race PROPERTIES
                 LABELS "host;integration;m2"
@@ -1154,15 +1196,22 @@ if(BUILD_TESTING)
                 host_admission_worker_death_returns_503 PROPERTIES
                 TIMEOUT 30 LABELS "host;integration;m2")
             endif()
+            # pool-forwards runs a multi-shard pool (SO_REUSEPORT is
+            # unavailable on Windows; see docs/windows.md).
+            if(NOT WIN32)
             add_test(
                 NAME host_admission_pool_forwards_options
                 COMMAND test-host-admission pool-forwards-admission
                     $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
+                host_admission_pool_forwards_options PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+            endif()
+            set_tests_properties(
                 host_admission_inflight_full_rejects
                 host_admission_queue_full_rejects
-                host_admission_queue_timeout_returns_504
-                host_admission_pool_forwards_options PROPERTIES
+                host_admission_queue_timeout_returns_504 PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 
@@ -1335,19 +1384,27 @@ if(BUILD_TESTING)
                     endif()
                 endif()
             endif()
-            add_test(
-                NAME host_static_pool_activation_barrier
-                COMMAND test-host-static-pool-integration activation-barrier
-                    $<TARGET_FILE:capsid-worker>)
-            add_test(
-                NAME host_static_pool_worker_exit_isolation
-                COMMAND test-host-static-pool-integration worker-exit
-                    $<TARGET_FILE:capsid-worker>)
-            set_tests_properties(
-                host_static_pool_activation_barrier
-                host_static_pool_worker_exit_isolation PROPERTIES
-                LABELS "host;integration;m2"
-                TIMEOUT 30)
+            # The activation-barrier case wraps the worker in a POSIX shell
+            # script (mkdir/sleep/exec semantics); it SKIPs by absence on
+            # Windows. The worker-exit case needs /proc evidence and is
+            # Linux-only as well.
+            if(NOT WIN32)
+                add_test(
+                    NAME host_static_pool_activation_barrier
+                    COMMAND test-host-static-pool-integration activation-barrier
+                        $<TARGET_FILE:capsid-worker>)
+                add_test(
+                    NAME host_static_pool_worker_exit_isolation
+                    COMMAND test-host-static-pool-integration worker-exit
+                        $<TARGET_FILE:capsid-worker>)
+            endif()
+            if(NOT WIN32)
+                set_tests_properties(
+                    host_static_pool_activation_barrier
+                    host_static_pool_worker_exit_isolation PROPERTIES
+                    LABELS "host;integration;m2"
+                    TIMEOUT 30)
+            endif()
 
             find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
             add_test(
@@ -1404,15 +1461,22 @@ if(BUILD_TESTING)
                 NAME host_concurrent_shard_wait
                 COMMAND test-host-concurrent-wait shard
                     $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_concurrent_shard_wait PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+            # The pool variant needs a multi-shard pool (SO_REUSEPORT is
+            # unavailable on Windows; see docs/windows.md).
+            if(NOT WIN32)
             add_test(
                 NAME host_concurrent_pool_wait
                 COMMAND test-host-concurrent-wait pool
                     $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
-                host_concurrent_shard_wait
                 host_concurrent_pool_wait PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
+            endif()
 
             # Metrics-on variant: the same integration run with
             # CAPSID_HOST_IPC_METRICS=1, which arms the per-pump metrics
@@ -1968,7 +2032,8 @@ if(BUILD_TESTING)
         # overlay must be classified (context-wired / profile-unreachable /
         # synchronous-reentry / value-only) in
         # tools/audit-txiki-async-context.py; an unclassified site fails.
-        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
+        # Windows Python installs expose python.exe; POSIX exposes python3.
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
         add_test(
             NAME txiki_async_context_inventory_audit
             COMMAND "${CAPSID_PYTHON3_EXECUTABLE}"
@@ -3200,6 +3265,9 @@ if(BUILD_TESTING)
             # If it silently does not run, `ctest` reports all-green while the
             # conformance surface is entirely untested. Register a test that fails
             # loudly so that absence of coverage can never be mistaken for a pass.
+            # The WPT harness itself is Linux-only (see docs/windows.md), so the
+            # loud-fail gate does not apply to Windows builds.
+            if(NOT WIN32)
             add_test(
                 NAME wpt_conformance_not_configured
                 COMMAND "${CMAKE_COMMAND}" -E false
@@ -3209,6 +3277,7 @@ if(BUILD_TESTING)
                 LABELS "conformance"
                 SKIP_RETURN_CODE 77
             )
+            endif()
         endif()
 
         add_executable(test-module-denial tests/test_module_denial.cc)

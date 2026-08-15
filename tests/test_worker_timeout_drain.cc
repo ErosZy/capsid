@@ -13,8 +13,12 @@
 
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdint>
@@ -84,13 +88,13 @@ int main(int argc, char **argv) {
             continue;
         }
         if (result == CAPSID_WOULD_BLOCK) {
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = capsid_worker_fd(worker);
             descriptor.events = POLLIN;
             if (descriptor.fd >= 0) {
-                poll(&descriptor, 1, 50);
+                capsid::win32::capsid_poll(&descriptor, 1, 50);
             } else {
-                usleep(50 * 1000);
+                capsid::win32::usleep(50u * 1000u);
             }
             continue;
         }
