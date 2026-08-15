@@ -63,11 +63,16 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   自动退化为整目录复制（内容一致，overlay key 只哈希文件内容）。
 - **OpenSSL/Boot**：通过 vcpkg `x64-windows-static` triplet 提供；本项目
   不执行配置期下载（延续 build_host.cmake 的“无 FetchContent”约束）。
+- **LTO 在 Windows 上强制关闭**：MSVC 的 `/GL` 在编译期绑定
+  `operator new/delete`，全局可替换符号的覆写（ABI guard 的分配失败注入
+  依赖这一契约）不再拦截 IPO 过的翻译单元。GCC/Clang 的 LTO 保留可替换
+  符号，故 POSIX 构建不受影响；build identity 的 feature flags 会如实
+  记录 `lto=OFF`。
 
 ### 已知可用配置
 
-- `CAPSID_BUILD_WORKER=ON` + `CAPSID_BUILD_HOST=ON`（Release，含 LTO）：发布
-  矩阵配置；
+- `CAPSID_BUILD_WORKER=ON` + `CAPSID_BUILD_HOST=ON`（Release）：发布
+  矩阵配置（Windows 上 LTO 恒为 OFF，见上）；
 - `CAPSID_STRICT_WARNINGS=ON`（默认）：MSVC 下为 `/W4 /WX`；
 - `CAPSID_ENABLE_ASAN=ON`：MSVC `/fsanitize=address`（须
   `CAPSID_USE_MIMALLOC=OFF`）。
@@ -120,6 +125,9 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   `sigwait`，`static-pool` 用控制台控制处理器（CTRL_C/CTRL_BREAK/关闭）
   触发同一停止路径；`single-worker` 使用 Boost.Asio `signal_set`（Windows
   下同样可用）。
+- **多 shard 静态池不可用**：多 shard 共享端口依赖 `SO_REUSEPORT`
+  （Linux-only）。Windows 构建只支持单 shard 池；多 shard 启动会被拒绝。
+  依赖 3-shard 拓扑的 host 集成测试（m2 组）在 Windows 上不注册。
 - **managed 模式不可用**：coordinator 的状态机依赖 dirfd 相对路径
   （openat/mkdirat/fstatat）、uid 属主校验与 UDS Admin 平面；这些语义
   无法在 Windows 上等价实现，构建直接排除（`--mode managed` 启动时报错
@@ -135,6 +143,10 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   socket 对。子进程句柄通过 `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` 显式继承
   （只有 IPC socket 与按需的 stdio 跨进程边界，等价于 POSIX 的
   close_range 扫尾）。`--ipc-fd` 携带的是句柄值而不是 fd 编号。
+  accept 出来的 socket 在关闭 listener 前必须
+  `SO_UPDATE_ACCEPT_CONTEXT` 重新绑定 listener 上下文：否则 AFD 回收
+  listener 的端点名后，已接受 socket 的后续 I/O 会以
+  `ERROR_ALREADY_EXISTS` 随机失败（socket 对两端都可能中毒）。
 - **fs 模块不可用**：`capsid:fs` 的读路径依赖 `openat2(RESOLVE_NO_SYMLINKS)`
   （Linux-only），Windows 上模块调用返回 “filesystem module is
   unavailable on this platform”（与 macOS 一致）。需要读取文件的部署应
@@ -151,6 +163,20 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   `hosted-evidence-index` 硬门禁。
 - `.github/workflows/release.yml` 的 Windows 矩阵项产出
   `capsid-<版本>-windows-x86_64.zip` 与 `.sha256` 并上传 Release。
+
+## Windows 上的测试覆盖差异
+
+以下契约在 Windows 上不做完整覆盖（Linux CI 保留全部场景）：
+
+- **ABI guard 的分配失败注入**：`test-abi-guard` 通过全局
+  `operator new` 覆写注入 bad_alloc/runtime_error。MSVC 静态 CRT 下，
+  “worker 进程已附着时的 throw-from-operator-new”路径会触发 fast-fail
+  或挂起，因此 `internal-error-injection`（worker 分支）、
+  `request-path-oom` 与 `destroy-reaps` 场景在 Windows 上跳过；
+  spawn 路径的注入 sweep（覆盖同一 guard 机制）仍然运行。
+- **WPT 一致性套件**：WPT 工具链仅 Linux；`wpt_conformance_not_configured`
+  的“响亮失败”门禁在 Windows 上不注册。
+- **多 shard 池契约**：见上文 SO_REUSEPORT 限制。
 
 ## 更新检查单
 
