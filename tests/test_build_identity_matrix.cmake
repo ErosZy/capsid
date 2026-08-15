@@ -35,11 +35,11 @@ if(NOT CAPSID_MATRIX_VARIANTS)
     set(CAPSID_MATRIX_VARIANTS
         "plain;asan;ubsan;mimalloc;lto-off;quickjs-diff")
 endif()
-# MSVC has no UBSan/TSan runtime; those variants cannot configure (the
-# top-level CMakeLists rejects them by design), so they are not part of
-# the Windows matrix.
+# MSVC has no UBSan/TSan runtime, and LTO is forced off (MSVC /GL binds
+# replaceable operator new/delete); those variants cannot configure or
+# cannot differ, so they are not part of the Windows matrix.
 if(WIN32)
-    list(REMOVE_ITEM CAPSID_MATRIX_VARIANTS "ubsan" "tsan")
+    list(REMOVE_ITEM CAPSID_MATRIX_VARIANTS "ubsan" "tsan" "lto-off")
 endif()
 
 if(NOT CAPSID_MATRIX_WORK_DIR)
