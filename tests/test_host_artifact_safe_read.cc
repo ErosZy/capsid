@@ -346,63 +346,77 @@ int main() {
     {
         Fixture fixture = make_fixture("orders", "v10");
         const std::string vdir = "orders/v10";
-        // Under the per-file limit (16 MiB) but large enough that the
-        // read window (fstat before -> resize -> pread -> fstat after)
-        // is much longer than one mutation.
-        const std::size_t big = 12U * 1024U * 1024U;
+        // Right under the per-file limit (16 MiB) to widen the read
+        // window (fstat before -> resize -> pread -> fstat after).
+        const std::size_t big = 16U * 1024U * 1024U - 4096U;
         const std::string big_fill(big, 'b');
         write_file_at(fixture.root_fd, (vdir + "/capsid.json").c_str(), "{}");
         write_file_at(fixture.root_fd, (vdir + "/bundle.mjs").c_str(), big_fill);
         // Deterministic mid-read perturbation, not a probabilistic race.
-        // The truncator toggles the file between `big` and `big + 4 KiB`
+        // The truncators toggle the file between `big` and `big + 4 KiB`
         // for the whole read:
         //
         //   * the file never drops below `big`, so the reader's first
         //     fstat always sees a multi-MiB file and the read window
-        //     (resize + pread of ~12 MiB) is at least ~1 ms;
+        //     (resize + pread of ~16 MiB) is at least ~2 ms;
         //   * each truncate only touches the 4 KiB tail, so both
-        //     directions complete in tens of microseconds and the toggle
-        //     cycle is ~100-400 us — far shorter than the window, so at
-        //     least one mutation always lands inside it;
-        //   * the shrink direction makes pread return short (offset !=
-        //     size) and the grow direction changes size/mtime/ctime —
-        //     either branch returns kIdentityChanged.
+        //     directions complete in tens of microseconds;
+        //   * any truncate in the window changes ctime (and usually
+        //     size), so the fstat-after identity differs — the shrink
+        //     direction additionally makes pread return short
+        //     (offset != size). Either branch returns kIdentityChanged.
         //
-        // A shrink-to-1024 / restore-to-12 MiB toggle was tried first and
-        // fails by construction under TSan: restoring 12 MiB through
-        // virtiofs zero-allocates the range (~3 ms per restore), so the
-        // toggle cycle is longer than the read window and no mutation
-        // reliably lands inside it. The ready/start handshake below also
-        // pins the truncator's first toggle before the read begins: a
-        // freshly spawned thread can lag the reader's whole window.
+        // A single busy-loop truncator was observed to lose on the UBSan
+        // CI leg (code 0): on an oversubscribed runner it can be
+        // descheduled for the entire ~2 ms window and no mutation lands
+        // inside it. Six independent truncators make "all starved for the
+        // whole window" practically impossible; truncate is atomic per
+        // inode, so concurrent toggles just idle between the same two
+        // states. A shrink-to-1024 / restore-to-12 MiB toggle was tried
+        // first and fails by construction under TSan: restoring 12 MiB
+        // through virtiofs zero-allocates the range (~3 ms per restore),
+        // so the toggle cycle is longer than the read window. The
+        // ready/start handshake pins the first toggle before the read
+        // begins: a freshly spawned thread can lag the reader's window.
         const std::string path = fixture.root + "/" + vdir + "/bundle.mjs";
+        constexpr int kTruncatorCount = 6;
+        std::atomic<int> truncators_ready{0};
         std::atomic<bool> reader_done{false};
-        std::atomic<bool> truncator_ready{false};
         std::atomic<bool> start{false};
         std::atomic<bool> restored{false};
-        std::thread truncator([&]() {
-            truncator_ready.store(true);
-            while (!start.load()) {
-                std::this_thread::yield();
-            }
-            // First full toggle completes before the reader starts: the
-            // main thread waits on `restored`, so the truncator is
-            // provably running (one mutation ahead) when the read begins.
-            if (truncate(path.c_str(), static_cast<off_t>(big)) != 0 ||
-                truncate(path.c_str(), static_cast<off_t>(big + 4096)) != 0) {
-                std::exit(2);  // fixture error
-            }
-            restored.store(true);
-            for (int i = 0; i < 100000 && !reader_done.load(); ++i) {
-                if (truncate(path.c_str(), static_cast<off_t>(big)) != 0 ||
-                    truncate(path.c_str(), static_cast<off_t>(big + 4096)) !=
-                        0) {
-                    std::exit(2);  // fixture error: no mutation reaches
-                                   // the reader's window
+        std::vector<std::thread> truncators;
+        for (int t = 0; t < kTruncatorCount; ++t) {
+            truncators.emplace_back([&, t]() {
+                truncators_ready.fetch_add(1, std::memory_order_relaxed);
+                while (!start.load()) {
+                    std::this_thread::yield();
                 }
-            }
-        });
-        while (!truncator_ready.load()) {
+                const auto toggle = [&]() {
+                    return truncate(path.c_str(),
+                                    static_cast<off_t>(big)) == 0 &&
+                           truncate(path.c_str(),
+                                    static_cast<off_t>(big + 4096)) == 0;
+                };
+                // First full toggle completes before the reader starts:
+                // the main thread waits on `restored` (set by truncator
+                // 0), so the mutation loop is provably running when the
+                // read begins.
+                if (!toggle()) {
+                    std::exit(2);  // fixture error
+                }
+                if (t == 0) {
+                    restored.store(true);
+                }
+                for (int i = 0; i < 100000 && !reader_done.load(); ++i) {
+                    if (!toggle()) {
+                        std::exit(2);  // fixture error: no mutation
+                                       // reaches the reader's window
+                    }
+                }
+            });
+        }
+        while (truncators_ready.load(std::memory_order_relaxed) <
+               kTruncatorCount) {
             std::this_thread::yield();
         }
         start.store(true);
@@ -413,7 +427,9 @@ int main() {
             safe_read_version_artifacts(fixture.root_fd, "orders", "v10",
                                         capsid::host::kMaxVersionArtifactTotalBytes);
         reader_done.store(true);
-        truncator.join();
+        for (std::thread& truncator : truncators) {
+            truncator.join();
+        }
         require(result.code == SafeReadErrorCode::kIdentityChanged,
                 "mid-read truncation was not detected (code " +
                     std::to_string(static_cast<int>(result.code)) + ")");
