@@ -133,19 +133,19 @@ public:
                         const char *certificate,
                         const char *private_key,
                         uint16_t port)
-        : pid_(-1) {
+        : pid_(-1)
+#if defined(_WIN32)
+          ,
+          process_handle_(NULL)
+#endif
+    {
         const std::string port_text = std::to_string(port);
 #if defined(_WIN32)
-        // _spawnv(_P_NOWAIT) launches the same s_server CLI surface.
-        // The storage vector keeps every argument string alive: c_str()
-        // pointers into temporaries would dangle before _spawnv runs.
-        std::vector<std::string> spawn_arg_storage;
-        std::vector<char*> spawn_args;
-        auto push_arg = [&spawn_arg_storage, &spawn_args](
-                            const std::string& value) {
-            spawn_arg_storage.push_back(value);
-            spawn_args.push_back(
-                const_cast<char*>(spawn_arg_storage.back().c_str()));
+        // CreateProcess launches the same s_server CLI surface and keeps
+        // the process handle for exit-code probing.
+        std::vector<std::string> arg_storage;
+        auto push_arg = [&arg_storage](const std::string& value) {
+            arg_storage.push_back(value);
         };
         push_arg(openssl_path);
         push_arg("s_server");
@@ -160,14 +160,24 @@ public:
         push_arg("rsa_pss_rsae_sha256");
         push_arg("-www");
         push_arg("-quiet");
-        push_arg("-no_ign_eof");
-        spawn_args.push_back(nullptr);
-        pid_ = static_cast<pid_t>(_spawnv(
-            _P_NOWAIT, openssl_path, spawn_args.data()));
-        if (static_cast<intptr_t>(pid_) < 0) {
-            fail(std::string("cannot launch OpenSSL TLS test server: ") +
-                 std::strerror(errno));
+        std::string command_line;
+        for (const std::string& argument : arg_storage) {
+            command_line += "\"" + argument + "\" ";
         }
+        STARTUPINFOA startup;
+        std::memset(&startup, 0, sizeof(startup));
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process;
+        std::memset(&process, 0, sizeof(process));
+        if (!CreateProcessA(
+                NULL, &command_line[0], NULL, NULL, TRUE, 0, NULL, NULL,
+                &startup, &process)) {
+            fail(std::string("cannot launch OpenSSL TLS test server: ") +
+                 std::to_string(GetLastError()));
+        }
+        pid_ = static_cast<pid_t>(process.dwProcessId);
+        process_handle_ = process.hProcess;
+        CloseHandle(process.hThread);
 #else
         pid_ = fork();
         if (pid_ == 0) {
@@ -197,7 +207,8 @@ public:
 
         for (int attempt = 0; attempt < 100; ++attempt) {
             if (server_exited_early()) {
-                fail("OpenSSL TLS test server exited early");
+                fail(std::string("OpenSSL TLS test server exited early: ") +
+                     std::to_string(child_exit_code()));
             }
 
             const int probe = capsid::win32::create_tcp_socket_fd();
@@ -227,18 +238,19 @@ public:
     ~OpenSslRsaPssServer() { stop(); }
 
 private:
+    DWORD child_exit_code() {
+#if defined(_WIN32)
+        DWORD exit_code = 0;
+        GetExitCodeProcess(process_handle_, &exit_code);
+        return exit_code;
+#else
+        return 0;
+#endif
+    }
+
     bool server_exited_early() {
 #if defined(_WIN32)
-        HANDLE process = OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
-            static_cast<DWORD>(pid_));
-        if (process == NULL) {
-            return true;
-        }
-        DWORD exit_code = 0;
-        GetExitCodeProcess(process, &exit_code);
-        CloseHandle(process);
-        return exit_code != STILL_ACTIVE;
+        return WaitForSingleObject(process_handle_, 0) == WAIT_OBJECT_0;
 #else
         int status = 0;
         if (waitpid(pid_, &status, WNOHANG) == pid_) {
@@ -254,13 +266,10 @@ private:
             return;
         }
 #if defined(_WIN32)
-        HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE,
-                                     static_cast<DWORD>(pid_));
-        if (process != NULL) {
-            TerminateProcess(process, 1);
-            WaitForSingleObject(process, 5000);
-            CloseHandle(process);
-        }
+        TerminateProcess(process_handle_, 1);
+        WaitForSingleObject(process_handle_, 5000);
+        CloseHandle(process_handle_);
+        process_handle_ = NULL;
 #else
         kill(pid_, SIGTERM);
         int status = 0;
@@ -271,6 +280,9 @@ private:
     }
 
     pid_t pid_;
+#if defined(_WIN32)
+    HANDLE process_handle_;
+#endif
 };
 
 class MbedTlsServer {
