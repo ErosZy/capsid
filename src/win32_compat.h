@@ -601,7 +601,9 @@ inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
 // header is included first by tests and host sources on every platform;
 // bring in the POSIX declarations the call sites rely on.
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -668,6 +670,69 @@ inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
     timeout.tv_usec = static_cast<suseconds_t>((timeout_ms % 1000u) * 1000u);
     return setsockopt(
         fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+}
+
+// Remaining Windows-shim passthroughs used by shared call sites. The
+// POSIX side implements them with the native equivalents so ported code
+// can call the shims unconditionally.
+inline bool ensure_winsock() {
+    return true;
+}
+
+inline void set_binary_file_defaults() {
+}
+
+inline ssize_t send_fd(int fd, const void *data, size_t size, int flags) {
+    return send(fd, data, size, flags);
+}
+
+inline ssize_t write_any_fd(int fd, const void *data, size_t size) {
+    return write(fd, data, size);
+}
+
+inline int accept_fd(int listener) {
+    return accept(listener, NULL, NULL);
+}
+
+inline int shutdown_fd(int fd) {
+    return shutdown(fd, SHUT_RDWR);
+}
+
+inline bool set_socket_nonblocking(int fd) {
+    const int status_flags = fcntl(fd, F_GETFL, 0);
+    return status_flags >= 0 &&
+           fcntl(fd, F_SETFL, status_flags | O_NONBLOCK) == 0;
+}
+
+inline void map_winsock_errno() {
+}
+
+inline int getpid() {
+    return ::getpid();
+}
+
+inline uid_t geteuid() {
+    return ::geteuid();
+}
+
+inline int setenv(const char *name, const char *value, int overwrite) {
+    return ::setenv(name, value, overwrite);
+}
+
+inline int unsetenv(const char *name) {
+    return ::unsetenv(name);
+}
+
+inline int usleep(unsigned long usec) {
+    return ::usleep(usec);
+}
+
+inline int gettimeofday(struct timeval *tv, void *timezone) {
+    return ::gettimeofday(tv, timezone);
+}
+
+inline char *mkdtemp(char *templ) {
+    return ::mkdtemp(templ);
 }
 
 }  // namespace win32
