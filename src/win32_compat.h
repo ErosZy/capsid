@@ -364,6 +364,21 @@ inline bool create_socket_pair(int fds[2]) {
 namespace capsid {
 namespace win32 {
 
+// socket(family, SOCK_STREAM, 0) as a CRT fd.
+inline int create_socket_fd(int family) {
+    if (!ensure_winsock()) {
+        errno = EIO;
+        return -1;
+    }
+    const SOCKET handle = socket(family, SOCK_STREAM, 0);
+    if (handle == INVALID_SOCKET) {
+        map_winsock_errno();
+        return -1;
+    }
+    return _open_osfhandle(
+        static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
+}
+
 // socket(AF_INET, SOCK_STREAM, 0) as a CRT fd.
 inline int create_tcp_socket_fd() {
     if (!ensure_winsock()) {
@@ -563,6 +578,10 @@ namespace win32 {
 
 inline bool create_socket_pair(int fds[2]) {
     return socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0;
+}
+
+inline int create_socket_fd(int family) {
+    return socket(family, SOCK_STREAM | SOCK_CLOEXEC, 0);
 }
 
 inline int create_tcp_socket_fd() {

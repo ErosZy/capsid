@@ -311,7 +311,7 @@ public:
           ipv6_(ipv6),
           stopping_(false),
           requests_(0) {
-        fd_ = socket(ipv6_ ? AF_INET6 : AF_INET, SOCK_STREAM, 0);
+        fd_ = capsid::win32::create_socket_fd(ipv6_ ? AF_INET6 : AF_INET);
         if (fd_ < 0) {
             fail("cannot create HTTP matrix socket");
         }
