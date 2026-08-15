@@ -5119,8 +5119,24 @@ private:
         writer_opaque_.diag = diag_enabled_;
         writer_opaque_.frame_types.fill(0);
         if (!outbound_.flush(socket_writer, &writer_opaque_)) {
+            {
+                FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+                if (dbg != NULL) {
+                    std::fprintf(dbg, "flush_output: FAILED errno=%d\n",
+                                 errno);
+                    std::fclose(dbg);
+                }
+            }
             shutdown();
             return;
+        }
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "flush_output: ok calls=%u\n",
+                             static_cast<unsigned>(writer_opaque_.calls));
+                std::fclose(dbg);
+            }
         }
         if (diag_enabled_ && writer_opaque_.calls > 0) {
             flush_syscall_samples_ += 1;
