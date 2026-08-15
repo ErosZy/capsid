@@ -98,6 +98,14 @@ bool redirect_stdio_to_dev_null() {
 }  // namespace
 
 int main(int argc, char **argv) {
+    {
+        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+        if (dbg != NULL) {
+            std::fprintf(dbg, "worker main entered argc=%d\n", argc);
+            std::fclose(dbg);
+        }
+    }
+    std::cerr << "capsid-worker: DEBUG main entered" << std::endl;
     int ipc_fd = -1;
     int network_namespace_fd = -1;
     bool close_stdio = false;
@@ -142,6 +150,7 @@ int main(int argc, char **argv) {
     if (close_stdio && !redirect_stdio_to_dev_null()) {
         return 2;
     }
+    std::cerr << "capsid-worker: DEBUG started fd=" << ipc_fd << std::endl;
     TJS_Initialize(argc, argv);
     return capsid_run_worker(ipc_fd, network_namespace_fd);
 }
