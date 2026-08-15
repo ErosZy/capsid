@@ -20,6 +20,11 @@ extern "C" {
 
 int capsid_tjs_set_ca_bundle_path(TJSRuntime *runtime, const char *path);
 int capsid_tjs_set_cookie_jar_path(TJSRuntime *runtime, const char *path);
+int capsid_tjs_set_fs_policy(
+    TJSRuntime *runtime,
+    int (*check)(void *opaque, const char *path, int write_access,
+                 char *reason, size_t reason_size),
+    void *opaque);
 int capsid_tjs_set_egress_policy(
     TJSRuntime *runtime,
     int (*check)(void *opaque,
@@ -1204,11 +1209,13 @@ private:
             // §7.7: the Binding Runtime's egress gate consults the
             // current binding's policy — never the User policy.
             if (capsid_tjs_set_egress_policy(
-                    runtime, binding_egress_check, self) != 0) {
+                    runtime, binding_egress_check, self) != 0 ||
+                capsid_tjs_set_fs_policy(
+                    runtime, binding_fs_check, self) != 0) {
                 if (!JS_HasException(ctx)) {
                     JS_ThrowInternalError(
                         ctx,
-                        "failed to install Capsid binding egress gate");
+                        "failed to install Capsid binding native gates");
                 }
                 return -1;
             }
@@ -1348,6 +1355,48 @@ private:
                 }
                 return 0;
             }
+        }
+        return 1;
+    }
+
+    // §3.1: the Binding Runtime's FS gate consults the current
+    // binding's policy; no valid binding context fails closed before the
+    // syscall.
+    static int binding_fs_check(void *opaque,
+                                const char *path,
+                                int write_access,
+                                char *reason,
+                                size_t reason_size) {
+        WorkerRuntime *self =
+            static_cast<WorkerRuntime *>(opaque);
+        if (reason && reason_size != 0) {
+            reason[0] = '\0';
+        }
+        if (!self || !path) {
+            return 0;
+        }
+        const capsid::BindingPolicy *policy =
+            self->binding_policies_.policy(self->current_binding_id_);
+        if (policy == NULL) {
+            if (reason && reason_size != 0) {
+                const std::string text =
+                    "fs denied: no binding policy";
+                std::snprintf(reason, reason_size, "%s", text.c_str());
+            }
+            return 0;
+        }
+        const capsid::PermissionDecision decision =
+            policy->capability.evaluate(
+                write_access ? CAPSID_PERMISSION_WRITE
+                             : CAPSID_PERMISSION_READ,
+                path);
+        if (decision.state != CAPSID_PERMISSION_STATE_GRANTED) {
+            if (reason && reason_size != 0) {
+                const std::string text =
+                    std::string("fs denied by binding policy: ") + path;
+                std::snprintf(reason, reason_size, "%s", text.c_str());
+            }
+            return 0;
         }
         return 1;
     }
@@ -4355,9 +4404,15 @@ private:
                         descriptor.secrets[index].value.data()),
                     descriptor.secrets[index].value.size()));
         }
+        // §2.4: config and secrets are null-prototype, deep-frozen.
+        JS_SetPrototype(binding_ctx_, config, JS_NULL);
         deep_freeze(binding_ctx_, config);
         deep_freeze(binding_ctx_, secrets);
         JSValue log = build_binding_log_object();
+        // §2.4: the factory runs outside any binding context — factory
+        // initialization is pure JavaScript, so every native gate fails
+        // closed during it.
+        current_binding_id_.clear();
         // §2.4: the factory receives one frozen object argument
         // { config, secrets, log }. JS_SetPropertyStr transfers ownership
         // of each value into `init`, so only `init` is freed afterwards.
@@ -4371,6 +4426,7 @@ private:
             JS_Call(binding_ctx_, factory, JS_UNDEFINED, 1, args);
         JS_FreeValue(binding_ctx_, init);
         JS_FreeValue(binding_ctx_, factory);
+        current_binding_id_ = descriptor.name;
         if (JS_IsException(result)) {
             *error = "binding '" + descriptor.name +
                      "' factory threw: " + js_error_text(binding_ctx_);
@@ -4428,12 +4484,25 @@ private:
                          method_name;
                 return false;
             }
-            JSValue member =
-                JS_GetProperty(binding_ctx_, result, tab[index].atom);
+            JSPropertyDescriptor member_descriptor;
+            if (JS_GetOwnProperty(binding_ctx_, &member_descriptor,
+                                  result, tab[index].atom) < 0) {
+                JS_FreePropertyEnum(binding_ctx_, tab, count);
+                JS_FreeValue(binding_ctx_, result);
+                JS_FreeValue(binding_ctx_, table.factory_object);
+                *error = "binding '" + descriptor.name +
+                         "' method property is unreadable";
+                return false;
+            }
+            const bool is_accessor =
+                !JS_IsUndefined(member_descriptor.getter) ||
+                !JS_IsUndefined(member_descriptor.setter);
             const bool is_function =
-                JS_IsFunction(binding_ctx_, member);
-            JS_FreeValue(binding_ctx_, member);
-            if (!is_function) {
+                JS_IsFunction(binding_ctx_, member_descriptor.value);
+            JS_FreeValue(binding_ctx_, member_descriptor.getter);
+            JS_FreeValue(binding_ctx_, member_descriptor.setter);
+            JS_FreeValue(binding_ctx_, member_descriptor.value);
+            if (is_accessor || !is_function) {
                 JS_FreePropertyEnum(binding_ctx_, tab, count);
                 JS_FreeValue(binding_ctx_, result);
                 JS_FreeValue(binding_ctx_, table.factory_object);
@@ -4702,8 +4771,8 @@ private:
         if (self == NULL || func_data == NULL) {
             return JS_UNDEFINED;
         }
-        int call_id = -1;
-        if (JS_ToInt32(ctx, &call_id, func_data[0]) != 0 ||
+        int64_t call_id = -1;
+        if (JS_ToInt64(ctx, &call_id, func_data[0]) != 0 ||
             call_id < 0) {
             return JS_UNDEFINED;
         }
@@ -4737,8 +4806,8 @@ private:
         if (self == NULL || func_data == NULL) {
             return JS_UNDEFINED;
         }
-        int call_id = -1;
-        if (JS_ToInt32(ctx, &call_id, func_data[0]) != 0 ||
+        int64_t call_id = -1;
+        if (JS_ToInt64(ctx, &call_id, func_data[0]) != 0 ||
             call_id < 0) {
             return JS_UNDEFINED;
         }
@@ -4843,8 +4912,7 @@ private:
             binding_to_user_.push_back(call_id);
             return;
         }
-        JSValue data = JS_NewInt32(
-            binding_ctx_, static_cast<int32_t>(call_id));
+        JSValue data = JS_NewInt64(binding_ctx_, call_id);
         JSValue on_fulfilled = JS_NewCFunctionData2(
             binding_ctx_, binding_fulfilled, "onFulfilled", 1, 0, 1,
             &data);
@@ -4967,13 +5035,32 @@ private:
     void cancel_binding_calls(uint64_t request_id) {
         for (std::map<uint64_t, PendingBindingCall>::iterator it =
                  pending_binding_calls_.begin();
-             it != pending_binding_calls_.end();
-             ++it) {
+             it != pending_binding_calls_.end();) {
             PendingBindingCall &call = it->second;
             if (call.request_id != request_id || call.canceled) {
+                ++it;
                 continue;
             }
             call.canceled = true;
+            if (!call.dispatched) {
+                // §5.2: an undispatched call is dropped immediately — the
+                // queue entry and the inflight quota are released now,
+                // not when the pump would have reached it.
+                for (std::deque<uint64_t>::iterator q =
+                         user_to_binding_.begin();
+                     q != user_to_binding_.end(); ++q) {
+                    if (*q == it->first) {
+                        user_to_binding_.erase(q);
+                        break;
+                    }
+                }
+                self_finish_binding_call(call);
+                pending_binding_calls_.erase(it++);
+                if (inflight_binding_calls_ > 0) {
+                    --inflight_binding_calls_;
+                }
+                continue;
+            }
             if (binding_ctx_ != NULL &&
                 !JS_IsUndefined(call.abort_controller)) {
                 JSValue ignored = JS_Call(

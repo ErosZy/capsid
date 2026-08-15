@@ -1,0 +1,80 @@
+--- a/src/private.h	2026-08-15 18:40:24
++++ b/src/private.h	2026-08-15 18:40:24
+@@ -122,6 +122,13 @@
+                      size_t reason_size);
+         void *opaque;
+     } egress;
++    /* Capsid Binding v1: per-origin FS gate for raw core.fs and SQLite
++     * paths; write_access distinguishes mutations from reads. */
++    struct {
++        int (*check)(void *opaque, const char *path, int write_access,
++                     char *reason, size_t reason_size);
++        void *opaque;
++    } capsid_fs;
+ #endif
+     struct {
+         TJSTimer *timers;
+--- a/src/mod_fs.c	2026-08-15 18:40:24
++++ b/src/mod_fs.c	2026-08-15 18:40:24
+@@ -956,6 +956,29 @@
+         return JS_EXCEPTION;
+     }
+ 
++#ifdef TJS_RESTRICTED_CORE
++    /* Capsid Binding v1: the per-origin FS gate decides every open before
++     * the syscall; mutations need the write path. */
++    {
++        TJSRuntime *qrt = TJS_GetRuntime(ctx);
++        if (!qrt || !qrt->capsid_fs.check) {
++            JS_FreeCString(ctx, path);
++            JS_ThrowTypeError(ctx, "fs policy is unavailable");
++            return JS_EXCEPTION;
++        }
++        char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++        const int write_access =
++            (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND)) != 0;
++        if (!qrt->capsid_fs.check(qrt->capsid_fs.opaque, path,
++                                  write_access, reason, sizeof(reason))) {
++            JS_FreeCString(ctx, path);
++            JS_ThrowTypeError(ctx, "%s",
++                              reason[0] ? reason : "fs access denied");
++            return JS_EXCEPTION;
++        }
++    }
++#endif
++
+     TJSFsReq *fr = js_malloc(ctx, sizeof(*fr));
+     if (!fr) {
+         JS_FreeCString(ctx, path);
+--- a/src/mod_sqlite3.c	2026-08-15 18:40:24
++++ b/src/mod_sqlite3.c	2026-08-15 18:40:24
+@@ -180,6 +180,29 @@
+     }
+ #endif
+ 
++#ifdef TJS_RESTRICTED_CORE
++    /* Capsid Binding v1: SQLite databases open through the per-origin FS
++     * gate; a readable database still writes its journal and locks. */
++    {
++        TJSRuntime *qrt = TJS_GetRuntime(ctx);
++        if (!qrt || !qrt->capsid_fs.check) {
++            JS_FreeCString(ctx, db_name);
++            JS_ThrowTypeError(ctx, "fs policy is unavailable");
++            return JS_EXCEPTION;
++        }
++        char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++        const int write_access =
++            (flags & SQLITE_OPEN_READONLY) == 0;
++        if (!qrt->capsid_fs.check(qrt->capsid_fs.opaque, db_name,
++                                  write_access, reason, sizeof(reason))) {
++            JS_FreeCString(ctx, db_name);
++            JS_ThrowTypeError(ctx, "%s",
++                              reason[0] ? reason : "fs access denied");
++            return JS_EXCEPTION;
++        }
++    }
++#endif
++
+     sqlite3 *handle = NULL;
+     int r = sqlite3_open_v2(db_name, &handle, flags, NULL);
+ 

@@ -52,6 +52,19 @@ int capsid_tjs_set_egress_policy(
     return 0;
 }
 
+int capsid_tjs_set_fs_policy(
+    TJSRuntime *runtime,
+    int (*check)(void *opaque, const char *path, int write_access,
+                 char *reason, size_t reason_size),
+    void *opaque) {
+    if (!runtime || !check || runtime->capsid_fs.check) {
+        return -1;
+    }
+    runtime->capsid_fs.check = check;
+    runtime->capsid_fs.opaque = opaque;
+    return 0;
+}
+
 static JSValue capsid_serialize(JSContext *ctx,
                               JSValueConst this_val,
                               int argc,

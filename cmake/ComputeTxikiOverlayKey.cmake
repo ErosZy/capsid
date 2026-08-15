@@ -176,10 +176,10 @@ function(capsid_compute_txiki_overlay_key)
     file(GLOB CTOK_PATCH_LIST "${CTOK_PATCH_DIR}/*.patch")
     list(SORT CTOK_PATCH_LIST)
     list(LENGTH CTOK_PATCH_LIST CTOK_PATCH_COUNT)
-    # Binding v1: 0016 adds the shared loop; 0017 gates raw TCP/UDP egress.
-    if(NOT CTOK_PATCH_COUNT EQUAL 18)
+    # Binding v1: 0016 shared loop; 0017 raw egress; 0018 FS native gate.
+    if(NOT CTOK_PATCH_COUNT EQUAL 19)
         message(FATAL_ERROR
-            "expected 18 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 19 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

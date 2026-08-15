@@ -725,6 +725,82 @@ void test_binding_raw_tcp_egress_denial(const char *worker_path,
     finish_worker(fd, pid, true);
 }
 
+// Binding v1 P0-6: the per-origin Native Gate — a Binding writing a file
+// outside its fs policy fails before the syscall, on the raw core.fs
+// path (not only through a capsid facade).
+void test_binding_fs_native_gate(const char *worker_path,
+                                 const char *call_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob(
+        "import core from 'tjs:internal/core';"
+        "export default ({ config, secrets, log }) => {"
+        "  return { find() {"
+        "    return core.fs.open('/tmp/capsid-binding-fs-probe', 'w');"
+        "  } };"
+        "};");
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(call_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    for (int i = 0; i < 8; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "no frame arrived before READY");
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+    }
+    require(frame.type == capsid::protocol::kReady,
+            "fs-gate binding worker did not report READY");
+
+    capsid::protocol::Frame head;
+    head.type = capsid::protocol::kRequestHead;
+    head.flags = capsid::protocol::kFlagRequestEnd;
+    head.request_id = 80;
+    append_string16(&head.payload, "GET");
+    append_string32(&head.payload, "https://example.test/");
+    capsid::protocol::append_u16(&head.payload, 0);
+    send_frame(fd, head);
+
+    std::string body;
+    bool ended = false;
+    for (int i = 0; i < 64; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "fs-gate response frames stopped before the terminal");
+        if (frame.type == capsid::protocol::kError &&
+            frame.request_id == 80) {
+            body.assign(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+            ended = true;
+            break;
+        }
+        if (frame.type == capsid::protocol::kResponseBody) {
+            body.append(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+        }
+        if (frame.type == capsid::protocol::kResponseEnd) {
+            ended = true;
+            break;
+        }
+    }
+    require(ended, "fs-gate binding request never terminated");
+    require(body.find("fs denied") != std::string::npos ||
+                body.find("binding call failed") != std::string::npos,
+            "fs-gate denial carries no failure text: " + body);
+    finish_worker(fd, pid, true);
+}
+
 void test_load_binding_abi_validation() {
     capsid_worker *worker = NULL;
     require(
@@ -768,6 +844,7 @@ int main(int argc, char **argv) {
     test_binding_end_to_end_call(argv[1], argv[4]);
     test_binding_egress_denial(argv[1], argv[4]);
     test_binding_raw_tcp_egress_denial(argv[1], argv[4]);
+    test_binding_fs_native_gate(argv[1], argv[4]);
     test_load_binding_abi_validation();
     return 0;
 }
