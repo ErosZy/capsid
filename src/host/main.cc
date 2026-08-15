@@ -1281,8 +1281,17 @@ int main(int argc, char** argv) {
     // the single active worker, which these modes publish at spawn.
     auto structured_log = std::make_unique<capsid::host::StructuredLog>(
         [](const std::string& line) {
+#if defined(_WIN32)
+            // MSVC write() takes an unsigned int count; structured log
+            // lines are single small JSON objects.
+            const ssize_t written = ::write(
+                STDERR_FILENO,
+                line.data(),
+                static_cast<unsigned int>(line.size()));
+#else
             const ssize_t written = ::write(STDERR_FILENO, line.data(),
                                             line.size());
+#endif
             (void)written;
         });
     auto metrics = std::make_unique<capsid::host::MetricsRegistry>();
