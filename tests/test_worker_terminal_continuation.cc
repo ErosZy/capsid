@@ -56,7 +56,7 @@ std::string log_message(const capsid_event &event) {
 }
 
 void wait_io(capsid_worker *worker, bool writable) {
-    pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
     descriptor.events = POLLIN | (writable ? POLLOUT : 0);
     (void)capsid::win32::capsid_poll(&descriptor, 1, 20);

@@ -63,26 +63,25 @@ public:
           port_(0),
           accepted_(false),
           closed_(false) {
-        listener_ = socket(AF_INET, SOCK_STREAM, 0);
+        listener_ = capsid::win32::create_tcp_socket_fd();
         if (listener_ < 0) {
             fail("cannot create hanging server");
         }
         const int reuse = 1;
-        setsockopt(
-            listener_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        capsid::win32::setsockopt_reuseaddr_fd(listener_);
         struct sockaddr_in address = {};
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         address.sin_port = 0;
-        if (bind(
+        if (capsid::win32::bind_fd(
                 listener_,
                 reinterpret_cast<const struct sockaddr *>(&address),
                 sizeof(address)) != 0 ||
-            listen(listener_, 1) != 0) {
+            capsid::win32::listen_fd(listener_, 1) != 0) {
             fail("cannot bind hanging server");
         }
         socklen_t size = sizeof(address);
-        if (getsockname(
+        if (capsid::win32::getsockname_fd(
                 listener_,
                 reinterpret_cast<struct sockaddr *>(&address),
                 &size) != 0) {
@@ -95,10 +94,10 @@ public:
     ~HangingServer() {
         const int client = client_.load();
         if (client >= 0) {
-            shutdown(client, SHUT_RDWR);
+            capsid::win32::shutdown_fd(client);
         }
         if (listener_ >= 0) {
-            shutdown(listener_, SHUT_RDWR);
+            capsid::win32::shutdown_fd(listener_);
         }
         if (thread_.joinable()) {
             thread_.join();
@@ -129,7 +128,7 @@ private:
         if (capsid::win32::capsid_poll(&descriptor, 1, 5000) <= 0) {
             return;
         }
-        const int client = accept(listener_, NULL, NULL);
+        const int client = capsid::win32::accept_fd(listener_);
         client_ = client;
         if (client < 0) {
             return;
