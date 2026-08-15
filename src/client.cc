@@ -1414,14 +1414,6 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
            resource_limits.cgroup_cpu_quota_us < 1000)))) {
         return CAPSID_INVALID_ARGUMENT;
     }
-#if defined(_WIN32)
-    // Strict sandbox has no Windows equivalent (no seccomp/Landlock;
-    // see docs/windows.md). Reject at spawn so the worker never starts
-    // under a configuration it cannot enforce.
-    if (config.strict_sandbox) {
-        return CAPSID_INVALID_ARGUMENT;
-    }
-#endif
     if (config.sandbox_network_namespace_fd >= 0) {
 #if defined(__linux__)
         if (!config.strict_sandbox ||
