@@ -2508,6 +2508,14 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
         return CAPSID_OK;
     }
     for (;;) {
+        // The hard-timeout path closes the descriptor and marks the
+        // worker closed; once the terminal reasons have drained there is
+        // nothing left to read. Reading a closed descriptor is UB on
+        // Windows (_get_osfhandle indexes the CRT table), so report the
+        // closed channel instead.
+        if (worker->closed) {
+            return CAPSID_CLOSED;
+        }
         capsid::protocol::Frame frame;
         capsid::protocol::ParseResult parse_result =
             worker->parser.next(&frame, &worker->event_payload);
