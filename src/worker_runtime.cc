@@ -572,7 +572,23 @@ public:
             return 1;
         }
         deadline_timer_started_ = true;
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: before update_poll
+");
+                std::fclose(dbg);
+            }
+        }
         update_poll();
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: after update_poll
+");
+                std::fclose(dbg);
+            }
+        }
         // The READY payload is the 71-byte compatibility ID from the single
         // generated identity source, so a host can compare the running
         // worker against the linked library and the bytecode compiler
