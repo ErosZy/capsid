@@ -187,7 +187,7 @@ jobs:
         shell: pwsh
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
-            openssl boost-system --triplet x64-windows-static
+            openssl boost-system boost-asio --triplet x64-windows-static
           cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCAPSID_BUILD_HOST=ON `

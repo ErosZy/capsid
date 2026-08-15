@@ -24,8 +24,9 @@ Linux 的严格沙箱语义（seccomp/Landlock/namespace/cgroup）没有 Windows
 ### 步骤
 
 ```powershell
-# 1. 依赖：静态 OpenSSL 与 Boost.System（Boost ≥1.87 为 header-only）
-vcpkg install openssl boost-system --triplet x64-windows-static
+# 1. 依赖：静态 OpenSSL 与 Boost.System/Asio（Boost ≥1.87 为 header-only；
+#    boost-asio 是独立 port，Host 数据面需要 <boost/asio.hpp>）
+vcpkg install openssl boost-system boost-asio --triplet x64-windows-static
 
 # 2. 锁定 JS 依赖（esbuild）
 npm ci --ignore-scripts --prefix vendor/txiki.js

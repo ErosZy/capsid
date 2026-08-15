@@ -496,13 +496,14 @@ jobs:
             refs/tags/v26.6.0:refs/tags/v26.6.0
         shell: bash
 
-      # OpenSSL (static) and Boost.System (header-only) come from the
+      # OpenSSL (static) and Boost.System/Asio (header-only) come from the
       # runner's preinstalled vcpkg; the static triplet matches the /MT CRT
-      # policy pinned by the vendored txiki build.
+      # policy pinned by the vendored txiki build. boost-asio is a separate
+      # port from boost-system (the Host data plane needs <boost/asio.hpp>).
       - name: Install Windows build dependencies (vcpkg)
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
-            openssl boost-system --triplet x64-windows-static
+            openssl boost-system boost-asio --triplet x64-windows-static
         shell: pwsh
 
       # §12.5 Windows row: Host units plus the non-strict worker contracts.
