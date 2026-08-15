@@ -976,6 +976,57 @@ void test_binding_wasi_workload(const char *worker_path,
     finish_worker(fd, pid, true);
 }
 
+// Binding v1 §3.3: every module the manifest schema can grant must
+// actually exist in this restricted build — the grantable set and the
+// build must not drift.
+void test_binding_grantable_modules_exist(const char *worker_path,
+                                          const char *call_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob(
+        "import assert_mod from 'tjs:assert';"
+        "import getopts_mod from 'tjs:getopts';"
+        "import hashing_mod from 'tjs:hashing';"
+        "import core from 'tjs:internal/core';"
+        "import internal_path from 'tjs:internal/path';"
+        "import ipaddr_mod from 'tjs:ipaddr';"
+        "import path_mod from 'tjs:path';"
+        "import socket_mod from 'tjs:posix-socket';"
+        "import readline_mod from 'tjs:readline';"
+        "import sqlite_mod from 'tjs:sqlite';"
+        "import utils_mod from 'tjs:utils';"
+        "import uuid_mod from 'tjs:uuid';"
+        "import wasi_mod from 'tjs:wasi';"
+        "const seen = [assert_mod, getopts_mod, hashing_mod, core,"
+        "  internal_path, ipaddr_mod, path_mod, socket_mod,"
+        "  readline_mod, sqlite_mod, utils_mod, uuid_mod, wasi_mod];"
+        "export default ({ config, secrets, log }) => {"
+        "  return { find() { return 'modules:' + seen.length; } };"
+        "};");
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(call_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    for (int i = 0; i < 8; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "no frame arrived before READY");
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+    }
+    require(frame.type == capsid::protocol::kReady,
+            "grantable-modules binding worker did not report READY");
+    finish_worker(fd, pid, true);
+}
+
 void test_load_binding_abi_validation() {
     capsid_worker *worker = NULL;
     require(
@@ -1022,6 +1073,7 @@ int main(int argc, char **argv) {
     test_binding_fs_native_gate(argv[1], argv[4]);
     test_binding_async_identity(argv[1], argv[4]);
     test_binding_wasi_workload(argv[1], argv[4]);
+    test_binding_grantable_modules_exist(argv[1], argv[4]);
     test_load_binding_abi_validation();
     return 0;
 }
