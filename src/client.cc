@@ -1524,10 +1524,22 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
                 DWORD flags = 0;
                 GetHandleInformation(reinterpret_cast<HANDLE>(child),
                                      &flags);
-                std::fprintf(dbg, "client: child_handle=%lld inherit_flags=%lu\n",
-                             static_cast<long long>(
-                                 static_cast<intptr_t>(child)),
-                             static_cast<unsigned long>(flags));
+                int so_type = 0;
+                int type_length = sizeof(so_type);
+                std::fprintf(
+                    dbg,
+                    "client: child_handle=%lld inherit_flags=%lu "
+                    "parent_so_type=%d parent_type_err=%d\n",
+                    static_cast<long long>(
+                        static_cast<intptr_t>(child)),
+                    static_cast<unsigned long>(flags),
+                    getsockopt(
+                        child, SOL_SOCKET, SO_TYPE,
+                        reinterpret_cast<char *>(&so_type),
+                        &type_length) == 0
+                        ? so_type
+                        : -1,
+                    WSAGetLastError());
                 std::fclose(dbg);
             }
         }
