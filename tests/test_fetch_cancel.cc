@@ -288,6 +288,12 @@ int main(int argc, char **argv) {
             if (event.type == CAPSID_EVENT_EXIT) {
                 fail("worker exited while canceling fetch");
             }
+            if (event.type == CAPSID_EVENT_LOG) {
+                std::fprintf(
+                    stderr, "DBG worker log: %.*s\n",
+                    static_cast<int>(event.payload.size),
+                    event.payload.data);
+            }
         }
     }
     if (!server.closed()) {
