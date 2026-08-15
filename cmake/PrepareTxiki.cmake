@@ -122,8 +122,11 @@ find_program(CAPSID_GIT_EXECUTABLE git REQUIRED)
 file(GLOB CAPSID_PATCHES "${CMAKE_CURRENT_LIST_DIR}/../patches/txiki/*.patch")
 list(SORT CAPSID_PATCHES)
 foreach(CAPSID_PATCH IN LISTS CAPSID_PATCHES)
+    # WORKING_DIRECTORY alone (no `git -C`): mingw git mis-resolves
+    # drive-lettered -C paths and then fails deps-relative hunks with
+    # "No such file or directory".
     execute_process(
-        COMMAND "${CAPSID_GIT_EXECUTABLE}" -C "${CAPSID_VENDOR_OVERLAY}"
+        COMMAND "${CAPSID_GIT_EXECUTABLE}"
             apply -p1 --ignore-whitespace "${CAPSID_PATCH}"
         WORKING_DIRECTORY "${CAPSID_VENDOR_OVERLAY}"
         RESULT_VARIABLE CAPSID_PATCH_RESULT
