@@ -249,7 +249,6 @@ static int scenario_request_path_oom(const char *worker_path) {
     const capsid_result begin_result = capsid_worker_begin_request(
         worker, 1, "GET", "http://example.test/", NULL, 0);
     disarm_failures();
-                 static_cast<int>(begin_result));
     CHECK(begin_result == CAPSID_OUT_OF_MEMORY);
     CHECK(capsid_last_error() != NULL);
 
@@ -259,7 +258,6 @@ static int scenario_request_path_oom(const char *worker_path) {
         capsid_worker_begin_bodyless_request(
             worker, 2, "GET", "http://example.test/", NULL, 0);
     disarm_failures();
-                 static_cast<int>(bodyless_result));
     CHECK(bodyless_result == CAPSID_OUT_OF_MEMORY);
     CHECK(capsid_last_error() != NULL);
 
@@ -282,7 +280,6 @@ static int scenario_request_path_oom(const char *worker_path) {
     const capsid_result end_result =
         capsid_worker_end_request(worker, 3);
     disarm_failures();
-                 static_cast<int>(end_result));
     CHECK(end_result == CAPSID_OUT_OF_MEMORY);
     CHECK(capsid_last_error() != NULL);
 
@@ -290,7 +287,6 @@ static int scenario_request_path_oom(const char *worker_path) {
     const capsid_result credit_result =
         capsid_worker_grant_response_credit(worker, 3, 4096);
     disarm_failures();
-                 static_cast<int>(credit_result));
     CHECK(credit_result == CAPSID_OUT_OF_MEMORY);
     CHECK(capsid_last_error() != NULL);
 
@@ -298,7 +294,6 @@ static int scenario_request_path_oom(const char *worker_path) {
     const capsid_result cancel_result =
         capsid_worker_cancel(worker, 3);
     disarm_failures();
-                 static_cast<int>(cancel_result));
     CHECK(cancel_result == CAPSID_OUT_OF_MEMORY);
     CHECK(capsid_last_error() != NULL);
 
@@ -306,7 +301,6 @@ static int scenario_request_path_oom(const char *worker_path) {
     const capsid_result metrics_result =
         capsid_worker_request_memory_metrics(worker);
     disarm_failures();
-                 static_cast<int>(metrics_result));
     CHECK(metrics_result == CAPSID_OUT_OF_MEMORY);
     CHECK(capsid_last_error() != NULL);
 
@@ -315,7 +309,6 @@ static int scenario_request_path_oom(const char *worker_path) {
     const capsid_result bundle_result = capsid_worker_load_bundle(
         worker, body, sizeof(body) - 1);
     disarm_failures();
-                 static_cast<int>(bundle_result));
     CHECK(bundle_result == CAPSID_OUT_OF_MEMORY);
     CHECK(capsid_last_error() != NULL);
 
@@ -328,7 +321,6 @@ static int scenario_request_path_oom(const char *worker_path) {
     const capsid_result event_result =
         capsid_worker_next_event(worker, &event);
     disarm_failures();
-                 static_cast<int>(event_result));
     CHECK(event_result == CAPSID_OUT_OF_MEMORY ||
           event_result == CAPSID_WOULD_BLOCK);
     if (event_result == CAPSID_OUT_OF_MEMORY) {
