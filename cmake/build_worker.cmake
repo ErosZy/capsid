@@ -162,6 +162,15 @@ if(CAPSID_BUILD_WORKER)
     if(NOT MSVC)
         target_compile_options(tjs PRIVATE -Wno-unused-result)
     endif()
+    if(MSVC)
+        # qjsc.c uses POSIX getopt (optarg/optind) with no portability
+        # layer; the vendored shim (vendor/win32-shims) provides it for
+        # the tjsc tool only, force-included into the translation unit.
+        target_sources(tjsc PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/win32-shims/getopt.c")
+        target_compile_options(tjsc PRIVATE
+            "/FI${CMAKE_CURRENT_SOURCE_DIR}/vendor/win32-shims/getopt.h")
+    endif()
 
     if(CAPSID_ESBUILD_EXECUTABLE)
         set(CAPSID_ESBUILD "${CAPSID_ESBUILD_EXECUTABLE}")
