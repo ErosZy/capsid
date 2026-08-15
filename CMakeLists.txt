@@ -14,6 +14,10 @@ if(MSVC)
     # same self-containment reason as the musl Linux package.
     cmake_policy(SET CMP0091 NEW)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    # Every project and vendored source is UTF-8 (comments include
+    # em-dashes etc.). MSVC otherwise assumes the ANSI codepage, and C4819
+    # becomes a hard error under /WX on non-Western-locale machines.
+    add_compile_options(/utf-8)
 endif()
 
 option(CAPSID_BUILD_WORKER "Build the txiki.js worker process" ON)
