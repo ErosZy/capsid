@@ -608,6 +608,12 @@ inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
 #include <sys/un.h>
 #include <unistd.h>
 
+// macOS has no SOCK_CLOEXEC; the runtime sets FD_CLOEXEC explicitly on
+// every descriptor it creates, so 0 is a faithful fallback there.
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 0
+#endif
+
 namespace capsid {
 namespace win32 {
 
