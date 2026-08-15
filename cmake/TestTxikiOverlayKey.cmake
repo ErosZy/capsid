@@ -74,7 +74,19 @@ if(CAPSID_SUBMODULE_STATUS)
 endif()
 list(SORT CAPSID_SORTABLE_SUBMODULES)
 
-file(SHA256 "${CAPSID_TXIKI_PREPARE_SCRIPT}" CAPSID_PREPARE_HASH)
+# Content hashes are CRLF-normalized, mirroring the shared computation in
+# ComputeTxikiOverlayKey.cmake: a checkout's line endings must not change
+# the key (Windows CRLF vs Linux LF).
+function(capsid_test_normalized_sha256 path out_var)
+    file(READ "${path}" capsid_test_content)
+    string(REPLACE "\r\n" "\n"
+        capsid_test_content "${capsid_test_content}")
+    string(SHA256 capsid_test_hash "${capsid_test_content}")
+    set("${out_var}" "${capsid_test_hash}" PARENT_SCOPE)
+endfunction()
+
+capsid_test_normalized_sha256(
+    "${CAPSID_TXIKI_PREPARE_SCRIPT}" CAPSID_PREPARE_HASH)
 file(GLOB CAPSID_PATCHES "${CAPSID_TXIKI_PATCH_DIR}/*.patch")
 list(SORT CAPSID_PATCHES)
 
@@ -92,7 +104,7 @@ endforeach()
 string(APPEND CAPSID_CANONICAL_INPUT "prepare=${CAPSID_PREPARE_HASH}\n")
 foreach(CAPSID_PATCH IN LISTS CAPSID_PATCHES)
     get_filename_component(CAPSID_PATCH_NAME "${CAPSID_PATCH}" NAME)
-    file(SHA256 "${CAPSID_PATCH}" CAPSID_PATCH_HASH)
+    capsid_test_normalized_sha256("${CAPSID_PATCH}" CAPSID_PATCH_HASH)
     string(APPEND CAPSID_CANONICAL_INPUT
         "patch=${CAPSID_PATCH_NAME} ${CAPSID_PATCH_HASH}\n")
 endforeach()
