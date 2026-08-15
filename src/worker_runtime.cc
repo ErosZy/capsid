@@ -523,26 +523,32 @@ public:
         seal_module_loader();
 
         std::string load_error;
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: before load_application
+");
+                std::fclose(dbg);
+            }
+        }
         if (!load_application(&load_error)) {
             send_error(0, load_error);
             flush_blocking();
             return 1;
         }
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "run: after load_application
+");
+                std::fclose(dbg);
+            }
+        }
 
         set_nonblocking();
-#if defined(_WIN32)
-        // libuv on Windows takes the raw SOCKET, not the CRT fd.
-        if (uv_poll_init(
-                TJS_GetLoop(runtime_),
-                &poll_,
-                static_cast<uv_os_sock_t>(_get_osfhandle(fd_))) != 0) {
-            return 1;
-        }
-#else
         if (uv_poll_init(TJS_GetLoop(runtime_), &poll_, fd_) != 0) {
             return 1;
         }
-#endif
         poll_.data = this;
         poll_started_ = true;
         if (uv_timer_init(TJS_GetLoop(runtime_), &deadline_timer_) != 0) {
