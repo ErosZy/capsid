@@ -82,6 +82,11 @@ if(BUILD_TESTING)
             tests/test_host_binding_registry.cc)
         add_test(NAME host_binding_registry COMMAND test-host-binding-registry)
 
+        capsid_add_binding_test(
+            test-host-binding-compile
+            tests/test_host_binding_compile.cc)
+        add_test(NAME host_binding_compile COMMAND test-host-binding-compile)
+
         add_executable(
             test-host-trusted-key-store
             tests/test_host_trusted_key_store.cc)

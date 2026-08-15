@@ -5,6 +5,7 @@ struct capsid_worker;
 
 #include "host/activation_transaction.h"
 #include "host/bytecode_attestation.h"
+#include "host/binding_compile.h"
 #include "host/policy_compiler.h"
 #include "host/service_lifecycle.h"
 #include "host/worker_capacity_ledger.h"
@@ -59,6 +60,9 @@ struct DeployOutcome {
     WorkerExecutor::WorkerFactory generation_factory;
     std::string version;
     std::string generation_digest;
+    // Binding v1 §6: the committed immutable Binding snapshot; worker
+    // replacement reloads from this, never from a re-read of bindingsRoot.
+    std::vector<capsid::host::EffectiveBinding> bindings;
 };
 
 struct ManagedHostOptions {
@@ -70,6 +74,9 @@ struct ManagedHostOptions {
     std::string state_root;  // absolute path, created by the Host
     std::string application; // the single active App
     std::string worker_path; // absolute capsid-worker path
+    // Binding v1 §2.1: the scanned bindingsRoot snapshot root. Empty
+    // disables bindings for this Host.
+    std::string bindings_root;
     HostPolicy host_policy;
     // Trusted Ed25519 keys for bytecode attestation verification.
     std::vector<capsid::host::TrustedBytecodeKey> trusted_keys;

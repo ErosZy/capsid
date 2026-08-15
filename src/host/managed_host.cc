@@ -243,6 +243,28 @@ struct WarmResult {
 // and checks the compatibility id itself (PR-09c §8.3/§9.3). On failure the
 // worker is destroyed and nullptr is returned — a half-started worker never
 // escapes.
+// Binding v1 §6: every Binding is loaded after spawn and before the App
+// bundle, exactly once per worker; a failure destroys the worker.
+bool load_effective_bindings(
+    capsid_worker* worker,
+    const std::vector<capsid::host::EffectiveBinding>& bindings,
+    std::string* error) {
+    for (const capsid::host::EffectiveBinding& binding : bindings) {
+        capsid_binding_descriptor descriptor;
+        if (!capsid::host::build_binding_descriptor(binding, &descriptor)) {
+            *error = "binding descriptor build failed";
+            return false;
+        }
+        const capsid_result result =
+            capsid_worker_load_binding(worker, &descriptor);
+        if (result != CAPSID_OK) {
+            *error = "binding load failed: " + binding.id;
+            return false;
+        }
+    }
+    return true;
+}
+
 capsid_worker* spawn_loaded_worker(
     const ManagedHostOptions& options,
     const std::vector<std::uint8_t>& bundle,
@@ -250,6 +272,7 @@ capsid_worker* spawn_loaded_worker(
     const std::string& source_name,
     const EffectiveConfig& effective,
     const std::vector<std::pair<std::string, std::string>>& env_values,
+    const std::vector<capsid::host::EffectiveBinding>& bindings,
     std::string* error) {
     capsid_worker* worker = nullptr;
     // ---- two-phase descriptor build ----
@@ -509,6 +532,10 @@ capsid_worker* spawn_loaded_worker(
         options.metrics->set_isolation_applied_features(
             options.application, effective.strict_sandbox ? 1 : 0);
     }
+    if (!load_effective_bindings(worker, bindings, error)) {
+        capsid_worker_destroy(worker);
+        return nullptr;
+    }
     capsid::host::WorkerEventSource event_source;
     event_source.set_worker(worker);
     const capsid_result load_result =
@@ -539,7 +566,8 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                        const std::string& source_name,
                        const std::string& generation,
                        const EffectiveConfig& effective,
-                       const std::vector<std::pair<std::string, std::string>>& env_values) {
+                       const std::vector<std::pair<std::string, std::string>>& env_values,
+                       const std::vector<capsid::host::EffectiveBinding>& bindings) {
     WarmResult out;
     // M2 item 7: §12.1 worker family on the spawn edge — the operation
     // identifier is the generation being deployed.
@@ -551,7 +579,7 @@ WarmResult warm_worker(const ManagedHostOptions& options,
     std::string spawn_error;
     capsid_worker* spawned = spawn_loaded_worker(
         options, bundle, trusted_bytecode, source_name, effective, env_values,
-        &spawn_error);
+        bindings, &spawn_error);
     if (spawned == nullptr) {
         out.error = spawn_error;
         return out;
@@ -665,9 +693,10 @@ WorkerExecutor::WorkerFactory make_generation_factory(
     bool trusted_bytecode,
     const std::string& source_name,
     const EffectiveConfig& effective,
-    const std::vector<std::pair<std::string, std::string>>& env_values) {
+    const std::vector<std::pair<std::string, std::string>>& env_values,
+    const std::vector<capsid::host::EffectiveBinding>& bindings) {
     return [options, bundle, trusted_bytecode, source_name, effective,
-            env_values](capsid_worker** out,
+            env_values, bindings](capsid_worker** out,
                         std::string* factory_error) -> bool {
         if (options.stop_requested != nullptr &&
             options.stop_requested->load()) {
@@ -677,7 +706,7 @@ WorkerExecutor::WorkerFactory make_generation_factory(
         std::string spawn_error;
         capsid_worker* worker = spawn_loaded_worker(
             options, bundle, trusted_bytecode, source_name, effective,
-            env_values, &spawn_error);
+            env_values, bindings, &spawn_error);
         if (worker == nullptr) {
             *factory_error = spawn_error;
             return false;
@@ -705,13 +734,14 @@ WarmPoolResult warm_worker_pool(
     const std::string& source_name,
     const std::string& generation,
     const EffectiveConfig& effective,
-    const std::vector<std::pair<std::string, std::string>>& env_values) {
+    const std::vector<std::pair<std::string, std::string>>& env_values,
+    const std::vector<capsid::host::EffectiveBinding>& bindings) {
     WarmPoolResult out;
     out.workers.reserve(effective.workers);
     for (std::uint32_t index = 0; index < effective.workers; ++index) {
         const WarmResult warm = warm_worker(options, bundle, trusted_bytecode,
                                             source_name, generation, effective,
-                                            env_values);
+                                            env_values, bindings);
         if (!warm.ok) {
             for (capsid_worker* worker : out.workers) {
                 capsid_worker_destroy(worker);
@@ -2320,6 +2350,10 @@ struct PreparedDeployment {
     EffectiveConfig effective;
     std::vector<std::pair<std::string, std::string>> env_values;
     std::string generation_digest;
+    // Binding v1 §6: the committed immutable Binding snapshot and its
+    // committed document (never secret values).
+    std::vector<capsid::host::EffectiveBinding> bindings;
+    std::string bindings_json;
     // Full snapshot material for re-verification at recovery time: the
     // source bundle, the raw bytecode, the attestation claim and its
     // signature. Empty when the deployment carried none.
@@ -2598,6 +2632,81 @@ PreparedDeployment prepare_deployment(ManagedHostOptions* options,
     }
     prepared.effective = compiled.effective;
 
+    // ---- 5b. Binding v1: compile the effective binding set from the
+    // committed snapshot material. The digest joins the Generation
+    // Identity; the snapshot travels with the prepared outcome so worker
+    // replacement never re-reads bindingsRoot.
+    std::string binding_set_digest;
+    if (!options->bindings_root.empty()) {
+        std::vector<capsid::host::AppBindingRequest> binding_requests;
+        std::string binding_parse_error;
+        if (!capsid::host::parse_app_bindings(
+                artifacts.artifacts.capsid_json.bytes, &binding_requests,
+                &binding_parse_error)) {
+            fail(binding_parse_error);
+            return prepared;
+        }
+        if (!binding_requests.empty()) {
+            capsid::host::BindingRegistrySnapshot registry;
+            std::string scan_error;
+            if (!capsid::host::scan_bindings_root(
+                    options->bindings_root, {0, geteuid()}, &registry,
+                    &scan_error)) {
+                fail(scan_error);
+                return prepared;
+            }
+            capsid::host::BindingCompileResult binding_result =
+                capsid::host::compile_effective_bindings(
+                    registry, binding_requests, snapshot_revision);
+            if (!binding_result.ok) {
+                fail(binding_result.error);
+                return prepared;
+            }
+            prepared.bindings = std::move(binding_result.bindings);
+            binding_set_digest = std::move(binding_result.set_digest);
+            prepared.bindings_json =
+                capsid::host::serialize_bindings_snapshot(
+                    prepared.bindings);
+            if (prepared.bindings_json.empty()) {
+                fail("binding snapshot serialization failed");
+                return prepared;
+            }
+            // Resolve binding secret values from the committed snapshot
+            // metadata; an unresolved key id fails the prepare.
+            for (capsid::host::EffectiveBinding& binding :
+                 prepared.bindings) {
+                for (const std::string& key_id :
+                     binding.request.secret_key_ids) {
+                    bool found = false;
+                    for (const EnvironmentSnapshotMetadata& meta :
+                         snapshot.snapshot.metadata()) {
+                        if (meta.source !=
+                                EnvironmentValueSource::kSecret ||
+                            meta.secret_key_id != key_id) {
+                            continue;
+                        }
+                        for (const EnvironmentSnapshotEntry& entry :
+                             snapshot.snapshot.entries()) {
+                            if (entry.name == meta.name) {
+                                binding.secret_values.push_back(
+                                    {key_id, entry.value});
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (found) {
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        fail("binding secret is not resolved: " + key_id);
+                        return prepared;
+                    }
+                }
+            }
+        }
+    }
+
     // ---- 6. real generation identity (no placeholders) ----
     GenerationIdentityInput identity;
     identity.application_id = options->application;
@@ -2613,6 +2722,7 @@ PreparedDeployment prepare_deployment(ManagedHostOptions* options,
     identity.host_config_digest = host_policy_identity(options->host_policy);
     identity.secret_revision = snapshot_revision;
     identity.runtime_compatibility_id = options->runtime_compatibility_id;
+    identity.binding_set_digest = std::move(binding_set_digest);
     prepared.generation_digest = compute_generation_digest(identity);
     prepared.selected = selected;
     prepared.source_name = std::move(source_name);
@@ -2651,6 +2761,7 @@ struct ValidatedGeneration {
     std::string bundle_bin;
     EffectiveConfig effective;
     std::vector<std::pair<std::string, std::string>> env_values;
+    std::vector<capsid::host::EffectiveBinding> bindings;
 };
 
 // Validates a committed generation snapshot in full and rebuilds the warm
@@ -2708,6 +2819,8 @@ ValidatedGeneration validate_committed_generation(
     std::string artifact_text;
     std::string capsid_json;
     std::string generation_text;
+    std::string bindings_json;
+    ReadFileStatus bindings_status = ReadFileStatus::kInvalid;
     {
         const int generations_fd =
             prepare_subdir_at(app_state_fd, "generations");
@@ -2745,6 +2858,9 @@ ValidatedGeneration validate_committed_generation(
             &artifact_text);
         const ReadFileStatus capsid_status = read_file_at(
             generation_fd, "capsid.json", kMaxConfigFileBytes, &capsid_json);
+        bindings_status = read_file_at(
+            generation_fd, "bindings.json", kMaxConfigFileBytes,
+            &bindings_json);
         const ReadFileStatus generation_status = read_file_at(
             generation_fd, "generation.json", 4096, &generation_text);
         // Bytecode material is optional: present exactly when the version
@@ -2772,7 +2888,8 @@ ValidatedGeneration validate_committed_generation(
         const bool optional_snapshot_clean =
             bytecode_status != ReadFileStatus::kInvalid &&
             attestation_status != ReadFileStatus::kInvalid &&
-            signature_status != ReadFileStatus::kInvalid;
+            signature_status != ReadFileStatus::kInvalid &&
+            bindings_status != ReadFileStatus::kInvalid;
         if (!complete_snapshot) {
             fail("committed generation snapshot is incomplete");
             return validated;
@@ -2916,8 +3033,18 @@ ValidatedGeneration validate_committed_generation(
             break;
         }
     }
+    // Binding v1 §6: binding secret key ids join the recovery's secret
+    // reads; the values resolve in order below (values were never
+    // committed — the current provider is the authority).
+    std::vector<std::string> binding_key_ids;
+    for (const capsid::host::EffectiveBinding& binding : validated.bindings) {
+        for (const std::string& key_id : binding.request.secret_key_ids) {
+            binding_key_ids.push_back(key_id);
+        }
+    }
+    const bool has_binding_secrets = !binding_key_ids.empty();
     std::vector<SecretFileOutcome> outcomes;
-    if (has_secret_requests) {
+    if (has_secret_requests || has_binding_secrets) {
         if (options.secret_root_template_fd < 0) {
             fail("secret root not configured");
             return validated;
@@ -2934,8 +3061,36 @@ ValidatedGeneration validate_committed_generation(
                 key_ids.push_back(request.secret_key_id);
             }
         }
+        for (const std::string& key_id : binding_key_ids) {
+            key_ids.push_back(key_id);
+        }
         outcomes = read_secret_files(app_secret_fd, key_ids);
         close(app_secret_fd);
+    }
+    // Binding secret values resolve from the tail of the outcomes list
+    // (env key ids first, binding key ids appended in declaration order).
+    {
+        std::size_t binding_outcome_index = 0;
+        for (const AppRequest::EnvRequest& request : app_request.env) {
+            if (request.from_secret) {
+                ++binding_outcome_index;
+            }
+        }
+        for (capsid::host::EffectiveBinding& binding : validated.bindings) {
+            for (const std::string& key_id :
+                 binding.request.secret_key_ids) {
+                if (binding_outcome_index >= outcomes.size() ||
+                    !outcomes[binding_outcome_index].error.empty()) {
+                    fail("binding secret resolution failed: " + key_id);
+                    return validated;
+                }
+                binding.secret_values.push_back(
+                    { key_id, std::string(
+                                  outcomes[binding_outcome_index].value.begin(),
+                                  outcomes[binding_outcome_index].value.end()) });
+                ++binding_outcome_index;
+            }
+        }
     }
     std::vector<std::string_view> host_names;
     for (const std::string& pattern : options.host_policy.env_patterns) {
@@ -3079,6 +3234,19 @@ ValidatedGeneration validate_committed_generation(
     validated.source_name = derived_source_name;
     validated.bundle_bin = std::move(bundle_bin);
     validated.effective = std::move(compiled.effective);
+    // Binding v1 §6: recovery rebuilds from the committed snapshot, never
+    // from a re-read of bindingsRoot.
+    if (bindings_status == ReadFileStatus::kOk) {
+        const capsid::host::BindingSnapshotParseResult bindings_parsed =
+            capsid::host::parse_bindings_snapshot(bindings_json);
+        if (!bindings_parsed.ok) {
+            fail("committed bindings snapshot is invalid");
+            return validated;
+        }
+        validated.bindings = bindings_parsed.bindings;
+        // Secret values are re-resolved from the current provider below,
+        // like the env snapshot.
+    }
     // The env values come from the recomputed snapshot (the current
     // provider), never from committed metadata.
     for (const EnvironmentSnapshotEntry& entry : snapshot.snapshot.entries()) {
@@ -3229,7 +3397,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             *options, bundle,
             validated.selected == SelectedArtifactKind::kTrustedBytecode,
             validated.source_name, generation_digest, validated.effective,
-            validated.env_values);
+            validated.env_values, validated.bindings);
         if (!warm.ok) {
             // The failed warm rolls its own reserve back.
             if (options->ledger != nullptr) {
@@ -3252,7 +3420,8 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         outcome.generation_factory = make_generation_factory(
             *options, bundle,
             validated.selected == SelectedArtifactKind::kTrustedBytecode,
-            validated.source_name, validated.effective, validated.env_values);
+            validated.source_name, validated.effective, validated.env_values,
+            validated.bindings);
         finish_activation(options, &outcome, warm.workers, version,
                           generation_digest, app_state_fd, replacement,
                           status);
@@ -3334,6 +3503,9 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         // provider and the literal values from the committed capsid.json.
         write_file_at(staging_fd, "env.json", prepared.env_metadata_json,
                       &error) &&
+        (prepared.bindings_json.empty() ||
+         write_file_at(staging_fd, "bindings.json", prepared.bindings_json,
+                       &error)) &&
         write_file_at(staging_fd, "capsid.json", prepared.capsid_json,
                       &error) &&
         write_file_at(staging_fd, "artifact.json",
@@ -3470,7 +3642,8 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     status->state = OperationState::kWarming;
     const WarmPoolResult warm = warm_worker_pool(
         *options, bundle_bytes, selected == SelectedArtifactKind::kTrustedBytecode,
-        source_name, generation_digest, effective, env_values);
+        source_name, generation_digest, effective, env_values,
+        prepared.bindings);
     if (!warm.ok) {
         // The failed warm rolls its own reserve back.
         if (options->ledger != nullptr) {
@@ -3490,7 +3663,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     outcome.generation_factory = make_generation_factory(
         *options, bundle_bytes,
         selected == SelectedArtifactKind::kTrustedBytecode, source_name,
-        effective, env_values);
+        effective, env_values, prepared.bindings);
     finish_activation(options, &outcome, warm.workers, version,
                       generation_digest, app_state_fd, replacement,
                       status);
@@ -3968,7 +4141,7 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
         *options, bundle,
         validated.selected == SelectedArtifactKind::kTrustedBytecode,
         validated.source_name, active_generation, validated.effective,
-        validated.env_values);
+        validated.env_values, validated.bindings);
     if (!warm.ok) {
         if (options->ledger != nullptr) {
             options->ledger->abort_reserve(
@@ -3989,7 +4162,8 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
     outcome.generation_factory = make_generation_factory(
         *options, bundle,
         validated.selected == SelectedArtifactKind::kTrustedBytecode,
-        validated.source_name, validated.effective, validated.env_values);
+        validated.source_name, validated.effective, validated.env_values,
+        validated.bindings);
     publish_pool(&outcome, warm.workers);
     return outcome;
 }
