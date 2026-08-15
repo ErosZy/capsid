@@ -99,18 +99,38 @@ static const uint64_t kReclaimSettleWindowNs = 2 * 1000000000ull;  // 2s
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
 #if defined(_WIN32)
     // Winsock send() takes the raw SOCKET handle, not the CRT fd.
-    const ssize_t sent = capsid::win32::send_fd(fd, data, size, 0);
+    ssize_t sent = capsid::win32::send_fd(fd, data, size, 0);
     {
         FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
         if (dbg != NULL) {
-            std::fprintf(dbg, "write_socket: fd=%d size=%lld sent=%lld errno=%d wsa=%d\n",
+            uint16_t frame_type = 0;
+            if (size >= 8) {
+                frame_type = static_cast<uint16_t>(data[6]) |
+                             static_cast<uint16_t>(data[7] << 8);
+            }
+            std::fprintf(dbg, "write_socket: fd=%d size=%lld sent=%lld errno=%d wsa=%d type=%u\n",
                          fd,
                          static_cast<long long>(size),
                          static_cast<long long>(sent),
                          errno,
+                         WSAGetLastError(),
+                         static_cast<unsigned>(frame_type));
+            std::fclose(dbg);
+        }
+    }
+    if (sent < 0 && WSAGetLastError() == 183) {
+        // debug probe: is ERROR_ALREADY_EXISTS transient on retry?
+        Sleep(1);
+        const ssize_t retried = capsid::win32::send_fd(fd, data, size, 0);
+        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+        if (dbg != NULL) {
+            std::fprintf(dbg, "write_socket retry: sent=%lld errno=%d wsa=%d\n",
+                         static_cast<long long>(retried),
+                         errno,
                          WSAGetLastError());
             std::fclose(dbg);
         }
+        sent = retried;
     }
     return sent;
 #elif defined(MSG_NOSIGNAL)
