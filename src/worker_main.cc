@@ -151,6 +151,48 @@ int main(int argc, char **argv) {
         return 2;
     }
     std::cerr << "capsid-worker: DEBUG started fd=" << ipc_fd << std::endl;
+#if defined(_WIN32)
+    {
+        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+        if (dbg != NULL) {
+            const SOCKET before = static_cast<SOCKET>(
+                _get_osfhandle(ipc_fd));
+            int type = 0;
+            int length = sizeof(type);
+            std::fprintf(
+                dbg,
+                "before TJS: handle=%lld so_type=%d type_err=%d\n",
+                static_cast<long long>(before),
+                getsockopt(before, SOL_SOCKET, SO_TYPE,
+                           reinterpret_cast<char *>(&type), &length) == 0
+                    ? type
+                    : -1,
+                WSAGetLastError());
+            std::fclose(dbg);
+        }
+    }
+#endif
     TJS_Initialize(argc, argv);
+#if defined(_WIN32)
+    {
+        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+        if (dbg != NULL) {
+            const SOCKET after = static_cast<SOCKET>(
+                _get_osfhandle(ipc_fd));
+            int type = 0;
+            int length = sizeof(type);
+            std::fprintf(
+                dbg,
+                "after TJS: handle=%lld so_type=%d type_err=%d\n",
+                static_cast<long long>(after),
+                getsockopt(after, SOL_SOCKET, SO_TYPE,
+                           reinterpret_cast<char *>(&type), &length) == 0
+                    ? type
+                    : -1,
+                WSAGetLastError());
+            std::fclose(dbg);
+        }
+    }
+#endif
     return capsid_run_worker(ipc_fd, network_namespace_fd);
 }
