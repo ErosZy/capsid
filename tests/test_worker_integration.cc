@@ -64,30 +64,30 @@ bool contains(const std::string &text, const char *fragment) {
 class LocalHttpServer {
 public:
     LocalHttpServer() : fd_(-1), port_(0), served_(false) {
-        fd_ = socket(AF_INET, SOCK_STREAM, 0);
+        fd_ = capsid::win32::create_tcp_socket_fd();
         if (fd_ < 0) {
             fail("cannot create local HTTP server socket");
         }
         const int reuse = 1;
-        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        capsid::win32::setsockopt_reuseaddr_fd(fd_);
 
         struct sockaddr_in address = {};
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         address.sin_port = 0;
-        if (bind(fd_,
+        if (capsid::win32::bind_fd(fd_,
                  reinterpret_cast<const struct sockaddr *>(&address),
                  sizeof(address)) != 0) {
             fail(std::string("cannot bind local HTTP server: ") +
                  std::strerror(errno));
         }
-        if (listen(fd_, 1) != 0) {
+        if (capsid::win32::listen_fd(fd_, 1) != 0) {
             fail(std::string("cannot listen on local HTTP server: ") +
                  std::strerror(errno));
         }
 
         socklen_t address_size = sizeof(address);
-        if (getsockname(fd_,
+        if (capsid::win32::getsockname_fd(fd_,
                         reinterpret_cast<struct sockaddr *>(&address),
                         &address_size) != 0) {
             fail("cannot resolve local HTTP server port");
@@ -98,7 +98,7 @@ public:
 
     ~LocalHttpServer() {
         if (thread_.joinable()) {
-            shutdown(fd_, SHUT_RDWR);
+            capsid::win32::shutdown_fd(fd_);
             thread_.join();
         }
         if (fd_ >= 0) {
@@ -134,7 +134,7 @@ private:
             return;
         }
 
-        const int client = accept(fd_, NULL, NULL);
+        const int client = capsid::win32::accept_fd(fd_);
         if (client < 0) {
             return;
         }

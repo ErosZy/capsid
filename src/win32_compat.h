@@ -356,6 +356,19 @@ inline int bind_fd(int fd, const struct sockaddr *address,
     return result;
 }
 
+inline int listen_fd(int fd, int backlog) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int result = listen(socket_handle, backlog);
+    if (result != 0) {
+        map_winsock_errno();
+    }
+    return result;
+}
+
 inline int getsockname_fd(int fd, struct sockaddr *address,
                           socklen_t *address_size) {
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
@@ -386,6 +399,24 @@ inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
         return -1;
     }
     return static_cast<ssize_t>(received);
+}
+
+// SO_REUSEADDR on a CRT fd (Windows takes the option value as a char
+// pointer; POSIX as an int pointer).
+inline int setsockopt_reuseaddr_fd(int fd) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int reuse = 1;
+    const int result = setsockopt(
+        socket_handle, SOL_SOCKET, SO_REUSEADDR,
+        reinterpret_cast<const char *>(&reuse), sizeof(reuse));
+    if (result != 0) {
+        map_winsock_errno();
+    }
+    return result;
 }
 
 // SO_RCVTIMEO as a millisecond budget (Windows takes DWORD ms; POSIX
@@ -432,6 +463,10 @@ inline int bind_fd(int fd, const struct sockaddr *address,
     return bind(fd, address, address_size);
 }
 
+inline int listen_fd(int fd, int backlog) {
+    return listen(fd, backlog);
+}
+
 inline int getsockname_fd(int fd, struct sockaddr *address,
                           socklen_t *address_size) {
     return getsockname(fd, address, address_size);
@@ -439,6 +474,12 @@ inline int getsockname_fd(int fd, struct sockaddr *address,
 
 inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
     return recv(fd, buffer, size, flags);
+}
+
+inline int setsockopt_reuseaddr_fd(int fd) {
+    const int reuse = 1;
+    return setsockopt(
+        fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 }
 
 inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {

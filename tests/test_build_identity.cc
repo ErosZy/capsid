@@ -195,6 +195,28 @@ capsid_build_info read_library_build_info() {
 }
 
 std::string read_child_stdout(const char* executable, const char* argument) {
+#if defined(_WIN32)
+    std::string command = std::string("\"") + executable + "\" \"" +
+                          argument + "\"";
+    FILE* stream = _popen(command.c_str(), "rb");
+    require(stream != nullptr, "could not spawn compiler identity probe");
+    std::string output;
+    char buffer[256];
+    for (;;) {
+        const size_t count = std::fread(buffer, 1, sizeof(buffer), stream);
+        if (count > 0) {
+            output.append(buffer, count);
+            continue;
+        }
+        break;
+    }
+    require(_pclose(stream) == 0, "compiler identity probe failed");
+    while (!output.empty() &&
+           (output.back() == '\n' || output.back() == '\r')) {
+        output.pop_back();
+    }
+    return output;
+#else
     int descriptors[2];
     require(pipe(descriptors) == 0, "could not create compiler output pipe");
     const pid_t child = fork();
@@ -233,6 +255,7 @@ std::string read_child_stdout(const char* executable, const char* argument) {
         output.pop_back();
     }
     return output;
+#endif
 }
 
 std::string read_worker_identity(const char* worker_path) {
@@ -258,7 +281,7 @@ std::string read_worker_identity(const char* worker_path) {
         event.struct_size = sizeof(event);
         const capsid_result next = capsid_worker_next_event(worker, &event);
         if (next == CAPSID_WOULD_BLOCK) {
-            pollfd descriptor = {capsid_worker_fd(worker), POLLIN, 0};
+            capsid_pollfd descriptor = {capsid_worker_fd(worker), POLLIN, 0};
             require(capsid::win32::capsid_poll(&descriptor, 1, 100) >= 0 || errno == EINTR,
                     "worker identity poll failed");
             continue;
