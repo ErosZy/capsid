@@ -6,6 +6,7 @@
 #include "host/binding_compile.h"
 
 #include "host/config.h"
+#include "ipc_validation.h"
 
 #include <jansson.h>
 
@@ -321,6 +322,81 @@ bool parse_app_bindings(const std::vector<std::uint8_t>& bytes,
     return true;
 }
 
+
+std::string compute_effective_profile_digest(
+    const std::vector<EffectiveBinding>& bindings) {
+    if (bindings.empty()) {
+        return {};
+    }
+    std::vector<std::string> profiles;
+    for (const EffectiveBinding& binding : bindings) {
+        for (const std::string& profile : binding.profiles) {
+            profiles.push_back(profile);
+        }
+    }
+    std::sort(profiles.begin(), profiles.end());
+    profiles.erase(std::unique(profiles.begin(), profiles.end()),
+                   profiles.end());
+    std::string canonical;
+    for (const std::string& profile : profiles) {
+        canonical += profile;
+        canonical += '\n';
+    }
+    return sha256_hex(std::span<const std::uint8_t>(
+        reinterpret_cast<const std::uint8_t*>(canonical.data()),
+        canonical.size()));
+}
+
+bool verify_worker_ready(const std::vector<std::uint8_t>& payload,
+                         const std::string& compatibility_id,
+                         const std::vector<EffectiveBinding>& bindings,
+                         std::string* error) {
+    if (error != nullptr) {
+        error->clear();
+    }
+    capsid::WorkerReadyProof proof;
+    std::string reported_compat;
+    std::string proof_error;
+    if (!capsid::parse_ready_proof(
+            payload, &reported_compat, &proof, &proof_error)) {
+        if (error != nullptr) {
+            *error = "worker READY payload is malformed: " + proof_error;
+        }
+        return false;
+    }
+    if (reported_compat != compatibility_id) {
+        if (error != nullptr) {
+            *error = "worker compatibility mismatch";
+        }
+        return false;
+    }
+    if (!proof.extended) {
+        // §7.2: a zero-binding worker reports the exact baseline; a
+        // Binding generation must carry the proof.
+        if (!bindings.empty()) {
+            if (error != nullptr) {
+                *error = "binding worker READY lacks the sandbox proof";
+            }
+            return false;
+        }
+        return true;
+    }
+    if (bindings.empty()) {
+        if (error != nullptr) {
+            *error = "zero-binding worker reported an extended READY";
+        }
+        return false;
+    }
+    const std::string expected =
+        compute_effective_profile_digest(bindings);
+    if (proof.sandbox_profile_digest != expected) {
+        if (error != nullptr) {
+            *error = "worker READY profile digest mismatch";
+        }
+        return false;
+    }
+    return true;
+}
 
 std::string serialize_bindings_snapshot(
     const std::vector<EffectiveBinding>& bindings) {

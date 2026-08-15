@@ -574,6 +574,7 @@ bool parse_host_config(std::string_view json, ParsedHostConfig* out,
     config.applications_root = json_string_field(root, "applicationsRoot");
     config.state_root = json_string_field(root, "stateRoot");
     config.secret_root_template = json_string_field(root, "secretRootTemplate");
+    config.bindings_root = json_string_field(root, "bindingsRoot");
     json_t* admin = json_object_get(root, "admin");
     if (json_is_object(admin)) {
         config.admin_unix_path = json_string_field(admin, "unix");

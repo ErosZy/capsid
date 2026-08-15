@@ -312,6 +312,24 @@ void test_minimal_document_parses() {
             "absent capacity.activationSurgeWorkers must default to 0");
 }
 
+// Binding v1 P0-1: the v2 bindingsRoot maps into the typed model, so the
+// production Host actually passes it to ManagedHostOptions.
+void test_bindings_root_maps() {
+    ParsedHostConfig config;
+    require_valid_parse(
+        R"json({"apiVersion":"capsid/host-v2","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/var/lib/capsid/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"},"bindingsRoot":"/etc/capsid/bindings"})json",
+        "host v2 with bindingsRoot",
+        &config);
+    require(config.bindings_root == "/etc/capsid/bindings",
+            "bindingsRoot did not map into the typed model");
+    require_valid_parse(
+        R"json({"apiVersion":"capsid/host-v1","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/var/lib/capsid/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"}})json",
+        "host v1 without bindingsRoot",
+        &config);
+    require(config.bindings_root.empty(),
+            "v1 document produced a bindingsRoot");
+}
+
 void test_semantic_gates() {
     std::string admin_mode =
         R"json({
@@ -477,6 +495,7 @@ void test_error_is_stable_and_safe() {
 int main() {
     test_full_document_maps_every_field();
     test_minimal_document_parses();
+    test_bindings_root_maps();
     test_semantic_gates();
     test_grammar_gates();
     test_error_is_stable_and_safe();

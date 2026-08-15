@@ -606,13 +606,21 @@ WarmResult warm_worker(const ManagedHostOptions& options,
             capsid_worker_next_event(out.worker, &event);
         if (result == CAPSID_OK) {
             if (event.type == CAPSID_EVENT_READY) {
-                const std::string reported(
-                    reinterpret_cast<const char*>(event.payload.data),
-                    event.payload.size);
-                if (reported != options.runtime_compatibility_id) {
+                // §4.3: the READY payload is the 71-byte compatibility id
+                // plus, for Binding workers, the sandbox proof. The Host
+                // compares both — the compat prefix and its own expected
+                // profile digest — never a whole-payload string equality.
+                std::string ready_error;
+                if (!capsid::host::verify_worker_ready(
+                        std::vector<std::uint8_t>(
+                            event.payload.data,
+                            event.payload.data + event.payload.size),
+                        options.runtime_compatibility_id,
+                        bindings,
+                        &ready_error)) {
                     capsid_worker_destroy(out.worker);
                     out.worker = nullptr;
-                    out.error = "worker compatibility mismatch";
+                    out.error = ready_error;
                     emit_deploy_stage(options.metrics, "health", "fail",
                                       options.application);
                     return out;

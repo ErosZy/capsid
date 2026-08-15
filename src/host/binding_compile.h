@@ -57,6 +57,21 @@ struct BindingCompileResult {
     std::string set_digest;
 };
 
+// The §7.4 READY profile digest the Host expects: SHA-256 over the
+// canonical (sorted, de-duplicated, newline-joined) union of every
+// effective binding's profiles — the exact worker-side algorithm.
+std::string compute_effective_profile_digest(
+    const std::vector<EffectiveBinding>& bindings);
+
+// §4.3: the Host-side READY verdict. The payload must parse as the
+// 71-byte compatibility id plus an optional proof; a Binding worker's
+// proof must carry exactly the Host's expected profile digest. Returns
+// true only on a full match, with a static diagnostic otherwise.
+bool verify_worker_ready(const std::vector<std::uint8_t>& payload,
+                         const std::string& compatibility_id,
+                         const std::vector<EffectiveBinding>& bindings,
+                         std::string* error);
+
 // Serializes the committed binding snapshot (manifest, source, config,
 // effective permissions, profiles, modules, secret key ids — never secret
 // values). Recovery rebuilds exclusively from this document.

@@ -141,6 +141,9 @@ struct ParsedHostConfig {
     // trustedBytecodeKeys: id → absolute key-file path. Loaded into a
     // TrustedKeyStore by the caller; a descriptor is only the *reference*.
     std::vector<TrustedKeyDescriptor> trusted_keys;
+    // Binding v1 §2.1: the Host's bindingsRoot (host-v2). Empty when the
+    // Host declares no bindings.
+    std::string bindings_root;
     TierConfig defaults;
     TierConfig maximums;
     CapacityConfig capacity;

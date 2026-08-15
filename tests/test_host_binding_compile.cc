@@ -4,6 +4,7 @@
 #include "host/binding_compile.h"
 #include "host/binding_registry.h"
 #include "host/generation_identity.h"
+#include "ipc_validation.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -258,9 +259,73 @@ void test_snapshot_round_trip() {
     require(!malformed.ok, "malformed snapshot was accepted");
 }
 
+void test_worker_ready_verification() {
+    const std::string compat = "sha256:" + std::string(64, 'a');
+    std::vector<std::uint8_t> baseline(compat.begin(), compat.end());
+    std::string error;
+
+    // Zero-binding baseline passes.
+    require(capsid::host::verify_worker_ready(
+                baseline, compat, {}, &error),
+            "zero-binding baseline was rejected: " + error);
+    // A zero-binding worker reporting an extended proof is rejected.
+    std::vector<std::uint8_t> extended = baseline;
+    capsid::append_ready_proof(
+        &extended, 0, 2, 3, "",
+        "sha256:" + std::string(64, 'b'));
+    require(!capsid::host::verify_worker_ready(
+                extended, compat, {}, &error) &&
+                !error.empty(),
+            "zero-binding extended READY was accepted");
+
+    // A binding worker's proof must carry the Host's expected profile
+    // digest.
+    BindingRegistrySnapshot registry;
+    registry.packages.push_back(package("mongo", kManifest));
+    AppBindingRequest request;
+    request.id = "mongo";
+    request.config_json = R"json({"database":"orders"})json";
+    const auto compiled =
+        compile_effective_bindings(registry, {request}, "rev-1");
+    require(compiled.ok, "compile failed");
+    const std::string expected_digest =
+        capsid::host::compute_effective_profile_digest(
+            compiled.bindings);
+    require(expected_digest.rfind("sha256:", 0) == 0 &&
+                expected_digest.size() == 71,
+            "expected profile digest is not a sha256 digest");
+
+    std::vector<std::uint8_t> good = baseline;
+    capsid::append_ready_proof(&good, 0, 2, 3, "", expected_digest);
+    require(capsid::host::verify_worker_ready(
+                good, compat, compiled.bindings, &error),
+            "matching binding READY was rejected: " + error);
+
+    std::vector<std::uint8_t> bad = baseline;
+    capsid::append_ready_proof(
+        &bad, 0, 2, 3, "",
+        "sha256:" + std::string(64, 'f'));
+    require(!capsid::host::verify_worker_ready(
+                bad, compat, compiled.bindings, &error) &&
+                !error.empty(),
+            "digest-mismatched binding READY was accepted");
+
+    require(!capsid::host::verify_worker_ready(
+                baseline, compat, compiled.bindings, &error) &&
+                !error.empty(),
+            "binding worker with a baseline READY was accepted");
+
+    std::vector<std::uint8_t> malformed = baseline;
+    malformed.pop_back();
+    require(!capsid::host::verify_worker_ready(
+                malformed, compat, {}, &error),
+            "malformed READY was accepted");
+}
+
 }  // namespace
 
 int main() {
+    test_worker_ready_verification();
     test_snapshot_round_trip();
     test_parse_app_bindings();
     test_compile_effective_bindings();
