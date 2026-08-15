@@ -1526,7 +1526,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
                                      &flags);
                 std::fprintf(dbg, "client: child_handle=%lld inherit_flags=%lu\n",
                              static_cast<long long>(
-                                 reinterpret_cast<intptr_t>(child)),
+                                 static_cast<intptr_t>(child)),
                              static_cast<unsigned long>(flags));
                 std::fclose(dbg);
             }
