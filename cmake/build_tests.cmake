@@ -3265,6 +3265,9 @@ if(BUILD_TESTING)
             # If it silently does not run, `ctest` reports all-green while the
             # conformance surface is entirely untested. Register a test that fails
             # loudly so that absence of coverage can never be mistaken for a pass.
+            # The WPT harness itself is Linux-only (see docs/windows.md), so the
+            # loud-fail gate does not apply to Windows builds.
+            if(NOT WIN32)
             add_test(
                 NAME wpt_conformance_not_configured
                 COMMAND "${CMAKE_COMMAND}" -E false
@@ -3274,6 +3277,7 @@ if(BUILD_TESTING)
                 LABELS "conformance"
                 SKIP_RETURN_CODE 77
             )
+            endif()
         endif()
 
         add_executable(test-module-denial tests/test_module_denial.cc)
