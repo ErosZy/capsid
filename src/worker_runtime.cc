@@ -122,6 +122,8 @@ ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
         // debug probe: is ERROR_ALREADY_EXISTS transient on retry?
         Sleep(250);
         const ssize_t retried = capsid::win32::send_fd(fd, data, size, 0);
+        const uint8_t probe_bytes[4] = {0x50, 0x49, 0x4e, 0x47};
+        const ssize_t probe_sent = capsid::win32::send_fd(fd, probe_bytes, 4, 0);
         const SOCKET probe_handle = static_cast<SOCKET>(_get_osfhandle(fd));
         struct sockaddr_in peer_address = {};
         int peer_size = sizeof(peer_address);
@@ -138,14 +140,18 @@ ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
         if (dbg != NULL) {
             std::fprintf(dbg,
                          "write_socket retry: sent=%lld errno=%d wsa=%d "
-                         "getpeername=%d(peer_err=%d) SO_ERROR=%d(so_err=%d)\n",
+                         "getpeername=%d(peer_err=%d) SO_ERROR=%d(so_err=%d) "
+                         "probe4=%lld(probe_errno=%d probe_wsa=%d)\n",
                          static_cast<long long>(retried),
                          errno,
                          WSAGetLastError(),
                          peer_result,
                          peer_result == 0 ? 0 : WSAGetLastError(),
                          so_error,
-                         so_result == 0 ? 0 : WSAGetLastError());
+                         so_result == 0 ? 0 : WSAGetLastError(),
+                         static_cast<long long>(probe_sent),
+                         errno,
+                         WSAGetLastError());
             std::fclose(dbg);
         }
         sent = retried;
