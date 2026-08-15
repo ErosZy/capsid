@@ -159,31 +159,38 @@ if(BUILD_TESTING)
                 capsid-worker)
         endif()
 
-        add_executable(
-            test-host-artifact-safe-read
-            tests/test_host_artifact_safe_read.cc)
-        target_include_directories(
-            test-host-artifact-safe-read PRIVATE include src)
-        target_link_libraries(test-host-artifact-safe-read PRIVATE
-            capsid_host_core
-            capsid_sanitizers)
-        set_target_properties(test-host-artifact-safe-read PROPERTIES
-            CXX_STANDARD 20
-            CXX_STANDARD_REQUIRED ON
-            CXX_EXTENSIONS OFF)
-        if(CAPSID_STRICT_WARNINGS)
-            if(MSVC)
-                target_compile_options(
-                    test-host-artifact-safe-read PRIVATE /W4 /WX)
-            else()
-                target_compile_options(
-                    test-host-artifact-safe-read PRIVATE
-                    -Wall -Wextra -Wpedantic -Werror)
+        # The safe-read fixture builder uses dirfd-relative POSIX
+        # primitives (openat/mkdirat/symlinkat/mkfifoat) and unix-domain
+        # socket nodes throughout; the Windows open_beneath path is
+        # exercised via the runtime compile-time contract and documented
+        # in docs/windows.md (SKIP by absence, never FAIL).
+        if(NOT WIN32)
+            add_executable(
+                test-host-artifact-safe-read
+                tests/test_host_artifact_safe_read.cc)
+            target_include_directories(
+                test-host-artifact-safe-read PRIVATE include src)
+            target_link_libraries(test-host-artifact-safe-read PRIVATE
+                capsid_host_core
+                capsid_sanitizers)
+            set_target_properties(test-host-artifact-safe-read PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-artifact-safe-read PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-artifact-safe-read PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
             endif()
+            add_test(
+                NAME host_artifact_safe_read
+                COMMAND test-host-artifact-safe-read)
         endif()
-        add_test(
-            NAME host_artifact_safe_read
-            COMMAND test-host-artifact-safe-read)
 
         add_executable(
             test-host-secret-file-provider
