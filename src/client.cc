@@ -1666,6 +1666,12 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         if (std::strncmp(*env, "CAPSID_", 7) == 0) {
             capsid_environment.push_back(*env);
         }
+        // The CRT needs SystemRoot even in a minimal forwarded
+        // environment (a worker with an empty environment block cannot
+        // initialize its runtime directories).
+        if (std::strncmp(*env, "SystemRoot=", 11) == 0) {
+            capsid_environment.push_back(*env);
+        }
     }
     std::sort(
         capsid_environment.begin(),
