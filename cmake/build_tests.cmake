@@ -33,6 +33,10 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME host_config COMMAND test-host-config)
 
+        # host_config_model.cc is part of the managed coordinator and not
+        # built on Windows (docs/windows.md); the model test SKIPs by
+        # absence there.
+        if(NOT WIN32)
         add_executable(
             test-host-config-model
             tests/test_host_config_model.cc)
@@ -56,6 +60,7 @@ if(BUILD_TESTING)
             endif()
         endif()
         add_test(NAME host_config_model COMMAND test-host-config-model)
+        endif()
 
         add_executable(
             test-host-trusted-key-store
