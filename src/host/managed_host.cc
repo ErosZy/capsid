@@ -2679,17 +2679,24 @@ bool has_secret_requests = false;
     std::string binding_set_digest;
     if (!options->bindings_root.empty()) {
         if (!binding_requests.empty()) {
-            capsid::host::BindingRegistrySnapshot registry;
-            std::string scan_error;
-            if (!capsid::host::scan_bindings_root(
-                    options->bindings_root, {0, geteuid()}, &registry,
-                    &scan_error)) {
-                fail(scan_error);
-                return prepared;
+            // §2.1: the Host startup snapshot is authoritative; the
+            // fallback scan only serves callers without one.
+            const capsid::host::BindingRegistrySnapshot* registry =
+                &options->binding_registry;
+            capsid::host::BindingRegistrySnapshot fallback;
+            if (!options->binding_registry_loaded) {
+                std::string scan_error;
+                if (!capsid::host::scan_bindings_root(
+                        options->bindings_root, {0, geteuid()}, &fallback,
+                        &scan_error)) {
+                    fail(scan_error);
+                    return prepared;
+                }
+                registry = &fallback;
             }
             capsid::host::BindingCompileResult binding_result =
                 capsid::host::compile_effective_bindings(
-                    registry, binding_requests, snapshot_revision);
+                    *registry, binding_requests, snapshot_revision);
             if (!binding_result.ok) {
                 fail(binding_result.error);
                 return prepared;
@@ -2887,7 +2894,8 @@ ValidatedGeneration validate_committed_generation(
         const ReadFileStatus capsid_status = read_file_at(
             generation_fd, "capsid.json", kMaxConfigFileBytes, &capsid_json);
         bindings_status = read_file_at(
-            generation_fd, "bindings.json", kMaxConfigFileBytes,
+            generation_fd, "bindings.json",
+            capsid::host::kMaxBindingsSnapshotBytes,
             &bindings_json);
         const ReadFileStatus generation_status = read_file_at(
             generation_fd, "generation.json", 4096, &generation_text);

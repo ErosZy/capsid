@@ -39,9 +39,13 @@ bool is_group_or_world_writable(mode_t mode) {
 }
 
 // lstat-level check shared by the root, package directories and files.
+// The scanned dev/ino pair is recorded so the later open can verify it
+// still refers to the very same inode (TOCTOU guard).
 bool check_entry(const std::string &path,
                  bool require_directory,
                  const std::vector<uid_t> &allowed_uids,
+                 dev_t *out_dev,
+                 ino_t *out_ino,
                  std::string *error) {
     struct stat st;
     if (lstat(path.c_str(), &st) != 0) {
@@ -69,6 +73,12 @@ bool check_entry(const std::string &path,
         *error = path + " is group- or world-writable";
         return false;
     }
+    if (out_dev != nullptr) {
+        *out_dev = st.st_dev;
+    }
+    if (out_ino != nullptr) {
+        *out_ino = st.st_ino;
+    }
     return true;
 }
 
@@ -77,9 +87,11 @@ bool check_entry(const std::string &path,
 // always exactly one stable file version.
 bool read_whole_file(const std::string &path,
                      std::size_t limit,
+                     dev_t expected_dev,
+                     ino_t expected_ino,
                      std::string *out,
                      std::string *error) {
-    const int fd = open(path.c_str(), O_RDONLY);
+    const int fd = open(path.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0) {
         *error = path + " cannot be opened";
         return false;
@@ -88,6 +100,12 @@ bool read_whole_file(const std::string &path,
     if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
         close(fd);
         *error = path + " is not a regular file";
+        return false;
+    }
+    // TOCTOU guard: the opened inode must be the scanned one.
+    if (st.st_dev != expected_dev || st.st_ino != expected_ino) {
+        close(fd);
+        *error = path + " changed between scan and read";
         return false;
     }
     if (static_cast<std::uint64_t>(st.st_size) > limit) {
@@ -139,7 +157,12 @@ bool scan_bindings_root(const std::string &root,
         return false;
     };
 
-    if (!check_entry(root, /*require_directory=*/true, allowed_uids, error)) {
+    dev_t root_dev = 0;
+    ino_t root_ino = 0;
+    (void)root_dev;
+    (void)root_ino;
+    if (!check_entry(root, /*require_directory=*/true, allowed_uids,
+                     &root_dev, &root_ino, error)) {
         return false;
     }
 
@@ -168,8 +191,11 @@ bool scan_bindings_root(const std::string &root,
             return fail_with(package_path +
                              " is not a valid binding package directory name");
         }
+        dev_t package_dev = 0;
+        ino_t package_ino = 0;
         if (!check_entry(package_path, /*require_directory=*/true,
-                         allowed_uids, error)) {
+                         allowed_uids, &package_dev, &package_ino,
+                         error)) {
             return false;
         }
 
@@ -191,6 +217,10 @@ bool scan_bindings_root(const std::string &root,
 
         bool has_manifest = false;
         bool has_index = false;
+        dev_t manifest_dev = 0;
+        ino_t manifest_ino = 0;
+        dev_t index_dev = 0;
+        ino_t index_ino = 0;
         for (const std::string &file : files) {
             if (file == "manifest.json") {
                 has_manifest = true;
@@ -200,10 +230,19 @@ bool scan_bindings_root(const std::string &root,
                 return fail_with(package_path + "/" + file +
                                  " is an unexpected entry");
             }
+            dev_t file_dev = 0;
+            ino_t file_ino = 0;
             if (!check_entry(package_path + "/" + file,
                              /*require_directory=*/false, allowed_uids,
-                             error)) {
+                             &file_dev, &file_ino, error)) {
                 return false;
+            }
+            if (file == "manifest.json") {
+                manifest_dev = file_dev;
+                manifest_ino = file_ino;
+            } else {
+                index_dev = file_dev;
+                index_ino = file_ino;
             }
         }
         if (!has_manifest) {
@@ -216,13 +255,15 @@ bool scan_bindings_root(const std::string &root,
         BindingPackageSnapshot snapshot;
         snapshot.id = name;
         if (!read_whole_file(package_path + "/manifest.json",
-                             kMaxBindingManifestBytes, &snapshot.manifest_json,
-                             error)) {
+                             kMaxBindingManifestBytes,
+                             manifest_dev, manifest_ino,
+                             &snapshot.manifest_json, error)) {
             return false;
         }
         if (!read_whole_file(package_path + "/index.js",
-                             kMaxBindingSourceBytes, &snapshot.source,
-                             error)) {
+                             kMaxBindingSourceBytes,
+                             index_dev, index_ino,
+                             &snapshot.source, error)) {
             return false;
         }
         const ConfigValidationResult validation =

@@ -508,6 +508,17 @@ int run_managed(const std::string& host_config_path,
         options->secret_root_template_fd = secrets_fd;
         options->state_root = config.state_root;
         options->bindings_root = config.bindings_root;
+        if (!config.bindings_root.empty()) {
+            std::string scan_error;
+            if (!capsid::host::scan_bindings_root(
+                    config.bindings_root, {0, geteuid()},
+                    &options->binding_registry, &scan_error)) {
+                std::cerr << "capsid-host: bindingsRoot rejected: "
+                          << scan_error << std::endl;
+                return EXIT_FAILURE;
+            }
+            options->binding_registry_loaded = true;
+        }
         options->application = application;
         options->worker_path = worker_path;
         options->host_policy = config.policy;

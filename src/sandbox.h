@@ -10,6 +10,12 @@
 
 namespace capsid {
 
+// Binding v1 §7.9: the kernel's SECCOMP_MODE_FILTER state value (the
+// userspace headers only ship the SET_MODE_FILTER operation constant).
+// Reported in the READY proof; the Host compares it as the installed
+// filter mode.
+static constexpr uint32_t kSeccompModeFilter = 2u;
+
 struct SandboxConfig {
     SandboxConfig()
         : address_space_limit(0),

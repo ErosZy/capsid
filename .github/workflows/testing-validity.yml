@@ -130,9 +130,18 @@ jobs:
       # below, this step covers the native namespace probe.
       - name: Run the privileged sandbox matrix
         run: |
+          set -euo pipefail
+          # Binding §7.9: a sandbox test that skips (77) under root is a
+          # failure in the Hosted Validity workflow — the delegated
+          # environment must actually execute every profile probe.
           sudo ctest --test-dir build-validity \
             --output-on-failure \
-            -L sandbox
+            -L sandbox 2>&1 | tee build-validity/sandbox-run.log
+          if grep -q "Skipped" build-validity/sandbox-run.log; then
+            echo "::error::a sandbox test skipped under root; Binding §7.9 "\
+                 "requires every probe to execute"
+            exit 1
+          fi
 
       - name: Record package evidence (build ID, compatibility ID, package and SBOM hashes)
         run: |

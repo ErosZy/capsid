@@ -77,6 +77,11 @@ struct ManagedHostOptions {
     // Binding v1 §2.1: the scanned bindingsRoot snapshot root. Empty
     // disables bindings for this Host.
     std::string bindings_root;
+    // The Host-startup snapshot (immutable, per design §2.1); populated
+    // once by main() when bindings_root is set. prepare_deployment falls
+    // back to a fresh scan only when this is absent (unit tests).
+    capsid::host::BindingRegistrySnapshot binding_registry;
+    bool binding_registry_loaded = false;
     HostPolicy host_policy;
     // Trusted Ed25519 keys for bytecode attestation verification.
     std::vector<capsid::host::TrustedBytecodeKey> trusted_keys;

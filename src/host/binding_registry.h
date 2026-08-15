@@ -17,6 +17,12 @@
 
 namespace capsid::host {
 
+// Binding v1 snapshot ceiling: every manifest (1 MiB), every source
+// (16 MiB), every config (256 KiB) plus framing for one generation's
+// bindings — recovery reads bindings.json under this bound.
+inline constexpr std::size_t kMaxBindingsSnapshotBytes =
+    18U * 1024U * 1024U;
+
 // One validated Binding package, fully copied at scan time. The strings
 // are private copies of the file bytes; later edits to bindingsRoot cannot
 // change a returned snapshot (v1 does not watch or reload).

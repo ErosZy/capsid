@@ -1212,7 +1212,8 @@ bool apply_sandbox(const SandboxConfig &config,
     }
     features |= CAPSID_SANDBOX_FEATURE_SECCOMP;
     if (seccomp_mode) {
-        *seccomp_mode = SECCOMP_SET_MODE_FILTER;
+        // The state constant (mode 2), not the SET operation constant.
+        *seccomp_mode = kSeccompModeFilter;
     }
     const uint32_t missing = config.required_features & ~features;
     if (missing != 0) {
