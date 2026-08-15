@@ -196,8 +196,12 @@ capsid_build_info read_library_build_info() {
 
 std::string read_child_stdout(const char* executable, const char* argument) {
 #if defined(_WIN32)
-    std::string command = std::string("\"") + executable + "\" \"" +
-                          argument + "\"";
+    // cmd /c strips the first and last quote when the command starts with
+    // one, which would corrupt the executable token. The outer empty pair
+    // is the documented escape: cmd strips it and parses the inner
+    // quoted tokens correctly.
+    std::string command = std::string("\"\"") + "\"" + executable + "\" \"" +
+                          argument + "\"\"";
     FILE* stream = _popen(command.c_str(), "rb");
     require(stream != nullptr, "could not spawn compiler identity probe");
     std::string output;
