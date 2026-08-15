@@ -122,12 +122,30 @@ ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
         // debug probe: is ERROR_ALREADY_EXISTS transient on retry?
         Sleep(1);
         const ssize_t retried = capsid::win32::send_fd(fd, data, size, 0);
+        const SOCKET probe_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+        struct sockaddr_in peer_address = {};
+        int peer_size = sizeof(peer_address);
+        const int peer_result = getpeername(
+            probe_handle,
+            reinterpret_cast<struct sockaddr *>(&peer_address),
+            &peer_size);
+        int so_error = 0;
+        int so_error_size = sizeof(so_error);
+        const int so_result = getsockopt(
+            probe_handle, SOL_SOCKET, SO_ERROR,
+            reinterpret_cast<char *>(&so_error), &so_error_size);
         FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
         if (dbg != NULL) {
-            std::fprintf(dbg, "write_socket retry: sent=%lld errno=%d wsa=%d\n",
+            std::fprintf(dbg,
+                         "write_socket retry: sent=%lld errno=%d wsa=%d "
+                         "getpeername=%d(peer_err=%d) SO_ERROR=%d(so_err=%d)\n",
                          static_cast<long long>(retried),
                          errno,
-                         WSAGetLastError());
+                         WSAGetLastError(),
+                         peer_result,
+                         peer_result == 0 ? 0 : WSAGetLastError(),
+                         so_error,
+                         so_result == 0 ? 0 : WSAGetLastError());
             std::fclose(dbg);
         }
         sent = retried;
