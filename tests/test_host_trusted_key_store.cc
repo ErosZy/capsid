@@ -20,6 +20,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -53,7 +54,13 @@ const std::vector<std::uint8_t> kKeyBytes = [] {
 }();
 
 struct Fixture {
+#if defined(_WIN32)
+    std::string dir =
+        (std::filesystem::temp_directory_path() /
+         "capsid-key-store-XXXXXX").string();
+#else
     std::string dir = "/tmp/capsid-key-store-XXXXXX";
+#endif
 
     Fixture() {
         require(mkdtemp(&dir[0]) != nullptr, "cannot create temp dir");
@@ -75,14 +82,26 @@ struct Fixture {
     // Writes `name` in `dir` with the given bytes, mode and ownership.
     // chown to root when `root_owned` (a no-op when the test runs as root,
     // which makes root-ownership the default and cannot be falsified).
+    // On Windows the mode/ownership parameters are meaningless (the store
+    // skips the uid/mode gate there; NTFS ACLs are the boundary) and are
+    // ignored.
     void write_key(const std::string& name, const void* bytes,
                    std::size_t size, mode_t mode, bool root_owned) {
         const int fd = open(path(name).c_str(),
                             O_CREAT | O_EXCL | O_WRONLY, 0600);
         require(fd >= 0, "cannot create key file");
+#if defined(_WIN32)
+        require(write(fd, bytes, static_cast<unsigned int>(size)) ==
+                    static_cast<ssize_t>(size),
+                "cannot write key file");
+        (void)mode;
+        (void)root_owned;
+#else
         require(write(fd, bytes, size) == static_cast<ssize_t>(size),
                 "cannot write key file");
+#endif
         require(close(fd) == 0, "cannot close key file");
+#if !defined(_WIN32)
         require(chmod(path(name).c_str(), mode) == 0,
                 "cannot chmod key file");
         if (root_owned) {
@@ -93,6 +112,7 @@ struct Fixture {
             const int chown_result = chown(path(name).c_str(), 0, 0);
             (void)chown_result;
         }
+#endif
         entries.push_back(name);
     }
 
@@ -190,6 +210,11 @@ void test_wrong_size_rejected() {
 }
 
 void test_symlink_rejected() {
+#if defined(_WIN32)
+    // Creating a file symlink needs the SeCreateSymbolicLinkPrivilege on
+    // Windows; the store's reparse-point rejection is exercised where the
+    // privilege exists (documented in docs/windows.md).
+#else
     Fixture fixture;
     fixture.write_key("real.raw");
     require(symlink(fixture.path("real.raw").c_str(),
@@ -198,18 +223,27 @@ void test_symlink_rejected() {
     fixture.entries.push_back("link.raw");
     require_rejected({descriptor("link", fixture.path("link.raw"))},
                      "symlinked key");
+#endif
 }
 
 void test_non_regular_file_rejected() {
+#if defined(_WIN32)
+    // Windows has no FIFO nodes.
+#else
     Fixture fixture;
     require(mkfifo(fixture.path("fifo.raw").c_str(), 0600) == 0,
             "cannot create fifo");
     fixture.entries.push_back("fifo.raw");
     require_rejected({descriptor("fifo", fixture.path("fifo.raw"))},
                      "fifo key");
+#endif
 }
 
 void test_group_or_world_writable_rejected() {
+#if defined(_WIN32)
+    // Windows has no uid/mode bits on files; the store skips the
+    // ownership gate and relies on NTFS ACLs (docs/windows.md).
+#else
     Fixture fixture;
     fixture.write_key("group-writable.raw", kKeyBytes.data(),
                       kKeyBytes.size(), 0620, false);
@@ -226,6 +260,7 @@ void test_group_or_world_writable_rejected() {
     // Read-only for other is fine: 0644 must LOAD (readable, not writable).
     require_ok({descriptor("wr", fixture.path("world-readable.raw"))},
                "world-readable key");
+#endif
 }
 
 void test_duplicate_id_rejected() {

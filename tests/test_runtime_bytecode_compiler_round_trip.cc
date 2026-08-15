@@ -85,6 +85,40 @@ std::vector<std::uint8_t> read_bytes(const char* path) {
 }
 
 std::string run_command(const std::vector<std::string>& argv) {
+#if defined(_WIN32)
+    // _popen captures stdout; stderr is merged so diagnostics appear in
+    // the failure text exactly like the POSIX dup2 of the pipe below.
+    std::string command;
+    for (const std::string& argument : argv) {
+        if (!command.empty()) {
+            command += " ";
+        }
+        command += "\"";
+        for (const char c : argument) {
+            command += c == '"' ? "\\\"" : std::string(1, c);
+        }
+        command += "\"";
+    }
+    command = "cmd /c \"" + command + " 2>&1\"";
+    FILE* stream = _popen(command.c_str(), "rb");
+    if (stream == nullptr) {
+        fail("cannot spawn command");
+    }
+    std::string output;
+    char buffer[4096];
+    for (;;) {
+        const size_t count = std::fread(buffer, 1, sizeof(buffer), stream);
+        if (count == 0) {
+            break;
+        }
+        output.append(buffer, count);
+    }
+    const int status = _pclose(stream);
+    if (status != 0) {
+        fail("command failed (" + argv[0] + "): " + output);
+    }
+    return output;
+#else
     std::vector<char*> args;
     for (const std::string& argument : argv) {
         args.push_back(const_cast<char*>(argument.c_str()));
@@ -124,6 +158,38 @@ std::string run_command(const std::vector<std::string>& argv) {
         fail("command failed (" + argv[0] + "): " + output);
     }
     return output;
+#endif
+}
+
+// Runs the compiler synchronously and returns its exit status (2 for
+// usage errors). Windows _spawnv returns the child exit code directly;
+// POSIX forks and reports WEXITSTATUS.
+int run_compiler_sync(const std::vector<std::string>& argv) {
+#if defined(_WIN32)
+    std::vector<char*> args;
+    for (const std::string& argument : argv) {
+        args.push_back(const_cast<char*>(argument.c_str()));
+    }
+    args.push_back(nullptr);
+    return _spawnv(_P_WAIT, argv[0].c_str(), args.data());
+#else
+    std::vector<char*> args;
+    for (const std::string& argument : argv) {
+        args.push_back(const_cast<char*>(argument.c_str()));
+    }
+    args.push_back(nullptr);
+    const pid_t pid = fork();
+    if (pid < 0) {
+        fail("cannot fork");
+    }
+    if (pid == 0) {
+        execv(args[0], args.data());
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 127;
+#endif
 }
 
 // ---- worker harness (same contract as test_worker_integration) ----
@@ -552,71 +618,58 @@ int main(int argc, char** argv) {
     // producing or clobbering files.
     {
         // Duplicate argument.
-        int status = 0;
-        const pid_t duplicate = fork();
-        if (duplicate == 0) {
-            execl(compiler_tool, compiler_tool,
-                  "--source", fixture_path,
-                  "--source-name", source_name.c_str(),
-                  "--application", "orders",
-                  "--version", "2026-08-03-001",
-                  "--key-id", "test-key-1",
-                  "--bytecode-out", bytecode_out.c_str(),
-                  "--bytecode-out", bytecode_out.c_str(),
-                  "--attestation-out", attestation_out.c_str(),
-                  "--signing-message-out", message_out.c_str(),
-                  nullptr);
-            _exit(127);
-        }
-        waitpid(duplicate, &status, 0);
-        require(WIFEXITED(status) && WEXITSTATUS(status) == 2,
+        require(run_compiler_sync({
+                    compiler_tool,
+                    "--source", fixture_path,
+                    "--source-name", source_name,
+                    "--application", "orders",
+                    "--version", "2026-08-03-001",
+                    "--key-id", "test-key-1",
+                    "--bytecode-out", bytecode_out,
+                    "--bytecode-out", bytecode_out,
+                    "--attestation-out", attestation_out,
+                    "--signing-message-out", message_out,
+                }) == 2,
                 "duplicate argument not rejected");
 
         // Aliased output paths.
-        const pid_t alias = fork();
-        if (alias == 0) {
-            execl(compiler_tool, compiler_tool,
-                  "--source", fixture_path,
-                  "--source-name", source_name.c_str(),
-                  "--application", "orders",
-                  "--version", "2026-08-03-001",
-                  "--key-id", "test-key-1",
-                  "--bytecode-out", bytecode_out.c_str(),
-                  "--attestation-out", bytecode_out.c_str(),
-                  "--signing-message-out", message_out.c_str(),
-                  nullptr);
-            _exit(127);
-        }
-        waitpid(alias, &status, 0);
-        require(WIFEXITED(status) && WEXITSTATUS(status) == 2,
+        require(run_compiler_sync({
+                    compiler_tool,
+                    "--source", fixture_path,
+                    "--source-name", source_name,
+                    "--application", "orders",
+                    "--version", "2026-08-03-001",
+                    "--key-id", "test-key-1",
+                    "--bytecode-out", bytecode_out,
+                    "--attestation-out", bytecode_out,
+                    "--signing-message-out", message_out,
+                }) == 2,
                 "aliased output paths not rejected");
 
         // Pre-existing final target: no-replace refuses and the existing
         // content survives.
         const std::string kept = read_file(attestation_out.c_str());
-        const pid_t existing = fork();
-        if (existing == 0) {
-            execl(compiler_tool, compiler_tool,
-                  "--source", fixture_path,
-                  "--source-name", source_name.c_str(),
-                  "--application", "orders",
-                  "--version", "2026-08-03-001",
-                  "--key-id", "test-key-1",
-                  "--bytecode-out", bytecode_out.c_str(),
-                  "--attestation-out", attestation_out.c_str(),
-                  "--signing-message-out", message_out.c_str(),
-                  nullptr);
-            _exit(127);
-        }
-        waitpid(existing, &status, 0);
-        require(WIFEXITED(status) && WEXITSTATUS(status) != 0,
+        require(run_compiler_sync({
+                    compiler_tool,
+                    "--source", fixture_path,
+                    "--source-name", source_name,
+                    "--application", "orders",
+                    "--version", "2026-08-03-001",
+                    "--key-id", "test-key-1",
+                    "--bytecode-out", bytecode_out,
+                    "--attestation-out", attestation_out,
+                    "--signing-message-out", message_out,
+                }) != 0,
                 "pre-existing target was overwritten");
         require(read_file(attestation_out.c_str()) == kept,
                 "pre-existing target content changed");
 
+#if !defined(_WIN32)
         // Pre-placed temp symlink: the child's temp path is
         // <name>.tmp.<pid>; the fork tells us the pid before exec, so the
         // symlink is placed exactly where the compiler will open it.
+        // (Windows has no fork to learn the child pid, and the compiler's
+        // CREATE_NEW + reparse rejection covers the same contract.)
         const pid_t temp_symlink = fork();
         if (temp_symlink == 0) {
             const std::string symlink_path =
@@ -636,9 +689,11 @@ int main(int argc, char** argv) {
                   nullptr);
             _exit(127);
         }
+        int status = 0;
         waitpid(temp_symlink, &status, 0);
         require(WIFEXITED(status) && WEXITSTATUS(status) != 0,
                 "pre-placed temp symlink was followed");
+#endif
     }
 
     std::cout << "PASS" << std::endl;

@@ -34,6 +34,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 
+#include <direct.h>
 #include <fcntl.h>
 #include <io.h>
 #include <process.h>
@@ -61,6 +62,26 @@ typedef DWORD pid_t;
 #ifndef ELOOP
 #define ELOOP EDEADLOCK
 #endif
+
+// rmdir lives in the CRT as _rmdir only.
+#ifndef rmdir
+#define rmdir _rmdir
+#endif
+
+// mkdtemp for test scaffolding: replaces the XXXXXX suffix with unique
+// characters and creates the directory (the POSIX contract).
+inline char *mkdtemp(char *path_template) {
+    const errno_t err =
+        _mktemp_s(path_template, std::strlen(path_template) + 1);
+    if (err != 0) {
+        errno = err;
+        return nullptr;
+    }
+    if (_mkdir(path_template) != 0) {
+        return nullptr;
+    }
+    return path_template;
+}
 
 // access() constants: MSVC io.h defines only F_OK.
 #ifndef F_OK
