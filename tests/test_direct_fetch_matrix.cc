@@ -2,24 +2,24 @@
 #include "egress_test_policy.h"
 #include "graceful_worker_exit.h"
 
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <arpa/inet.h>
 #endif
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <netinet/in.h>
 #endif
 #include "win32_compat.h"
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <sys/socket.h>
 #endif
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <unistd.h>
 #endif

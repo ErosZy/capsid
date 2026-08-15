@@ -3,13 +3,13 @@
 
 #include "host/static_pool_server.h"
 
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <arpa/inet.h>
 #endif
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <dirent.h>
 #endif
@@ -17,8 +17,8 @@
 #include <limits.h>
 #include "win32_compat.h"
 #include <signal.h>
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <sys/socket.h>
 #endif
@@ -28,14 +28,14 @@
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <sys/stat.h>
 #endif
 #include <sys/types.h>
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <unistd.h>
 #endif

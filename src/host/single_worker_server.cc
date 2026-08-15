@@ -42,8 +42,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <poll.h>
 #include <sys/socket.h>

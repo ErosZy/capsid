@@ -9,8 +9,8 @@ extern "C" {
 #include <cstring>
 #include <iostream>
 
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <fcntl.h>
 #include <sys/resource.h>

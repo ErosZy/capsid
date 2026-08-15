@@ -26,14 +26,14 @@
 #define CAPSID_HAS_SINGLE_WORKER_SERVER 0
 #endif
 
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <arpa/inet.h>
 #endif
 #include "win32_compat.h"
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <sys/socket.h>
 #endif
@@ -43,13 +43,13 @@
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <sys/time.h>
 #endif
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <unistd.h>
 #endif

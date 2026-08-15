@@ -9,8 +9,8 @@
 #include <iostream>
 #include <string>
 #include <sys/types.h>
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #else
 #include <sys/wait.h>
 #include <unistd.h>

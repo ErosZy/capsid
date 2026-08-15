@@ -7,8 +7,8 @@
 
 #include <jansson.h>
 
-#if defined(_WIN32)
 #include "win32_compat.h"
+#if defined(_WIN32)
 #include <afunix.h>
 #else
 #include <sys/socket.h>
