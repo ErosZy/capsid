@@ -5,6 +5,12 @@ if(BUILD_TESTING)
     # included from the top-level scope, so this applies to the test
     # targets created below only.)
     include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
+    if(WIN32)
+        # Many test targets compile runtime sources (egress_policy.cc ...)
+        # directly instead of linking capsid_runtime; each of them needs
+        # the Winsock import library for inet_pton/ntohs/htons.
+        link_libraries(ws2_32)
+    endif()
     if(CAPSID_BUILD_HOST)
         find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 
