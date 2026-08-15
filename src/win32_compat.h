@@ -597,6 +597,17 @@ inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
 
 #else  // POSIX passthroughs
 
+// The passthroughs below call the socket/process APIs directly, and this
+// header is included first by tests and host sources on every platform;
+// bring in the POSIX declarations the call sites rely on.
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <unistd.h>
+
 namespace capsid {
 namespace win32 {
 
