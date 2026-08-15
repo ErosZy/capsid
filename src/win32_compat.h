@@ -51,6 +51,15 @@ typedef int socklen_t;
 #ifndef pid_t
 typedef DWORD pid_t;
 #endif
+#ifndef mode_t
+typedef unsigned int mode_t;
+#endif
+#ifndef uid_t
+typedef unsigned int uid_t;
+#endif
+#ifndef gid_t
+typedef unsigned int gid_t;
+#endif
 /* off_t: provided by MSVC sys/types.h (pulled in by io.h). */
 
 #define STDIN_FILENO 0
@@ -129,7 +138,7 @@ inline int gettimeofday(struct timeval *tv, void * /*timezone*/) {
         return -1;
     }
     FILETIME file_time;
-    GetSystemTimePreciseAsFileTime(&file_time);
+    GetSystemTimeAsFileTime(&file_time);
     ULARGE_INTEGER value;
     value.LowPart = file_time.dwLowDateTime;
     value.HighPart = file_time.dwHighDateTime;

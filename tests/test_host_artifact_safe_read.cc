@@ -25,7 +25,11 @@
 #include <sys/stat.h>
 #endif
 #include <sys/types.h>
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/un.h>
+#endif
 #if defined(_WIN32)
 #include "win32_compat.h"
 #else

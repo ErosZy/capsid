@@ -171,7 +171,8 @@ int run_compiler_sync(const std::vector<std::string>& argv) {
         args.push_back(const_cast<char*>(argument.c_str()));
     }
     args.push_back(nullptr);
-    return _spawnv(_P_WAIT, argv[0].c_str(), args.data());
+    return static_cast<int>(
+        _spawnv(_P_WAIT, argv[0].c_str(), args.data()));
 #else
     std::vector<char*> args;
     for (const std::string& argument : argv) {
