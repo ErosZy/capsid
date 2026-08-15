@@ -144,27 +144,12 @@ int main(int argc, char **argv) {
     // for the ioctlsocket/CRT-over-socket paths.
     capsid::win32::set_binary_file_defaults();
     (void)capsid::win32::ensure_winsock();
-    // The IPC socket was created by the host process; libuv's AFD-based
-    // poll cannot watch a cross-process socket. Rebuild the socket's
-    // process-local ownership via WSADuplicateSocket so uv_poll owns a
-    // socket this process created.
-    {
-        const SOCKET inherited = static_cast<SOCKET>(
-            _get_osfhandle(ipc_fd));
-        WSAPROTOCOL_INFOW protocol_info;
-        if (WSADuplicateSocketW(
-                inherited, GetCurrentProcessId(), &protocol_info) == 0) {
-            const SOCKET owned = WSASocketW(
-                FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO,
-                FROM_PROTOCOL_INFO, &protocol_info, 0,
-                WSA_FLAG_OVERLAPPED);
-            if (owned != INVALID_SOCKET) {
-                close(ipc_fd);
-                ipc_fd = _open_osfhandle(
-                    static_cast<intptr_t>(owned), _O_RDWR | _O_BINARY);
-            }
-        }
-    }
+    // The inherited IPC handle is a genuine SOCKET valid in this process
+    // (CreateProcess passed it through the inheritable-handle list), so
+    // send/recv and libuv's poll work on it directly. Do NOT rebuild it
+    // via WSADuplicateSocket(self): a same-process duplicate collides
+    // with the original's AFD registration once uv_poll_start calls
+    // WSAEventSelect, and the next send fails with ERROR_ALREADY_EXISTS.
 #endif
 
     close_unrelated_descriptors(ipc_fd, network_namespace_fd);
