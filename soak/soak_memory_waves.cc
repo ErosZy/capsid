@@ -22,7 +22,11 @@
 #include "capsid/runtime.h"
 
 #include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdint>

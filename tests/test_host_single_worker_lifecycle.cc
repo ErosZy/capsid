@@ -90,19 +90,16 @@ std::uint16_t ready_port(const std::string& line) {
 }
 
 void require_http_response(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create lifecycle HTTP socket");
-    struct timeval timeout = {};
-    timeout.tv_sec = 3;
-    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                       sizeof(timeout)) == 0,
+    require(capsid::win32::setsockopt_recv_timeout_fd(fd, 3000) == 0,
             "cannot set lifecycle HTTP timeout");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode loopback address");
-    require(connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                     sizeof(address)) == 0,
             "cannot connect after server start");
     const std::string request =
@@ -112,14 +109,14 @@ void require_http_response(std::uint16_t port) {
     std::size_t sent = 0;
     while (sent < request.size()) {
         const ssize_t count =
-            send(fd, request.data() + sent, request.size() - sent, 0);
+            capsid::win32::send_fd(fd, request.data() + sent, request.size() - sent, 0);
         require(count > 0, "cannot write lifecycle HTTP request");
         sent += static_cast<std::size_t>(count);
     }
     std::string response;
     char bytes[2048];
     for (;;) {
-        const ssize_t count = recv(fd, bytes, sizeof(bytes), 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, bytes, sizeof(bytes), 0);
         if (count == 0) {
             break;
         }
@@ -133,14 +130,14 @@ void require_http_response(std::uint16_t port) {
 }
 
 void require_port_closed(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create closed-port probe socket");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode closed-port probe address");
-    const int connected = connect(
+    const int connected = capsid::win32::connect_fd(
         fd, reinterpret_cast<struct sockaddr*>(&address), sizeof(address));
     close(fd);
     require(connected != 0,
@@ -148,18 +145,18 @@ void require_port_closed(std::uint16_t port) {
 }
 
 std::uint16_t reserve_test_port() {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create port-reservation socket");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = 0;
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode port-reservation address");
-    require(bind(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::bind_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                  sizeof(address)) == 0,
             "cannot reserve lifecycle test port");
     socklen_t length = sizeof(address);
-    require(getsockname(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::getsockname_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                         &length) == 0,
             "cannot inspect lifecycle test port");
     const std::uint16_t port = ntohs(address.sin_port);
@@ -169,14 +166,14 @@ std::uint16_t reserve_test_port() {
 }
 
 void require_port_bindable(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create listener-cleanup probe socket");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode listener-cleanup probe address");
-    const int bound = bind(fd, reinterpret_cast<struct sockaddr*>(&address),
+    const int bound = capsid::win32::bind_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                            sizeof(address));
     close(fd);
     require(bound == 0,
@@ -243,7 +240,7 @@ void exercise_lifecycle(Server* server,
 int main(int argc, char** argv) {
     require(argc == 2, "expected capsid-worker path");
     int ready[2];
-    require(pipe(ready) == 0, "cannot create READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create READY pipe");
 
     const std::string source =
         "export default { fetch: () => new Response('lifecycle-ok') };";
@@ -257,7 +254,7 @@ int main(int argc, char** argv) {
     // to stop: long-lived accept/signal handlers retain shared_ptr<Impl> and
     // can otherwise prevent Impl's destructor from ever starting.
     int destructor_ready[2];
-    require(pipe(destructor_ready) == 0,
+    require(capsid::win32::create_socket_pair(destructor_ready),
             "cannot create destructor READY pipe");
     std::uint16_t destructor_port = 0;
     const auto destructor_began = std::chrono::steady_clock::now();
@@ -283,8 +280,12 @@ int main(int argc, char** argv) {
     // and worker before start() returns. StaticPoolServer depends on this to
     // make an N-shard startup failure atomic while shard objects remain alive.
     const std::uint16_t failed_start_port = reserve_test_port();
+#if defined(_WIN32)
+    const int read_only_ready_fd = _open("NUL", _O_RDONLY);
+#else
     const int read_only_ready_fd =
         open("/dev/null", O_RDONLY | O_CLOEXEC);
+#endif
     require(read_only_ready_fd >= 0,
             "cannot create failed-READY lifecycle fixture");
     auto failed_options = make_options(argv[1], read_only_ready_fd);

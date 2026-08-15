@@ -298,6 +298,147 @@ inline bool create_socket_pair(int fds[2]) {
 }  // namespace win32
 }  // namespace capsid
 
+// ---- socket-fd wrappers (both platforms) ---------------------------------
+// Tests and host sources drive sockets through CRT fds; these wrappers
+// translate to raw SOCKET handles on Windows and pass through on POSIX,
+// so call sites stay platform-neutral.
+
+#if defined(_WIN32)
+
+namespace capsid {
+namespace win32 {
+
+// socket(AF_INET, SOCK_STREAM, 0) as a CRT fd.
+inline int create_tcp_socket_fd() {
+    const SOCKET handle = socket(AF_INET, SOCK_STREAM, 0);
+    if (handle == INVALID_SOCKET) {
+        map_winsock_errno();
+        return -1;
+    }
+    return _open_osfhandle(
+        static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
+}
+
+inline int connect_fd(int fd, const struct sockaddr *address,
+                      socklen_t address_size) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int result = connect(socket_handle, address, address_size);
+    if (result != 0) {
+        map_winsock_errno();
+    }
+    return result;
+}
+
+inline int bind_fd(int fd, const struct sockaddr *address,
+                   socklen_t address_size) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int result = bind(socket_handle, address, address_size);
+    if (result != 0) {
+        map_winsock_errno();
+    }
+    return result;
+}
+
+inline int getsockname_fd(int fd, struct sockaddr *address,
+                          socklen_t *address_size) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int result = getsockname(socket_handle, address, address_size);
+    if (result != 0) {
+        map_winsock_errno();
+    }
+    return result;
+}
+
+inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const int received = recv(
+        socket_handle,
+        static_cast<char *>(buffer),
+        static_cast<int>(size),
+        flags);
+    if (received == SOCKET_ERROR) {
+        map_winsock_errno();
+        return -1;
+    }
+    return static_cast<ssize_t>(received);
+}
+
+// SO_RCVTIMEO as a millisecond budget (Windows takes DWORD ms; POSIX
+// takes struct timeval).
+inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
+    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
+    if (socket_handle == INVALID_SOCKET) {
+        errno = EBADF;
+        return -1;
+    }
+    const DWORD ms = static_cast<DWORD>(timeout_ms);
+    const int result = setsockopt(
+        socket_handle, SOL_SOCKET, SO_RCVTIMEO,
+        reinterpret_cast<const char *>(&ms), sizeof(ms));
+    if (result != 0) {
+        map_winsock_errno();
+    }
+    return result;
+}
+
+}  // namespace win32
+}  // namespace capsid
+
+#else  // POSIX passthroughs
+
+namespace capsid {
+namespace win32 {
+
+inline int create_tcp_socket_fd() {
+    return socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+}
+
+inline int connect_fd(int fd, const struct sockaddr *address,
+                      socklen_t address_size) {
+    return connect(fd, address, address_size);
+}
+
+inline int bind_fd(int fd, const struct sockaddr *address,
+                   socklen_t address_size) {
+    return bind(fd, address, address_size);
+}
+
+inline int getsockname_fd(int fd, struct sockaddr *address,
+                          socklen_t *address_size) {
+    return getsockname(fd, address, address_size);
+}
+
+inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
+    return recv(fd, buffer, size, flags);
+}
+
+inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
+    struct timeval timeout = {};
+    timeout.tv_sec = static_cast<time_t>(timeout_ms / 1000u);
+    timeout.tv_usec = static_cast<suseconds_t>((timeout_ms % 1000u) * 1000u);
+    return setsockopt(
+        fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+}
+
+}  // namespace win32
+}  // namespace capsid
+
 #endif  // _WIN32
 
 // ---- poll() compatibility ------------------------------------------------
@@ -341,6 +482,8 @@ inline int capsid_poll(capsid_pollfd *fds,
 }  // namespace capsid
 #else
 #include <poll.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 typedef struct pollfd capsid_pollfd;
 namespace capsid {
 namespace win32 {
