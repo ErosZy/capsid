@@ -2649,7 +2649,8 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                 {
                     FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
                     if (dbg != NULL) {
-                        std::fprintf(dbg, "client next_event: hard read error errno=%d wsa=%d\n",
+                        std::fprintf(dbg, "client next_event: hard read error read_size=%lld errno=%d wsa=%d\n",
+                                     static_cast<long long>(read_size),
                                      captured_errno,
 #if defined(_WIN32)
                                      captured_wsa
