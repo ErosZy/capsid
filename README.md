@@ -13,7 +13,10 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 Ja
 
 > **项目状态：** 当前版本为 `0.1.x`。Runtime ABI 为 v7，第一方 Host 仍是
 > 非生产部署接口。Linux strict sandbox 是 v1 的生产隔离目标；未启用严格沙箱
-> 时，只能运行受信任代码。
+> 时，只能运行受信任代码。自 v0.1.2 起提供 Windows x86_64 构建（MSVC，静态
+> CRT），Runtime/worker/字节码编译器与 single-worker/static-pool Host 可用，
+> strict sandbox 与 managed Host 仍为 Linux 专属，详见
+> [Windows 构建与平台能力](docs/windows.md)。
 
 ## 为什么是 Capsid
 
@@ -121,6 +124,9 @@ curl http://127.0.0.1:8080/@capsid/orders/
 Admin API 和 durable active state 驱动的 `managed` 模式。生产集成应先阅读
 [宿主嵌入规范](docs/host-integration.md)与[配置参考](docs/host-config.md)。
 
+Windows（MSVC）构建步骤、能力矩阵与平台限制见
+[Windows 构建与平台能力](docs/windows.md)。
+
 ## 集成模型
 
 生产宿主通常链接 `libcapsid_runtime`，并自行管理 listener、TLS、路由、worker
@@ -214,6 +220,7 @@ Capsid 在该矩阵的常规 JSON 负载中领先；大字节流并非全部领�
 | 部署第一方 Host | [host.json / capsid.json 参考](docs/host-config.md) |
 | 配置应用权限 | [capsid.json 教程](docs/capsid-json.md) · [模块与权限参考](docs/module-permissions.md) |
 | 验证安全隔离 | [能力策略](docs/capability-policy.md) · [Linux 严格沙箱](docs/linux-sandbox.md) |
+| 在 Windows 上构建 | [Windows 构建与平台能力](docs/windows.md) |
 | 了解兼容性 | [标准与合规](docs/conformance.md) · [框架兼容性](docs/framework-compatibility/README.md) |
 | 复现测试与性能 | [测试门禁](docs/testing.md) · [性能证据](docs/performance-benchmarks.md) |
 
