@@ -1205,6 +1205,11 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         input->abi_version != CAPSID_ABI_VERSION) {
         return CAPSID_INVALID_ARGUMENT;
     }
+    // WP-06, spec §10.4: clear the output before ANY failure-capable body
+    // step — policy validation and the Windows spawn preamble allocate
+    // before the later null-out below, and an injected OOM there must
+    // still leave the caller's pointer at NULL.
+    *out_worker = NULL;
 
     capsid_worker_config config = *input;
     capsid::EgressPolicy validated_egress_policy;
