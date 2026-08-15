@@ -114,7 +114,12 @@ bool read_frame(int fd,
             return false;
         }
         uint8_t buffer[4096];
-        const ssize_t count = read(fd, buffer, sizeof(buffer));
+        const ssize_t count =
+#if defined(_WIN32)
+            capsid::win32::read_fd(fd, buffer, sizeof(buffer));
+#else
+            read(fd, buffer, sizeof(buffer));
+#endif
         if (count <= 0) {
             return false;
         }
