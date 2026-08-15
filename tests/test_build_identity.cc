@@ -7,17 +7,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include "win32_compat.h"
 #include <string>
 #include <sys/types.h>
 #if defined(_WIN32)
 #include "win32_compat.h"
 #else
 #include <sys/wait.h>
-#endif
-#if defined(_WIN32)
-#include "win32_compat.h"
-#else
 #include <unistd.h>
 #endif
 
@@ -196,25 +191,54 @@ capsid_build_info read_library_build_info() {
 
 std::string read_child_stdout(const char* executable, const char* argument) {
 #if defined(_WIN32)
-    // cmd /c strips the first and last quote when the command starts with
-    // one, which would corrupt the executable token. The outer empty pair
-    // is the documented escape: cmd strips it and parses the inner
-    // quoted tokens correctly.
-    std::string command = std::string("\"\"") + "\"" + executable + "\" \"" +
-                          argument + "\"\"";
-    FILE* stream = _popen(command.c_str(), "rb");
-    require(stream != nullptr, "could not spawn compiler identity probe");
+    // Spawn the probe directly (no shell): cmd /c quote-stripping corrupts
+    // quoted tokens, and CreateProcess gives exact argument passing plus a
+    // stdout pipe.
+    HANDLE read_pipe = NULL;
+    HANDLE write_pipe = NULL;
+    SECURITY_ATTRIBUTES attributes = {};
+    attributes.nLength = sizeof(attributes);
+    attributes.bInheritHandle = TRUE;
+    require(CreatePipe(&read_pipe, &write_pipe, &attributes, 0),
+            "could not create compiler output pipe");
+    require(SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0),
+            "could not clear compiler output pipe inheritance");
+    std::string command = std::string("\"") + executable + "\" \"" +
+                          argument + "\"";
+    STARTUPINFOA startup;
+    std::memset(&startup, 0, sizeof(startup));
+    startup.cb = sizeof(startup);
+    startup.hStdOutput = write_pipe;
+    startup.hStdError = write_pipe;
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    PROCESS_INFORMATION process;
+    std::memset(&process, 0, sizeof(process));
+    require(CreateProcessA(NULL, &command[0], NULL, NULL, TRUE, 0, NULL,
+                           NULL, &startup, &process),
+            "could not spawn compiler identity probe");
+    CloseHandle(write_pipe);
+    CloseHandle(process.hThread);
     std::string output;
     char buffer[256];
     for (;;) {
-        const size_t count = std::fread(buffer, 1, sizeof(buffer), stream);
+        DWORD count = 0;
+        require(ReadFile(read_pipe, buffer, sizeof(buffer), &count, NULL) ||
+                    GetLastError() == ERROR_BROKEN_PIPE,
+                "could not read compiler identity output");
         if (count > 0) {
             output.append(buffer, count);
             continue;
         }
         break;
     }
-    require(_pclose(stream) == 0, "compiler identity probe failed");
+    CloseHandle(read_pipe);
+    require(WaitForSingleObject(process.hProcess, INFINITE) == WAIT_OBJECT_0,
+            "could not wait for compiler identity probe");
+    DWORD exit_code = 0;
+    require(GetExitCodeProcess(process.hProcess, &exit_code) &&
+                exit_code == 0,
+            "compiler identity probe failed");
+    CloseHandle(process.hProcess);
     while (!output.empty() &&
            (output.back() == '\n' || output.back() == '\r')) {
         output.pop_back();
