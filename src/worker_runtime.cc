@@ -3277,7 +3277,7 @@ private:
         (void)argv;
         return JS_ThrowInternalError(
             ctx, "filesystem module is unavailable on this platform");
-#endif
+#else
         std::string path;
         capsid::PermissionDecision decision;
         if (!fs_path(
@@ -3347,6 +3347,7 @@ private:
         close(descriptor);
         return JS_NewStringLen(
             ctx, contents.data(), contents.size());
+#endif  // !defined(_WIN32)
     }
 
     static JSValue js_fs_stat(
@@ -3362,7 +3363,7 @@ private:
         (void)argv;
         return JS_ThrowInternalError(
             ctx, "filesystem module is unavailable on this platform");
-#endif
+#else
         std::string path;
         capsid::PermissionDecision decision;
         if (!fs_path(
@@ -3411,6 +3412,7 @@ private:
             return JS_EXCEPTION;
         }
         return result;
+#endif  // !defined(_WIN32)
     }
 
     static JSValue js_fs_list(
@@ -3426,7 +3428,7 @@ private:
         (void)argv;
         return JS_ThrowInternalError(
             ctx, "filesystem module is unavailable on this platform");
-#endif
+#else
         std::string path;
         capsid::PermissionDecision decision;
         if (!fs_path(
@@ -3506,6 +3508,7 @@ private:
             return JS_EXCEPTION;
         }
         return result;
+#endif  // !defined(_WIN32)
     }
 
     static int fs_module_init(
