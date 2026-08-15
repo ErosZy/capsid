@@ -167,7 +167,7 @@ capsid_build_info read_library_build_info() {
     const bool commit_known = is_lower_hex(info.capsid_commit, 40);
     const bool release_grade = std::strcmp(info.cmake_build_type, "Release") == 0 &&
                                info.capsid_tree_clean == 1u && commit_known;
-    require(info.provenance_dirty == (release_grade ? 0 : 1),
+    require(info.provenance_dirty == (release_grade ? 0u : 1u),
             "provenance_dirty disagrees with build type/commit/tree state");
     require(info.compiler_id != nullptr && info.compiler_id[0] != 0 &&
                 info.compiler_version != nullptr &&

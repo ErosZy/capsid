@@ -130,9 +130,22 @@ int main(int argc, char **argv) {
     if (worker_pid <= 0) {
         fail("worker pid unavailable");
     }
+#if defined(_WIN32)
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE,
+                                 static_cast<DWORD>(worker_pid));
+    if (process == NULL || !TerminateProcess(process, 1)) {
+        if (process != NULL) {
+            CloseHandle(process);
+        }
+        fail("kill worker");
+    }
+    WaitForSingleObject(process, 5000);
+    CloseHandle(process);
+#else
     if (kill(worker_pid, SIGKILL) != 0) {
         fail("kill worker");
     }
+#endif
 
     for (;;) {
         const capsid_result flush = capsid_worker_flush(worker);

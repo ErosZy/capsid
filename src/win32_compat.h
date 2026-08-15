@@ -130,6 +130,19 @@ inline int getpid() {
     return static_cast<int>(_getpid());
 }
 
+inline int setenv(const char *name, const char *value, int overwrite) {
+    if (!overwrite && std::getenv(name) != nullptr) {
+        return 0;
+    }
+    return _putenv_s(name, value) == 0 ? 0 : -1;
+}
+
+// _putenv with a bare NAME (no '=') removes the variable — the CRT's
+// documented removal form.
+inline int unsetenv(const char *name) {
+    return _putenv(name) == 0 ? 0 : -1;
+}
+
 // usleep: millisecond-resolution sleep (test scaffolding; the ceiling
 // round matches POSIX "sleep at least this long").
 inline int usleep(unsigned long usec) {

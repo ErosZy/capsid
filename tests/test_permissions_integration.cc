@@ -1283,6 +1283,13 @@ void test_stdio_module_contract(
 
 void test_fs_module_contract(
     const char *worker_path) {
+#if defined(_WIN32)
+    // capsid:fs requires openat2 path semantics (Linux-only; the module
+    // reports "unavailable" on other platforms). The contract is not
+    // exercised on Windows — see docs/windows.md.
+    (void)worker_path;
+    return;
+#else
     char directory_template[] =
         "/tmp/capsid-fs-contract.XXXXXX";
     char *directory_value = mkdtemp(directory_template);
@@ -1426,6 +1433,7 @@ void test_fs_module_contract(
     unlink(denied.c_str());
     unlink(allowed.c_str());
     rmdir(directory.c_str());
+#endif  // !defined(_WIN32)
 }
 
 }  // namespace
