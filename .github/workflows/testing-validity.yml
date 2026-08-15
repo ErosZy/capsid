@@ -510,9 +510,13 @@ jobs:
       # Linux-only strict-sandbox and managed-suite tests are not registered
       # on Windows (they SKIP by absence, never FAIL), and the §12.3 package
       # suite is excluded here (the Release job packages Windows).
+      # Ninja keeps this single-config like every other job; the Visual
+      # Studio generator would default to Debug builds and require ctest
+      # -C <config>, which quietly "Not Run"s the whole matrix.
       - name: Configure Windows host library and worker contracts
         run: |
           cmake -S . -B build-windows `
+            -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCAPSID_BUILD_HOST=ON `
             -DCAPSID_BUILD_WORKER=ON `
