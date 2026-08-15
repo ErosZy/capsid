@@ -1,0 +1,173 @@
+--- a/src/tjs.h	2026-08-15 13:07:46
++++ b/src/tjs.h	2026-08-15 13:08:11
+@@ -41,6 +41,11 @@
+     bool skip_run_main;
+     TJSBootstrapCallback bootstrap;
+     void *bootstrap_opaque;
++    /* Capsid Binding v1: attach this runtime to an existing loop owned by
++     * another runtime instead of initializing its own. The attached
++     * runtime never initializes or closes the loop; TJS_FreeRuntime only
++     * closes its own handles. */
++    uv_loop_t *shared_loop;
+ } TJSRunOptions;
+ 
+ void TJS_DefaultOptions(TJSRunOptions *options);
+@@ -53,6 +58,10 @@
+ int TJS_Run(TJSRuntime *qrt);
+ void TJS_Stop(TJSRuntime *qrt);
+ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
++/* Capsid Binding v1: the TJS_Run preamble — start this runtime's job-queue
++ * handles on its (possibly shared) loop. A shared-loop runtime is pumped
++ * by the owning runtime's loop; it never calls TJS_Run itself. */
++void TJS_StartRuntimeJobs(TJSRuntime *qrt);
+ JSValue TJS_GetInternalCore(TJSRuntime *qrt);
+ int TJS_EvalBytecode(JSContext *ctx, const uint8_t *buf, size_t buf_len, bool check_promise);
+ JSValue TJS_EvalModuleContent(JSContext *ctx,
+--- a/src/private.h	2026-08-15 13:07:46
++++ b/src/private.h	2026-08-15 13:08:19
+@@ -83,6 +83,10 @@
+     bool is_worker;
+     bool freeing;
+     bool draining_microtasks;
++    /* Capsid Binding v1: true when this runtime attaches to another
++     * runtime's loop (options.shared_loop); its free path then skips
++     * uv_loop_close and only closes its own handles. */
++    bool loop_shared;
+     TJSAsyncContextHooks async_ctx_hooks;
+     void *async_ctx_opaque;
+ #ifdef TJS_HAVE_WASM
+--- a/src/vm.c	2026-08-15 13:07:46
++++ b/src/vm.c	2026-08-15 13:09:02
+@@ -236,6 +236,12 @@
+ }
+ #endif
+ 
++/* Capsid Binding v1: the loop this runtime's handles live on — the shared
++ * loop for attached runtimes, the embedded loop otherwise. */
++static uv_loop_t *tjs__effective_loop(TJSRuntime *qrt) {
++    return qrt->options.shared_loop ? qrt->options.shared_loop : &qrt->loop;
++}
++
+ static void tjs__bootstrap_core(JSContext *ctx, JSValue ns) {
+ #ifdef TJS_RESTRICTED_CORE
+     tjs__mod_streams_init(ctx, ns);
+@@ -423,7 +429,7 @@
+     TJSRuntime *qrt = handle->data;
+     CHECK_NOT_NULL(qrt);
+ 
+-    uv_stop(&qrt->loop);
++    uv_stop(tjs__effective_loop(qrt));
+ }
+ 
+ void TJS_DefaultOptions(TJSRunOptions *options) {
+@@ -489,22 +495,29 @@
+     qrt->is_worker = is_worker;
+     JS_SetCanBlock(rt, is_worker);
+ 
+-    CHECK_EQ(uv_loop_init(&qrt->loop), 0);
++    /* Capsid Binding v1: a shared-loop runtime attaches to another
++     * runtime's loop and never initializes (or closes) it; its handles
++     * live on the shared loop and are pumped by the owning runtime. */
++    qrt->loop_shared = options->shared_loop != NULL;
++    if (!qrt->loop_shared) {
++        CHECK_EQ(uv_loop_init(&qrt->loop), 0);
++    }
++    uv_loop_t *loop = tjs__effective_loop(qrt);
+ 
+     /* handle which runs the job queue */
+-    CHECK_EQ(uv_prepare_init(&qrt->loop, &qrt->jobs.prepare), 0);
++    CHECK_EQ(uv_prepare_init(loop, &qrt->jobs.prepare), 0);
+     qrt->jobs.prepare.data = qrt;
+ 
+     /* handle to prevent the loop from blocking for i/o when there are pending jobs. */
+-    CHECK_EQ(uv_idle_init(&qrt->loop, &qrt->jobs.idle), 0);
++    CHECK_EQ(uv_idle_init(loop, &qrt->jobs.idle), 0);
+     qrt->jobs.idle.data = qrt;
+ 
+     /* handle which runs the job queue */
+-    CHECK_EQ(uv_check_init(&qrt->loop, &qrt->jobs.check), 0);
++    CHECK_EQ(uv_check_init(loop, &qrt->jobs.check), 0);
+     qrt->jobs.check.data = qrt;
+ 
+     /* handle for stopping this runtime (also works from another thread) */
+-    CHECK_EQ(uv_async_init(&qrt->loop, &qrt->stop, uv__stop), 0);
++    CHECK_EQ(uv_async_init(loop, &qrt->stop, uv__stop), 0);
+     qrt->stop.data = qrt;
+ 
+     /* loader for ES modules */
+@@ -653,23 +666,27 @@
+     }
+ #endif
+ 
+-    /* Cleanup loop. All handles should be closed. */
+-    int closed = 0;
+-    for (int i = 0; i < 5; i++) {
+-        if (uv_loop_close(&qrt->loop) == 0) {
+-            closed = 1;
+-            break;
+-        }
+-        uv_run(&qrt->loop, UV_RUN_NOWAIT);
+-    }
++    /* Cleanup loop. All handles should be closed. Capsid Binding v1: a
++     * shared-loop runtime only closes its own handles — the loop belongs
++     * to another runtime and outlives this one. */
++    if (!qrt->loop_shared) {
++        int closed = 0;
++        for (int i = 0; i < 5; i++) {
++            if (uv_loop_close(&qrt->loop) == 0) {
++                closed = 1;
++                break;
++            }
++            uv_run(&qrt->loop, UV_RUN_NOWAIT);
++        }
+ #ifndef NDEBUG
+-    if (!closed) {
+-        uv_print_all_handles(&qrt->loop, stderr);
+-    }
+-    CHECK_EQ(closed, 1);
++        if (!closed) {
++            uv_print_all_handles(&qrt->loop, stderr);
++        }
++        CHECK_EQ(closed, 1);
+ #else
+-    (void) closed;
++        (void) closed;
+ #endif
++    }
+ 
+     tjs__free(qrt);
+ }
+@@ -935,14 +952,21 @@
+ }
+ 
+ /* main loop which calls the user JS callbacks */
+-int TJS_Run(TJSRuntime *qrt) {
+-    int ret = 0;
+-
++void TJS_StartRuntimeJobs(TJSRuntime *qrt) {
++    /* The TJS_Run preamble: start this runtime's job-queue handles on its
++     * (possibly shared) loop. A shared-loop runtime is pumped by the loop
++     * owner; it must never call TJS_Run itself. */
+     CHECK_EQ(uv_prepare_start(&qrt->jobs.prepare, uv__prepare_cb), 0);
+     uv_unref((uv_handle_t *) &qrt->jobs.prepare);
+     CHECK_EQ(uv_check_start(&qrt->jobs.check, uv__check_cb), 0);
+     uv_unref((uv_handle_t *) &qrt->jobs.check);
++}
+ 
++int TJS_Run(TJSRuntime *qrt) {
++    int ret = 0;
++
++    TJS_StartRuntimeJobs(qrt);
++
+     /* Use the async handle to keep the worker alive even when there is nothing to do. */
+     if (!qrt->is_worker) {
+         uv_unref((uv_handle_t *) &qrt->stop);
+@@ -1004,7 +1028,7 @@
+ }
+ 
+ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt) {
+-    return &qrt->loop;
++    return tjs__effective_loop(qrt);
+ }
+ 
+ int tjs__load_file(JSContext *ctx, TBuf *dbuf, const char *filename) {

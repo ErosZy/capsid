@@ -4148,6 +4148,19 @@ if(BUILD_TESTING)
         set_tests_properties(quickjs_job_context_hooks
             PROPERTIES TIMEOUT 20)
 
+        # Binding v1 §7.5: two TJS runtimes on one Capsid-owned loop
+        # (0016-capsid-shared-loop.patch). RED until the patch exists.
+        add_executable(
+            test-tjs-shared-loop
+            tests/test_tjs_shared_loop.cc
+        )
+        target_link_libraries(test-tjs-shared-loop PRIVATE tjs)
+        add_test(
+            NAME tjs_shared_loop
+            COMMAND test-tjs-shared-loop
+        )
+        set_tests_properties(tjs_shared_loop PROPERTIES TIMEOUT 20)
+
         # WP-00/PR-01 RED gates. All three worker tests are expected to
         # FAIL on the pre-fix bridge (identity collapse P0-1, request
         # context loss P0-2, terminal continuation survival P0-3); the

@@ -176,9 +176,11 @@ function(capsid_compute_txiki_overlay_key)
     file(GLOB CTOK_PATCH_LIST "${CTOK_PATCH_DIR}/*.patch")
     list(SORT CTOK_PATCH_LIST)
     list(LENGTH CTOK_PATCH_LIST CTOK_PATCH_COUNT)
-    if(NOT CTOK_PATCH_COUNT EQUAL 16)
+    # Binding v1 §7.5: 0016-capsid-shared-loop.patch attaches a second
+    # TJS runtime to the Capsid-owned loop.
+    if(NOT CTOK_PATCH_COUNT EQUAL 17)
         message(FATAL_ERROR
-            "expected 16 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 17 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

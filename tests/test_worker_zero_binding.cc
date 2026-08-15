@@ -346,9 +346,10 @@ void test_load_binding_after_bundle_is_rejected(const char *worker_path,
             "sealed LOAD_BINDING worker did not terminate");
 }
 
-std::vector<uint8_t> mongo_binding_blob() {
+std::vector<uint8_t> mongo_binding_blob(const std::string &source =
+                                            "export default () => ({});") {
     // A minimal valid descriptor: mongo with the network-client profile,
-    // tjs:internal/core granted, and no source-side behavior.
+    // tjs:internal/core granted, and a configurable factory source.
     std::vector<uint8_t> descriptor;
     append_string16(&descriptor, "mongo");
     append_string32(&descriptor, "{}");
@@ -366,7 +367,7 @@ std::vector<uint8_t> mongo_binding_blob() {
     capsid::protocol::append_u32(
         &blob, static_cast<uint32_t>(descriptor.size()));
     blob.insert(blob.end(), descriptor.begin(), descriptor.end());
-    blob.insert(blob.end(), 3, 0x5a);
+    blob.insert(blob.end(), source.begin(), source.end());
     return blob;
 }
 
@@ -384,16 +385,42 @@ void test_binding_ready_proof(const char *worker_path,
     binding.flags =
         capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob();
+    // A real factory: the worker must evaluate the Binding module, call
+    // the factory with (config, secrets, log) and freeze the method table
+    // before READY.
+    binding.payload = mongo_binding_blob(
+        "export default ({ config, secrets, log }) => {"
+        "  log.info('binding warmed');"
+        "  return { find(input) { return 'find:' + input.collection; } };"
+        "};");
     send_frame(fd, binding);
     send_bundle(fd, read_file(p0_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
-    require(
-        read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame &&
-            frame.type == capsid::protocol::kReady,
-        "binding worker did not report READY");
+    // The factory's log.info emits a LOG frame before READY.
+    bool saw_binding_log = false;
+    for (int i = 0; i < 8; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "binding worker produced no startup frame");
+        if (frame.type == capsid::protocol::kLog) {
+            const std::string log_message(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+            if (log_message.find("binding warmed") != std::string::npos) {
+                saw_binding_log = true;
+            }
+            continue;
+        }
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+        fail("binding worker did not report READY");
+    }
+    require(frame.type == capsid::protocol::kReady &&
+                saw_binding_log,
+            "binding worker did not report READY after the factory log");
     capsid::WorkerReadyProof proof;
     std::string compat_id;
     std::string error;
@@ -413,6 +440,70 @@ void test_binding_ready_proof(const char *worker_path,
                 std::vector<capsid::WorkerBindingDescriptor>{expected}),
         "binding READY profile digest diverged from the worker's union");
     finish_worker(fd, pid, true);
+}
+
+// Binding v1 §7.5: a Binding factory or method-export violation fails the
+// worker startup (generation warmup) before READY, with a diagnostic that
+// names the failure.
+void expect_binding_startup_failure(const char *worker_path,
+                                    const char *p0_path,
+                                    const std::string &source,
+                                    const char *needle) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob(source);
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(p0_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    bool failed = false;
+    for (int i = 0; i < 8; ++i) {
+        if (read_frame(fd, &parser, &frame, 5000) == ReadResult::kEof) {
+            break;
+        }
+        if (frame.type == capsid::protocol::kError) {
+            failed = true;
+            break;
+        }
+    }
+    require(failed && frame.request_id == 0,
+            "binding startup violation did not fail the worker");
+    const std::string message(
+        reinterpret_cast<const char *>(frame.payload.data()),
+        frame.payload.size());
+    require(message.find(needle) != std::string::npos,
+            "startup error does not name the binding failure");
+    int status = 0;
+    close(fd);
+    kill(pid, SIGKILL);
+    waitpid(pid, &status, 0);
+}
+
+void test_binding_factory_failures(const char *worker_path,
+                                   const char *p0_path) {
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "export default () => { throw new Error('boom'); };",
+        "boom");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "export default () => ({ constructor() {} });",
+        "invalid method name");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "export default () => 42;",
+        "factory must return an object");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "export default () => ({ find: 7 });",
+        "method is not a function");
 }
 
 void test_load_binding_abi_validation() {
@@ -453,6 +544,7 @@ int main(int argc, char **argv) {
     test_undeclared_binding_import_fails(argv[1], argv[3]);
     test_load_binding_after_bundle_is_rejected(argv[1], argv[2]);
     test_binding_ready_proof(argv[1], argv[2]);
+    test_binding_factory_failures(argv[1], argv[2]);
     test_load_binding_abi_validation();
     return 0;
 }

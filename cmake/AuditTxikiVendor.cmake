@@ -146,9 +146,11 @@ file(GLOB CAPSID_TXIKI_PATCHES "${CAPSID_TXIKI_PATCH_DIR}/*.patch")
 list(SORT CAPSID_TXIKI_PATCHES)
 list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 
-if(NOT CAPSID_PATCH_COUNT EQUAL 16)
+# Binding v1 §7.5: 0016-capsid-shared-loop.patch adds the shared-loop
+# runtime attachment (audited with the overlay key/manifest bump).
+if(NOT CAPSID_PATCH_COUNT EQUAL 17)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 16 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 17 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------

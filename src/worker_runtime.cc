@@ -37,6 +37,9 @@ JSModuleDef *tjs_module_loader(
 JSModuleDef *tjs__load_builtin(
     JSContext *ctx,
     const char *module_name);
+// Binding v1 §5.1: drains a runtime's microtasks and deferred rejections,
+// completing async module evaluation (quickjs-ng) before exports are read.
+void tjs__execute_jobs(JSContext *ctx);
 }
 
 #include <errno.h>
@@ -322,6 +325,9 @@ public:
           shutting_down_(false),
           bundle_is_trusted_bytecode_(false),
           bundle_name_("capsid:app/main"),
+          binding_runtime_(NULL),
+          binding_ctx_(NULL),
+          bootstrapping_binding_runtime_(false),
           application_handler_(JS_UNDEFINED),
           application_handler_this_(JS_UNDEFINED),
           begin_request_(JS_UNDEFINED),
@@ -357,6 +363,25 @@ public:
                 reject_pending(it->second, "worker shutting down");
             }
             free_bridge_functions();
+        }
+        if (binding_runtime_) {
+            // §7.5: free the Binding Runtime first so its handles close on
+            // the shared loop while the User runtime still owns the loop.
+            for (size_t index = 0; index < binding_tables_.size(); ++index) {
+                for (size_t method = 0;
+                     method < binding_tables_[index].method_names.size();
+                     ++method) {
+                    JS_FreeAtom(
+                        binding_ctx_,
+                        binding_tables_[index].method_names[method]);
+                }
+                JS_FreeValue(
+                    binding_ctx_,
+                    binding_tables_[index].factory_object);
+            }
+            TJS_FreeRuntime(binding_runtime_);
+            binding_runtime_ = NULL;
+            binding_ctx_ = NULL;
         }
         if (runtime_) {
             // §7.5: close capsid-owned loop handles before the txiki
@@ -517,6 +542,16 @@ public:
             return 1;
         }
         seal_module_loader();
+        // §7.5: create the Binding Runtime (only when bindings exist) and
+        // warm every binding factory before READY. A factory/method-export
+        // violation fails the worker startup.
+        std::string binding_runtime_error;
+        if (!create_binding_runtime(&binding_runtime_error)) {
+            send_error(0, std::string("binding runtime setup failed: ") +
+                              binding_runtime_error);
+            flush_blocking();
+            return 1;
+        }
 
         std::string load_error;
         if (!load_application(&load_error)) {
@@ -1047,10 +1082,48 @@ private:
 
     static int bootstrap(TJSRuntime *runtime, JSContext *ctx, void *opaque) {
         WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
-        self->runtime_ = runtime;
-        self->ctx_ = ctx;
+        // Binding v1 §5.1: the Binding Runtime reuses the same bootstrap
+        // bytecode for the profile global surface, but must never claim
+        // the User runtime pointers or install the User request bridge.
+        const bool binding_runtime =
+            self->bootstrapping_binding_runtime_;
+        if (!binding_runtime) {
+            self->runtime_ = runtime;
+            self->ctx_ = ctx;
+        }
 
         JSValue core = TJS_GetInternalCore(runtime);
+        if (binding_runtime) {
+            // §3.3: the Binding Runtime has no User request bridge; the
+            // bridge natives throw so bootstrap wiring cannot cross the
+            // runtime boundary. Fetch limits stay readable (harmless) and
+            // capsidInstallBridge becomes a no-op.
+            if (!self->define_native(ctx, core, "capsidRequestCredit", js_bridge_forbidden, 2) ||
+                !self->define_native(ctx, core, "capsidResponseHead", js_bridge_forbidden, 4) ||
+                !self->define_native(ctx, core, "capsidResponseWrite", js_bridge_forbidden, 2) ||
+                !self->define_native(ctx, core, "capsidResponseEnd", js_bridge_forbidden, 1) ||
+                !self->define_native(ctx, core, "capsidResponseError", js_bridge_forbidden, 2) ||
+                !self->define_native(ctx, core, "capsidResponseFinal", js_bridge_forbidden, 5) ||
+                !self->define_native(ctx, core, "capsidResponseFixed", js_bridge_forbidden, 5) ||
+                !self->define_native(ctx, core, "capsidRequestSettled", js_bridge_forbidden, 1) ||
+                !self->define_native(ctx, core, "capsidLog", js_log, 2) ||
+                !self->define_native(ctx, core, "capsidFetchRequestBodyLimit",
+                    js_fetch_request_body_limit, 0) ||
+                !self->define_native(ctx, core, "capsidFetchResponseBodyLimit",
+                    js_fetch_response_body_limit, 0) ||
+                !self->define_native(ctx, core, "capsidFixedResponseBodyLimit",
+                    js_fixed_response_body_limit, 0) ||
+                !self->define_native(ctx, core, "capsidInstallBridge", js_install_bridge, 4)) {
+                if (!JS_HasException(ctx)) {
+                    JS_ThrowInternalError(
+                        ctx,
+                        "failed to install Capsid binding bootstrap");
+                }
+                return -1;
+            }
+            return TJS_EvalBytecode(
+                ctx, capsid__bootstrap, capsid__bootstrap_size, true);
+        }
         if (capsid_tjs_set_cookie_jar_path(runtime, "") != 0 ||
             capsid_tjs_set_egress_policy(
                 runtime, egress_check, self) != 0 ||
@@ -1058,31 +1131,28 @@ private:
              capsid_tjs_set_ca_bundle_path(
                  runtime,
                  self->config_.tls_ca_bundle_path.c_str()) != 0) ||
-            !self->define_native(core, "capsidLog", js_log, 2) ||
-            !self->define_native(core, "capsidRequestCredit", js_request_credit, 2) ||
-            !self->define_native(core, "capsidResponseHead", js_response_head, 4) ||
-            !self->define_native(core, "capsidResponseWrite", js_response_write, 2) ||
-            !self->define_native(core, "capsidResponseEnd", js_response_end, 1) ||
-            !self->define_native(core, "capsidResponseError", js_response_error, 2) ||
-            !self->define_native(core, "capsidResponseFinal", js_response_final, 5) ||
-            !self->define_native(core, "capsidResponseFixed", js_response_fixed, 5) ||
-            !self->define_native(core, "capsidRequestSettled", js_request_settled, 1) ||
-            !self->define_native(
-                core,
+            !self->define_native(ctx, core, "capsidLog", js_log, 2) ||
+            !self->define_native(ctx, core, "capsidRequestCredit", js_request_credit, 2) ||
+            !self->define_native(ctx, core, "capsidResponseHead", js_response_head, 4) ||
+            !self->define_native(ctx, core, "capsidResponseWrite", js_response_write, 2) ||
+            !self->define_native(ctx, core, "capsidResponseEnd", js_response_end, 1) ||
+            !self->define_native(ctx, core, "capsidResponseError", js_response_error, 2) ||
+            !self->define_native(ctx, core, "capsidResponseFinal", js_response_final, 5) ||
+            !self->define_native(ctx, core, "capsidResponseFixed", js_response_fixed, 5) ||
+            !self->define_native(ctx, core, "capsidRequestSettled", js_request_settled, 1) ||
+            !self->define_native(ctx, core,
                 "capsidFetchRequestBodyLimit",
                 js_fetch_request_body_limit,
                 0) ||
-            !self->define_native(
-                core,
+            !self->define_native(ctx, core,
                 "capsidFetchResponseBodyLimit",
                 js_fetch_response_body_limit,
                 0) ||
-            !self->define_native(
-                core,
+            !self->define_native(ctx, core,
                 "capsidFixedResponseBodyLimit",
                 js_fixed_response_body_limit,
                 0) ||
-            !self->define_native(core, "capsidInstallBridge", js_install_bridge, 4)) {
+            !self->define_native(ctx, core, "capsidInstallBridge", js_install_bridge, 4)) {
             if (!JS_HasException(ctx)) {
                 JS_ThrowInternalError(ctx, "failed to install Capsid native bridge");
             }
@@ -1259,15 +1329,19 @@ private:
         return 1;
     }
 
-    bool define_native(JSValue core,
+    // §5.1: natives must be defined with the context that owns `core` —
+    // the User ctx for the User bootstrap, the Binding ctx for the Binding
+    // bootstrap. Cross-runtime JSValue mutation corrupts the shape hash.
+    bool define_native(JSContext *ctx,
+                       JSValue core,
                        const char *name,
                        JSCFunction *function,
                        int length) {
         const int result =
-            JS_DefinePropertyValueStr(ctx_,
+            JS_DefinePropertyValueStr(ctx,
                                       core,
                                       name,
-                                      JS_NewCFunction(ctx_, function, name, length),
+                                      JS_NewCFunction(ctx, function, name, length),
                                       JS_PROP_C_W_E);
         return result > 0;
     }
@@ -1361,6 +1435,13 @@ private:
         if (!g_worker || argc < 4) {
             return JS_ThrowInternalError(ctx, "invalid Capsid bridge installation");
         }
+        if (g_worker->bootstrapping_binding_runtime_) {
+            // §3.3/§5.1: the bootstrap bytecode wires the request bridge
+            // unconditionally; inside the Binding Runtime the bridge must
+            // not exist — accept and drop the wiring (the native stubs
+            // installed for this bootstrap throw on any later call).
+            return JS_UNDEFINED;
+        }
         for (int i = 0; i < 4; ++i) {
             if (!JS_IsFunction(ctx, argv[i])) {
                 return JS_ThrowTypeError(ctx, "Capsid request bridge entries must be functions");
@@ -1376,6 +1457,19 @@ private:
         g_worker->request_end_ = JS_DupValue(ctx, argv[2]);
         g_worker->cancel_request_ = JS_DupValue(ctx, argv[3]);
         return JS_UNDEFINED;
+    }
+
+    // Binding v1 §3.3: the User request bridge never exists inside the
+    // Binding Runtime; the bootstrap-native stubs throw on any call.
+    static JSValue js_bridge_forbidden(JSContext *ctx,
+                                       JSValueConst,
+                                       int argc,
+                                       JSValueConst *argv) {
+        (void)argc;
+        (void)argv;
+        return JS_ThrowInternalError(
+            ctx,
+            "the Capsid request bridge is unavailable in the Binding Runtime");
     }
 
     static JSValue js_request_credit(JSContext *ctx,
@@ -3796,6 +3890,429 @@ private:
                                 this);
     }
 
+    // --- Binding v1 dual runtime (§5) -----------------------------------
+
+    // The Binding Runtime module gate: an import is authorized only when
+    // the binding currently initializing (or executing) granted it. The
+    // upstream loader then serves it; everything else fails at
+    // normalization before any code loads.
+    static char *binding_normalize_module(
+        JSContext *ctx,
+        const char *base_name,
+        const char *name,
+        void *opaque) {
+        (void)base_name;
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        const std::string module = name ? name : "";
+        const capsid::BindingPolicy *policy =
+            self->binding_policies_.policy(self->current_binding_id_);
+        if (policy == NULL ||
+            policy->module_decision(module) != capsid::kModuleGranted) {
+            JS_ThrowReferenceError(
+                ctx,
+                "module is not authorized for this binding: %s",
+                module.c_str());
+            return NULL;
+        }
+        return js_strdup(ctx, module.c_str());
+    }
+
+    static JSModuleDef *binding_module_load(
+        JSContext *ctx,
+        const char *name,
+        void *opaque,
+        JSValueConst attributes) {
+        (void)opaque;
+        // The normalization gate already authorized the name; the upstream
+        // loader serves tjs:internal/core and the builtin bytecode modules.
+        return tjs_module_loader(ctx, name, NULL, attributes);
+    }
+
+    static JSValue binding_log_fn(JSContext *ctx,
+                                  JSValue this_val,
+                                  int argc,
+                                  JSValue *argv,
+                                  int magic,
+                                  JSValue *func_data) {
+        (void)this_val;
+        (void)func_data;
+        static const char *const levels[] = {
+            "debug", "info", "warn", "error"};
+        const char *level = levels[magic & 3];
+        std::string message;
+        if (argc > 0 && !JS_IsUndefined(argv[0])) {
+            const char *text = JS_ToCString(ctx, argv[0]);
+            message = text ? text : "";
+            if (text) {
+                JS_FreeCString(ctx, text);
+            }
+        }
+        WorkerRuntime *self = g_worker;
+        if (!self || !self->binding_ctx_) {
+            return JS_UNDEFINED;
+        }
+        capsid::protocol::Frame frame;
+        frame.type = capsid::protocol::kLog;
+        frame.flags = 0;
+        frame.request_id = 0;
+        const std::string stream =
+            std::string("binding:") +
+            (self->current_binding_id_.empty()
+                 ? "<unknown>"
+                 : self->current_binding_id_);
+        append_string16(
+            &frame.payload,
+            reinterpret_cast<const uint8_t *>(stream.data()),
+            stream.size());
+        frame.payload.insert(
+            frame.payload.end(), level, level + std::strlen(level));
+        frame.payload.push_back(' ');
+        frame.payload.insert(
+            frame.payload.end(), message.begin(), message.end());
+        self->queue_output(frame);
+        return JS_UNDEFINED;
+    }
+
+    JSValue build_binding_log_object() {
+        JSValue log = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        static const char *const names[] = {
+            "debug", "info", "warn", "error"};
+        for (int index = 0; index < 4; ++index) {
+            JS_SetPropertyStr(
+                binding_ctx_,
+                log,
+                names[index],
+                JS_NewCFunctionData2(
+                    binding_ctx_,
+                    binding_log_fn,
+                    names[index],
+                    1,
+                    index,
+                    0,
+                    NULL));
+        }
+        JS_FreezeObject(binding_ctx_, log);
+        return log;
+    }
+
+    static void deep_freeze(JSContext *ctx, JSValue value) {
+        if (!JS_IsObject(value)) {
+            return;
+        }
+        JSPropertyEnum *tab = NULL;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(
+                ctx, &tab, &count, value,
+                JS_GPN_ENUM_ONLY | JS_GPN_STRING_MASK) == 0) {
+            for (uint32_t index = 0; index < count; ++index) {
+                JSValue child =
+                    JS_GetProperty(ctx, value, tab[index].atom);
+                if (!JS_IsException(child)) {
+                    deep_freeze(ctx, child);
+                }
+                JS_FreeValue(ctx, child);
+            }
+        }
+        if (tab != NULL) {
+            JS_FreePropertyEnum(ctx, tab, count);
+        }
+        JS_FreezeObject(ctx, value);
+    }
+
+    static bool valid_binding_method_name(const std::string &name) {
+        static const char *const reserved[] = {
+            "constructor", "prototype", "__proto__",
+            "then",        "catch",     "finally"};
+        if (name.empty() || name.size() > 64) {
+            return false;
+        }
+        for (size_t index = 0;
+             index < sizeof(reserved) / sizeof(reserved[0]);
+             ++index) {
+            if (name == reserved[index]) {
+                return false;
+            }
+        }
+        const unsigned char first =
+            static_cast<unsigned char>(name[0]);
+        if (!(std::isalpha(first) || first == '_' || first == '$')) {
+            return false;
+        }
+        for (size_t index = 1; index < name.size(); ++index) {
+            const unsigned char ch =
+                static_cast<unsigned char>(name[index]);
+            if (!(std::isalnum(ch) || ch == '_' || ch == '$')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static std::string js_error_text(JSContext *ctx) {
+        JSValue exception = JS_GetException(ctx);
+        const char *text = JS_ToCString(ctx, exception);
+        std::string result = text ? text : "<unprintable>";
+        if (text != NULL) {
+            JS_FreeCString(ctx, text);
+        }
+        JS_FreeValue(ctx, exception);
+        return result;
+    }
+
+    // Loads one binding package into the Binding Runtime: evaluate the
+    // module, call the synchronous factory with (config, secrets, log),
+    // and freeze the returned method table. Any violation fails the
+    // worker startup (generation warmup failure, §2.4).
+    bool load_binding_package(
+        const capsid::WorkerBindingDescriptor &descriptor,
+        std::string *error) {
+        const std::string module_name =
+            "capsid:binding/" + descriptor.name;
+        // Mirror the production bundle sequence: compile only, resolve the
+        // module graph, evaluate, drain the job queue, then read the
+        // exports from the namespace.
+        JSValue module = JS_Eval(
+            binding_ctx_,
+            reinterpret_cast<const char *>(descriptor.source.data()),
+            descriptor.source.size(),
+            module_name.c_str(),
+            JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+        if (JS_IsException(module)) {
+            *error = "binding '" + descriptor.name +
+                     "' module compile failed: " +
+                     js_error_text(binding_ctx_);
+            JS_FreeValue(binding_ctx_, module);
+            return false;
+        }
+        if (JS_ResolveModule(binding_ctx_, module) < 0) {
+            *error = "binding '" + descriptor.name +
+                     "' module resolution failed: " +
+                     js_error_text(binding_ctx_);
+            JS_FreeValue(binding_ctx_, module);
+            return false;
+        }
+        JSModuleDef *definition = static_cast<JSModuleDef *>(
+            JS_VALUE_GET_PTR(module));
+        JSValue evaluation = JS_EvalFunction(
+            binding_ctx_, JS_DupValue(binding_ctx_, module));
+        if (JS_IsException(evaluation)) {
+            JS_FreeValue(binding_ctx_, module);
+            *error = "binding '" + descriptor.name +
+                     "' module evaluation failed: " +
+                     js_error_text(binding_ctx_);
+            return false;
+        }
+        tjs__execute_jobs(binding_ctx_);
+        if (JS_PromiseState(binding_ctx_, evaluation) ==
+            JS_PROMISE_REJECTED) {
+            JSValue reason = JS_PromiseResult(binding_ctx_, evaluation);
+            *error = "binding '" + descriptor.name +
+                     "' module evaluation rejected: " +
+                     to_string(binding_ctx_, reason);
+            JS_FreeValue(binding_ctx_, reason);
+            JS_FreeValue(binding_ctx_, evaluation);
+            JS_FreeValue(binding_ctx_, module);
+            return false;
+        }
+        if (JS_PromiseState(binding_ctx_, evaluation) ==
+            JS_PROMISE_PENDING) {
+            *error = "binding '" + descriptor.name +
+                     "' top-level await must settle without external I/O";
+            JS_FreeValue(binding_ctx_, evaluation);
+            JS_FreeValue(binding_ctx_, module);
+            return false;
+        }
+        JS_FreeValue(binding_ctx_, evaluation);
+        JSValue module_namespace =
+            JS_GetModuleNamespace(binding_ctx_, definition);
+        JS_FreeValue(binding_ctx_, module);
+        if (JS_IsException(module_namespace)) {
+            *error = "binding '" + descriptor.name +
+                     "' namespace resolution failed: " +
+                     js_error_text(binding_ctx_);
+            JS_FreeValue(binding_ctx_, module_namespace);
+            return false;
+        }
+        JSValue factory =
+            JS_GetPropertyStr(binding_ctx_, module_namespace, "default");
+        JS_FreeValue(binding_ctx_, module_namespace);
+        if (!JS_IsFunction(binding_ctx_, factory)) {
+            JS_FreeValue(binding_ctx_, factory);
+            *error = "binding '" + descriptor.name +
+                     "' default export is not a synchronous factory";
+            return false;
+        }
+        JSValue config = JS_ParseJSON(
+            binding_ctx_,
+            descriptor.config_json.data(),
+            descriptor.config_json.size(),
+            "binding-config");
+        if (JS_IsException(config)) {
+            *error = "binding '" + descriptor.name +
+                     "' config is not valid JSON: " +
+                     js_error_text(binding_ctx_);
+            JS_FreeValue(binding_ctx_, config);
+            JS_FreeValue(binding_ctx_, factory);
+            return false;
+        }
+        JSValue secrets = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        for (size_t index = 0;
+             index < descriptor.secrets.size();
+             ++index) {
+            JS_SetPropertyStr(
+                binding_ctx_,
+                secrets,
+                descriptor.secrets[index].key.c_str(),
+                JS_NewStringLen(
+                    binding_ctx_,
+                    reinterpret_cast<const char *>(
+                        descriptor.secrets[index].value.data()),
+                    descriptor.secrets[index].value.size()));
+        }
+        deep_freeze(binding_ctx_, config);
+        deep_freeze(binding_ctx_, secrets);
+        JSValue log = build_binding_log_object();
+        // §2.4: the factory receives one frozen object argument
+        // { config, secrets, log }. JS_SetPropertyStr transfers ownership
+        // of each value into `init`, so only `init` is freed afterwards.
+        JSValue init = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        JS_SetPropertyStr(binding_ctx_, init, "config", config);
+        JS_SetPropertyStr(binding_ctx_, init, "secrets", secrets);
+        JS_SetPropertyStr(binding_ctx_, init, "log", log);
+        JS_FreezeObject(binding_ctx_, init);
+        JSValue args[1] = { init };
+        JSValue result =
+            JS_Call(binding_ctx_, factory, JS_UNDEFINED, 1, args);
+        JS_FreeValue(binding_ctx_, init);
+        JS_FreeValue(binding_ctx_, factory);
+        if (JS_IsException(result)) {
+            *error = "binding '" + descriptor.name +
+                     "' factory threw: " + js_error_text(binding_ctx_);
+            JS_FreeValue(binding_ctx_, result);
+            return false;
+        }
+        if (!JS_IsObject(result)) {
+            JS_FreeValue(binding_ctx_, result);
+            *error = "binding '" + descriptor.name +
+                     "' factory must return an object";
+            return false;
+        }
+
+        JSPropertyEnum *tab = NULL;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(
+                binding_ctx_, &tab, &count, result,
+                JS_GPN_ENUM_ONLY | JS_GPN_STRING_MASK) < 0) {
+            JS_FreeValue(binding_ctx_, result);
+            *error = "binding '" + descriptor.name +
+                     "' method enumeration failed";
+            return false;
+        }
+        if (count == 0 || count > 128) {
+            JS_FreePropertyEnum(binding_ctx_, tab, count);
+            JS_FreeValue(binding_ctx_, result);
+            *error = "binding '" + descriptor.name +
+                     "' must expose between 1 and 128 methods";
+            return false;
+        }
+        BindingRuntimeMethodTable table;
+        table.id = descriptor.name;
+        table.policy = binding_policies_.policy(descriptor.name);
+        table.factory_object = JS_DupValue(binding_ctx_, result);
+        for (uint32_t index = 0; index < count; ++index) {
+            const char *name =
+                JS_AtomToCString(binding_ctx_, tab[index].atom);
+            if (name == NULL) {
+                JS_FreeCString(binding_ctx_, name);
+                JS_FreePropertyEnum(binding_ctx_, tab, count);
+                JS_FreeValue(binding_ctx_, result);
+                JS_FreeValue(binding_ctx_, table.factory_object);
+                *error = "binding '" + descriptor.name +
+                         "' method name is not printable";
+                return false;
+            }
+            const std::string method_name(name);
+            JS_FreeCString(binding_ctx_, name);
+            if (!valid_binding_method_name(method_name)) {
+                JS_FreePropertyEnum(binding_ctx_, tab, count);
+                JS_FreeValue(binding_ctx_, result);
+                JS_FreeValue(binding_ctx_, table.factory_object);
+                *error = "binding '" + descriptor.name +
+                         "' exposes an invalid method name: " +
+                         method_name;
+                return false;
+            }
+            JSValue member =
+                JS_GetProperty(binding_ctx_, result, tab[index].atom);
+            const bool is_function =
+                JS_IsFunction(binding_ctx_, member);
+            JS_FreeValue(binding_ctx_, member);
+            if (!is_function) {
+                JS_FreePropertyEnum(binding_ctx_, tab, count);
+                JS_FreeValue(binding_ctx_, result);
+                JS_FreeValue(binding_ctx_, table.factory_object);
+                *error = "binding '" + descriptor.name +
+                         "' method is not a function: " + method_name;
+                return false;
+            }
+            table.method_names.push_back(
+                JS_DupAtom(binding_ctx_, tab[index].atom));
+        }
+        JS_FreePropertyEnum(binding_ctx_, tab, count);
+        JS_FreeValue(binding_ctx_, result);
+        binding_tables_.push_back(table);
+        return true;
+    }
+
+    bool create_binding_runtime(std::string *error) {
+        if (bindings_.empty()) {
+            // §7.2: zero bindings keep the exact single-runtime path.
+            return true;
+        }
+        TJSRunOptions options;
+        TJS_DefaultOptions(&options);
+        options.mem_limit = 64 * 1024 * 1024;  // Binding Heap, §5.3
+        options.stack_size = config_.js_stack_size;
+        options.skip_run_main = true;
+        // The same bootstrap bytecode installs the profile global
+        // surface; the bootstrapping_binding_runtime_ flag switches the
+        // native layer to the bridge-less Binding shape.
+        options.bootstrap = bootstrap;
+        options.bootstrap_opaque = this;
+        options.shared_loop = TJS_GetLoop(runtime_);
+        bootstrapping_binding_runtime_ = true;
+        binding_runtime_ = TJS_NewRuntimeOptions(&options);
+        bootstrapping_binding_runtime_ = false;
+        if (binding_runtime_ == NULL) {
+            *error = "binding runtime creation failed";
+            return false;
+        }
+        binding_ctx_ = TJS_GetJSContext(binding_runtime_);
+        if (binding_ctx_ == NULL) {
+            *error = "binding runtime has no context";
+            return false;
+        }
+        JS_SetModuleLoaderFunc2(
+            JS_GetRuntime(binding_ctx_),
+            binding_normalize_module,
+            binding_module_load,
+            deny_attributes,
+            this);
+        // The Binding Runtime's job queue is pumped by the User runtime's
+        // loop; it never calls TJS_Run itself.
+        TJS_StartRuntimeJobs(binding_runtime_);
+        for (size_t index = 0; index < bindings_.size(); ++index) {
+            current_binding_id_ = bindings_[index].name;
+            const bool loaded =
+                load_binding_package(bindings_[index], error);
+            current_binding_id_.clear();
+            if (!loaded) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool load_application(std::string *error) {
         if (bundle_.empty()) {
             *error = "application bundle is empty";
@@ -5164,6 +5681,26 @@ private:
     // §7.3: per-Binding policies, compiled from the descriptors above and
     // fully separate from the User policy in config_.
     capsid::BindingPolicySet binding_policies_;
+    // §7.5: the single Binding Runtime, created only when bindings exist.
+    // It attaches to the User runtime's loop (shared_loop) and is pumped
+    // by it; heaps, globals, module loaders and job queues stay separate.
+    TJSRuntime *binding_runtime_;
+    JSContext *binding_ctx_;
+    struct BindingRuntimeMethodTable {
+        BindingRuntimeMethodTable() : policy(NULL),
+                                      factory_object(JS_UNDEFINED) {}
+        std::string id;
+        const capsid::BindingPolicy *policy;
+        JSValue factory_object;              // referenced
+        std::vector<JSAtom> method_names;    // duplicated atoms
+    };
+    std::vector<BindingRuntimeMethodTable> binding_tables_;
+    // The binding id whose factory is currently initializing; the binding
+    // module loader authorizes imports against that binding's policy only.
+    std::string current_binding_id_;
+    // True while TJS_NewRuntimeOptions bootstraps the Binding Runtime, so
+    // the shared bootstrap() switches to the bridge-less native shape.
+    bool bootstrapping_binding_runtime_;
     std::map<uint64_t, ResponseState> responses_;
     // Round-robin rotation order for pump_response_output (design §3.4):
     // a request is enqueued on begin and rotated to the back after each
