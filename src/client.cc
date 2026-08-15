@@ -1681,10 +1681,10 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         [](const std::string &left, const std::string &right) {
             const size_t limit = std::min(left.size(), right.size());
             for (size_t i = 0; i < limit; ++i) {
-                const char left_character =
-                    std::tolower(static_cast<unsigned char>(left[i]));
-                const char right_character =
-                    std::tolower(static_cast<unsigned char>(right[i]));
+                const char left_character = static_cast<char>(std::tolower(
+                    static_cast<unsigned char>(left[i])));
+                const char right_character = static_cast<char>(std::tolower(
+                    static_cast<unsigned char>(right[i])));
                 if (left_character != right_character) {
                     return left_character < right_character;
                 }

@@ -290,9 +290,13 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
 #if defined(_WIN32)
         // No pread on Windows: the fd is freshly opened and read exactly
         // once, so sequential reads are position-stable; the identity
-        // re-check below still catches concurrent replacement.
+        // re-check below still catches concurrent replacement. MSVC read()
+        // takes an unsigned int count; every caller bounds the file size
+        // well below UINT_MAX before reaching this loop.
         const ssize_t count = read(
-            fd, file.bytes.data() + offset, file.bytes.size() - offset);
+            fd,
+            file.bytes.data() + offset,
+            static_cast<unsigned int>(file.bytes.size() - offset));
 #else
         const ssize_t count = pread(
             fd, file.bytes.data() + offset, file.bytes.size() - offset,
