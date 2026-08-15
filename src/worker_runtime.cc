@@ -99,7 +99,20 @@ static const uint64_t kReclaimSettleWindowNs = 2 * 1000000000ull;  // 2s
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
 #if defined(_WIN32)
     // Winsock send() takes the raw SOCKET handle, not the CRT fd.
-    return capsid::win32::send_fd(fd, data, size, 0);
+    const ssize_t sent = capsid::win32::send_fd(fd, data, size, 0);
+    {
+        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+        if (dbg != NULL) {
+            std::fprintf(dbg, "write_socket: fd=%d size=%lld sent=%lld errno=%d wsa=%d\n",
+                         fd,
+                         static_cast<long long>(size),
+                         static_cast<long long>(sent),
+                         errno,
+                         WSAGetLastError());
+            std::fclose(dbg);
+        }
+    }
+    return sent;
 #elif defined(MSG_NOSIGNAL)
     return send(fd, data, size, MSG_NOSIGNAL);
 #else
