@@ -120,7 +120,7 @@ ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
     }
     if (sent < 0 && WSAGetLastError() == 183) {
         // debug probe: is ERROR_ALREADY_EXISTS transient on retry?
-        Sleep(1);
+        Sleep(250);
         const ssize_t retried = capsid::win32::send_fd(fd, data, size, 0);
         const SOCKET probe_handle = static_cast<SOCKET>(_get_osfhandle(fd));
         struct sockaddr_in peer_address = {};
