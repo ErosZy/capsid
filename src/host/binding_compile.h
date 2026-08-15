@@ -85,6 +85,7 @@ bool verify_worker_ready(
     const std::vector<EffectiveBinding>& bindings,
     uint32_t expected_seccomp_mode,  // 0 = this Host does not pin it
     uint32_t expected_landlock_abi,  // 0 = this Host does not pin it
+    const std::string& expected_namespace_identity,  // empty = not pinned
     std::string* error);
 
 // Serializes the committed binding snapshot (manifest, source, config,

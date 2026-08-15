@@ -793,6 +793,76 @@ private:
         }
     }
 
+    // Binding v1 §5.1: the Binding Runtime's job/async hooks propagate
+    // the binding id across async continuations — a timer, connection-pool
+    // reconnection or DNS callback re-enters with the same BindingToken
+    // the operation started under. Each captured job owns a heap copy.
+    static int binding_job_capture_hook(JSContext *,
+                                        void *opaque,
+                                        void **out_job_context) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        *out_job_context = NULL;
+        if (self && !self->current_binding_id_.empty()) {
+            *out_job_context =
+                strdup(self->current_binding_id_.c_str());
+        }
+        return 0;
+    }
+
+    static void *binding_job_enter_hook(JSContext *,
+                                        void *job_context,
+                                        void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        void *previous = self && !self->current_binding_id_.empty()
+                             ? strdup(self->current_binding_id_.c_str())
+                             : NULL;
+        if (self) {
+            self->current_binding_id_ =
+                job_context != NULL
+                    ? static_cast<const char *>(job_context)
+                    : "";
+        }
+        return previous;
+    }
+
+    static void binding_job_leave_hook(JSContext *,
+                                       void *previous_context,
+                                       void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        if (self) {
+            self->current_binding_id_ =
+                previous_context != NULL
+                    ? static_cast<const char *>(previous_context)
+                    : "";
+        }
+        free(previous_context);
+    }
+
+    static void binding_job_release_hook(void *job_context,
+                                         void *opaque) {
+        (void)opaque;
+        free(job_context);
+    }
+
+    // Installs the binding identity hooks on the Binding Runtime; every
+    // native gate (fs, egress) then observes the originating binding
+    // across async continuations instead of losing it after dispatch.
+    void install_binding_async_hooks() {
+        JSJobContextHooks job_hooks;
+        job_hooks.capture = binding_job_capture_hook;
+        job_hooks.enter = binding_job_enter_hook;
+        job_hooks.leave = binding_job_leave_hook;
+        job_hooks.release = binding_job_release_hook;
+        JS_SetJobContextHooks(
+            JS_GetRuntime(binding_ctx_), &job_hooks, this);
+        TJSAsyncContextHooks async_hooks;
+        async_hooks.capture = binding_job_capture_hook;
+        async_hooks.enter = binding_job_enter_hook;
+        async_hooks.leave = binding_job_leave_hook;
+        async_hooks.release = binding_job_release_hook;
+        tjs_set_async_context_hooks(binding_ctx_, &async_hooks, this);
+    }
+
     void retain_token(RequestToken *token) {
         if (token) {
             ++token->refs;
@@ -4553,6 +4623,7 @@ private:
             binding_module_load,
             deny_attributes,
             this);
+        install_binding_async_hooks();
         // The Binding Runtime's job queue is pumped by the User runtime's
         // loop; it never calls TJS_Run itself.
         TJS_StartRuntimeJobs(binding_runtime_);

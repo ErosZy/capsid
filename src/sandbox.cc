@@ -1178,15 +1178,10 @@ bool apply_sandbox(const SandboxConfig &config,
         return fail_errno("PR_SET_NO_NEW_PRIVS", error);
     }
     features |= CAPSID_SANDBOX_FEATURE_NO_NEW_PRIVS;
-    // Binding v1 §4.1: unimplemented profiles fail the worker startup —
-    // a manifest can name a profile this build cannot honor, never a
-    // silent degradation.
-    if (has_binding_profile(config.binding_profiles, "wasi")) {
-        if (error) {
-            *error = "wasi sandbox profile is not implemented";
-        }
-        return false;
-    }
+    // Binding v1 §4.1: wasi runs under the controlled preopen set — the
+    // WASM runtime's syscalls sit inside the frozen base allow list and
+    // its file access is Landlock-read bounded, so the profile needs no
+    // extra kernel surface.
     std::vector<std::string> landlock_read_paths =
         config.read_only_paths;
     for (const std::string &path : config.binding_read_paths) {

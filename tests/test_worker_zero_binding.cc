@@ -346,20 +346,29 @@ void test_load_binding_after_bundle_is_rejected(const char *worker_path,
             "sealed LOAD_BINDING worker did not terminate");
 }
 
-std::vector<uint8_t> mongo_binding_blob(const std::string &source =
-                                            "export default () => ({});") {
+std::vector<uint8_t> mongo_binding_blob(
+    const std::string &source = "export default () => ({});",
+    const std::vector<std::string> &fs_read = {},
+    const std::vector<std::string> &profiles = {"network-client"}) {
     // A minimal valid descriptor: mongo with the network-client profile,
     // tjs:internal/core granted, and a configurable factory source.
     std::vector<uint8_t> descriptor;
     append_string16(&descriptor, "mongo");
     append_string32(&descriptor, "{}");
     capsid::protocol::append_u32(&descriptor, 0);  // secrets
-    capsid::protocol::append_u32(&descriptor, 1);  // profiles
-    append_string16(&descriptor, "network-client");
+    capsid::protocol::append_u32(
+        &descriptor, static_cast<uint32_t>(profiles.size()));
+    for (const std::string &profile : profiles) {
+        append_string16(&descriptor, profile);
+    }
     capsid::protocol::append_u32(&descriptor, 1);  // modules
     append_string16(&descriptor, "tjs:internal/core");
     capsid::protocol::append_u32(&descriptor, 0);  // net rules
-    capsid::protocol::append_u32(&descriptor, 0);  // fs read
+    capsid::protocol::append_u32(
+        &descriptor, static_cast<uint32_t>(fs_read.size()));
+    for (const std::string &path : fs_read) {
+        append_string16(&descriptor, path);
+    }
     capsid::protocol::append_u32(&descriptor, 0);  // fs write
     capsid::protocol::append_u32(&descriptor, 0);  // env
     capsid::protocol::append_u32(&descriptor, 0);  // stdio
@@ -801,6 +810,172 @@ void test_binding_fs_native_gate(const char *worker_path,
     finish_worker(fd, pid, true);
 }
 
+// Binding v1 §5.1: async continuations propagate the Binding identity —
+// a timer callback performing an authorized fs read still passes the
+// Native gate (the dispatch window alone would have closed).
+void test_binding_async_identity(const char *worker_path,
+                                 const char *call_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob(
+        "import core from 'tjs:internal/core';"
+        "export default ({ config, secrets, log }) => {"
+        "  return { find() {"
+        "    return new Promise((resolve, reject) => {"
+        "      setTimeout(() => {"
+        "        core.fs.open('/etc/capsid/mongo/ca.pem', 'r').then("
+        "          () => resolve('unexpected-open'),"
+        "          (e) => reject(e)"
+        "        );"
+        "      }, 0);"
+        "    });"
+        "  } };"
+        "};",
+        {"/etc/capsid/mongo"});
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(call_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    for (int i = 0; i < 8; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "no frame arrived before READY");
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+    }
+    require(frame.type == capsid::protocol::kReady,
+            "async-identity binding worker did not report READY");
+
+    capsid::protocol::Frame head;
+    head.type = capsid::protocol::kRequestHead;
+    head.flags = capsid::protocol::kFlagRequestEnd;
+    head.request_id = 81;
+    append_string16(&head.payload, "GET");
+    append_string32(&head.payload, "https://example.test/");
+    capsid::protocol::append_u16(&head.payload, 0);
+    send_frame(fd, head);
+
+    std::string body;
+    bool ended = false;
+    for (int i = 0; i < 64; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "async-identity response frames stopped before the terminal");
+        if (frame.type == capsid::protocol::kError &&
+            frame.request_id == 81) {
+            body.assign(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+            ended = true;
+            break;
+        }
+        if (frame.type == capsid::protocol::kResponseBody) {
+            body.append(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+        }
+        if (frame.type == capsid::protocol::kResponseEnd) {
+            ended = true;
+            break;
+        }
+    }
+    require(ended, "async-identity binding request never terminated");
+    // The gate must have PASSED the authorized path inside the timer
+    // callback: the failure text is the missing file, never a policy
+    // denial.
+    require(body.find("fs denied") == std::string::npos,
+            "async continuation lost the binding identity: " + body);
+    finish_worker(fd, pid, true);
+}
+
+// Binding v1 §7.9: the wasi profile runs a real WebAssembly workload
+// inside the Binding Runtime — the positive counterpart to the
+// not-implemented gate of earlier iterations.
+void test_binding_wasi_workload(const char *worker_path,
+                                const char *call_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    // A minimal wasm module: (module (func (export "answer")
+    // (result i32) i32.const 42)) — bytes below.
+    binding.payload = mongo_binding_blob(
+        "export default ({ config, secrets, log }) => {"
+        "  const bytes = new Uint8Array(["
+        "    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,"  // magic+version
+        "    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f,"        // type section
+        "    0x03, 0x02, 0x01, 0x00,"                        // func section
+        "    0x07, 0x0a, 0x01, 0x06, 0x61, 0x6e, 0x73, 0x77,"
+        "    0x65, 0x72, 0x00, 0x00,"                        // export "answer"
+        "    0x0a, 0x06, 0x01, 0x04, 0x00, 0x41, 0x2a, 0x0b"  // code: i32.const 42
+        "  ]);"
+        "  return { find() {"
+        "    return WebAssembly.instantiate(bytes).then("
+        "      (r) => 'wasm:' + r.instance.exports.answer()"
+        "    );"
+        "  } };"
+        "};",
+        {},
+        {"wasi"});
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(call_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    for (int i = 0; i < 8; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "no frame arrived before READY");
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+    }
+    require(frame.type == capsid::protocol::kReady,
+            "wasi binding worker did not report READY");
+
+    capsid::protocol::Frame head;
+    head.type = capsid::protocol::kRequestHead;
+    head.flags = capsid::protocol::kFlagRequestEnd;
+    head.request_id = 82;
+    append_string16(&head.payload, "GET");
+    append_string32(&head.payload, "https://example.test/");
+    capsid::protocol::append_u16(&head.payload, 0);
+    send_frame(fd, head);
+
+    std::string body;
+    bool ended = false;
+    for (int i = 0; i < 64; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "wasi response frames stopped before ResponseEnd");
+        if (frame.type == capsid::protocol::kResponseBody) {
+            body.append(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+        }
+        if (frame.type == capsid::protocol::kResponseEnd) {
+            ended = true;
+            break;
+        }
+    }
+    require(ended, "wasi binding response never ended");
+    require(body == "result:wasm:42",
+            "wasi workload returned the wrong body: " + body);
+    finish_worker(fd, pid, true);
+}
+
 void test_load_binding_abi_validation() {
     capsid_worker *worker = NULL;
     require(
@@ -845,6 +1020,8 @@ int main(int argc, char **argv) {
     test_binding_egress_denial(argv[1], argv[4]);
     test_binding_raw_tcp_egress_denial(argv[1], argv[4]);
     test_binding_fs_native_gate(argv[1], argv[4]);
+    test_binding_async_identity(argv[1], argv[4]);
+    test_binding_wasi_workload(argv[1], argv[4]);
     test_load_binding_abi_validation();
     return 0;
 }

@@ -359,6 +359,7 @@ bool verify_worker_ready(
     const std::vector<EffectiveBinding>& bindings,
     uint32_t expected_seccomp_mode,
     uint32_t expected_landlock_abi,
+    const std::string& expected_namespace_identity,
     std::string* error) {
     if (error != nullptr) {
         error->clear();
@@ -417,6 +418,14 @@ bool verify_worker_ready(
         proof.landlock_abi != expected_landlock_abi) {
         if (error != nullptr) {
             *error = "worker READY Landlock ABI mismatch";
+        }
+        return false;
+    }
+    if (!expected_namespace_identity.empty() &&
+        proof.network_namespace_identity !=
+            expected_namespace_identity) {
+        if (error != nullptr) {
+            *error = "worker READY network namespace identity mismatch";
         }
         return false;
     }

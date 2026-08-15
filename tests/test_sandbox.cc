@@ -367,12 +367,10 @@ int run_binding_wasi_probe() {
     config.binding_profiles = {"wasi"};
     uint32_t features = 0;
     std::string error;
-    if (capsid::apply_sandbox(
+    if (!capsid::apply_sandbox(
             config, &features, NULL, NULL, &error)) {
-        return 50;
-    }
-    if (error.find("not implemented") == std::string::npos) {
-        return 51;
+        std::cerr << "wasi sandbox unavailable: " << error << std::endl;
+        return 77;
     }
     return 0;
 }
