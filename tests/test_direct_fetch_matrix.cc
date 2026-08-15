@@ -153,9 +153,9 @@ bool send_all(int fd, const char *data, size_t size) {
     size_t offset = 0;
     while (offset < size) {
 #ifdef MSG_NOSIGNAL
-        const ssize_t count = send(fd, data + offset, size - offset, MSG_NOSIGNAL);
+        const ssize_t count = capsid::win32::send_fd(fd, data + offset, size - offset, 0);
 #else
-        const ssize_t count = send(fd, data + offset, size - offset, 0);
+        const ssize_t count = capsid::win32::send_fd(fd, data + offset, size - offset, 0);
 #endif
         if (count < 0 && errno == EINTR) {
             continue;
@@ -182,7 +182,7 @@ struct HttpRequest {
 bool receive_more(int fd, std::string *wire) {
     char buffer[8192];
     for (;;) {
-        const ssize_t count = recv(fd, buffer, sizeof(buffer), 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, buffer, sizeof(buffer), 0);
         if (count < 0 && errno == EINTR) {
             continue;
         }
@@ -347,15 +347,15 @@ public:
             address->sin_port = 0;
             size = sizeof(*address);
         }
-        if (bind(fd_,
+        if (capsid::win32::bind_fd(fd_,
                  reinterpret_cast<const struct sockaddr *>(&storage),
                  size) != 0 ||
-            listen(fd_, 16) != 0) {
+            capsid::win32::listen_fd(fd_, 16) != 0) {
             fail(std::string("cannot start HTTP matrix server: ") +
                  std::strerror(errno));
         }
         size = sizeof(storage);
-        if (getsockname(
+        if (capsid::win32::getsockname_fd(
                 fd_,
                 reinterpret_cast<struct sockaddr *>(&storage),
                 &size) != 0) {
@@ -564,9 +564,10 @@ private:
 
     void serve_client(int client) {
 #ifdef SO_NOSIGPIPE
+        // Linux/macOS only: suppress SIGPIPE on the accepted socket.
         const int no_sigpipe = 1;
-        setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE,
-                   &no_sigpipe, sizeof(no_sigpipe));
+        setsockopt(
+            client, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
 #endif
         for (;;) {
             HttpRequest request;
@@ -606,7 +607,7 @@ private:
             if (capsid::win32::capsid_poll(&descriptor, 1, 100) <= 0) {
                 continue;
             }
-            const int client = accept(fd_, NULL, NULL);
+            const int client = capsid::win32::accept_fd(fd_);
             if (client < 0) {
                 continue;
             }
