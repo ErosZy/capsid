@@ -2180,8 +2180,13 @@ private:
             {
                 FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
                 if (dbg != NULL) {
-                    std::fprintf(dbg, "read_startup: read count=%lld errno=%d\n",
-                                 static_cast<long long>(count), errno);
+                    std::fprintf(dbg, "read_startup: read count=%lld errno=%d wsa=%d\n",
+                                 static_cast<long long>(count), errno,
+#if defined(_WIN32)
+                                 WSAGetLastError());
+#else
+                                 0);
+#endif
                     std::fclose(dbg);
                 }
             }
