@@ -18,6 +18,11 @@ if(MSVC)
     # em-dashes etc.). MSVC otherwise assumes the ANSI codepage, and C4819
     # becomes a hard error under /WX on non-Western-locale machines.
     add_compile_options(/utf-8)
+    # single_worker_server.cc is compiled into ~20 host/test targets; in
+    # Debug, MSVC emits one COMDAT section per inline function and blows
+    # past the default 2^16-section object limit (C1128). /bigobj lifts
+    # the limit and is inert for ordinary TUs.
+    add_compile_options(/bigobj)
     # The portability layer deliberately uses the POSIX-named CRT entry
     # points (open/read/write/close/...); without these defines every
     # such call warns C4996 and fails /WX. The secure-CRT deprecations

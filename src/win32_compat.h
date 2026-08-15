@@ -30,6 +30,12 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifndef _WIN32_WINNT
+/* Pin the Windows API target: sdkddkver.h otherwise assumes 0x0601 and
+ * nags every TU that reaches windows.h. WSAPoll needs Vista+; 0x0601
+ * matches the toolchain default so no header surface changes. */
+#define _WIN32_WINNT 0x0601
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <mswsock.h>
