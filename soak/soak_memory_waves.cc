@@ -21,7 +21,7 @@
 
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 #include <unistd.h>
 
 #include <chrono>
