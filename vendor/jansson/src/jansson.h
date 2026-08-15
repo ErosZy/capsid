@@ -114,6 +114,16 @@ json_t *json_null(void);
 #elif JSON_HAVE_SYNC_BUILTINS
 #define JSON_INTERNAL_INCREF(json) __sync_add_and_fetch(&json->refcount, 1)
 #define JSON_INTERNAL_DECREF(json) __sync_sub_and_fetch(&json->refcount, 1)
+#elif defined(_MSC_VER)
+/* Capsid deviation (see vendor/jansson/VENDOR.txt): MSVC has neither
+   builtin family; the Win32 interlocked intrinsics are the atomic tier. */
+#include <intrin.h>
+#pragma intrinsic(_InterlockedIncrement64)
+#pragma intrinsic(_InterlockedDecrement64)
+#define JSON_INTERNAL_INCREF(json)                                                       \
+    _InterlockedIncrement64((volatile __int64 *)&json->refcount)
+#define JSON_INTERNAL_DECREF(json)                                                       \
+    _InterlockedDecrement64((volatile __int64 *)&json->refcount)
 #else
 #define JSON_INTERNAL_INCREF(json) (++json->refcount)
 #define JSON_INTERNAL_DECREF(json) (--json->refcount)
