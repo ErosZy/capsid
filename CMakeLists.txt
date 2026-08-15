@@ -196,6 +196,11 @@ add_library(capsid_runtime STATIC
 add_library(capsid::runtime ALIAS capsid_runtime)
 set_target_properties(capsid_runtime PROPERTIES OUTPUT_NAME capsid_runtime)
 target_link_libraries(capsid_runtime PUBLIC capsid_sanitizers)
+if(WIN32)
+    # egress_policy uses inet_pton/ntohs; every consumer of the runtime
+    # (host, tests, embedders) must carry the Winsock import library.
+    target_link_libraries(capsid_runtime PUBLIC ws2_32)
+endif()
 if(CAPSID_ENABLE_LTO)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT CAPSID_IPO_SUPPORTED OUTPUT CAPSID_IPO_ERROR)

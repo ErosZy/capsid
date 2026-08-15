@@ -136,7 +136,7 @@ pid_t spawn_worker(const char *path, int *parent_fd) {
     if (!capsid::win32::create_socket_pair(sockets)) {
         fail("socket pair failed");
     }
-    const HANDLE child_handle = reinterpret_cast<HANDLE>(
+    HANDLE child_handle = reinterpret_cast<HANDLE>(
         static_cast<intptr_t>(_get_osfhandle(sockets[1])));
     if (!SetHandleInformation(child_handle, HANDLE_FLAG_INHERIT,
                               HANDLE_FLAG_INHERIT)) {
