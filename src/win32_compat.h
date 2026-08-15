@@ -424,6 +424,14 @@ inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
         static_cast<int>(size),
         flags);
     if (received == SOCKET_ERROR) {
+        const int error = WSAGetLastError();
+        // A hard peer death surfaces as RST on Windows (POSIX read()
+        // reports EOF for the same event); the IPC channel and the HTTP
+        // test clients treat it as a closed stream.
+        if (error == WSAECONNRESET || error == WSAENOTCONN ||
+            error == WSAESHUTDOWN) {
+            return 0;
+        }
         map_winsock_errno();
         return -1;
     }
@@ -444,6 +452,11 @@ inline ssize_t read_fd(int fd, void *buffer, size_t size) {
         static_cast<int>(size),
         0);
     if (received == SOCKET_ERROR) {
+        const int error = WSAGetLastError();
+        if (error == WSAECONNRESET || error == WSAENOTCONN ||
+            error == WSAESHUTDOWN) {
+            return 0;
+        }
         map_winsock_errno();
         return -1;
     }
