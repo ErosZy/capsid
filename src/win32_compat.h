@@ -502,11 +502,12 @@ inline ssize_t read_fd(int fd, void *buffer, size_t size) {
         errno = EIO;
         return -1;
     }
-    const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
-    if (socket_handle == INVALID_SOCKET) {
+    const intptr_t osfhandle = _get_osfhandle(fd);
+    if (osfhandle < 0) {
         errno = EBADF;
         return -1;
     }
+    const SOCKET socket_handle = static_cast<SOCKET>(osfhandle);
     const int received = recv(
         socket_handle,
         static_cast<char *>(buffer),
@@ -514,6 +515,16 @@ inline ssize_t read_fd(int fd, void *buffer, size_t size) {
         0);
     if (received == SOCKET_ERROR) {
         const int error = WSAGetLastError();
+        {
+            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
+            if (dbg != NULL) {
+                std::fprintf(dbg, "read_fd: fd=%d handle=%lld recv_error=%d\n",
+                             fd,
+                             static_cast<long long>(osfhandle),
+                             error);
+                std::fclose(dbg);
+            }
+        }
         if (error == WSAECONNRESET || error == WSAENOTCONN ||
             error == WSAESHUTDOWN) {
             return 0;
