@@ -52,7 +52,11 @@
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/time.h>
+#endif
 #if defined(_WIN32)
 #include "win32_compat.h"
 #else
