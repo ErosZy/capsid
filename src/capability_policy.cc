@@ -1,5 +1,6 @@
 #include "capability_policy.h"
 #include "capability_manifest_hash.h"
+#include "ipc_validation.h"
 
 #include <algorithm>
 #include <cctype>
@@ -825,6 +826,332 @@ const char *permission_state_name(capsid_permission_state state) {
 
 const char *capability_manifest_hash() {
     return CAPSID_CAPABILITY_MANIFEST_SHA256;
+}
+
+// --- Binding v1 policy set (§3.1-§3.3) ----------------------------------
+
+namespace {
+
+// FNV-1a, mirroring the Host policy compiler's rule-id hash
+// (src/host/policy_compiler.cc). The label schemes here are the worker
+// authority for Binding rules; the Host generation compiler must adopt
+// the same labels when it starts producing binding rule ids.
+uint32_t binding_rule_id(const std::string &label) {
+    uint32_t hash = 2166136261u;
+    for (size_t index = 0; index < label.size(); ++index) {
+        hash ^= static_cast<uint8_t>(label[index]);
+        hash *= 16777619u;
+    }
+    return hash == 0 ? 1 : hash;
+}
+
+const char *const kBindingModules[] = {
+    "tjs:assert",        "tjs:getopts",      "tjs:hashing",
+    "tjs:internal/core", "tjs:internal/path", "tjs:ipaddr",
+    "tjs:path",          "tjs:posix-socket", "tjs:readline",
+    "tjs:sqlite",        "tjs:utils",        "tjs:uuid",
+    "tjs:wasi",
+};
+
+const char *const kBindingProfiles[] = {
+    "network-client", "filesystem-read", "filesystem-write",
+    "filesystem-watch", "sqlite", "wasi",
+};
+
+bool contains(const char *const *names, size_t count,
+              const std::string &value) {
+    for (size_t index = 0; index < count; ++index) {
+        if (value == names[index]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Permanently forbidden Binding modules (§3.3): server, process and
+// escape capabilities stay closed no matter what a Manifest asks for.
+bool binding_module_forbidden(const std::string &name) {
+    static const char *const forbidden[] = {
+        "tjs:ffi",             "tjs:worker",
+        "tjs:http-server",     "tjs:process",
+        "tjs:signals",         "tjs:internal/worker",
+    };
+    return contains(forbidden,
+                    sizeof(forbidden) / sizeof(forbidden[0]), name);
+}
+
+bool split_net_target(const std::string &net_target,
+                      std::string *host,
+                      uint16_t *port) {
+    if (net_target.empty()) {
+        return false;
+    }
+    if (net_target[0] == '[') {
+        const size_t close = net_target.find(']');
+        if (close == std::string::npos ||
+            close + 1 >= net_target.size() ||
+            net_target[close + 1] != ':') {
+            return false;
+        }
+        *host = net_target.substr(1, close - 1);
+        const std::string port_text = net_target.substr(close + 2);
+        unsigned int value = 0;
+        for (size_t index = 0; index < port_text.size(); ++index) {
+            const char c = port_text[index];
+            if (c < '0' || c > '9') {
+                return false;
+            }
+            value = value * 10 + static_cast<unsigned int>(c - '0');
+        }
+        if (value < 1 || value > 65535) {
+            return false;
+        }
+        *port = static_cast<uint16_t>(value);
+        return true;
+    }
+    const size_t colon = net_target.find(':');
+    if (colon == std::string::npos ||
+        net_target.find(':', colon + 1) != std::string::npos) {
+        return false;
+    }
+    *host = net_target.substr(0, colon);
+    const std::string port_text = net_target.substr(colon + 1);
+    unsigned int value = 0;
+    for (size_t index = 0; index < port_text.size(); ++index) {
+        const char c = port_text[index];
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        value = value * 10 + static_cast<unsigned int>(c - '0');
+    }
+    if (value < 1 || value > 65535) {
+        return false;
+    }
+    *port = static_cast<uint16_t>(value);
+    return true;
+}
+
+}  // namespace
+
+bool handle_owner_matches(const NativeHandleOwner &owner,
+                          const RuntimeOrigin &caller) {
+    if (!owner.valid() || !caller.valid()) {
+        return false;
+    }
+    if (owner.origin.domain != caller.domain) {
+        return false;
+    }
+    return owner.origin.domain != RuntimeDomain::kBinding ||
+           owner.origin.binding_id == caller.binding_id;
+}
+
+bool binding_module_known(const std::string &name) {
+    return contains(kBindingModules,
+                    sizeof(kBindingModules) / sizeof(kBindingModules[0]),
+                    name);
+}
+
+bool binding_profile_known(const std::string &name) {
+    return contains(kBindingProfiles,
+                    sizeof(kBindingProfiles) /
+                        sizeof(kBindingProfiles[0]),
+                    name);
+}
+
+ModuleDecision BindingPolicy::module_decision(
+    const std::string &name) const {
+    for (size_t index = 0; index < modules.size(); ++index) {
+        if (modules[index] == name) {
+            return kModuleGranted;
+        }
+    }
+    if (binding_module_forbidden(name)) {
+        return kModuleForbidden;
+    }
+    return kModuleDenied;
+}
+
+BindingPolicySet::BindingPolicySet() {}
+
+bool BindingPolicySet::configure(
+    const std::vector<WorkerBindingDescriptor> &bindings,
+    std::string *error) {
+    if (error) {
+        error->clear();
+    }
+    std::vector<BindingPolicy> compiled;
+    compiled.reserve(bindings.size());
+    std::set<std::string> seen_ids;
+    for (size_t binding_index = 0;
+         binding_index < bindings.size();
+         ++binding_index) {
+        const WorkerBindingDescriptor &descriptor =
+            bindings[binding_index];
+        if (!seen_ids.insert(descriptor.name).second) {
+            if (error) {
+                *error = "duplicate binding id";
+            }
+            return false;
+        }
+        for (size_t index = 0;
+             index < descriptor.profiles.size();
+             ++index) {
+            if (!binding_profile_known(descriptor.profiles[index])) {
+                if (error) {
+                    *error = "unknown binding sandbox profile";
+                }
+                return false;
+            }
+        }
+        for (size_t index = 0;
+             index < descriptor.modules.size();
+             ++index) {
+            if (!binding_module_known(descriptor.modules[index])) {
+                if (error) {
+                    *error = "binding module is not grantable";
+                }
+                return false;
+            }
+        }
+
+        BindingPolicy policy;
+        policy.binding_id = descriptor.name;
+        policy.modules = descriptor.modules;
+        policy.profiles = descriptor.profiles;
+        policy.env = descriptor.env;
+        policy.stdio = descriptor.stdio;
+
+        std::vector<std::string> resources;
+        std::vector<capsid_permission_rule> rules;
+        resources.reserve(descriptor.fs_read.size() +
+                          descriptor.fs_write.size());
+        rules.reserve(descriptor.fs_read.size() +
+                      descriptor.fs_write.size());
+        for (size_t index = 0;
+             index < descriptor.fs_read.size();
+             ++index) {
+            resources.push_back(descriptor.fs_read[index]);
+            capsid_permission_rule rule;
+            capsid_permission_rule_init(&rule);
+            rule.permission = CAPSID_PERMISSION_READ;
+            rule.action = CAPSID_PERMISSION_ALLOW;
+            rule.resource = resources.back().c_str();
+            rule.rule_id = binding_rule_id(
+                "binding-fs-read:" + resources.back());
+            rules.push_back(rule);
+        }
+        for (size_t index = 0;
+             index < descriptor.fs_write.size();
+             ++index) {
+            resources.push_back(descriptor.fs_write[index]);
+            capsid_permission_rule rule;
+            capsid_permission_rule_init(&rule);
+            rule.permission = CAPSID_PERMISSION_WRITE;
+            rule.action = CAPSID_PERMISSION_ALLOW;
+            rule.resource = resources.back().c_str();
+            rule.rule_id = binding_rule_id(
+                "binding-fs-write:" + resources.back());
+            rules.push_back(rule);
+        }
+        capsid_capability_policy capability_descriptor;
+        capsid_capability_policy_init(&capability_descriptor);
+        capability_descriptor.application_identity =
+            descriptor.name.c_str();
+        capability_descriptor.rules =
+            rules.empty() ? NULL : &rules[0];
+        capability_descriptor.rule_count =
+            static_cast<uint32_t>(rules.size());
+        if (!policy.capability.configure(
+                &capability_descriptor, error)) {
+            if (error) {
+                *error = "invalid binding permission rules";
+            }
+            return false;
+        }
+
+        if (!descriptor.net_rules.empty()) {
+            std::vector<std::string> targets;
+            std::vector<capsid_egress_rule> egress_rules;
+            targets.reserve(descriptor.net_rules.size());
+            egress_rules.reserve(descriptor.net_rules.size());
+            for (size_t index = 0;
+                 index < descriptor.net_rules.size();
+                 ++index) {
+                std::string host;
+                uint16_t port = 0;
+                if (!split_net_target(
+                        descriptor.net_rules[index], &host, &port)) {
+                    if (error) {
+                        *error = "invalid binding net target";
+                    }
+                    return false;
+                }
+                targets.push_back(host);
+                capsid_egress_rule rule;
+                capsid_egress_rule_init(&rule);
+                rule.action = CAPSID_EGRESS_ALLOW;
+                rule.target = targets.back().c_str();
+                rule.port_start = port;
+                rule.port_end = port;
+                rule.rule_id = binding_rule_id(
+                    "binding-net:" + descriptor.net_rules[index]);
+                egress_rules.push_back(rule);
+            }
+            capsid_egress_policy egress_descriptor;
+            capsid_egress_policy_init(&egress_descriptor);
+            egress_descriptor.default_action = CAPSID_EGRESS_DENY;
+            egress_descriptor.rules =
+                egress_rules.empty() ? NULL : &egress_rules[0];
+            egress_descriptor.rule_count =
+                static_cast<uint32_t>(egress_rules.size());
+            if (!policy.egress.configure(
+                    &egress_descriptor, error)) {
+                if (error) {
+                    *error = "invalid binding net policy";
+                }
+                return false;
+            }
+            policy.has_net_policy = true;
+        }
+
+        compiled.push_back(policy);
+    }
+    policies_.swap(compiled);
+    return true;
+}
+
+bool BindingPolicySet::has(const std::string &id) const {
+    return policy(id) != NULL;
+}
+
+const BindingPolicy *BindingPolicySet::policy(
+    const std::string &id) const {
+    for (size_t index = 0; index < policies_.size(); ++index) {
+        if (policies_[index].binding_id == id) {
+            return &policies_[index];
+        }
+    }
+    return NULL;
+}
+
+PermissionDecision BindingPolicySet::evaluate(
+    const std::string &id,
+    capsid_permission_name permission,
+    const std::string &resource) const {
+    const BindingPolicy *found = policy(id);
+    if (found == NULL) {
+        return PermissionDecision();
+    }
+    return found->capability.evaluate(permission, resource);
+}
+
+std::vector<std::string> BindingPolicySet::ids() const {
+    std::vector<std::string> result;
+    result.reserve(policies_.size());
+    for (size_t index = 0; index < policies_.size(); ++index) {
+        result.push_back(policies_[index].binding_id);
+    }
+    return result;
 }
 
 }  // namespace capsid

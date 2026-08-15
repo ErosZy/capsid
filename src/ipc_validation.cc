@@ -43,26 +43,10 @@ const size_t kMaxBindingConfigBytes = 256U * 1024U;
 const size_t kMaxBindingSecrets = 64;
 const size_t kMaxBindingSecretValueBytes = 256U * 1024U;
 const size_t kMaxBindingRules = 1024;
+const size_t kMaxBindingModules = 64;
 const size_t kMaxBindingEnvEntries = 256;
 const size_t kMaxBindingStdioEntries = 3;
 const size_t kMaxBindingPathBytes = 4096;
-
-const char *const kBindingSandboxProfiles[] = {
-    "network-client", "filesystem-read", "filesystem-write",
-    "filesystem-watch", "sqlite", "wasi",
-};
-
-bool is_binding_profile(const std::string &value) {
-    for (size_t i = 0;
-         i < sizeof(kBindingSandboxProfiles) /
-                 sizeof(kBindingSandboxProfiles[0]);
-         ++i) {
-        if (value == kBindingSandboxProfiles[i]) {
-            return true;
-        }
-    }
-    return false;
-}
 
 // [a-z][a-z0-9-]{0,62}, 1..63 bytes.
 bool valid_binding_name(const std::string &value) {
@@ -345,8 +329,12 @@ bool parse_binding_blob(const std::vector<uint8_t> &blob,
     }
 
     if (!read_binding_list(&cursor, descriptor_end, &decoded.profiles,
-                           6, is_binding_profile, "sandbox profile",
-                           error) ||
+                           6, capsid::binding_profile_known,
+                           "sandbox profile", error) ||
+        !read_binding_list(&cursor, descriptor_end, &decoded.modules,
+                           kMaxBindingModules,
+                           capsid::binding_module_known,
+                           "module", error) ||
         !read_binding_list(&cursor, descriptor_end, &decoded.net_rules,
                            kMaxBindingRules, valid_binding_net_target,
                            "net target", error) ||

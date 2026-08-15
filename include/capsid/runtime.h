@@ -591,6 +591,10 @@ typedef struct capsid_binding_secret {
 } capsid_binding_secret;
 
 typedef struct capsid_binding_policy {
+    // Manifest permission modules (the Binding Runtime's module grants;
+    // the App never repeats them).
+    const char *const *modules;
+    uint32_t module_count;
     const char *const *net_rules;
     uint32_t net_rule_count;
     const char *const *fs_read;

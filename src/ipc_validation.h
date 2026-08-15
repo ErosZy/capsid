@@ -48,6 +48,7 @@ struct WorkerBindingDescriptor {
     std::string config_json;
     std::vector<WorkerBindingSecret> secrets;
     std::vector<std::string> profiles;   // sandbox.requires (fixed set)
+    std::vector<std::string> modules;    // manifest permission modules
     std::vector<std::string> net_rules;  // effective allow targets
     std::vector<std::string> fs_read;
     std::vector<std::string> fs_write;

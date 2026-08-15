@@ -448,6 +448,17 @@ public:
         // sealed in before any JavaScript executes.
         bindings_.assign(startup_state_.bindings().begin(),
                          startup_state_.bindings().end());
+        // §7.3: compile the per-Binding policies before any JavaScript
+        // runs. The User policy stays exactly as the HELLO compiled it;
+        // Binding grants can never widen it.
+        std::string binding_policy_error;
+        if (!binding_policies_.configure(
+                bindings_, &binding_policy_error)) {
+            send_error(0, std::string("binding policy setup failed: ") +
+                              binding_policy_error);
+            flush_blocking();
+            return 1;
+        }
 
         TJSRunOptions options;
         TJS_DefaultOptions(&options);
@@ -5120,6 +5131,9 @@ private:
     // Binding v1 descriptors in arrival order; empty for zero-binding
     // workers. No Binding Runtime is created when this stays empty.
     std::vector<capsid::WorkerBindingDescriptor> bindings_;
+    // §7.3: per-Binding policies, compiled from the descriptors above and
+    // fully separate from the User policy in config_.
+    capsid::BindingPolicySet binding_policies_;
     std::map<uint64_t, ResponseState> responses_;
     // Round-robin rotation order for pump_response_output (design §3.4):
     // a request is enqueued on begin and rotated to the back after each

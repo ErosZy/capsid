@@ -1,5 +1,6 @@
 #include "capability_policy.h"
 #include "capsid/runtime.h"
+#include "ipc_validation.h"
 
 #include <cstdlib>
 #include <cstddef>
@@ -933,6 +934,230 @@ void test_malformed_rules() {
             "duplicate rule id was accepted");
 }
 
+// Binding v1 §7.3: per-binding policies and origin isolation
+// (docs/binding-technical-design.md §3.1-§3.3). The binding policy set is
+// compiled from wire descriptors and is fully separate from the User
+// policy: a Binding grant can never widen what the User can do, an
+// unknown Binding ID fails closed, and Native Handles carry an
+// unforgeable owner that only their origin may touch.
+
+capsid::WorkerBindingDescriptor binding_descriptor(
+    const std::string &name,
+    const std::vector<std::string> &modules,
+    const std::vector<std::string> &profiles,
+    const std::vector<std::string> &net_rules,
+    const std::vector<std::string> &fs_write) {
+    capsid::WorkerBindingDescriptor descriptor;
+    descriptor.name = name;
+    descriptor.source.assign(3, 0x5a);
+    descriptor.config_json = "{}";
+    descriptor.modules = modules;
+    descriptor.profiles = profiles;
+    descriptor.net_rules = net_rules;
+    descriptor.fs_read.clear();
+    descriptor.fs_write = fs_write;
+    descriptor.env.push_back("APP_MODE");
+    descriptor.stdio.push_back("stdout");
+    return descriptor;
+}
+
+void test_binding_policy_origin_isolation() {
+    const capsid::WorkerBindingDescriptor mongo = binding_descriptor(
+        "mongo",
+        {"tjs:internal/core", "tjs:posix-socket"},
+        {"network-client", "filesystem-write"},
+        {"127.0.0.1:27017"},
+        {"/var/lib/capsid/mongo"});
+
+    capsid::BindingPolicySet set;
+    std::string error;
+    require(set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{mongo},
+                &error),
+            "valid binding policy set was rejected: " + error);
+    require(set.has("mongo") && !set.has("redis"),
+            "binding set lookup failed");
+    require(set.ids() == std::vector<std::string>{"mongo"},
+            "binding set ids are wrong");
+
+    const capsid::BindingPolicy *policy = set.policy("mongo");
+    require(policy != NULL, "mongo binding policy missing");
+
+    // §3.1: the Binding gate only consults the named Binding policy.
+    require(policy->egress.allows_host("127.0.0.1", 27017),
+            "authorized binding net target was denied");
+    require(!policy->egress.allows_host("127.0.0.1", 9999),
+            "wrong port was allowed by the binding net policy");
+    require(!policy->egress.allows_host("evil.example.com", 27017),
+            "unknown host was allowed by the binding net policy");
+
+    require(policy->module_decision("tjs:internal/core") ==
+                capsid::kModuleGranted,
+            "granted binding module was denied");
+    require(policy->module_decision("tjs:posix-socket") ==
+                capsid::kModuleGranted,
+            "granted binding module was denied");
+    require(policy->module_decision("capsid:fs") ==
+                capsid::kModuleDenied,
+            "user facade was granted to the binding policy");
+    require(policy->module_decision("tjs:ffi") ==
+                capsid::kModuleForbidden,
+            "permanently forbidden module was not forbidden");
+    require(policy->module_decision("tjs:utils") ==
+                capsid::kModuleDenied,
+            "ungranted module was allowed");
+
+    require(policy->capability.evaluate(
+                CAPSID_PERMISSION_WRITE,
+                "/var/lib/capsid/mongo")
+                .state == CAPSID_PERMISSION_STATE_GRANTED,
+            "binding fs write path was denied");
+    require(policy->capability.evaluate(
+                CAPSID_PERMISSION_WRITE,
+                "/var/lib/capsid/mongo/journal")
+                .state == CAPSID_PERMISSION_STATE_GRANTED,
+            "binding fs write child path was denied");
+    require(policy->capability.evaluate(
+                CAPSID_PERMISSION_READ,
+                "/var/lib/capsid/mongo")
+                .state == CAPSID_PERMISSION_STATE_DENIED,
+            "binding fs read on a write-only path was granted");
+    require(policy->capability.evaluate(
+                CAPSID_PERMISSION_WRITE,
+                "/var/lib/capsid/other")
+                .state == CAPSID_PERMISSION_STATE_DENIED,
+            "binding fs write escaped the authorized directory");
+    require(policy->env.size() == 1 && policy->env[0] == "APP_MODE",
+            "binding env names are wrong");
+    require(policy->stdio.size() == 1 && policy->stdio[0] == "stdout",
+            "binding stdio streams are wrong");
+    require(policy->profiles.size() == 2 &&
+                policy->profiles[0] == "network-client" &&
+                policy->profiles[1] == "filesystem-write",
+            "binding sandbox profiles are wrong");
+
+    // Unknown Binding ID: fail closed at the set level, never a default
+    // allow or an exception.
+    require(set.policy("redis") == NULL,
+            "unknown binding id resolved to a policy");
+    require(set.evaluate("redis", CAPSID_PERMISSION_READ, "/x").state ==
+                CAPSID_PERMISSION_STATE_DENIED,
+            "unknown binding id evaluated as granted");
+
+    // §3.2: the User policy is never widened by any Binding grant. The
+    // user gate below holds a user-only policy and must still deny the
+    // binding's write path and the binding's tjs modules.
+    capsid::CapabilityPolicy user_policy;
+    std::vector<capsid_permission_rule> user_rules;
+    user_rules.push_back(rule(
+        CAPSID_PERMISSION_READ,
+        CAPSID_PERMISSION_ALLOW,
+        "/srv/apps/orders/public",
+        7));
+    require(configure(
+                &user_policy,
+                std::vector<const char *>{"capsid:fs"},
+                user_rules,
+                NULL,
+                &error),
+            "user policy fixture rejected: " + error);
+    require(user_policy.evaluate(
+                CAPSID_PERMISSION_WRITE,
+                "/var/lib/capsid/mongo")
+                .state == CAPSID_PERMISSION_STATE_DENIED,
+            "binding fs write widened the user policy");
+    require(user_policy.evaluate(
+                CAPSID_PERMISSION_READ,
+                "/var/lib/capsid/mongo")
+                .state == CAPSID_PERMISSION_STATE_DENIED,
+            "binding fs read widened the user policy");
+    require(user_policy.module_decision("tjs:internal/core") !=
+                capsid::kModuleGranted,
+            "binding module grant widened the user module policy");
+
+    // Atomic configure: any invalid descriptor rejects the whole set and
+    // leaves no partial state behind.
+    const capsid::WorkerBindingDescriptor forbidden_module =
+        binding_descriptor(
+            "bad-module", {"tjs:ffi"}, {}, {}, {});
+    capsid::BindingPolicySet partial;
+    require(!partial.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{
+                    mongo, forbidden_module},
+                &error) &&
+                !error.empty(),
+            "forbidden binding module was accepted");
+    require(!partial.has("mongo") && partial.ids().empty(),
+            "failed configure left partial binding state");
+
+    const capsid::WorkerBindingDescriptor bad_target =
+        binding_descriptor(
+            "bad-target", {"tjs:utils"}, {}, {"noport"}, {});
+    capsid::BindingPolicySet target_set;
+    require(!target_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{bad_target},
+                &error) &&
+                !error.empty(),
+            "invalid binding net target was accepted");
+
+    const capsid::WorkerBindingDescriptor bad_profile =
+        binding_descriptor(
+            "bad-profile", {"tjs:utils"}, {"network-server"}, {}, {});
+    capsid::BindingPolicySet profile_set;
+    require(!profile_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{bad_profile},
+                &error) &&
+                !error.empty(),
+            "unknown binding sandbox profile was accepted");
+
+    const capsid::WorkerBindingDescriptor same_id =
+        binding_descriptor(
+            "mongo", {"tjs:utils"}, {}, {}, {});
+    capsid::BindingPolicySet duplicate_set;
+    require(!duplicate_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{
+                    mongo, same_id},
+                &error) &&
+                !error.empty(),
+            "duplicate binding ids were accepted");
+
+    // §3.1: Native Handle ownership. A handle without a recorded owner is
+    // invalid; only its own origin may touch it.
+    capsid::NativeHandleOwner handle;
+    require(!handle.valid(),
+            "ownerless handle is valid");
+
+    capsid::RuntimeOrigin user_origin;
+    require(user_origin.valid(),
+            "default user origin is invalid");
+    capsid::RuntimeOrigin mongo_origin;
+    mongo_origin.domain = capsid::RuntimeDomain::kBinding;
+    require(!mongo_origin.valid(),
+            "binding origin without an id is valid");
+    mongo_origin.binding_id = "mongo";
+    require(mongo_origin.valid(),
+            "binding origin with an id is invalid");
+    capsid::RuntimeOrigin redis_origin;
+    redis_origin.domain = capsid::RuntimeDomain::kBinding;
+    redis_origin.binding_id = "redis";
+
+    handle.origin = mongo_origin;
+    handle.open_mode = 2;  // O_WRONLY creation mode
+    handle.recorded = true;
+    require(handle.valid(),
+            "owned handle is invalid");
+    require(capsid::handle_owner_matches(handle, mongo_origin),
+            "the owning origin was denied");
+    require(!capsid::handle_owner_matches(handle, user_origin),
+            "the user origin touched a binding handle");
+    require(!capsid::handle_owner_matches(handle, redis_origin),
+            "a different binding touched the handle");
+    capsid::RuntimeOrigin no_id;
+    no_id.domain = capsid::RuntimeDomain::kBinding;
+    require(!capsid::handle_owner_matches(handle, no_id),
+            "an invalid caller origin touched the handle");
+}
+
 }  // namespace
 
 int main() {
@@ -945,5 +1170,6 @@ int main() {
     test_explicit_environment_snapshot();
     test_version_1_policy_compatibility();
     test_malformed_rules();
+    test_binding_policy_origin_isolation();
     return 0;
 }

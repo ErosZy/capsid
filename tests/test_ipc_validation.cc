@@ -396,6 +396,7 @@ std::vector<uint8_t> binding_blob(
     const std::string &name,
     const std::string &config,
     const std::vector<std::pair<std::string, std::string>> &secrets,
+    const std::vector<std::string> &modules,
     const std::vector<std::string> &profiles,
     const std::vector<std::string> &net_rules,
     const std::vector<std::string> &fs_read,
@@ -421,6 +422,7 @@ std::vector<uint8_t> binding_blob(
         }
     };
     append_list(profiles);
+    append_list(modules);
     append_list(net_rules);
     append_list(fs_read);
     append_list(fs_write);
@@ -450,6 +452,7 @@ void test_binding_startup_state_machine() {
         "mongo",
         R"json({"database":"orders"})json",
         {{"password", "s3cr3t"}},
+        {"tjs:internal/core", "tjs:posix-socket"},
         {"network-client"},
         {"127.0.0.1:27017"},
         {"/etc/capsid/mongo"},
@@ -492,6 +495,11 @@ void test_binding_startup_state_machine() {
         const capsid::WorkerBindingDescriptor &binding =
             state.bindings().front();
         require(binding.name == "mongo", "binding name decoded wrong");
+        require(
+            binding.modules.size() == 2 &&
+                binding.modules[0] == "tjs:internal/core" &&
+                binding.modules[1] == "tjs:posix-socket",
+            "binding modules decoded wrong");
         require(
             binding.config_json == R"json({"database":"orders"})json",
             "binding config decoded wrong");
@@ -562,7 +570,7 @@ void test_binding_startup_state_machine() {
     // Descriptor validation failures reject the whole binding.
     {
         const std::vector<uint8_t> bad_name = binding_blob(
-            "Mongo", "{}", {}, {}, {}, {}, {}, {}, {}, "x");
+            "Mongo", "{}", {}, {}, {}, {}, {}, {}, {}, {}, "x");
         capsid::WorkerStartupState state;
         std::string error;
         require(state.consume(hello_frame(), &error), error);
@@ -579,7 +587,8 @@ void test_binding_startup_state_machine() {
     }
     {
         const std::vector<uint8_t> bad_profile = binding_blob(
-            "mongo", "{}", {}, {"network-server"}, {}, {}, {}, {}, {}, "x");
+            "mongo", "{}", {}, {}, {"network-server"}, {}, {}, {}, {}, {},
+            "x");
         capsid::WorkerStartupState state;
         std::string error;
         require(state.consume(hello_frame(), &error), error);
@@ -593,8 +602,8 @@ void test_binding_startup_state_machine() {
     }
     {
         const std::vector<uint8_t> bad_target = binding_blob(
-            "mongo", "{}", {}, {"network-client"}, {"noport"}, {}, {}, {},
-            {}, "x");
+            "mongo", "{}", {}, {}, {"network-client"}, {"noport"}, {}, {},
+            {}, {}, "x");
         capsid::WorkerStartupState state;
         std::string error;
         require(state.consume(hello_frame(), &error), error);
@@ -609,7 +618,7 @@ void test_binding_startup_state_machine() {
     {
         const std::vector<uint8_t> huge_config = binding_blob(
             "mongo", std::string(256U * 1024U + 1, 'x'), {}, {}, {}, {},
-            {}, {}, {}, "x");
+            {}, {}, {}, {}, "x");
         capsid::WorkerStartupState state;
         std::string error;
         require(state.consume(hello_frame(), &error), error);
@@ -620,6 +629,36 @@ void test_binding_startup_state_machine() {
                                huge_config),
                            &error),
             "LOAD_BINDING with an oversized config was accepted");
+    }
+
+    {
+        const std::vector<uint8_t> bad_module = binding_blob(
+            "mongo", "{}", {}, {"tjs:ffi"}, {}, {}, {}, {}, {}, {}, "x");
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               bad_module),
+                           &error),
+            "LOAD_BINDING with a forbidden module was accepted");
+    }
+    {
+        const std::vector<uint8_t> dup_module = binding_blob(
+            "mongo", "{}", {}, {"tjs:utils", "tjs:utils"}, {}, {}, {}, {},
+            {}, {}, "x");
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               dup_module),
+                           &error),
+            "LOAD_BINDING with a duplicate module was accepted");
     }
 
     // A LOAD_BINDING after the bundle started is a sealed-sequence error.

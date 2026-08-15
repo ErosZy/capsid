@@ -1898,7 +1898,9 @@ capsid_result capsid_worker_load_binding(capsid_worker *worker,
     if (!policy || !sandbox) {
         return CAPSID_INVALID_ARGUMENT;
     }
-    if (!valid_api_list(policy->net_rules, policy->net_rule_count,
+    if (!valid_api_list(policy->modules, policy->module_count,
+                        64, 64, NULL) ||
+        !valid_api_list(policy->net_rules, policy->net_rule_count,
                         kApiMaxBindingRules, 1024, NULL) ||
         !valid_api_list(policy->fs_read, policy->fs_read_count,
                         kApiMaxBindingRules, kApiMaxBindingPathBytes, NULL) ||
@@ -1944,6 +1946,7 @@ capsid_result capsid_worker_load_binding(capsid_worker *worker,
         uint32_t count;
     } lists[] = {
         { sandbox->profiles, sandbox->profile_count },
+        { policy->modules, policy->module_count },
         { policy->net_rules, policy->net_rule_count },
         { policy->fs_read, policy->fs_read_count },
         { policy->fs_write, policy->fs_write_count },
