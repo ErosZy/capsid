@@ -121,17 +121,34 @@ if(entry_count EQUAL 1)
     endif()
 endif()
 
-set(CAPSID_MANIFEST
-    "bin/capsid-worker"
-    "bin/capsid-bytecode-compile"
-    "include/capsid/runtime.h"
-    "include/capsid/runtime.hpp"
-    "lib/cmake/Capsid/CapsidTargets.cmake"
-    "share/licenses/capsid/LICENSE"
-    "share/capsid/build-info.txt"
-    "share/capsid/SBOM.spdx.json")
-if(CAPSID_HOST_TARGET)
-    list(APPEND CAPSID_MANIFEST "bin/capsid-host")
+if(WIN32)
+    # MSVC binaries carry .exe and the static runtime library drops the
+    # POSIX lib prefix.
+    set(CAPSID_MANIFEST
+        "bin/capsid-worker.exe"
+        "bin/capsid-bytecode-compile.exe"
+        "include/capsid/runtime.h"
+        "include/capsid/runtime.hpp"
+        "lib/cmake/Capsid/CapsidTargets.cmake"
+        "share/licenses/capsid/LICENSE"
+        "share/capsid/build-info.txt"
+        "share/capsid/SBOM.spdx.json")
+    if(CAPSID_HOST_TARGET)
+        list(APPEND CAPSID_MANIFEST "bin/capsid-host.exe")
+    endif()
+else()
+    set(CAPSID_MANIFEST
+        "bin/capsid-worker"
+        "bin/capsid-bytecode-compile"
+        "include/capsid/runtime.h"
+        "include/capsid/runtime.hpp"
+        "lib/cmake/Capsid/CapsidTargets.cmake"
+        "share/licenses/capsid/LICENSE"
+        "share/capsid/build-info.txt"
+        "share/capsid/SBOM.spdx.json")
+    if(CAPSID_HOST_TARGET)
+        list(APPEND CAPSID_MANIFEST "bin/capsid-host")
+    endif()
 endif()
 
 set(missing)
@@ -141,10 +158,16 @@ foreach(entry IN LISTS CAPSID_MANIFEST)
     endif()
 endforeach()
 
-file(GLOB CAPSID_PACKAGE_LIBS
-    "${CAPSID_MANIFEST_ROOT}/lib/libcapsid_runtime.*")
-if(NOT CAPSID_PACKAGE_LIBS)
-    list(APPEND missing "lib/libcapsid_runtime.*")
+if(WIN32)
+    if(NOT EXISTS "${CAPSID_MANIFEST_ROOT}/lib/capsid_runtime.lib")
+        list(APPEND missing "lib/capsid_runtime.lib")
+    endif()
+else()
+    file(GLOB CAPSID_PACKAGE_LIBS
+        "${CAPSID_MANIFEST_ROOT}/lib/libcapsid_runtime.*")
+    if(NOT CAPSID_PACKAGE_LIBS)
+        list(APPEND missing "lib/libcapsid_runtime.*")
+    endif()
 endif()
 
 file(GLOB_RECURSE CAPSID_PACKAGE_DOC
