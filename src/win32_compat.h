@@ -251,6 +251,18 @@ inline ssize_t send_fd(int fd,
     return static_cast<ssize_t>(sent);
 }
 
+// write() on a CRT fd that may wrap EITHER a socket (the READY/wake
+// channels are socketpairs) or a real pipe (a harness may pass a stdio
+// pipe as the READY fd). Winsock send() rejects pipe handles with
+// WSAENOTSOCK (mapped to EBADF); fall back to the CRT for those.
+inline ssize_t write_any_fd(int fd, const void *data, size_t size) {
+    const ssize_t via_socket = send_fd(fd, data, size, 0);
+    if (via_socket >= 0 || errno != EBADF) {
+        return via_socket;
+    }
+    return _write(fd, data, static_cast<unsigned int>(size));
+}
+
 // accept() on a CRT listener fd; the accepted socket becomes a CRT fd.
 inline int accept_fd(int listener) {
     if (!ensure_winsock()) {

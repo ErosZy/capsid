@@ -2478,13 +2478,13 @@ bool Impl::write_ready_line() {
     std::size_t offset = 0;
     while (offset < line.size()) {
 #if defined(_WIN32)
-        // The ready channel is a loopback socketpair on Windows; the
-        // CRT's write() is invalid on socket fds.
-        const ssize_t written = capsid::win32::send_fd(
+        // The ready channel may be a loopback socketpair (in-process
+        // harnesses) or a stdio pipe (process harnesses); write_any_fd
+        // covers both.
+        const ssize_t written = capsid::win32::write_any_fd(
             options_.ready_fd,
             line.data() + offset,
-            line.size() - offset,
-            0);
+            line.size() - offset);
 #else
         const ssize_t written = ::write(options_.ready_fd,
                                         line.data() + offset,

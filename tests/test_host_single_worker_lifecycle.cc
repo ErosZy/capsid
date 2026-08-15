@@ -70,7 +70,12 @@ std::string read_ready_line(int fd) {
             continue;
         }
         char bytes[512];
+#if defined(_WIN32)
+        const ssize_t count =
+            capsid::win32::read_fd(fd, bytes, sizeof(bytes));
+#else
         const ssize_t count = read(fd, bytes, sizeof(bytes));
+#endif
         require(count > 0, "READY pipe closed without a record");
         line.append(bytes, static_cast<std::size_t>(count));
     }
