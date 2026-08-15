@@ -1374,11 +1374,13 @@ if(BUILD_TESTING)
                     COMMAND test-host-static-pool-integration worker-exit
                         $<TARGET_FILE:capsid-worker>)
             endif()
-            set_tests_properties(
-                host_static_pool_activation_barrier
-                host_static_pool_worker_exit_isolation PROPERTIES
-                LABELS "host;integration;m2"
-                TIMEOUT 30)
+            if(NOT WIN32)
+                set_tests_properties(
+                    host_static_pool_activation_barrier
+                    host_static_pool_worker_exit_isolation PROPERTIES
+                    LABELS "host;integration;m2"
+                    TIMEOUT 30)
+            endif()
 
             find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
             add_test(
