@@ -507,13 +507,11 @@ inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
 // own read() does not handle _open_osfhandle socket fds (EINVAL).
 inline ssize_t read_fd(int fd, void *buffer, size_t size) {
     if (!ensure_winsock()) {
-        std::fprintf(stderr, "read_fd: fd=%d ENSURE_WINSOCK_FAILED\n", fd);
         errno = EIO;
         return -1;
     }
     const intptr_t osfhandle = _get_osfhandle(fd);
     if (osfhandle < 0) {
-        std::fprintf(stderr, "read_fd: fd=%d BAD_OSFHANDLE\n", fd);
         errno = EBADF;
         return -1;
     }
@@ -525,10 +523,9 @@ inline ssize_t read_fd(int fd, void *buffer, size_t size) {
         0);
     if (received == SOCKET_ERROR) {
         const int error = WSAGetLastError();
-        std::fprintf(stderr, "read_fd: fd=%d handle=%lld recv_error=%d\n",
-                     fd,
-                     static_cast<long long>(osfhandle),
-                     error);
+        // A hard peer death surfaces as RST on Windows (POSIX read()
+        // reports EOF for the same event); the IPC channel and the HTTP
+        // test clients treat it as a closed stream.
         if (error == WSAECONNRESET || error == WSAENOTCONN ||
             error == WSAESHUTDOWN) {
             return 0;
@@ -677,23 +674,6 @@ inline int capsid_poll(capsid_pollfd *fds,
         descriptors.empty() ? NULL : &descriptors[0],
         static_cast<ULONG>(count),
         timeout_ms);
-    {
-        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-        if (dbg != NULL) {
-            std::fprintf(dbg,
-                         "capsid_poll: fd=%d handle=%lld events=%d "
-                         "result=%d revents=%d err=%d\n",
-                         static_cast<int>(fds[0].fd),
-                         static_cast<long long>(descriptors[0].fd),
-                         static_cast<int>(descriptors[0].events),
-                         result,
-                         result > 0
-                             ? static_cast<int>(descriptors[0].revents)
-                             : -1,
-                         result == SOCKET_ERROR ? WSAGetLastError() : 0);
-            std::fclose(dbg);
-        }
-    }
     if (result == SOCKET_ERROR) {
         map_winsock_errno();
         return -1;

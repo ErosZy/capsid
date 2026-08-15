@@ -99,64 +99,7 @@ static const uint64_t kReclaimSettleWindowNs = 2 * 1000000000ull;  // 2s
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
 #if defined(_WIN32)
     // Winsock send() takes the raw SOCKET handle, not the CRT fd.
-    ssize_t sent = capsid::win32::send_fd(fd, data, size, 0);
-    {
-        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-        if (dbg != NULL) {
-            uint16_t frame_type = 0;
-            if (size >= 8) {
-                frame_type = static_cast<uint16_t>(data[6]) |
-                             static_cast<uint16_t>(data[7] << 8);
-            }
-            std::fprintf(dbg, "write_socket: fd=%d size=%lld sent=%lld errno=%d wsa=%d type=%u\n",
-                         fd,
-                         static_cast<long long>(size),
-                         static_cast<long long>(sent),
-                         errno,
-                         WSAGetLastError(),
-                         static_cast<unsigned>(frame_type));
-            std::fclose(dbg);
-        }
-    }
-    if (sent < 0 && WSAGetLastError() == 183) {
-        // debug probe: is ERROR_ALREADY_EXISTS transient on retry?
-        Sleep(250);
-        const ssize_t retried = capsid::win32::send_fd(fd, data, size, 0);
-        const uint8_t probe_bytes[4] = {0x50, 0x49, 0x4e, 0x47};
-        const ssize_t probe_sent = capsid::win32::send_fd(fd, probe_bytes, 4, 0);
-        const SOCKET probe_handle = static_cast<SOCKET>(_get_osfhandle(fd));
-        struct sockaddr_in peer_address = {};
-        int peer_size = sizeof(peer_address);
-        const int peer_result = getpeername(
-            probe_handle,
-            reinterpret_cast<struct sockaddr *>(&peer_address),
-            &peer_size);
-        int so_error = 0;
-        int so_error_size = sizeof(so_error);
-        const int so_result = getsockopt(
-            probe_handle, SOL_SOCKET, SO_ERROR,
-            reinterpret_cast<char *>(&so_error), &so_error_size);
-        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-        if (dbg != NULL) {
-            std::fprintf(dbg,
-                         "write_socket retry: sent=%lld errno=%d wsa=%d "
-                         "getpeername=%d(peer_err=%d) SO_ERROR=%d(so_err=%d) "
-                         "probe4=%lld(probe_errno=%d probe_wsa=%d)\n",
-                         static_cast<long long>(retried),
-                         errno,
-                         WSAGetLastError(),
-                         peer_result,
-                         peer_result == 0 ? 0 : WSAGetLastError(),
-                         so_error,
-                         so_result == 0 ? 0 : WSAGetLastError(),
-                         static_cast<long long>(probe_sent),
-                         errno,
-                         WSAGetLastError());
-            std::fclose(dbg);
-        }
-        sent = retried;
-    }
-    return sent;
+    return capsid::win32::send_fd(fd, data, size, 0);
 #elif defined(MSG_NOSIGNAL)
     return send(fd, data, size, MSG_NOSIGNAL);
 #else
@@ -458,13 +401,6 @@ public:
     }
 
     int run() {
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: entered\n");
-                std::fclose(dbg);
-            }
-        }
         if (!read_startup(false)) {
             return 1;
         }
@@ -510,22 +446,8 @@ public:
             flush_blocking();
             return 1;
         }
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: sandbox applied\n");
-                std::fclose(dbg);
-            }
-        }
         if (!read_startup(true)) {
             return 1;
-        }
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: startup read\n");
-                std::fclose(dbg);
-            }
         }
 
         TJSRunOptions options;
@@ -544,13 +466,6 @@ public:
         runtime_ = TJS_NewRuntimeOptions(&options);
         if (!runtime_ || !ctx_) {
             return 1;
-        }
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: runtime created\n");
-                std::fclose(dbg);
-            }
         }
         JS_SetInterruptHandler(
             JS_GetRuntime(ctx_), interrupt_handler, this);
@@ -580,57 +495,15 @@ public:
         seal_module_loader();
 
         std::string load_error;
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: before load_application\n");
-                std::fclose(dbg);
-            }
-        }
         if (!load_application(&load_error)) {
             send_error(0, load_error);
             flush_blocking();
             return 1;
         }
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: after load_application\n");
-                std::fclose(dbg);
-            }
-        }
 
         set_nonblocking();
-#if defined(_WIN32)
-        // Windows: flush READY before arming the loop poll. libuv's
-        // fast-poll submits an AFD poll registration whose completion
-        // races a second send on the same socket (ERROR_ALREADY_EXISTS);
-        // sending everything up front keeps the startup flush inside the
-        // registration-free window and makes the ordering deterministic.
-        static_assert(sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1 == 71,
-                      "compatibility ID must be sha256: plus 64 hex digits");
-        send_payload(capsid::protocol::kReady, 0, sandbox_features,
-                     reinterpret_cast<const std::uint8_t *>(
-                         CAPSID_BUILD_COMPATIBILITY_ID),
-                     sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1);
-        flush_output();
-#endif
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: before uv_poll_init\n");
-                std::fclose(dbg);
-            }
-        }
         if (uv_poll_init(TJS_GetLoop(runtime_), &poll_, fd_) != 0) {
             return 1;
-        }
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: after uv_poll_init\n");
-                std::fclose(dbg);
-            }
         }
         poll_.data = this;
         poll_started_ = true;
@@ -643,27 +516,11 @@ public:
             return 1;
         }
         deadline_timer_started_ = true;
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: before update_poll\n");
-                std::fclose(dbg);
-            }
-        }
         update_poll();
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: after update_poll\n");
-                std::fclose(dbg);
-            }
-        }
-#if !defined(_WIN32)
         // The READY payload is the 71-byte compatibility ID from the single
         // generated identity source, so a host can compare the running
         // worker against the linked library and the bytecode compiler
         // without trusting either side. sandbox features stay in flags.
-        // (On Windows this flush happens before uv_poll_init instead.)
         static_assert(sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1 == 71,
                       "compatibility ID must be sha256: plus 64 hex digits");
         send_payload(capsid::protocol::kReady, 0, sandbox_features,
@@ -671,14 +528,6 @@ public:
                          CAPSID_BUILD_COMPATIBILITY_ID),
                      sizeof(CAPSID_BUILD_COMPATIBILITY_ID) - 1);
         flush_output();
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "run: after ready flush\n");
-                std::fclose(dbg);
-            }
-        }
-#endif
 
         const int run_result = TJS_Run(runtime_);
         // §7.5: a clean exit — not poisoned and with no response state
@@ -2171,12 +2020,6 @@ private:
                     const std::string &capability,
                     const std::string &resource_kind,
                     const std::string &resource) {
-#if defined(_WIN32)
-        // debug: drop startup audits to isolate ERROR_ALREADY_EXISTS
-        if (!poll_started_) {
-            return;
-        }
-#endif
         const uint64_t now = uv_hrtime();
         if (audit_window_started_ns_ == 0 ||
             now - audit_window_started_ns_ >=
@@ -5199,29 +5042,8 @@ private:
         writer_opaque_.diag = diag_enabled_;
         writer_opaque_.frame_types.fill(0);
         if (!outbound_.flush(socket_writer, &writer_opaque_)) {
-            {
-                FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-                if (dbg != NULL) {
-                    std::fprintf(dbg, "flush_output: FAILED errno=%d wsa=%d\n",
-                                 errno,
-#if defined(_WIN32)
-                                 WSAGetLastError());
-#else
-                                 0);
-#endif
-                    std::fclose(dbg);
-                }
-            }
             shutdown();
             return;
-        }
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                std::fprintf(dbg, "flush_output: ok calls=%u\n",
-                             static_cast<unsigned>(writer_opaque_.calls));
-                std::fclose(dbg);
-            }
         }
         if (diag_enabled_ && writer_opaque_.calls > 0) {
             flush_syscall_samples_ += 1;

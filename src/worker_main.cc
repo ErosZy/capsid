@@ -98,14 +98,6 @@ bool redirect_stdio_to_dev_null() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    {
-        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-        if (dbg != NULL) {
-            std::fprintf(dbg, "worker main entered argc=%d\n", argc);
-            std::fclose(dbg);
-        }
-    }
-    std::cerr << "capsid-worker: DEBUG main entered" << std::endl;
     int ipc_fd = -1;
     int network_namespace_fd = -1;
     bool close_stdio = false;
@@ -156,57 +148,6 @@ int main(int argc, char **argv) {
     if (close_stdio && !redirect_stdio_to_dev_null()) {
         return 2;
     }
-    std::cerr << "capsid-worker: DEBUG started fd=" << ipc_fd << std::endl;
-#if defined(_WIN32)
-    {
-        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-        if (dbg != NULL) {
-            const SOCKET before = static_cast<SOCKET>(
-                _get_osfhandle(ipc_fd));
-            int type = 0;
-            int length = sizeof(type);
-            std::fprintf(
-                dbg,
-                "before TJS: handle=%lld so_type=%d type_err=%d\n",
-                static_cast<long long>(before),
-                getsockopt(before, SOL_SOCKET, SO_TYPE,
-                           reinterpret_cast<char *>(&type), &length) == 0
-                    ? type
-                    : -1,
-                WSAGetLastError());
-            std::fclose(dbg);
-        }
-    }
-#endif
     TJS_Initialize(argc, argv);
-#if defined(_WIN32)
-    {
-        FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-        if (dbg != NULL) {
-            const SOCKET after = static_cast<SOCKET>(
-                _get_osfhandle(ipc_fd));
-            int type = 0;
-            int length = sizeof(type);
-            std::fprintf(
-                dbg,
-                "after TJS: handle=%lld so_type=%d type_err=%d\n",
-                static_cast<long long>(after),
-                getsockopt(after, SOL_SOCKET, SO_TYPE,
-                           reinterpret_cast<char *>(&type), &length) == 0
-                    ? type
-                    : -1,
-                WSAGetLastError());
-            for (int probe_fd = 0; probe_fd <= 5; ++probe_fd) {
-                std::fprintf(dbg, "after TJS: fd=%d handle=%lld\n",
-                             probe_fd,
-                             static_cast<long long>(
-                                 _get_osfhandle(probe_fd)));
-            }
-            std::fprintf(dbg, "after TJS: stdout_fileno=%d stderr_fileno=%d\n",
-                         _fileno(stdout), _fileno(stderr));
-            std::fclose(dbg);
-        }
-    }
-#endif
     return capsid_run_worker(ipc_fd, network_namespace_fd);
 }

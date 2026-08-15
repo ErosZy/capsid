@@ -1525,32 +1525,6 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
             static_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
         sockets[1] = _open_osfhandle(
             static_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
-        {
-            FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-            if (dbg != NULL) {
-                DWORD flags = 0;
-                GetHandleInformation(reinterpret_cast<HANDLE>(child),
-                                     &flags);
-                int so_type = 0;
-                int type_length = sizeof(so_type);
-                std::fprintf(
-                    dbg,
-                    "client: pid=%d child_handle=%lld inherit_flags=%lu "
-                    "parent_so_type=%d parent_type_err=%d\n",
-                    capsid::win32::getpid(),
-                    static_cast<long long>(
-                        static_cast<intptr_t>(child)),
-                    static_cast<unsigned long>(flags),
-                    getsockopt(
-                        child, SOL_SOCKET, SO_TYPE,
-                        reinterpret_cast<char *>(&so_type),
-                        &type_length) == 0
-                        ? so_type
-                        : -1,
-                    WSAGetLastError());
-                std::fclose(dbg);
-            }
-        }
         if (sockets[0] < 0 || sockets[1] < 0) {
             if (sockets[0] >= 0) {
                 close(sockets[0]);
@@ -2549,11 +2523,6 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
 #else
                     read(worker->fd, buffer, sizeof(buffer));
 #endif
-                std::fprintf(stderr,
-                             "client read loop: fd=%d read_size=%lld errno=%d\n",
-                             worker->fd,
-                             static_cast<long long>(read_size),
-                             errno);
                 if (read_size > 0) {
                     if (worker->ipc_metrics_enabled) {
                         worker->ipc_metrics.socket_read_bytes.fetch_add(
@@ -2644,28 +2613,9 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                     }
                     return CAPSID_WOULD_BLOCK;
                 }
-                const int captured_errno = errno;
-#if defined(_WIN32)
-                const int captured_wsa = WSAGetLastError();
-#endif
                 worker->closed = true;
                 close(worker->fd);
                 worker->fd = -1;
-                {
-                    FILE *dbg = std::fopen("E:/capsid/build-win/worker-debug.log", "ab");
-                    if (dbg != NULL) {
-                        std::fprintf(dbg, "client next_event: hard read error read_size=%lld errno=%d wsa=%d\n",
-                                     static_cast<long long>(read_size),
-                                     captured_errno,
-#if defined(_WIN32)
-                                     captured_wsa
-#else
-                                     0
-#endif
-                                     );
-                        std::fclose(dbg);
-                    }
-                }
                 return CAPSID_CLOSED;
             }
             parse_result =
