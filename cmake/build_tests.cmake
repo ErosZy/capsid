@@ -858,6 +858,9 @@ if(BUILD_TESTING)
                 PROPERTIES TIMEOUT 10)
         endforeach()
 
+        # The operation registry lives in the managed coordinator, which
+        # is not built on Windows (docs/windows.md); SKIP by absence.
+        if(NOT WIN32)
         add_executable(
             test-host-managed-registry
             tests/test_managed_registry.cc)
@@ -894,6 +897,7 @@ if(BUILD_TESTING)
                 "host_managed_registry_${CAPSID_REGISTRY_TEST_ID}"
                 PROPERTIES TIMEOUT 30)
         endforeach()
+        endif()
 
         # WP-09 §13.6 soak platform: the memory-wave client is a real
         # binary so the CI gates build it and the smoke test proves the
