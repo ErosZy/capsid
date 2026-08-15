@@ -67,7 +67,8 @@ bool learn_class_ids(JSContext *ctx, CloneContext *context) {
         JS_FreeValue(ctx, context->object_proto);
         return false;
     }
-    context->object_proto = JS_DupValue(ctx, context->object_proto);
+    // JS_GetPrototype already returned a new reference; the context owns
+    // exactly one and frees it in neutral_from_js.
 
     JSValue handler = JS_NewObject(ctx);
     JSValue target = JS_NewObject(ctx);
@@ -78,6 +79,8 @@ bool learn_class_ids(JSContext *ctx, CloneContext *context) {
     JSValue proxy =
         JS_CallConstructor(ctx, proxy_ctor, 2, args);
     JS_FreeValue(ctx, proxy_ctor);
+    JS_FreeValue(ctx, target);
+    JS_FreeValue(ctx, handler);
     if (JS_IsException(proxy)) {
         JSValue exception = JS_GetException(ctx);
         JS_FreeValue(ctx, exception);
@@ -161,11 +164,12 @@ bool clone_value(JSContext *ctx,
     if (JS_IsDate(value)) {
         out->kind = NeutralValue::Kind::kDate;
         JSValue ms = JS_GetPropertyStr(ctx, value, "getTime");
-        // Borrowed constructor method; call with the date as this.
         if (JS_IsException(ms) || !JS_IsFunction(ctx, ms)) {
+            JS_FreeValue(ctx, ms);
             return fail_closed(error, "date value is unreadable");
         }
         JSValue result = JS_Call(ctx, ms, value, 0, NULL);
+        JS_FreeValue(ctx, ms);
         if (JS_IsException(result) ||
             JS_ToFloat64(ctx, &out->date_ms, result) != 0) {
             JS_FreeValue(ctx, result);

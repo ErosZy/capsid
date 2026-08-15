@@ -104,6 +104,18 @@ ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
 #endif
 }
 
+// §7.7: restores the binding dispatch window on scope exit so the egress
+// gate always observes a well-defined binding context.
+struct BindingWindowGuard {
+    std::string &slot;
+    const std::string previous;
+    BindingWindowGuard(std::string &slot, const std::string &id)
+        : slot(slot), previous(slot) {
+        slot = id;
+    }
+    ~BindingWindowGuard() { slot = previous; }
+};
+
 typedef capsid::WorkerStartupConfig WorkerConfig;
 
 /*
@@ -1171,6 +1183,17 @@ private:
                 }
                 return -1;
             }
+            // §7.7: the Binding Runtime's egress gate consults the
+            // current binding's policy — never the User policy.
+            if (capsid_tjs_set_egress_policy(
+                    runtime, binding_egress_check, self) != 0) {
+                if (!JS_HasException(ctx)) {
+                    JS_ThrowInternalError(
+                        ctx,
+                        "failed to install Capsid binding egress gate");
+                }
+                return -1;
+            }
             return TJS_EvalBytecode(
                 ctx, capsid__bootstrap, capsid__bootstrap_size, true);
         }
@@ -1248,6 +1271,67 @@ private:
                      resource.c_str());
             break;
         }
+    }
+
+    // §7.7: the Binding Runtime's egress gate. The binding id comes from
+    // the dispatch window (current_binding_id_); no valid binding context
+    // fails closed before any syscall. The check consults only the named
+    // Binding policy — never the User policy.
+    static int binding_egress_check(void *opaque,
+                                    const char *host,
+                                    uint16_t port,
+                                    const struct sockaddr *address,
+                                    socklen_t address_len,
+                                    char *reason,
+                                    size_t reason_size) {
+        WorkerRuntime *self =
+            static_cast<WorkerRuntime *>(opaque);
+        if (reason && reason_size != 0) {
+            reason[0] = '\0';
+        }
+        if (!self || !host || port == 0) {
+            return 0;
+        }
+        const capsid::BindingPolicy *policy =
+            self->binding_policies_.policy(self->current_binding_id_);
+        if (policy == NULL || !policy->has_net_policy) {
+            if (reason && reason_size != 0) {
+                const std::string text =
+                    "egress denied: no binding net policy";
+                std::snprintf(reason, reason_size, "%s", text.c_str());
+            }
+            return 0;
+        }
+        const std::string host_text(host);
+        const capsid::EgressDecision decision =
+            policy->egress.decide_host(host_text, port);
+        if (!decision.allowed) {
+            if (reason && reason_size != 0) {
+                const std::string text =
+                    "egress denied by binding policy: " + host_text +
+                    ":" + std::to_string(port);
+                std::snprintf(reason, reason_size, "%s", text.c_str());
+            }
+            return 0;
+        }
+        // Hostname stage allowed. A resolved address must also be covered
+        // by an explicit address rule when the address is numeric; the
+        // same policy decides both stages.
+        if (address != NULL) {
+            const capsid::EgressDecision address_decision =
+                policy->egress.decide_resolved_address_authoritative(
+                    address, address_len, port);
+            if (!address_decision.allowed) {
+                if (reason && reason_size != 0) {
+                    const std::string text =
+                        "egress denied by binding policy: resolved address";
+                    std::snprintf(reason, reason_size, "%s",
+                                  text.c_str());
+                }
+                return 0;
+            }
+        }
+        return 1;
     }
 
     static int egress_check(void *opaque,
@@ -4677,6 +4761,10 @@ private:
             return;  // dropped before dispatch
         }
         call.dispatched = true;
+        // The dispatch window sets the binding context the egress gate
+        // (and later native gates) read; all return paths restore it.
+        BindingWindowGuard binding_window(current_binding_id_,
+                                          call.binding_id);
         const BindingRuntimeMethodTable &table =
             binding_tables_[call.table_index];
         JSValue method =

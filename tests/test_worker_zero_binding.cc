@@ -570,6 +570,81 @@ void test_binding_end_to_end_call(const char *worker_path,
     finish_worker(fd, pid, true);
 }
 
+// Binding v1 §7.7: a Binding fetch to a target outside its net policy
+// fails closed before any connection — the App sees the egress denial.
+void test_binding_egress_denial(const char *worker_path,
+                                const char *call_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob(
+        "export default ({ config, secrets, log }) => {"
+        "  return { find() {"
+        "    return fetch('http://127.0.0.1:9999/').then((r) => r.text());"
+        "  } };"
+        "};");
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(call_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    for (int i = 0; i < 8; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "no frame arrived before READY");
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+    }
+    require(frame.type == capsid::protocol::kReady,
+            "egress binding worker did not report READY");
+
+    capsid::protocol::Frame head;
+    head.type = capsid::protocol::kRequestHead;
+    head.flags = capsid::protocol::kFlagRequestEnd;
+    head.request_id = 78;
+    append_string16(&head.payload, "GET");
+    append_string32(&head.payload, "https://example.test/");
+    capsid::protocol::append_u16(&head.payload, 0);
+    send_frame(fd, head);
+
+    std::string body;
+    bool ended = false;
+    for (int i = 0; i < 64; ++i) {
+        require(
+            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "egress response frames stopped before the terminal");
+        // The app handler rejection terminates the request as a kError
+        // carrying the egress denial text.
+        if (frame.type == capsid::protocol::kError &&
+            frame.request_id == 78) {
+            body.assign(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+            ended = true;
+            break;
+        }
+        if (frame.type == capsid::protocol::kResponseBody) {
+            body.append(
+                reinterpret_cast<const char *>(frame.payload.data()),
+                frame.payload.size());
+        }
+        if (frame.type == capsid::protocol::kResponseEnd) {
+            ended = true;
+            break;
+        }
+    }
+    require(ended, "egress binding request never terminated");
+    require(body.find("egress") != std::string::npos,
+            "egress binding error does not carry the denial: " + body);
+    finish_worker(fd, pid, true);
+}
+
 void test_load_binding_abi_validation() {
     capsid_worker *worker = NULL;
     require(
@@ -611,6 +686,7 @@ int main(int argc, char **argv) {
     test_binding_ready_proof(argv[1], argv[2]);
     test_binding_factory_failures(argv[1], argv[2]);
     test_binding_end_to_end_call(argv[1], argv[4]);
+    test_binding_egress_denial(argv[1], argv[4]);
     test_load_binding_abi_validation();
     return 0;
 }
