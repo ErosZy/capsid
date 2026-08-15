@@ -1,6 +1,8 @@
 # Patch payload whitespace is semantic and is covered by application/audit
-# tests rather than Git's generic whitespace checker.
-/patches/txiki/*.patch -whitespace
+# tests rather than Git's generic whitespace checker. The stack is also
+# forced to LF: GNU patch treats CR as content, so a CRLF checkout of the
+# patches fails hunks against an LF vendor tree (the GitHub runner state).
+/patches/txiki/*.patch text eol=lf -whitespace
 
 # Retained benchmark CSV files use the csv module's RFC-style CRLF records.
 /bench/results/**/*.csv -whitespace
