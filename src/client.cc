@@ -1759,9 +1759,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         NULL,
         TRUE,
         EXTENDED_STARTUPINFO_PRESENT,
-        environment_block.empty()
-            ? NULL
-            : reinterpret_cast<LPVOID>(&environment_block[0]),
+        NULL,  // DEBUG: env temporarily inherited
         NULL,
         &startup.StartupInfo,
         &process_info);
