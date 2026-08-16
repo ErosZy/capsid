@@ -862,7 +862,7 @@ void test_binding_sync_loop_interrupts(const char *worker_path,
     binding.request_id = 0;
     binding.payload = mongo_binding_blob(
         "export default () => ({"
-        "  spin() { while (true) {} }"
+        "  find() { while (true) {} }"
         "});",
         {}, {}, {"capsid:utils"}, {}, {}, {}, "{}", {});
     send_frame(fd, binding);
@@ -884,8 +884,11 @@ void test_binding_sync_loop_interrupts(const char *worker_path,
     send_bodyless_get(fd, 1, "/");
     bool saw_error = false;
     bool saw_exit = false;
-    for (int index = 0; index < 64; ++index) {
-        const ReadResult read = read_frame(fd, &parser, &frame, 5000);
+    for (int index = 0; index < 8; ++index) {
+        // The interrupt fires at the request deadline (5s); afterwards the
+        // worker must drain its 100ms poison window and close the channel.
+        const ReadResult read = read_frame(
+            fd, &parser, &frame, saw_error ? 3000 : 10000);
         if (read == ReadResult::kEof) {
             saw_exit = true;
             break;
@@ -895,8 +898,10 @@ void test_binding_sync_loop_interrupts(const char *worker_path,
             saw_error = true;
         }
     }
-    require(saw_error || saw_exit,
-            "Binding CPU loop was neither interrupted nor worker-exited");
+    require(saw_error,
+            "Binding CPU loop was not interrupted with a call error");
+    require(saw_exit,
+            "Binding CPU loop settled an error but the worker did not exit");
     finish_worker(fd, pid, saw_error);
 }
 
