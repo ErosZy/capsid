@@ -1068,12 +1068,15 @@ void test_binding_log_envelope_and_redaction(const char *worker_path,
             "Binding log envelope lacks metadata or leaked a secret");
 }
 
-// Binding v1 §3.1/§7.3: packages share one Binding Runtime, but a native
-// handle has an immutable Binding-ID owner. Passing the JS object through the
-// shared global must not let another equally-permitted Binding operate it;
-// the original owner must remain able to reuse and close it afterwards.
-void test_binding_native_handle_owner(const char *worker_path,
-                                      const char *owner_path) {
+// Binding v1 §3.1/§5.1/§7.3: every Binding package runs in its own
+// QuickJS runtime/context. A value stashed on one Binding's globalThis must
+// stay invisible to another equally-permitted Binding — including a native
+// handle, the factory `log` object and a mutated builtin module. The owner
+// Binding must keep its own global and module-cache state untouched and be
+// able to reuse and close its resources afterwards.
+void test_binding_isolation_globals_modules_and_handles(
+    const char *worker_path,
+    const char *owner_path) {
     char file_path[] = "/tmp/capsid-binding-owner-XXXXXX";
     const int fixture = mkstemp(file_path);
     require(fixture >= 0, "could not create Binding owner fixture");
@@ -1100,10 +1103,11 @@ void test_binding_native_handle_owner(const char *worker_path,
         "mongo",
         std::string("import core from 'capsid:internal/core';") +
             "import { Database } from 'capsid:sqlite';" +
+            "import getopts from 'capsid:getopts';" +
             "const wasmBytes = new Uint8Array([" +
             "0,97,115,109,1,0,0,0,1,4,1,96,0,0," +
             "3,2,1,0,7,8,1,4,110,111,111,112,0,0,10,4,1,2,0,11]);" +
-            "let owned; export default () => ({" +
+            "let owned; export default ({ log }) => ({" +
             " async store() {" +
             "  const file = await core.fs.open('" + file_path + "','r');" +
             "  const tcp = new core.TCP();" +
@@ -1121,9 +1125,16 @@ void test_binding_native_handle_owner(const char *worker_path,
             "  const timer = setTimeout(() => {}, 60000);" +
             "  owned = {file,tcp,udp,tls,database,statement,module,instance," +
             "           http,ws,watcher,timer};" +
-            "  globalThis.__capsidOwned = owned; return 'stored';" +
+            "  getopts.__capsidModuleMarker = 'mongo-module';" +
+            "  globalThis.__capsidOwned = owned;" +
+            "  globalThis.__capsidLog = log;" +
+            "  globalThis.__capsidProbe = 'mongo-global';" +
+            "  return 'stored:' + globalThis.__capsidProbe + ':' +" +
+            "    getopts.__capsidModuleMarker;" +
             " }," +
             " async cleanup() {" +
+            "  const probe = globalThis.__capsidProbe;" +
+            "  const moduleMarker = getopts.__capsidModuleMarker;" +
             "  await owned.file.close();" +
             "  owned.tcp.close(); owned.udp.close(); owned.tls.close();" +
             "  owned.statement.all(); owned.statement.finalize();" +
@@ -1133,12 +1144,16 @@ void test_binding_native_handle_owner(const char *worker_path,
             "  owned.ws.close(1000, '');" +
             "  void owned.watcher.path; owned.watcher.close();" +
             "  clearTimeout(owned.timer);" +
-            "  delete globalThis.__capsidOwned; return 'closed';" +
+            "  delete globalThis.__capsidOwned;" +
+            "  delete globalThis.__capsidLog;" +
+            "  delete globalThis.__capsidProbe;" +
+            "  delete getopts.__capsidModuleMarker;" +
+            "  return 'closed:' + probe + ':' + moduleMarker;" +
             " }" +
             "});",
         {file_path},
         {"filesystem-read", "filesystem-watch", "network-client", "sqlite"},
-        {"capsid:internal/core", "capsid:sqlite"},
+        {"capsid:internal/core", "capsid:sqlite", "capsid:getopts"},
         {}, {}, {websocket_target});
     send_frame(fd, mongo);
 
@@ -1149,30 +1164,30 @@ void test_binding_native_handle_owner(const char *worker_path,
     redis.request_id = 0;
     redis.payload = binding_blob(
         "redis",
-        "const message = async operation => {"
-        " try { await operation(); return 'ALLOWED'; }"
-        " catch (error) { return error.message; }"
-        "};"
+        "import getopts from 'capsid:getopts';"
         "export default () => ({ async use() {"
-        " const o = globalThis.__capsidOwned;"
-        " const results = [];"
-        " results.push(await message(() => o.file.stat()));"
-        " results.push(await message(() => o.tcp.close()));"
-        " results.push(await message(() => o.udp.close()));"
-        " results.push(await message(() => o.tls.close()));"
-        " results.push(await message(() => o.database.exec('SELECT 1')));"
-        " results.push(await message(() => o.statement.all()));"
-        " results.push(await message(() => WebAssembly.Module.exports(o.module)));"
-        " results.push(await message(() => o.instance.exports.noop()));"
-        " results.push(await message(() => o.http.timeout));"
-        " results.push(await message(() => o.ws.close(1000, '')));"
-        " results.push(await message(() => o.watcher.path));"
-        " results.push(await message(() => clearTimeout(o.timer)));"
-        " return results.join(',');"
+        " const crossOwned = globalThis.__capsidOwned;"
+        " const crossProbe = globalThis.__capsidProbe;"
+        " const crossLog = globalThis.__capsidLog;"
+        " const crossModuleMarker = getopts.__capsidModuleMarker;"
+        " let logResult;"
+        " try { crossLog.info('cross-binding probe');"
+        "   logResult = 'CALLED'; }"
+        " catch (error) { logResult = error instanceof TypeError"
+        "   ? 'type-error' : 'wrong-error:' + String(error); }"
+        " globalThis.__capsidProbe = 'redis-global';"
+        " getopts.__capsidModuleMarker = 'redis-module';"
+        " return ['isolated',"
+        "   String(crossOwned === undefined),"
+        "   String(crossProbe === undefined),"
+        "   String(crossLog === undefined),"
+        "   String(crossModuleMarker === undefined),"
+        "   logResult"
+        " ].join(':');"
         "} });",
         {file_path},
         {"filesystem-read", "filesystem-watch", "network-client", "sqlite"},
-        {"capsid:internal/core", "capsid:sqlite"},
+        {"capsid:internal/core", "capsid:sqlite", "capsid:getopts"},
         {}, {}, {websocket_target});
     send_frame(fd, redis);
     send_bundle(fd, read_file(owner_path));
@@ -1235,16 +1250,11 @@ void test_binding_native_handle_owner(const char *worker_path,
     require(ended, "owner-test response never ended");
     require(
         body ==
-            "result:stored:"
-            "CAPSID_BINDING_OWNER_MISMATCH,CAPSID_BINDING_OWNER_MISMATCH,"
-            "CAPSID_BINDING_OWNER_MISMATCH,CAPSID_BINDING_OWNER_MISMATCH,"
-            "CAPSID_BINDING_OWNER_MISMATCH,CAPSID_BINDING_OWNER_MISMATCH,"
-            "CAPSID_BINDING_OWNER_MISMATCH,CAPSID_BINDING_OWNER_MISMATCH,"
-            "CAPSID_BINDING_OWNER_MISMATCH,CAPSID_BINDING_OWNER_MISMATCH,"
-            "CAPSID_BINDING_OWNER_MISMATCH,"
-            "CAPSID_BINDING_OWNER_MISMATCH:"
-            "closed",
-        "a native resource crossed Binding ownership: " + body);
+            "result:stored:mongo-global:mongo-module:"
+            "isolated:true:true:true:true:type-error:"
+            "closed:mongo-global:mongo-module",
+        "a Binding value crossed the per-Binding isolation boundary: " +
+            body);
     finish_worker(fd, pid, true);
     finish_websocket_responder(websocket_server, websocket_listener);
 }
@@ -2630,7 +2640,7 @@ int main(int argc, char **argv) {
     test_binding_init_object_contract(argv[1], argv[4]);
     test_binding_method_table_is_frozen(argv[1], argv[4]);
     test_binding_log_envelope_and_redaction(argv[1], argv[4]);
-    test_binding_native_handle_owner(argv[1], argv[5]);
+    test_binding_isolation_globals_modules_and_handles(argv[1], argv[5]);
     test_binding_rpc_lifecycle(argv[1], argv[6]);
     test_binding_sync_loop_interrupts(argv[1], argv[4]);
     test_binding_core_is_client_only(argv[1], argv[4]);

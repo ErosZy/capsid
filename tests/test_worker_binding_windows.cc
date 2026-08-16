@@ -159,13 +159,21 @@ int main(int argc, char **argv) {
     const std::string app_bundle = read_file(argv[2]);
 
     // Host-trusted package source: a trivial factory that proves the
-    // Binding Runtime can evaluate a module and serve a User call.
+    // Binding Runtime can evaluate a module and serve a User call. It also
+    // stamps this Binding's own globalThis and the `capsid:getopts` module
+    // instance, so the smoke covers per-Binding global/module ownership
+    // bookkeeping on Windows.
     const std::string binding_source =
+        "import getopts from 'capsid:getopts';"
         "export default function createBinding({ config, secrets, log }) {"
+        "  getopts.__capsidWindowsMarker = 'windows-module-mark';"
+        "  globalThis.__capsidWindowsProbe = 'windows-global';"
         "  return {"
         "    async find(input) {"
         "      return 'binding:' + JSON.stringify(input) + ':' +"
-        "             (config && config.mode ? config.mode : 'default');"
+        "             (config && config.mode ? config.mode : 'default') + ':' +"
+        "             globalThis.__capsidWindowsProbe + ':' +"
+        "             getopts.__capsidWindowsMarker;"
         "    }"
         "  };"
         "}";
@@ -178,10 +186,10 @@ int main(int argc, char **argv) {
     require_result(capsid_worker_spawn(&config, &worker), "spawn worker");
     require(worker != NULL, "spawn returned a null worker");
 
-    const char *modules[] = { "capsid:utils" };
+    const char *modules[] = { "capsid:utils", "capsid:getopts" };
     capsid_binding_policy policy = {};
     policy.modules = modules;
-    policy.module_count = 1;
+    policy.module_count = 2;
     policy.net_rules = NULL;
     policy.net_rule_count = 0;
     policy.fs_read = NULL;
@@ -228,7 +236,8 @@ int main(int argc, char **argv) {
     std::string body;
     run_binding_request(worker, &body);
     require(body.find("result:binding:{\"collection\":\"users\"}:"
-                      "windows-smoke") != std::string::npos,
+                      "windows-smoke:windows-global:windows-module-mark") !=
+                std::string::npos,
             "Binding facade response did not carry the Binding result: " +
                 body);
 

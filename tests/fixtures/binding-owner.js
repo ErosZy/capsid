@@ -1,6 +1,7 @@
-// Cross-Binding native-handle ownership probe. Both packages share the same
-// Binding Runtime global, so JavaScript can pass an object through globalThis;
-// the native owner tag must still reject use by the wrong Binding ID.
+// Cross-Binding isolation probe. Each Binding package owns a separate
+// QuickJS runtime/context, so values stashed by mongo on its globalThis
+// (native handles, the factory log object, global/module-cache markers)
+// must be invisible to redis; mongo must still see its own state untouched.
 import mongo from 'capsid:binding/mongo';
 import redis from 'capsid:binding/redis';
 
