@@ -198,7 +198,7 @@ HELLO。deny rule 优先；越权键、重复键、通配符键名、空指针�
 ```js
 import { system } from "capsid:system";
 
-system.get("runtimeVersion"); // "0.1.2"
+system.get("runtimeVersion"); // "0.1.3"
 system.get("featureFlags");   // 冻结的编译期能力对象
 ```
 
