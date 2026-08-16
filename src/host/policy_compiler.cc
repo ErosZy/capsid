@@ -457,6 +457,18 @@ PolicyCompileResult compile_policy(
         result.error = "process memory ceiling below the JS heap limit";
         return result;
     }
+#if defined(__APPLE__)
+    // Darwin refuses the address-space limit by design (sandbox.cc's
+    // __APPLE__ branch; the worker also rejects a nonzero
+    // process_memory_limit at spawn). Reject the document at compile
+    // time so a deployment with processAddressSpace fails closed here
+    // instead of activating and then dying on its first worker spawn.
+    if (result.effective.process_address_bytes > 0) {
+        result.error = "process memory limit is unsupported on macOS; "
+                       "remove processAddressSpace or set it to 0";
+        return result;
+    }
+#endif
     // Canonical fetch ordering.
     std::sort(result.effective.fetch.begin(), result.effective.fetch.end(),
               [](const FetchTarget& a, const FetchTarget& b) {
