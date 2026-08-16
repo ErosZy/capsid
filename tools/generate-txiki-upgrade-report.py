@@ -227,7 +227,7 @@ def source_configuration(
     expected = {
         "BUILD_TJS_RESTRICTED_CORE": "ON",
         "BUILD_WITH_FFI": "OFF",
-        "BUILD_WITH_SQLITE": "OFF",
+        "BUILD_WITH_SQLITE": "ON",
         "CAPSID_ENABLE_LTO": "ON",
         "CAPSID_USE_MIMALLOC": "OFF",
     }
