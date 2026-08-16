@@ -181,12 +181,18 @@ Collector drive(capsid_worker *worker,
         // request can drain its remaining body without another stall.
         for (auto &entry : collector.pending_grant_bytes) {
             if (entry.second > 0) {
-                require_result(
+                const capsid_result result =
                     capsid_worker_grant_response_credit(
                         worker, entry.first,
-                        static_cast<uint32_t>(entry.second) + 65536u),
-                    "grant deferred credit");
+                        static_cast<uint32_t>(entry.second) + 65536u);
                 entry.second = 0;
+                // A request can reach its terminal between the deferred
+                // trigger and this release; the client has already dropped
+                // its credit state, so a stale grant is a benign race.
+                if (result == CAPSID_INVALID_ARGUMENT) {
+                    continue;
+                }
+                require_result(result, "grant deferred credit");
             }
         }
     };
@@ -232,6 +238,7 @@ Collector drive(capsid_worker *worker,
                     collector.outcomes[event.request_id].ended = true;
                     collector.terminal_counts[event.request_id] += 1;
                     collector.completion_order.push_back(event.request_id);
+                    collector.pending_grant_bytes[event.request_id] = 0;
                     pending_ids.erase(event.request_id);
                     break;
                 case CAPSID_EVENT_ERROR:
@@ -240,6 +247,7 @@ Collector drive(capsid_worker *worker,
                     collector.outcomes[event.request_id].errored = true;
                     collector.terminal_counts[event.request_id] += 1;
                     collector.completion_order.push_back(event.request_id);
+                    collector.pending_grant_bytes[event.request_id] = 0;
                     pending_ids.erase(event.request_id);
                     break;
                 case CAPSID_EVENT_EXIT:
