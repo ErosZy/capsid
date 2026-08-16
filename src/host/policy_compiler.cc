@@ -896,17 +896,28 @@ bool build_runtime_policy(
 
     out->env_values = env_values;
     out->env_entries.clear();
-    out->env_entries.reserve(env_values.size());
-    for (const std::pair<std::string, std::string>& entry : env_values) {
+    out->env_entries.reserve(out->env_values.size());
+    // Entry pointers reference the policy's own copy, not the caller's
+    // vector: on the local-capsid.json path the caller's env_values dies
+    // when load_local_capsid_policy returns, long before the spawn.
+    for (const std::pair<std::string, std::string>& entry : out->env_values) {
         capsid_env_entry env_entry;
         capsid_env_entry_init(&env_entry);
         env_entry.name = entry.first.c_str();
         env_entry.value = entry.second.c_str();
         out->env_entries.push_back(env_entry);
     }
+    // The capability table wants const char* pointers, which must point
+    // into this policy's own storage; module_names is stable here (the
+    // two-phase build never touches it after this point).
+    out->module_pointers.clear();
+    out->module_pointers.reserve(out->module_names.size());
+    for (const std::string& module : out->module_names) {
+        out->module_pointers.push_back(module.c_str());
+    }
     capsid_capability_policy_init(&out->capability);
     out->capability.allowed_modules =
-        out->module_names.empty() ? nullptr : out->module_names.data();
+        out->module_pointers.empty() ? nullptr : out->module_pointers.data();
     out->capability.allowed_module_count =
         static_cast<std::uint32_t>(out->module_names.size());
     out->capability.rules =

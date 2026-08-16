@@ -199,6 +199,11 @@ PolicyCompileResult compile_policy(
 // local-capsid.json data planes (single-worker / static-pool).
 struct RuntimePolicy {
     std::vector<std::string> module_names;
+    // Pointer table into module_names for the capability descriptor
+    // (const char* const*). Owned here, not on the builder's stack: the
+    // policy outlives the builder's caller on the local-capsid.json path,
+    // so no descriptor pointer may reference a caller-owned vector.
+    std::vector<const char*> module_pointers;
     // Parallel owned storage for every rule resource (env names, fs paths,
     // storage namespaces, stdio streams), in the same order as rules_.
     std::vector<std::string> rule_resources;

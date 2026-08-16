@@ -45,7 +45,12 @@ ReadOutcome read_local_config_file(const std::string& path,
         *error = "cannot stat " + path;
         return ReadOutcome::kFailed;
     }
-    if (!S_ISREG(before.st_mode)) {
+#if defined(_WIN32)
+    const bool regular = (before.st_mode & _S_IFREG) != 0;
+#else
+    const bool regular = S_ISREG(before.st_mode);
+#endif
+    if (!regular) {
         *error = path + " is not a regular file";
         return ReadOutcome::kFailed;
     }
@@ -113,15 +118,19 @@ bool load_local_capsid_policy(const std::string& path,
                               std::string* error) {
     std::vector<std::uint8_t> bytes;
     const ReadOutcome outcome = read_local_config_file(path, &bytes, error);
-    if (outcome != ReadOutcome::kOk) {
+    if (outcome == ReadOutcome::kMissing) {
         // A missing default file is the pre-v0.1.3 no-policy case; a
-        // missing explicit --capsid-json is an operator error. Any other
-        // read failure fails closed either way.
-        if (outcome == ReadOutcome::kMissing && !required) {
+        // missing explicit --capsid-json is an operator error.
+        if (!required) {
             out->present = false;
             out->policy = RuntimePolicy();
             return true;
         }
+        *error = "cannot find " + path;
+        return false;
+    }
+    if (outcome != ReadOutcome::kOk) {
+        // The reader already set *error for every other failure.
         return false;
     }
 
