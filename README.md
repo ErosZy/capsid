@@ -2,7 +2,7 @@
 
 [![Testing validity](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml/badge.svg)](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml)
 [![Release](https://img.shields.io/github/v/release/ErosZy/capsid?label=release)](https://github.com/ErosZy/capsid/releases)
-[![License: FSL-1.1-Apache-2.0](https://img.shields.io/badge/license-FSL--1.1--Apache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 进程隔离的 JavaScript 运行时：宿主通过 `libcapsid_runtime` 管理
 `capsid-worker` 进程，每个 worker 只加载一个自包含 ESM，并通过流式 FetchRPC
@@ -246,9 +246,4 @@ ctest --test-dir build-release --output-on-failure \
 
 ## License
 
-- Core（`src/`、构建与工具）：[FSL-1.1-Apache-2.0](LICENSE)，两年后转 Apache-2.0
-- SDK/文档/示例（`include/`、`docs/`、`examples/`）：[Apache-2.0](LICENSES/Apache-2.0.txt)
-- 历史版本 v0.1.0–v0.1.3：MIT（原 tag 保持有效）
-- Capsid 名称/logo 使用规则见 [TRADEMARK.md](TRADEMARK.md)
-
-详细边界见 [docs/licensing.md](docs/licensing.md)。
+[Apache-2.0](LICENSE) © Capsid contributors

@@ -11,9 +11,7 @@
 #                                             vendored dependency packages
 #                                             pinned by overlay commit, and
 #                                             every shipped file with its
-#                                             SHA-256 and licenseConcluded
-#                                             (FSL-1.1-Apache-2.0 core,
-#                                             Apache-2.0 headers/docs)
+#                                             SHA-256
 #
 # The two output files exclude themselves (and each other) from the walk.
 # 'created' in the SBOM is the capsid commit date, which is deterministic
@@ -120,12 +118,8 @@ string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
     "name" "\"capsid\"")
 string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
     "versionInfo" "\"${CAPSID_SBOM_VERSION}\"")
-# The capsid package is mixed-license by design: the runtime core is
-# FSL-1.1-Apache-2.0 (Functional Source License with the Apache-2.0
-# conversion), while the public headers, docs and examples are Apache-2.0.
-# The file-level licenseConcluded below maps each shipped file accordingly.
 string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
-    "licenseConcluded" "\"FSL-1.1-Apache-2.0 AND Apache-2.0\"")
+    "licenseConcluded" "\"Apache-2.0\"")
 string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
     "downloadLocation" "\"NOASSERTION\"")
 string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
@@ -203,21 +197,13 @@ foreach(CAPSID_GPA_ENTRY IN LISTS CAPSID_GPA_ENTRIES)
     list(GET CAPSID_GPA_PARTS 0 CAPSID_GPA_REL)
     list(GET CAPSID_GPA_PARTS 1 CAPSID_GPA_SIZE)
     list(GET CAPSID_GPA_PARTS 2 CAPSID_GPA_SHA)
-    # Per-file licensing: public headers (include/) and the installed
-    # documentation (share/doc/capsid/) are Apache-2.0; everything else is
-    # the FSL-1.1-Apache-2.0 runtime core.
-    if(CAPSID_GPA_REL MATCHES "^(include/|share/doc/capsid/)")
-        set(CAPSID_GPA_FILE_LICENSE "Apache-2.0")
-    else()
-        set(CAPSID_GPA_FILE_LICENSE "FSL-1.1-Apache-2.0")
-    endif()
     set(CAPSID_GPA_FILE_ID "SPDXRef-File-${CAPSID_GPA_INDEX}")
     string(JSON CAPSID_GPA_FILE_OBJ SET "{}"
         "SPDXID" "\"${CAPSID_GPA_FILE_ID}\"")
     string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
         "fileName" "\"/${CAPSID_GPA_REL}\"")
     string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
-        "licenseConcluded" "\"${CAPSID_GPA_FILE_LICENSE}\"")
+        "licenseConcluded" "\"Apache-2.0\"")
     string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
         "copyrightText" "\"NOASSERTION\"")
     string(JSON CAPSID_GPA_CHECKSUM SET "{}"

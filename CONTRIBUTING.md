@@ -82,14 +82,6 @@ README 只维护定位、最短上手路径、安全警告和稳定入口。字�
 node tests/audit-current-docs.mjs .
 ```
 
-## 签名与贡献者协议
-
-- 每次提交必须包含 `Signed-off-by: Name <email>`（DCO），表示你有权提交该
-  变更；
-- 核心源码采用 FSL，贡献者保留版权并授予项目再许可/商业授权权限；模板见
-  [个人 CLA](docs/legal/CLA-individual.md) 与[企业 CLA](docs/legal/CLA-corporate.md)；
-- 许可证边界见 [docs/licensing.md](docs/licensing.md)。
-
 ## Pull Request 检查清单
 
 - [ ] 变更范围单一，提交信息说明了“为什么”。
