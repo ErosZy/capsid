@@ -103,6 +103,13 @@ if(BUILD_TESTING)
                 test-host-binding-registry
                 tests/test_host_binding_registry.cc)
             add_test(NAME host_binding_registry COMMAND test-host-binding-registry)
+        else()
+            capsid_add_binding_test(
+                test-host-binding-registry-win
+                tests/test_host_binding_registry_win.cc)
+            add_test(
+                NAME host_binding_registry_win
+                COMMAND test-host-binding-registry-win)
         endif()
 
         capsid_add_binding_test(
@@ -4758,6 +4765,33 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 60
         )
         endif()  # UNIX — zero-binding regression uses POSIX spawn/socket
+
+        if(WIN32)
+            add_executable(
+                test-worker-binding-windows
+                tests/test_worker_binding_windows.cc
+            )
+            target_include_directories(
+                test-worker-binding-windows
+                PRIVATE include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-worker-binding-windows
+                PRIVATE capsid_runtime capsid_sanitizers)
+            add_dependencies(
+                test-worker-binding-windows
+                capsid-worker
+                test-binding-call-fixture)
+            add_test(
+                NAME worker_binding_windows_smoke
+                COMMAND test-worker-binding-windows
+                    $<TARGET_FILE:capsid-worker>
+                    "${CAPSID_BINDING_CALL_FIXTURE}"
+            )
+            set_tests_properties(
+                worker_binding_windows_smoke
+                PROPERTIES TIMEOUT 30
+            )
+        endif()
 
         add_executable(test-fetch-cancel tests/test_fetch_cancel.cc)
         target_link_libraries(
