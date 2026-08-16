@@ -726,4 +726,203 @@ PolicyCompileResult compile_policy(
     return result;
 }
 
+void RuntimePolicy::apply(capsid_worker_config* config) const {
+    config->capability_policy = &capability;
+    // A null egress policy keeps the Runtime's deny-all default for empty
+    // fetch sets; an empty-but-present policy must never be confused with
+    // "no policy" (see the managed builder's net_policy note).
+    config->egress_policy = has_egress ? &egress : nullptr;
+}
+
+bool build_runtime_policy(
+    const EffectiveConfig& effective,
+    const std::vector<std::pair<std::string, std::string>>& env_values,
+    RuntimePolicy* out,
+    std::string* error) {
+    // Two-phase descriptor build: every owning vector is fully populated
+    // before any pointer into it is taken. A c_str() taken after one
+    // push_back and read after a later push_back dangles when the vector
+    // reallocates (the double-env RED test caught exactly this
+    // heap-use-after-free under ASan).
+    out->module_names.clear();
+    out->module_names.reserve(effective.modules.size());
+    for (const std::string& module : effective.modules) {
+        out->module_names.push_back(module);
+    }
+    out->rule_resources.clear();
+    out->rule_resources.reserve(effective.env.size() +
+                                effective.fs_read.size() +
+                                effective.storage_namespaces.size() +
+                                effective.stdio_streams.size());
+    for (const EffectiveEnvEntry& entry : effective.env) {
+        out->rule_resources.push_back(entry.name);
+    }
+    for (const std::string& path : effective.fs_read) {
+        out->rule_resources.push_back(path);
+    }
+    for (const std::string& namespace_name : effective.storage_namespaces) {
+        out->rule_resources.push_back(namespace_name);
+    }
+    for (const std::string& stream : effective.stdio_streams) {
+        out->rule_resources.push_back(stream);
+    }
+    out->rules.clear();
+    out->rules.reserve(out->rule_resources.size());
+    std::size_t resource_index = 0;
+    for (const EffectiveEnvEntry& entry : effective.env) {
+        // The policy compiler assigns a stable non-zero rule id per entry;
+        // the Runtime rejects a zero or duplicate id across the policy.
+        if (entry.rule_id == 0) {
+            *error = "missing env rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_ENV;
+        rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = entry.rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    for (std::size_t index = 0; index < effective.fs_read.size(); ++index) {
+        const std::uint32_t rule_id =
+            index < effective.fs_rule_ids.size()
+                ? effective.fs_rule_ids[index]
+                : 0;
+        if (rule_id == 0) {
+            *error = "missing fs rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_READ;
+        rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    // Storage namespaces and stdio streams are exact-match resources: the
+    // Runtime module gates on CAPSID_PERMISSION_STORAGE/STDIO with the
+    // verbatim namespace/stream name. Each rule carries the compiler's
+    // stable unique id, exactly like env/fs/fetch.
+    for (std::size_t index = 0; index < effective.storage_namespaces.size();
+         ++index) {
+        const std::uint32_t rule_id =
+            index < effective.storage_rule_ids.size()
+                ? effective.storage_rule_ids[index]
+                : 0;
+        if (rule_id == 0) {
+            *error = "missing storage rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_STORAGE;
+        rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    for (std::size_t index = 0; index < effective.stdio_streams.size();
+         ++index) {
+        const std::uint32_t rule_id =
+            index < effective.stdio_rule_ids.size()
+                ? effective.stdio_rule_ids[index]
+                : 0;
+        if (rule_id == 0) {
+            *error = "missing stdio rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_STDIO;
+        rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    // Fetch is NOT a CAPSID_PERMISSION_NET rule: the Runtime rejects
+    // resource-carrying NET rules and requires the network policy to live
+    // in the egress policy (config.egress_policy). Targets and rules are
+    // again populated in two phases. Explicit rule ids are left zero so
+    // the ABI assigns index + 1: a host, expanded to several port rules,
+    // must not repeat one explicit id (the Runtime rejects duplicates).
+    out->egress_targets.clear();
+    out->egress_rules.clear();
+    out->has_egress = !effective.fetch.empty();
+    std::size_t egress_rule_count = 0;
+    for (const FetchTarget& target : effective.fetch) {
+        egress_rule_count += target.ports.empty() ? 1 : target.ports.size();
+    }
+    out->egress_targets.reserve(effective.fetch.size());
+    out->egress_rules.reserve(egress_rule_count);
+    for (const FetchTarget& target : effective.fetch) {
+        out->egress_targets.push_back(target.host);
+    }
+    for (std::size_t index = 0; index < effective.fetch.size(); ++index) {
+        const FetchTarget& target = effective.fetch[index];
+        if (target.ports.empty()) {
+            capsid_egress_rule rule;
+            capsid_egress_rule_init(&rule);
+            rule.action = CAPSID_EGRESS_ALLOW;
+            rule.target = out->egress_targets[index].c_str();
+            rule.port_start = 0;  // any port
+            rule.port_end = 0;
+            rule.rule_id = 0;
+            out->egress_rules.push_back(rule);
+        } else {
+            for (const std::uint16_t port : target.ports) {
+                capsid_egress_rule rule;
+                capsid_egress_rule_init(&rule);
+                rule.action = CAPSID_EGRESS_ALLOW;
+                rule.target = out->egress_targets[index].c_str();
+                rule.port_start = port;
+                rule.port_end = port;
+                rule.rule_id = 0;
+                out->egress_rules.push_back(rule);
+            }
+        }
+    }
+    capsid_egress_policy_init(&out->egress);
+    out->egress.default_action = CAPSID_EGRESS_DENY;
+    out->egress.rules =
+        out->egress_rules.empty() ? nullptr : out->egress_rules.data();
+    out->egress.rule_count =
+        static_cast<std::uint32_t>(out->egress_rules.size());
+
+    out->env_values = env_values;
+    out->env_entries.clear();
+    out->env_entries.reserve(env_values.size());
+    for (const std::pair<std::string, std::string>& entry : env_values) {
+        capsid_env_entry env_entry;
+        capsid_env_entry_init(&env_entry);
+        env_entry.name = entry.first.c_str();
+        env_entry.value = entry.second.c_str();
+        out->env_entries.push_back(env_entry);
+    }
+    capsid_capability_policy_init(&out->capability);
+    out->capability.allowed_modules =
+        out->module_names.empty() ? nullptr : out->module_names.data();
+    out->capability.allowed_module_count =
+        static_cast<std::uint32_t>(out->module_names.size());
+    out->capability.rules =
+        out->rules.empty() ? nullptr : out->rules.data();
+    out->capability.rule_count =
+        static_cast<std::uint32_t>(out->rules.size());
+    out->capability.env_entries =
+        out->env_entries.empty() ? nullptr : out->env_entries.data();
+    out->capability.env_entry_count =
+        static_cast<std::uint32_t>(out->env_entries.size());
+    // Without this the worker's egress check consults a default-constructed
+    // (deny-all) net policy whenever a capability policy is present — which
+    // is always the case in managed mode — so every fetch was rejected.
+    // nullptr keeps the deny-all fail-closed default for empty fetch sets.
+    out->capability.net_policy = out->has_egress ? &out->egress : nullptr;
+    return true;
+}
+
 }  // namespace capsid::host

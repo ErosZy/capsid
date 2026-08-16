@@ -77,6 +77,12 @@ struct SingleWorkerServerOptions {
     // (design §12). Null disables event logging/metrics on this path.
     StructuredLog* log = nullptr;
     MetricsRegistry* metrics = nullptr;
+    // v0.1.3 local capsid.json permissions (--capsid-json). Defaults to
+    // ./capsid.json; a missing default file is a no-op (the deny-all
+    // defaults stay), while capsid_json_required=true (an explicit
+    // --capsid-json) fails startup when the file is missing.
+    std::string capsid_json_path = "capsid.json";
+    bool capsid_json_required = false;
 };
 
 // M1A single-worker Host data plane: one Boost.Asio io_context owner, one

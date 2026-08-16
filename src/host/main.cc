@@ -1272,6 +1272,16 @@ int main(int argc, char** argv) {
         options.write_timeout_ms = parse_nonnegative_integer(
             *write_timeout_text, "write-timeout");
     }
+    // v0.1.3 local capsid.json permissions. The default ./capsid.json is
+    // tried whenever it exists; an explicit --capsid-json must exist (the
+    // missing-file failure happens inside the server start, not here, so
+    // the default no-policy case and the explicit error case share one
+    // code path).
+    const std::string* capsid_json_text = optional_value("capsid-json");
+    if (capsid_json_text != nullptr) {
+        options.capsid_json_path = *capsid_json_text;
+        options.capsid_json_required = true;
+    }
 
     const std::vector<std::uint8_t> bundle =
         read_bundle(options.source_bundle_path);

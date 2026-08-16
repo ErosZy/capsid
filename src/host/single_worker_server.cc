@@ -21,6 +21,8 @@
 
 #include "host/single_worker_server.h"
 
+#include "host/local_capsid_policy.h"
+
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/http.hpp>
@@ -872,6 +874,24 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         }
         return false;
     }
+    // ---- 0. local capsid.json permissions (v0.1.3, --capsid-json) ----
+    // Loaded once at start, before any spawn: a missing explicit file, a
+    // schema violation or a not-applicable section fails startup here
+    // instead of silently dropping permissions. The policy descriptors live
+    // on this frame and outlive every spawn the factory makes inside
+    // executor_->start(); absent a capsid.json (default path), the worker
+    // keeps the deny-all defaults below.
+    LocalCapsidPolicy local_policy;
+    std::string policy_error;
+    if (!load_local_capsid_policy(options_.capsid_json_path,
+                                  options_.capsid_json_required,
+                                  &local_policy, &policy_error)) {
+        if (error != nullptr) {
+            *error = policy_error;
+        }
+        return false;
+    }
+
     // ---- 1. spawn / load / flush (the same two-phase prepare as the
     // legacy run path), now inside the executor's factory. The factory
     // recycles what it created on failure; from the executor's start()
@@ -888,8 +908,11 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     // share the same ceiling.
     config.max_inflight_requests =
         static_cast<std::uint32_t>(max_inflight_);
-    // egress_policy and capability_policy stay NULL: every outbound Fetch
-    // is denied by the Runtime default.
+    // Local capsid.json permissions (v0.1.3): wire the compiled policy in
+    // place of the deny-all defaults.
+    if (local_policy.present) {
+        local_policy.policy.apply(&config);
+    }
 
     // Diagnostic IPC metrics: CAPSID_HOST_IPC_METRICS=1 enables counters
     // with zero overhead in headline runs (branch is off by default).
