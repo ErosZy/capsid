@@ -12,6 +12,9 @@ Capsid 文档按“选型 → 集成 → 配置 → 验证”组织。首次接�
 - 平台差异与选型：[platform-support.md](platform-support.md)；
   Linux 隔离：[linux-sandbox.md](linux-sandbox.md)；
   Windows 构建：[windows.md](windows.md)
+- 许可证与商业边界：[licensing.md](licensing.md)；
+  商标：[../TRADEMARK.md](../TRADEMARK.md)；
+  认证：[certification.md](certification.md)
 
 **宿主集成与部署**
 
