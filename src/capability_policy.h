@@ -135,8 +135,9 @@ bool handle_owner_matches(const NativeHandleOwner &owner,
                           const RuntimeOrigin &caller);
 
 // The §3.3 grantable-module set for the Binding Runtime, restricted to
-// what this TJS build dispatches (the builtins table plus
-// tjs:internal/core). Shared by the wire decoder and the policy set.
+// what this TJS build dispatches behind public capsid:* aliases. Shared by
+// the wire decoder and the policy set; tjs:* remains an implementation
+// detail and is never a Binding package contract.
 bool binding_module_known(const std::string &name);
 
 // The §4.1 fixed sandbox profile names. Unknown names fail closed at the
@@ -155,7 +156,7 @@ std::string compute_binding_profile_digest(
 // forbidden set); the User facade modules are never granted here.
 struct BindingPolicy {
     std::string binding_id;
-    std::vector<std::string> modules;   // granted tjs modules
+    std::vector<std::string> modules;   // granted capsid modules
     std::vector<std::string> profiles;  // sandbox requires
     std::vector<std::string> env;       // readable env names
     std::vector<std::string> stdio;     // granted streams

@@ -923,7 +923,7 @@ int main(int argc, char** argv) {
                 "cannot create bindingsRoot fixture");
         write_file(
             bindings_root + "/mongo/manifest.json",
-            R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["tjs:internal/core"],"net":{"allow":["127.0.0.1:27017"]},"env":[],"stdio":[]}})json");
+            R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["capsid:internal/core"],"net":{"allow":["127.0.0.1:27017"]},"env":[],"stdio":[]}})json");
         write_file(
             bindings_root + "/mongo/index.js",
             "export default ({ config, secrets, log }) => {"
@@ -1830,15 +1830,28 @@ int main(int argc, char** argv) {
         wait_active(fixture, invoices_operation);
         require_active_app(fixture, "invoices");
         // The orders replacement still arrives: the fair queue slows a
-        // crash-looping App but never starves it.
+        // crash-looping App but never starves it. Require the pair to
+        // hold across several polls: a replacement that appears and dies
+        // instantly is still starvation, and trusting one instant lets
+        // the assertion's re-read race the worker's exit. On failure the
+        // Host's own stderr (spawn errors, backoff, quarantine) ships in
+        // the diagnostic.
         const auto deadline = std::chrono::steady_clock::now() +
                               std::chrono::seconds(10 * kTestWaitScale);
-        while (live_worker_children().size() < 2 &&
-               std::chrono::steady_clock::now() < deadline) {
+        int stable = 0;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (live_worker_children().size() >= 2) {
+                if (++stable >= 5) {
+                    break;
+                }
+            } else {
+                stable = 0;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        require(live_worker_children().size() == 2,
-                "orders replacement starved behind the invoices deploy");
+        require(stable >= 5,
+                "orders replacement starved or unstable behind the invoices "
+                "deploy: " + fixture.diagnostics());
         stop_host(fixture);
         std::cout << "PASS" << std::endl;
         return 0;

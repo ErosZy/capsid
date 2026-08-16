@@ -7,11 +7,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <poll.h>
 #include <string>
 #include <sys/types.h>
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -158,8 +161,8 @@ capsid_build_info read_library_build_info() {
             "provenance_dirty is not a boolean");
     const bool commit_known = is_lower_hex(info.capsid_commit, 40);
     const bool release_grade = std::strcmp(info.cmake_build_type, "Release") == 0 &&
-                               info.capsid_tree_clean == 1 && commit_known;
-    require(info.provenance_dirty == (release_grade ? 0 : 1),
+                               info.capsid_tree_clean == 1u && commit_known;
+    require(info.provenance_dirty == (release_grade ? 0u : 1u),
             "provenance_dirty disagrees with build type/commit/tree state");
     require(info.compiler_id != nullptr && info.compiler_id[0] != 0 &&
                 info.compiler_version != nullptr &&
@@ -187,6 +190,61 @@ capsid_build_info read_library_build_info() {
 }
 
 std::string read_child_stdout(const char* executable, const char* argument) {
+#if defined(_WIN32)
+    // Spawn the probe directly (no shell): cmd /c quote-stripping corrupts
+    // quoted tokens, and CreateProcess gives exact argument passing plus a
+    // stdout pipe.
+    HANDLE read_pipe = NULL;
+    HANDLE write_pipe = NULL;
+    SECURITY_ATTRIBUTES attributes = {};
+    attributes.nLength = sizeof(attributes);
+    attributes.bInheritHandle = TRUE;
+    require(CreatePipe(&read_pipe, &write_pipe, &attributes, 0),
+            "could not create compiler output pipe");
+    require(SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0),
+            "could not clear compiler output pipe inheritance");
+    std::string command = std::string("\"") + executable + "\" \"" +
+                          argument + "\"";
+    STARTUPINFOA startup;
+    std::memset(&startup, 0, sizeof(startup));
+    startup.cb = sizeof(startup);
+    startup.hStdOutput = write_pipe;
+    startup.hStdError = write_pipe;
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    PROCESS_INFORMATION process;
+    std::memset(&process, 0, sizeof(process));
+    require(CreateProcessA(NULL, &command[0], NULL, NULL, TRUE, 0, NULL,
+                           NULL, &startup, &process),
+            "could not spawn compiler identity probe");
+    CloseHandle(write_pipe);
+    CloseHandle(process.hThread);
+    std::string output;
+    char buffer[256];
+    for (;;) {
+        DWORD count = 0;
+        require(ReadFile(read_pipe, buffer, sizeof(buffer), &count, NULL) ||
+                    GetLastError() == ERROR_BROKEN_PIPE,
+                "could not read compiler identity output");
+        if (count > 0) {
+            output.append(buffer, count);
+            continue;
+        }
+        break;
+    }
+    CloseHandle(read_pipe);
+    require(WaitForSingleObject(process.hProcess, INFINITE) == WAIT_OBJECT_0,
+            "could not wait for compiler identity probe");
+    DWORD exit_code = 0;
+    require(GetExitCodeProcess(process.hProcess, &exit_code) &&
+                exit_code == 0,
+            "compiler identity probe failed");
+    CloseHandle(process.hProcess);
+    while (!output.empty() &&
+           (output.back() == '\n' || output.back() == '\r')) {
+        output.pop_back();
+    }
+    return output;
+#else
     int descriptors[2];
     require(pipe(descriptors) == 0, "could not create compiler output pipe");
     const pid_t child = fork();
@@ -225,6 +283,7 @@ std::string read_child_stdout(const char* executable, const char* argument) {
         output.pop_back();
     }
     return output;
+#endif
 }
 
 std::string read_worker_identity(const char* worker_path) {
@@ -250,8 +309,8 @@ std::string read_worker_identity(const char* worker_path) {
         event.struct_size = sizeof(event);
         const capsid_result next = capsid_worker_next_event(worker, &event);
         if (next == CAPSID_WOULD_BLOCK) {
-            pollfd descriptor = {capsid_worker_fd(worker), POLLIN, 0};
-            require(poll(&descriptor, 1, 100) >= 0 || errno == EINTR,
+            capsid_pollfd descriptor = {capsid_worker_fd(worker), POLLIN, 0};
+            require(capsid::win32::capsid_poll(&descriptor, 1, 100) >= 0 || errno == EINTR,
                     "worker identity poll failed");
             continue;
         }

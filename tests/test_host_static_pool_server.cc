@@ -9,30 +9,56 @@
 #define CAPSID_HAS_STATIC_POOL_SERVER 0
 #endif
 
+#include "host/binding_registry.h"
+#include "host/generation_identity.h"
+
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <arpa/inet.h>
+#endif
 #include <fcntl.h>
-#include <poll.h>
+#include "win32_compat.h"
 #include <signal.h>
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <sys/socket.h>
+#endif
 
 // macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
 // on the test paths, so a plain socket type is the portable fallback.
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <sys/time.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <memory>
+#include <span>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <sys/wait.h>
+#endif
 
 namespace {
 
@@ -56,16 +82,20 @@ std::string read_one_ready_line(int fd) {
     while (line.empty() || line.back() != '\n') {
         require(std::chrono::steady_clock::now() < deadline,
                 "pool did not publish READY after start returned");
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = POLLIN;
-        const int polled = poll(&descriptor, 1, 50);
+        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
         require(polled >= 0, "cannot poll pool READY pipe");
         if (polled == 0) {
             continue;
         }
         char byte = 0;
+#if defined(_WIN32)
+        require(capsid::win32::read_fd(fd, &byte, 1) == 1,
+#else
         require(read(fd, &byte, 1) == 1,
+#endif
                 "pool READY pipe closed without a complete record");
         line.push_back(byte);
         require(line.size() <= 1024, "pool READY record is unbounded");
@@ -74,10 +104,10 @@ std::string read_one_ready_line(int fd) {
 }
 
 void require_no_second_ready_record(int fd) {
-    struct pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = fd;
     descriptor.events = POLLIN;
-    const int polled = poll(&descriptor, 1, 100);
+    const int polled = capsid::win32::capsid_poll(&descriptor, 1, 100);
     require(polled == 0,
             "pool exposed per-shard READY records instead of one pool record");
 }
@@ -94,20 +124,19 @@ std::uint16_t ready_port(const std::string& line) {
     return static_cast<std::uint16_t>(port);
 }
 
-void require_http_response(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+void require_http_response(std::uint16_t port,
+                           const std::string& expected_body =
+                               "static-pool-ok") {
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create static-pool HTTP socket");
-    struct timeval timeout = {};
-    timeout.tv_sec = 3;
-    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                       sizeof(timeout)) == 0,
+    require(capsid::win32::setsockopt_recv_timeout_fd(fd, 3000) == 0,
             "cannot set static-pool HTTP timeout");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode static-pool loopback address");
-    require(connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                     sizeof(address)) == 0,
             "cannot connect to active static pool");
     const std::string request =
@@ -117,14 +146,14 @@ void require_http_response(std::uint16_t port) {
     std::size_t sent = 0;
     while (sent < request.size()) {
         const ssize_t count =
-            send(fd, request.data() + sent, request.size() - sent, 0);
+            capsid::win32::send_fd(fd, request.data() + sent, request.size() - sent, 0);
         require(count > 0, "cannot write static-pool HTTP request");
         sent += static_cast<std::size_t>(count);
     }
     std::string response;
     char bytes[2048];
     for (;;) {
-        const ssize_t count = recv(fd, bytes, sizeof(bytes), 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, bytes, sizeof(bytes), 0);
         if (count == 0) {
             break;
         }
@@ -133,23 +162,23 @@ void require_http_response(std::uint16_t port) {
     }
     close(fd);
     require(response.find(" 200 ") != std::string::npos &&
-                response.find("static-pool-ok") != std::string::npos,
+                response.find(expected_body) != std::string::npos,
             "static pool did not preserve shard HTTP behavior");
 }
 
 std::uint16_t reserve_test_port() {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create pool port-reservation socket");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = 0;
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode pool port-reservation address");
-    require(bind(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::bind_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                  sizeof(address)) == 0,
             "cannot reserve static-pool test port");
     socklen_t length = sizeof(address);
-    require(getsockname(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::getsockname_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                         &length) == 0,
             "cannot inspect static-pool test port");
     const std::uint16_t port = ntohs(address.sin_port);
@@ -159,28 +188,28 @@ std::uint16_t reserve_test_port() {
 }
 
 void require_port_bindable(std::uint16_t port, const std::string& message) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create pool listener probe socket");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode pool listener probe address");
-    const int bound = bind(fd, reinterpret_cast<struct sockaddr*>(&address),
+    const int bound = capsid::win32::bind_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                            sizeof(address));
     close(fd);
     require(bound == 0, message);
 }
 
 void require_port_closed(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create stopped-pool probe socket");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode stopped-pool probe address");
-    const int connected = connect(
+    const int connected = capsid::win32::connect_fd(
         fd, reinterpret_cast<struct sockaddr*>(&address), sizeof(address));
     close(fd);
     require(connected != 0, "stopped static pool still accepted connections");
@@ -212,6 +241,69 @@ const std::vector<std::uint8_t>& fixture_bundle() {
     return bundle;
 }
 
+std::shared_ptr<const capsid::host::BindingRegistrySnapshot>
+make_pool_binding_registry() {
+    auto registry =
+        std::make_shared<capsid::host::BindingRegistrySnapshot>();
+    capsid::host::BindingPackageSnapshot package;
+    package.id = "echo";
+    package.manifest_json =
+        R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":[]}})json";
+    package.source =
+        "export default ({ config }) => ({"
+        "  echo(input) { return config.prefix + input; }"
+        "});";
+    package.manifest_digest = capsid::host::compute_binding_manifest_digest(
+        package.manifest_json);
+    package.source_digest = capsid::host::sha256_hex(
+        std::span<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(package.source.data()),
+            package.source.size()));
+    registry->packages.push_back(std::move(package));
+    return registry;
+}
+
+void test_binding_local_policy(const char* worker_path) {
+    const std::string policy_path = "capsid-static-pool-binding.json";
+    {
+        std::ofstream output(policy_path,
+                             std::ios::binary | std::ios::trunc);
+        require(static_cast<bool>(output),
+                "cannot create static-pool Binding policy");
+        output << R"json({"apiVersion":"capsid/app-v2","permissions":{},"bindings":{"echo":{"config":{"prefix":"pool-binding:"}}},"pool":{"minReady":1,"maxWorkers":1}})json";
+        require(static_cast<bool>(output),
+                "cannot write static-pool Binding policy");
+    }
+    const std::string source =
+        "import echo from 'capsid:binding/echo';"
+        "export default { async fetch() {"
+        "  return new Response(await echo.echo('ok'));"
+        "} };";
+    const std::vector<std::uint8_t> bundle(source.begin(), source.end());
+    int ready[2];
+    require(capsid::win32::create_socket_pair(ready),
+            "cannot create Binding pool READY pipe");
+    auto options = make_options(worker_path, ready[1], 2);
+    options.worker_options.capsid_json_path = policy_path;
+    options.worker_options.capsid_json_required = true;
+    options.worker_options.binding_registry = make_pool_binding_registry();
+    capsid::host::StaticPoolServer pool(std::move(options));
+    std::string error;
+    require(pool.start(bundle, &error),
+            "cannot start Binding static pool: " + error);
+    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
+    require(pool.active_workers() == 2,
+            "Binding static pool did not prepare every shard");
+    for (int request = 0; request < 12; ++request) {
+        require_http_response(port, "pool-binding:ok");
+    }
+    pool.request_stop();
+    require(pool.wait(&error), "Binding static pool wait failed: " + error);
+    close(ready[0]);
+    close(ready[1]);
+    remove(policy_path.c_str());
+}
+
 // The slow fixture: every request parks in the worker for 700 ms, so a test
 // can hold one inflight slot deterministically (same pattern as E-1).
 const std::vector<std::uint8_t>& slow_bundle() {
@@ -236,19 +328,16 @@ const std::vector<std::uint8_t>& hang_bundle() {
 }
 
 int connect_to(std::uint16_t port) {
-    const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create drain HTTP socket");
-    struct timeval timeout = {};
-    timeout.tv_sec = 5;
-    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                       sizeof(timeout)) == 0,
+    require(capsid::win32::setsockopt_recv_timeout_fd(fd, 5000) == 0,
             "cannot set drain HTTP receive timeout");
     struct sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode drain loopback address");
-    require(connect(fd, reinterpret_cast<struct sockaddr*>(&address),
+    require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
                     sizeof(address)) == 0,
             "cannot connect to draining pool");
     return fd;
@@ -262,7 +351,7 @@ void send_hold_request(int fd) {
     std::size_t sent = 0;
     while (sent < request.size()) {
         const ssize_t count =
-            send(fd, request.data() + sent, request.size() - sent, 0);
+            capsid::win32::send_fd(fd, request.data() + sent, request.size() - sent, 0);
         require(count > 0, "cannot write drain HTTP request");
         sent += static_cast<std::size_t>(count);
     }
@@ -275,7 +364,7 @@ std::string read_until_close(int fd) {
     std::string response;
     char bytes[2048];
     for (;;) {
-        const ssize_t count = recv(fd, bytes, sizeof(bytes), 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, bytes, sizeof(bytes), 0);
         if (count == 0) {
             return response;  // clean EOF
         }
@@ -293,12 +382,12 @@ std::string read_until_close(int fd) {
 // time.
 void test_drain_inflight_completes(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create drain READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create drain READY pipe");
     capsid::host::StaticPoolServer pool(
         make_options(worker_path, ready[1], 1));
     std::string error;
-    require(pool.start(slow_bundle(), &error),
-            "cannot start draining pool: " + error);
+    const bool started = pool.start(slow_bundle(), &error);
+    require(started, "cannot start draining pool: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     // Hold the single inflight slot (the slow bundle answers in ~700 ms).
@@ -348,13 +437,13 @@ void test_drain_inflight_completes(const char* worker_path) {
 // cancellation.
 void test_drain_deadline_forces(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create drain deadline READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create drain deadline READY pipe");
     auto options = make_options(worker_path, ready[1], 1);
     options.worker_options.request_timeout_ms = 0;  // wedged worker model
     capsid::host::StaticPoolServer pool(std::move(options));
     std::string error;
-    require(pool.start(hang_bundle(), &error),
-            "cannot start drain deadline pool: " + error);
+    const bool started = pool.start(hang_bundle(), &error);
+    require(started, "cannot start drain deadline pool: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     // The hung request holds the only inflight slot forever.
@@ -396,12 +485,12 @@ void test_drain_deadline_forces(const char* worker_path) {
 // immediately when the drain begins — no deadline wait, no cancellation.
 void test_drain_idle_exits(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create idle drain READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create idle drain READY pipe");
     capsid::host::StaticPoolServer pool(
         make_options(worker_path, ready[1], 1));
     std::string error;
-    require(pool.start(fixture_bundle(), &error),
-            "cannot start idle draining pool: " + error);
+    const bool started = pool.start(fixture_bundle(), &error);
+    require(started, "cannot start idle draining pool: " + error);
     (void)ready_port(read_one_ready_line(ready[0]));
 
     pool.begin_drain(60000);  // an idle drain must not wait anywhere near this
@@ -421,11 +510,11 @@ void test_drain_idle_exits(const char* worker_path) {
 
 void test_shared_port_lifecycle(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create static-pool READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create static-pool READY pipe");
     capsid::host::StaticPoolServer pool(make_options(worker_path, ready[1], 3));
     std::string error;
-    require(pool.start(fixture_bundle(), &error),
-            "cannot start three-shard static pool: " + error);
+    const bool started = pool.start(fixture_bundle(), &error);
+    require(started, "cannot start three-shard static pool: " + error);
     require(!pool.start(fixture_bundle(), &error),
             "static pool accepted a duplicate start");
     require(pool.active_workers() == 3,
@@ -451,10 +540,21 @@ void test_shared_port_lifecycle(const char* worker_path) {
 
 void test_atomic_start_failure(const char* worker_path) {
     const std::uint16_t port = reserve_test_port();
+#if defined(_WIN32)
+    const int read_only_ready_fd = _open("NUL", _O_RDONLY);
+#else
     const int read_only_ready_fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
+#endif
     require(read_only_ready_fd >= 0,
             "cannot create failed pool READY fixture");
+#if defined(_WIN32)
+    // A one-worker pool has no SO_REUSEPORT dependency on Windows, so this
+    // scenario reaches the intended unwritable-READY-fd failure instead of
+    // stopping earlier at the shared-port gate.
+    auto options = make_options(worker_path, read_only_ready_fd, 1);
+#else
     auto options = make_options(worker_path, read_only_ready_fd, 3);
+#endif
     options.worker_options.listen_port = port;
     capsid::host::StaticPoolServer pool(std::move(options));
     std::string error;
@@ -485,7 +585,7 @@ void test_atomic_start_failure(const char* worker_path) {
 // wait() must still complete without a thread that never started.
 void test_stop_before_start(const char* worker_path) {
     int ready[2];
-    require(pipe(ready) == 0, "cannot create static-pool READY pipe");
+    require(capsid::win32::create_socket_pair(ready), "cannot create static-pool READY pipe");
     capsid::host::StaticPoolServer pool(make_options(worker_path, ready[1], 2));
     pool.request_stop();
     std::string error;
@@ -506,6 +606,36 @@ void test_stop_before_start(const char* worker_path) {
 // starting shard is reclaimed by the atomic rollback (starting_shard_
 // publication) rather than leaked into a live pool.
 void test_start_stop_race(const char* worker_path) {
+#if defined(_WIN32)
+    // Windows has no fork: the probe runs on a plain thread (the pool
+    // facade is thread-safe and the probe is crash-free by contract).
+    std::thread child_thread([&]() {
+        for (int round = 0; round < 8; ++round) {
+            int ready[2];
+            require(capsid::win32::create_socket_pair(ready),
+                    "cannot create race READY pipe");
+            capsid::host::StaticPoolServer pool(
+                make_options(worker_path, ready[1], 1));
+            std::thread racer([&]() {
+                capsid::win32::usleep(
+                    static_cast<unsigned long>(round % 3) * 200U);
+                pool.request_stop();
+            });
+            std::string error;
+            const bool started = pool.start(fixture_bundle(), &error);
+            racer.join();
+            pool.request_stop();
+            require(pool.wait(&error),
+                    "start/stop race wedged pool wait: " + error);
+            require(pool.active_workers() == 0,
+                    "start/stop race leaked worker shards");
+            close(ready[0]);
+            close(ready[1]);
+            (void)started;
+        }
+    });
+    child_thread.join();
+#else
     const pid_t child = fork();
     require(child >= 0, "cannot fork static-pool start/stop race probe");
     if (child == 0) {
@@ -514,7 +644,8 @@ void test_start_stop_race(const char* worker_path) {
         // window while still interleaving stop across every start phase.
         for (int round = 0; round < 8; ++round) {
             int ready[2];
-            require(pipe(ready) == 0, "cannot create race READY pipe");
+            require(capsid::win32::create_socket_pair(ready),
+                    "cannot create race READY pipe");
             capsid::host::StaticPoolServer pool(
                 make_options(worker_path, ready[1], 1));
             std::thread racer([&]() {
@@ -553,6 +684,7 @@ void test_start_stop_race(const char* worker_path) {
         }
         usleep(1000);
     }
+#endif
 }
 
 #endif  // CAPSID_HAS_STATIC_POOL_SERVER
@@ -568,6 +700,8 @@ int main(int argc, char** argv) {
     const std::string mode = argv[1];
     if (mode == "lifecycle") {
         test_shared_port_lifecycle(argv[2]);
+    } else if (mode == "binding-local-policy") {
+        test_binding_local_policy(argv[2]);
     } else if (mode == "atomic-failure") {
         test_atomic_start_failure(argv[2]);
     } else if (mode == "drain-inflight-completes") {

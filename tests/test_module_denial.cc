@@ -1,6 +1,6 @@
 #include "capsid/runtime.h"
 
-#include <poll.h>
+#include "win32_compat.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -90,11 +90,11 @@ void expect_import_denied(capsid_worker *worker,
 
         const int fd = capsid_worker_fd(worker);
         if (fd >= 0) {
-            struct pollfd descriptor = {};
+            capsid_pollfd descriptor = {};
             descriptor.fd = fd;
             descriptor.events =
                 POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-            poll(&descriptor, 1, 50);
+            capsid::win32::capsid_poll(&descriptor, 1, 50);
         }
     }
 }

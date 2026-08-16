@@ -1,11 +1,27 @@
 #include "capsid/runtime.h"
 #include "egress_test_policy.h"
 
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <arpa/inet.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <netinet/in.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <sys/socket.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -47,26 +63,25 @@ public:
           port_(0),
           accepted_(false),
           closed_(false) {
-        listener_ = socket(AF_INET, SOCK_STREAM, 0);
+        listener_ = capsid::win32::create_tcp_socket_fd();
         if (listener_ < 0) {
             fail("cannot create hanging server");
         }
         const int reuse = 1;
-        setsockopt(
-            listener_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        capsid::win32::setsockopt_reuseaddr_fd(listener_);
         struct sockaddr_in address = {};
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         address.sin_port = 0;
-        if (bind(
+        if (capsid::win32::bind_fd(
                 listener_,
                 reinterpret_cast<const struct sockaddr *>(&address),
                 sizeof(address)) != 0 ||
-            listen(listener_, 1) != 0) {
+            capsid::win32::listen_fd(listener_, 1) != 0) {
             fail("cannot bind hanging server");
         }
         socklen_t size = sizeof(address);
-        if (getsockname(
+        if (capsid::win32::getsockname_fd(
                 listener_,
                 reinterpret_cast<struct sockaddr *>(&address),
                 &size) != 0) {
@@ -79,10 +94,10 @@ public:
     ~HangingServer() {
         const int client = client_.load();
         if (client >= 0) {
-            shutdown(client, SHUT_RDWR);
+            capsid::win32::shutdown_fd(client);
         }
         if (listener_ >= 0) {
-            shutdown(listener_, SHUT_RDWR);
+            capsid::win32::shutdown_fd(listener_);
         }
         if (thread_.joinable()) {
             thread_.join();
@@ -107,32 +122,42 @@ public:
 
 private:
     void serve() {
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = listener_;
         descriptor.events = POLLIN;
-        if (poll(&descriptor, 1, 5000) <= 0) {
+        if (capsid::win32::capsid_poll(&descriptor, 1, 5000) <= 0) {
             return;
         }
-        const int client = accept(listener_, NULL, NULL);
+        const int client = capsid::win32::accept_fd(listener_);
         client_ = client;
         if (client < 0) {
             return;
         }
         accepted_ = true;
+        // Blocking recv with a receive timeout: WSAPoll cannot be trusted
+        // to report a peer FIN, but a blocking recv returns 0 the moment
+        // the close lands.
+        capsid::win32::setsockopt_recv_timeout_fd(client, 500);
         char buffer[2048];
         for (;;) {
-            descriptor.fd = client;
-            descriptor.events = POLLIN | POLLHUP;
-            descriptor.revents = 0;
-            if (poll(&descriptor, 1, 5000) <= 0) {
-                return;
-            }
+#if defined(_WIN32)
+            // accept_fd returns a CRT fd; Winsock recv takes the raw
+            // SOCKET handle.
+            const ssize_t count =
+                capsid::win32::recv_fd(client, buffer, sizeof(buffer), 0);
+#else
             const ssize_t count = recv(client, buffer, sizeof(buffer), 0);
+#endif
             if (count == 0) {
                 closed_ = true;
                 return;
             }
             if (count < 0) {
+#if defined(_WIN32)
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    continue;
+                }
+#endif
                 return;
             }
         }
@@ -151,11 +176,11 @@ void pump(capsid_worker *worker) {
     if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
         fail("worker flush failed");
     }
-    struct pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
     descriptor.events =
         POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-    poll(&descriptor, 1, 10);
+    capsid::win32::capsid_poll(&descriptor, 1, 10);
 }
 
 bool next_event(capsid_worker *worker, capsid_event *event) {

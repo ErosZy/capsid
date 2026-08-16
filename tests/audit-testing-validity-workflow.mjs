@@ -14,6 +14,12 @@ const expectedActions = new Map([
   ["actions/setup-node", "49933ea5288caeca8642d1e84afbd3f7d6820020"],
   ["actions/setup-go", "40f1582b2485089dde7abd97c1529aa768e1baff"],
   ["denoland/setup-deno", "22d081ff2d3a40755e97629de92e3bcbfa7cf2ed"],
+  // v1 (v1.13.0): sets up the Visual Studio developer environment in a
+  // non-vcvars shell so the Ninja generator can find `cl` (Windows host
+  // job only). Must stay on the tag commit: the repo only commits
+  // node_modules into release tags, so default-branch revisions fail
+  // with "Cannot find module '@actions/core'".
+  ["ilammy/msvc-dev-cmd", "0b201ec74fa43914dc39ae48a89fd1d8cb592756"],
   // v6.0.0 (node24 runtime): the reviewed revision after the Node 20
   // deprecation migration (upload b7c566a, download 018cc2c).
   ["actions/upload-artifact", "b7c566a772e6b6bfb58ed0dc250532a479d7789f"],

@@ -6,13 +6,16 @@
 
 #include "host/poll_limits.h"
 
+#include "win32_compat.h"
+
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <fcntl.h>
 #include <limits>
-#include <poll.h>
+#if !defined(_WIN32)
+#include <fcntl.h>
 #include <unistd.h>
+#endif
 
 namespace capsid::host {
 
@@ -26,6 +29,16 @@ void write_stderr(std::string_view message) {
 }  // namespace
 
 WorkerEventSource::WorkerEventSource() {
+#if defined(_WIN32)
+    // WSAPoll cannot watch pipe handles, so the wake channel is a loopback
+    // socket pair (non-inheritable by default; no CLOEXEC pass needed).
+    if (!capsid::win32::create_socket_pair(wake_pipe_) ||
+        !capsid::win32::set_socket_nonblocking(wake_pipe_[0]) ||
+        !capsid::win32::set_socket_nonblocking(wake_pipe_[1])) {
+        write_stderr("capsid-host: failed to create the command wake pipe");
+        std::abort();
+    }
+#else
     if (::pipe(wake_pipe_) != 0 ||
         fcntl(wake_pipe_[0], F_SETFD, FD_CLOEXEC) != 0 ||
         fcntl(wake_pipe_[1], F_SETFD, FD_CLOEXEC) != 0 ||
@@ -34,6 +47,7 @@ WorkerEventSource::WorkerEventSource() {
         write_stderr("capsid-host: failed to create the command wake pipe");
         std::abort();
     }
+#endif
 }
 
 WorkerEventSource::~WorkerEventSource() {
@@ -52,14 +66,27 @@ void WorkerEventSource::set_worker(capsid_worker* worker) {
 
 void WorkerEventSource::wake() {
     const char byte = 0;
+#if defined(_WIN32)
+    // The wake channel is a loopback socketpair on Windows; the CRT's
+    // write() is invalid on socket fds.
+    const ssize_t unused =
+        capsid::win32::send_fd(wake_pipe_[1], &byte, 1, 0);
+#else
     const ssize_t unused = ::write(wake_pipe_[1], &byte, 1);
+#endif
     (void)unused;
 }
 
 void WorkerEventSource::drain_wake_bytes() {
     char buffer[64];
+#if defined(_WIN32)
+    while (capsid::win32::recv_fd(wake_pipe_[0], buffer, sizeof(buffer), 0) >
+           0) {
+    }
+#else
     while (::read(wake_pipe_[0], buffer, sizeof(buffer)) > 0) {
     }
+#endif
 }
 
 bool WorkerEventSource::wait(
@@ -86,7 +113,7 @@ WorkerEventSource::PollResult WorkerEventSource::poll_worker(
     short worker_events,
     short wake_events,
     std::optional<std::chrono::steady_clock::time_point> until) {
-    struct pollfd descriptors[2];
+    capsid_pollfd descriptors[2];
     descriptors[0].fd = worker_fd_;
     descriptors[0].events = worker_events;
     descriptors[0].revents = 0;
@@ -103,7 +130,8 @@ WorkerEventSource::PollResult WorkerEventSource::poll_worker(
             static_cast<std::uint64_t>(std::max<std::int64_t>(0, remaining)));
     }
     for (;;) {
-        const int result = ::poll(descriptors, 2, timeout_ms);
+        const int result =
+            capsid::win32::capsid_poll(descriptors, 2, timeout_ms);
         if (result < 0) {
             if (errno == EINTR) {
                 continue;

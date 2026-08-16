@@ -1,22 +1,23 @@
-# capsid.json 怎么写（教程）
+# How to Write `capsid.json` (Tutorial)
 
-`capsid.json` 描述**一个应用版本**要什么权限、多少资源、池多大。它放在
-版本目录里，和 bundle 一起部署：
+`capsid.json` describes **one application version**'s permissions, resource needs, and pool size. It lives in the version directory and is deployed together with the bundle:
 
 ```text
 <applicationsRoot>/<app-id>/<version>/
-    capsid.json     ← 本文的主角
-    bundle.mjs      ← 自包含 ESM bundle（必需，同一目录）
+    capsid.json     ← the subject of this article
+    bundle.mjs      ← self-contained ESM bundle (required, same directory)
 ```
 
-主机配置（listener、全局权限上限、容量）在
-[host.json](host-config.md)，两边的权限取交集：capsid.json 申请的内容
-必须同时被 host.json 允许，否则部署失败。
+Host configuration (listener, global permission caps, capacity) lives in
+[host.json](host-config.md). Permissions on both sides are intersected: what
+`capsid.json` requests must also be allowed by `host.json`, otherwise deployment
+fails.
 
-本文按"最小可用 → 逐步加东西 → 完整示例"的顺序教你写。全部字段以
-`src/host/config.cc`、`managed_host.cc` 的实现为准。
+This article walks through "minimal usable → add features step by step → full
+example." All fields follow the implementation in `src/host/config.cc` and
+`managed_host.cc`.
 
-## 第一步：最小可用版本（3 个字段就能跑）
+## Step 1: Minimal usable version (3 fields is enough to run)
 
 ```json
 {
@@ -28,17 +29,19 @@
 }
 ```
 
-- `apiVersion`：必须精确等于 `capsid/app-v1`，其他值拒绝；
-- `pool.minReady` 和 `pool.maxWorkers`：**两个都必需**，且值必须相等
-  （v1 池是固定大小）。`2` 表示这个版本始终维持 2 个 worker。
+- `apiVersion`: use `capsid/app-v1` for the baseline schema, or
+  `capsid/app-v2` when declaring Host Bindings; any other value is rejected;
+- `pool.minReady` and `pool.maxWorkers`: **both required**, and the values must be
+  equal (the v1 pool is fixed-size). `2` means this version always maintains 2
+  workers.
 
-这样已经能部署，但应用不能导入任何 `capsid:` 模块，也不能出站 fetch。
-需要什么就往下逐节加。
+That is already deployable, but the app cannot import any `capsid:` module, nor
+can it make egress fetch calls. Add what you need section by section below.
 
-## 第二步：模块权限（`permissions.modules`）
+## Step 2: Module permissions (`permissions.modules`)
 
-应用 `import` 了哪个 `capsid:` 模块，就必须在这里列出，否则 import 直接失败
-（`module is not authorized`）：
+For every `capsid:` module the app `import`s, you must list it here, otherwise
+the import fails directly (`module is not authorized`):
 
 ```json
 {
@@ -48,17 +51,21 @@
 }
 ```
 
-可用模块见[模块与权限参考](module-permissions.md)。规则：
+Available modules are listed in the
+[Modules and Permissions Reference](module-permissions.md). Rules:
 
-- 只认 `capsid:*` 公共名；写 `tjs:*` 或 `tjs:internal/*` 会**直接拒绝**，这是
-  永久禁止项，不是开放项；
-- 纯工具模块（`capsid:assert`、`capsid:hashing` 等）也必须逐个列出；
-- 标准 `fetch()` 不走这里——出站网络用下面的 `permissions.fetch`。
+- Only public `capsid:*` names are accepted; writing `tjs:*` or `tjs:internal/*`
+  is **directly rejected** — these are permanently forbidden, not open items;
+- Pure utility modules (`capsid:assert`, `capsid:hashing`, etc.) must also be
+  listed individually;
+- Standard `fetch()` does not go through this section — outbound networking uses
+  `permissions.fetch` below.
 
-## 第三步：环境变量（`permissions.env`）
+## Step 3: Environment variables (`permissions.env`)
 
-应用读到的环境变量**只来自这里**（worker 进程环境是清空的），两种来源，
-**恰好二选一**：
+The environment variables the app reads **come only from here** (the worker
+process environment is cleared). There are two sources, **exactly one of which
+must be chosen**:
 
 ```json
 {
@@ -71,18 +78,23 @@
 }
 ```
 
-- `value`：字面量直接写；
-- `valueFrom`：引用 secret 文件。key id `db-url` 对应
-  `<secretRootTemplate 替换 {application}>/db-url` 这个普通文件，文件内容就是
-  值（见[host.json 参考](host-config.md#secret-文件)）；
-- 键名文法：**字母或 `_` 开头**，后续只能字母、数字、`_`（不能带 `*`，
-  不能数字开头）——`1APP_MODE`、`APP*MODE` 都会拒绝；
-- 同一个键**不能同时写 `value` 和 `valueFrom`**，两个都写或都不写都拒绝；
-- 环境值上限受运行时约束，超大值在快照编译阶段失败。
+- `value`: write a literal value directly;
+- `valueFrom`: references a secret file. The key id `db-url` corresponds to the
+  regular file `<secretRootTemplate replaced with {application}>/db-url`, whose
+  contents are the value (see the
+  [host.json reference](host-config.md#secret-files));
+- Key name grammar: **starts with a letter or `_`**, and subsequent characters
+  may only be letters, digits, or `_` (no `*`, and it cannot start with a
+  digit) — `1APP_MODE` and `APP*MODE` are rejected;
+- The same key **cannot have both `value` and `valueFrom`**; writing both or
+  neither is rejected;
+- Environment value sizes are subject to runtime constraints; oversized values
+  fail during snapshot compilation.
 
-## 第四步：只读文件系统（`permissions.fs`）
+## Step 4: Read-only filesystem (`permissions.fs`)
 
-`capsid:fs` 只能读、不能写。`allow` 是授权根，`deny` 在 `allow` 之上优先：
+`capsid:fs` can only read, not write. `allow` is the authorization root, and
+`deny` takes precedence over `allow`:
 
 ```json
 {
@@ -97,12 +109,14 @@
 }
 ```
 
-- 必须是规范化绝对路径；strict sandbox 下授权根不能是 symlink；
-- 根目录必须同时出现在 host.json 的 `permissions.fsReadRoots` 里。
+- Paths must be canonical absolute paths; under strict sandbox an authorization
+  root cannot be a symlink;
+- The root must also appear in host.json's `permissions.fsReadRoots`.
 
-## 第五步：出站网络（`permissions.fetch`）
+## Step 5: Outbound network (`permissions.fetch`)
 
-控制标准 `fetch()` 的目标，语法是 `host` 或 `host:p1,p2`（端口列表）：
+Controls the targets of standard `fetch()`. The syntax is `host` or
+`host:p1,p2` (port list):
 
 ```json
 {
@@ -114,12 +128,13 @@
 }
 ```
 
-- 每次请求都会检查 hostname、DNS 解析出的**每个地址**和**每次 redirect**；
-- 目标必须同时被 host.json 的 `permissions.fetchTargets` 允许；
-- 不写这一节 = 出站 Fetch 全部拒绝（host.json 的 `egress_policy == NULL`
-  同理）。
+- Every request checks the hostname, **every address** returned by DNS
+  resolution, and **every redirect**;
+- The target must also be allowed by host.json's `permissions.fetchTargets`;
+- Omitting this section = all outbound fetch is denied (same as host.json's
+  `egress_policy == NULL`).
 
-## 第六步：内存存储与日志（`permissions.storage` / `permissions.stdio`）
+## Step 6: In-memory storage and logging (`permissions.storage` / `permissions.stdio`)
 
 ```json
 {
@@ -130,14 +145,16 @@
 }
 ```
 
-- `storage.namespaces`：只接受 ASCII 字母、数字、`_`、`-`、`.`，最长 128
-  字符；每个 namespace 有独立 quota，只存活于单个 worker；
-- `stdio`：只接受 `stdin`/`stdout`/`stderr` 三个字符串；`capsid:stdio`
-  只发有界日志事件，不碰真实 fd。
+- `storage.namespaces`: accepts only ASCII letters, digits, `_`, `-`, `.`, up to
+  128 characters; each namespace has an independent quota and lives only in a
+  single worker;
+- `stdio`: accepts only the three strings `stdin`/`stdout`/`stderr`;
+  `capsid:stdio` only emits bounded log events and never touches real fds.
 
-## 第七步：资源上限（`worker`）——不写也行
+## Step 7: Resource limits (`worker`) — optional
 
-不写 = worker 用运行时自带默认。写了是给自己一个明确的边界：
+Omitting this section = the worker uses the runtime's built-in defaults. Writing
+it gives yourself an explicit boundary:
 
 ```json
 {
@@ -151,16 +168,19 @@
 }
 ```
 
-- 大小统一用后缀：`KiB`/`MiB`/`GiB`/`KB`/`MB`/`GB`，其他后缀（如裸
-  `256`、`1M`）拒绝；
-- `jsHeap` 限制 QuickJS 堆，`processAddressSpace` 限制进程地址空间，
-  `memoryMax` 是整体内存上限——三者独立，不互相冒充；生效内存上限取
-  `max(memoryMax, jsHeap, processAddressSpace)`；
-- `fileDescriptors` 必须 ≥1；
-- 所有值受 host.json `maximums` 封顶：超过即部署失败（`maximums` 里 0 =
-  不限）。`host.json defaults` 只作整机声明，不注入生效配置。
+- Sizes uniformly use one of these suffixes:
+  `KiB`/`MiB`/`GiB`/`KB`/`MB`/`GB`; other suffixes (such as bare `256` or `1M`)
+  are rejected;
+- `jsHeap` limits the QuickJS heap, `processAddressSpace` limits the process
+  address space, and `memoryMax` is the overall memory limit — the three are
+  independent and do not stand in for one another; the effective memory limit is
+  `max(memoryMax, jsHeap, processAddressSpace)`;
+- `fileDescriptors` must be ≥ 1;
+- All values are capped by host.json `maximums`: exceeding them fails deployment
+  (`maximums` value 0 = unlimited). host.json `defaults` are only a whole-host
+  declaration and are not injected into the effective configuration.
 
-## 第八步：请求窗口（`request`）
+## Step 8: Request window (`request`)
 
 ```json
 {
@@ -174,13 +194,14 @@
 }
 ```
 
-- `timeout` 是请求级超时（`ms`/`s`/`m`）；同步 CPU 死循环被 interrupt 打断
-  后 worker 视为不可复用；
-- `maxInflightPerWorker` 是每个 worker 的并发请求窗口；
-- `maxStreamingInflightPerWorker` 是 SSE/streaming 槽位（缺省 2），
-  `streamIdleTimeoutMs` 是流空闲超时——慢客户端由 `writeTimeoutMs` 兜底。
+- `timeout` is the request-level timeout (`ms`/`s`/`m`); after a synchronous CPU
+  infinite loop is interrupted, the worker is treated as non-reusable;
+- `maxInflightPerWorker` is the per-worker concurrent request window;
+- `maxStreamingInflightPerWorker` is the SSE/streaming slot count (default 2),
+  and `streamIdleTimeoutMs` is the stream idle timeout — slow clients are covered
+  by `writeTimeoutMs`.
 
-## 第九步：队列（`pool` 可选字段）
+## Step 9: Queue (`pool` optional fields)
 
 ```json
 {
@@ -194,10 +215,10 @@
 }
 ```
 
-- 缺省 0 = 关闭排队，负载超窗口直接拒绝；
-- 同样受 host.json `maximums.pool` 封顶。
+- Default 0 = queueing disabled; load beyond the window is directly rejected;
+- Also capped by host.json `maximums.pool`.
 
-## 第十步：健康检查（`healthCheck`）
+## Step 10: Health check (`healthCheck`)
 
 ```json
 {
@@ -208,14 +229,16 @@
 }
 ```
 
-- `path` 是 **worker 内部路径**（Host 直接把请求发给 worker，不经过
-  listener 路由），所以要写应用自己 `fetch()` 里的路径，如 `/health`；
-- 不写或空 path = 不探测；连续失败超过 host.json `recovery.activeHealthFailures`
-  次才替换 worker。
+- `path` is a **worker-internal path** (the Host sends the request directly to
+  the worker, not through listener routing), so write the path the app itself
+  uses in `fetch()`, such as `/health`;
+- Omitting it or using an empty path = no probing; the worker is replaced only
+  after consecutive failures exceed host.json `recovery.activeHealthFailures`.
 
-## 完整示例
+## Complete example
 
-一个读取配置、请求上游、带存储和健康检查的订单应用：
+An order app that reads configuration, calls upstream, uses storage, and has a
+health check:
 
 ```json
 {
@@ -272,46 +295,104 @@
 }
 ```
 
-## 部署三步
+## Deployment in three steps
 
 ```sh
-# 1. 把 capsid.json 和 bundle 放进版本目录（app id：小写字母/数字开头，
-#    [a-z0-9._-]，≤63 字符；版本 id 同文法）
+# 1. Put capsid.json and the bundle into the version directory (app id: starts with
+#    a lowercase letter/digit, [a-z0-9._-], ≤63 chars; version id uses the same grammar)
 mkdir -p /srv/capsid/applications/orders/v2
 cp capsid.json bundle.mjs /srv/capsid/applications/orders/v2/
 
-# 2. 通过 Admin API 部署（Unix socket，与 Host 同 euid；蓝绿发布：
-#    先预热 + 健康检查，原子切换，失败保持旧版本）
+# 2. Deploy through the Admin API (Unix socket, same euid as the Host; blue-green:
+#    prewarm + health check, atomic switch, failure keeps the old version)
 curl --unix-socket /run/capsid/admin.sock \
   -X POST http://localhost/v1/deploy \
   -H 'Content-Type: application/json' \
   -d '{"application":"orders","version":"v2"}'
 
-# 3. 查状态
+# 3. Check status
 curl --unix-socket /run/capsid/admin.sock http://localhost/v1/apps/orders
 ```
 
-部署时如果发现 bundle 目录里同时有 `bundle.qjsb`、`bytecode.json`、
-`bytecode.sig`，会走可信字节码路径——这三个文件**全有或全无**，缺任一个
-都拒绝部署。
+At deployment time, if the bundle directory also contains `bundle.qjsb`,
+`bytecode.json`, and `bytecode.sig`, the trusted bytecode path is used — these
+three files are **all-or-nothing**; missing any one rejects deployment.
 
-## 常见错误（全部 fail closed）
+## Local mode (v0.1.3, `--capsid-json`): run directly without deploying
 
-| 错误写法 | 结果 |
+`capsid-host --mode single-worker` (and `static-pool`) is the
+benchmark/local-development data plane: no blue-green deployment and no Admin
+API. In this mode there is no host.json — **the capsid.json document is itself
+the permission authority**, and it no longer intersects with host.json:
+
+```sh
+# Default reads ./capsid.json in the current directory; absent = fall back to the
+# v0.1.2 no-permission baseline (all denied)
+capsid-host --mode single-worker --source-bundle bundle.mjs
+
+# Explicit path: the file must exist; a missing file fails startup (not silently skipped)
+capsid-host --mode single-worker --source-bundle bundle.mjs \
+  --capsid-json ./my-policy.json
+
+# Binding development: the App imports capsid:binding/mongo while the Host
+# supplies the trusted package from this explicitly scanned Registry
+capsid-host --mode single-worker --source-bundle bundle.mjs \
+  --capsid-json ./capsid.json \
+  --bindings-root ./bindings
+```
+
+- Permissions still apply as usual: `permissions.modules` / `env` / `fs`
+  (including `fs.read.deny`, deny still takes precedence over allow) / `fetch` /
+  `storage` / `stdio`, through the **exact same** frozen schema validation and
+  compilation pipeline as managed mode (rule ids, digests, canonicalization all
+  included); every earlier section of this tutorial applies;
+- `pool` is still a schema-required field (`minReady` == `maxWorkers`), but the
+  values are lazy — the worker count is decided by the CLI (`--workers`);
+- Sections that local mode cannot honor **reject startup directly**, never
+  silently skip:
+  - `worker` / `request` / `healthCheck` / `entry`: capacity, resources, request
+    window, and bundle entry are controlled by the CLI;
+  - `pool.queueRequests` / `queueHeaderBytes` / `queueTimeout`: the admission
+    queue is controlled by the CLI;
+  - env `valueFrom`: there is no managed-mode secret store; environment
+    variables can only use literal `{"value": "..."}`;
+- `capsid/app-v2` Binding declarations are supported for Binding development.
+  They use the managed path's Registry scan, Manifest ∩ App permission
+  proof, pre-bundle load ordering and READY proof. A declaration without an
+  explicit `--bindings-root` fails startup; Binding `secrets.valueFrom` also
+  fails because local mode has no secret provider;
+- The policy file must be a regular file owned by the current user
+  (symlinks/directories/FIFOs are not accepted), at most 1 MiB, and concurrent
+  replacement while it is being read rejects startup.
+
+In static-pool mode the Host reads and compiles the local policy once and
+shares that immutable result with every shard; each worker loads the same
+Binding set, and if any shard fails to load, the whole pool fails startup.
+
+## Common errors (all fail closed)
+
+| Invalid input | Result |
 | --- | --- |
-| `"apiVersion": "capsid/app-v2"` | 拒绝：apiVersion 必须精确 `capsid/app-v1` |
-| `"modules": ["tjs:assert"]` | 拒绝：`tjs:*` 永久禁止 |
-| `"minReady": 2, "maxWorkers": 4` | 拒绝：cross-field values must be equal |
-| 只写 `minReady` 不写 `maxWorkers` | 拒绝：missing required field |
-| `"env": { "1APP": {...} }` | 拒绝：环境键名必须字母/`_` 开头 |
-| 一个 env entry 同时写 `value` 和 `valueFrom` | 拒绝：恰好一个 |
-| `"fetch": { "allow": ["example.com:70000"] }` | 拒绝：端口越界 |
-| `"stdio": ["log"]` | 拒绝：只接受 stdin/stdout/stderr |
-| `"storage": { "namespaces": ["a/b"] }` | 拒绝：namespace 非法字符 |
-| `"worker": { "jsHeap": "64" }` | 拒绝：大小必须有 KiB/MiB/GiB/KB/MB/GB 后缀 |
-| 重复 key（同一对象出现两次 `pool`） | 拒绝：JSON_REJECT_DUPLICATES |
-| 任何未列出的字段（如 `"cpu": 2`） | 拒绝：unknown configuration field |
-| 申请超过 host.json `maximums` | 部署拒绝 |
-| bundle 目录只有 `bundle.qjsb` 没有签名 | 拒绝：字节码必须全有或全无 |
+| Local `capsid/app-v2` declares a Binding without `--bindings-root` | Rejected at startup: Binding requires an explicit Host Registry |
+| Local Binding declares `secrets.valueFrom` | Rejected at startup: local mode has no Binding secret provider |
+| `"modules": ["tjs:assert"]` | Rejected: `tjs:*` is permanently forbidden |
+| `"minReady": 2, "maxWorkers": 4` | Rejected: cross-field values must be equal |
+| Only `minReady`, no `maxWorkers` | Rejected: missing required field |
+| `"env": { "1APP": {...} }` | Rejected: environment key names must start with a letter/`_` |
+| An env entry with both `value` and `valueFrom` | Rejected: exactly one is required |
+| `"fetch": { "allow": ["example.com:70000"] }` | Rejected: port out of range |
+| `"stdio": ["log"]` | Rejected: only stdin/stdout/stderr are accepted |
+| `"storage": { "namespaces": ["a/b"] }` | Rejected: invalid character in namespace |
+| `"worker": { "jsHeap": "64" }` | Rejected: sizes must have a KiB/MiB/GiB/KB/MB/GB suffix |
+| Duplicate key (same object appears twice, e.g. `pool`) | Rejected: JSON_REJECT_DUPLICATES |
+| Any unlisted field (such as `"cpu": 2`) | Rejected: unknown configuration field |
+| Request exceeds host.json `maximums` | Deployment rejected |
+| Bundle directory has only `bundle.qjsb` without a signature | Rejected: bytecode must be all-or-nothing |
+| Local mode with `worker` / `request` / `healthCheck` / `entry` sections | Rejected at startup: not applicable in local mode (CLI-owned) |
+| Local mode with `pool.queue*` | Rejected at startup: admission queue is CLI-owned |
+| Local mode env with `valueFrom` | Rejected at startup: valueFrom is unavailable in local mode |
+| `--capsid-json` points to a symlink / directory / file not owned by the user | Rejected at startup: not a regular file / not owned |
+| `--capsid-json` points to a nonexistent file | Rejected at startup: cannot find … (except a missing default `./capsid.json`, which is the no-permission baseline) |
 
-所有校验在部署前完成，错误不会在运行时悄悄跳过。
+All validation completes before deployment; errors are never silently skipped at
+runtime.

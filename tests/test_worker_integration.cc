@@ -2,11 +2,27 @@
 #include "egress_test_policy.h"
 #include "wpt_report.h"
 
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <arpa/inet.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <netinet/in.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <sys/socket.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <cerrno>
@@ -48,30 +64,30 @@ bool contains(const std::string &text, const char *fragment) {
 class LocalHttpServer {
 public:
     LocalHttpServer() : fd_(-1), port_(0), served_(false) {
-        fd_ = socket(AF_INET, SOCK_STREAM, 0);
+        fd_ = capsid::win32::create_tcp_socket_fd();
         if (fd_ < 0) {
             fail("cannot create local HTTP server socket");
         }
         const int reuse = 1;
-        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        capsid::win32::setsockopt_reuseaddr_fd(fd_);
 
         struct sockaddr_in address = {};
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         address.sin_port = 0;
-        if (bind(fd_,
+        if (capsid::win32::bind_fd(fd_,
                  reinterpret_cast<const struct sockaddr *>(&address),
                  sizeof(address)) != 0) {
             fail(std::string("cannot bind local HTTP server: ") +
                  std::strerror(errno));
         }
-        if (listen(fd_, 1) != 0) {
+        if (capsid::win32::listen_fd(fd_, 1) != 0) {
             fail(std::string("cannot listen on local HTTP server: ") +
                  std::strerror(errno));
         }
 
         socklen_t address_size = sizeof(address);
-        if (getsockname(fd_,
+        if (capsid::win32::getsockname_fd(fd_,
                         reinterpret_cast<struct sockaddr *>(&address),
                         &address_size) != 0) {
             fail("cannot resolve local HTTP server port");
@@ -82,7 +98,7 @@ public:
 
     ~LocalHttpServer() {
         if (thread_.joinable()) {
-            shutdown(fd_, SHUT_RDWR);
+            capsid::win32::shutdown_fd(fd_);
             thread_.join();
         }
         if (fd_ >= 0) {
@@ -111,14 +127,14 @@ public:
 
 private:
     void serve() {
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd_;
         descriptor.events = POLLIN;
-        if (poll(&descriptor, 1, 15000) <= 0) {
+        if (capsid::win32::capsid_poll(&descriptor, 1, 15000) <= 0) {
             return;
         }
 
-        const int client = accept(fd_, NULL, NULL);
+        const int client = capsid::win32::accept_fd(fd_);
         if (client < 0) {
             return;
         }
@@ -135,7 +151,14 @@ private:
         char buffer[2048];
         while (request.find("\r\n\r\n") == std::string::npos &&
                request.size() < 64u * 1024u) {
+#if defined(_WIN32)
+            // accept_fd returns a CRT fd; Winsock recv takes the raw
+            // SOCKET handle.
+            const ssize_t count =
+                capsid::win32::recv_fd(client, buffer, sizeof(buffer), 0);
+#else
             const ssize_t count = recv(client, buffer, sizeof(buffer), 0);
+#endif
             if (count <= 0) {
                 close(client);
                 return;
@@ -153,7 +176,10 @@ private:
             "capsid-fetch-ok";
         size_t offset = 0;
         while (offset < sizeof(response) - 1) {
-#ifdef MSG_NOSIGNAL
+#if defined(_WIN32)
+            const ssize_t count = capsid::win32::send_fd(
+                client, response + offset, sizeof(response) - 1 - offset, 0);
+#elif defined(MSG_NOSIGNAL)
             const ssize_t count = send(
                 client,
                 response + offset,
@@ -212,10 +238,10 @@ void wait_for_ready(capsid_worker *worker) {
             fail("timed out waiting for READY");
         }
 
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -262,11 +288,11 @@ void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
                  "no error event surfaced");
         }
 
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events =
             POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -326,11 +352,11 @@ void invalid_request_header_fails_closed(capsid_worker *worker,
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("invalid incoming header did not fail closed");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events =
             POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -403,10 +429,10 @@ std::string run_request(capsid_worker *worker,
             fail("timed out waiting for response");
         }
 
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 

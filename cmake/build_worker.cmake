@@ -135,7 +135,20 @@ if(CAPSID_BUILD_WORKER)
     set(BUILD_TJS_RESTRICTED_CORE ON CACHE BOOL "" FORCE)
     set(BUILD_TJS_BENCHMARK_SQLITE OFF CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
-    find_package(Iconv REQUIRED)
+    if(WIN32)
+        # Windows has no system iconv; the vendored win-iconv (public
+        # domain, MultiByteToWideChar-backed) provides the same API the
+        # restricted core's TextDecoder path uses (see vendor/win-iconv).
+        if(NOT TARGET Iconv::Iconv)
+            add_library(capsid_winiconv STATIC
+                "${CMAKE_CURRENT_SOURCE_DIR}/vendor/win-iconv/win_iconv.c")
+            target_include_directories(capsid_winiconv PUBLIC
+                "${CMAKE_CURRENT_SOURCE_DIR}/vendor/win-iconv")
+            add_library(Iconv::Iconv ALIAS capsid_winiconv)
+        endif()
+    else()
+        find_package(Iconv REQUIRED)
+    endif()
     target_sources(tjs PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/txiki_restricted_core.c"
     )
@@ -145,11 +158,29 @@ if(CAPSID_BUILD_WORKER)
     # intentionally fire-and-forget (abort() follows immediately). Suppress
     # only this warning class for the vendored library; project code keeps
     # strict warnings. Vendor fixes should still go through patches/txiki
-    # when the code itself is wrong.
-    target_compile_options(tjs PRIVATE -Wno-unused-result)
+    # when the code itself is wrong. (MSVC warning categories do not map
+    # onto the glibc warn_unused_result class; Windows toolchains warn
+    # differently, matching txiki's own Unix-only -Werror stance.)
+    if(NOT MSVC)
+        target_compile_options(tjs PRIVATE -Wno-unused-result)
+    endif()
+    if(MSVC)
+        # qjsc.c uses POSIX getopt (optarg/optind) with no portability
+        # layer; the vendored shim (vendor/win32-shims) provides it for
+        # the tjsc tool only, force-included into the translation unit.
+        target_sources(tjsc PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/win32-shims/getopt.c")
+        target_compile_options(tjsc PRIVATE
+            "/FI${CMAKE_CURRENT_SOURCE_DIR}/vendor/win32-shims/getopt.h")
+    endif()
 
     if(CAPSID_ESBUILD_EXECUTABLE)
         set(CAPSID_ESBUILD "${CAPSID_ESBUILD_EXECUTABLE}")
+    elseif(WIN32)
+        # npm's .bin/esbuild entry is a shell wrapper on Windows; call the
+        # platform binary directly.
+        set(CAPSID_ESBUILD
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/node_modules/@esbuild/win32-x64/esbuild.exe")
     else()
         set(CAPSID_ESBUILD
             "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/node_modules/.bin/esbuild")
@@ -237,11 +268,22 @@ if(CAPSID_BUILD_WORKER)
         CXX_STANDARD_REQUIRED ON
         OUTPUT_NAME capsid-worker
     )
+    if(MSVC)
+        # worker_runtime.cc uses std::optional (MSVC's C++14 mode has no
+        # <optional>; GNU/Clang already compile this TU as >= C++17 because
+        # their default standard exceeds the requested 11). Windows only —
+        # the POSIX build surface stays unchanged.
+        set_property(TARGET capsid-worker PROPERTY CXX_STANDARD 17)
+    endif()
     if(CAPSID_STRICT_WARNINGS)
-        target_compile_options(capsid-worker PRIVATE
-            -Wall -Wextra -Wpedantic -Werror
-            "$<$<COMPILE_LANGUAGE:CXX>:-Wno-c99-extensions>"
-        )
+        if(MSVC)
+            target_compile_options(capsid-worker PRIVATE /W4 /WX)
+        else()
+            target_compile_options(capsid-worker PRIVATE
+                -Wall -Wextra -Wpedantic -Werror
+                "$<$<COMPILE_LANGUAGE:CXX>:-Wno-c99-extensions>"
+            )
+        endif()
     endif()
     # First-party bytecode compiler (M1D-1): compiles module bytecode with
     # the same QuickJS the worker links (the txiki overlay's tjs), emits the
@@ -255,6 +297,7 @@ if(CAPSID_BUILD_WORKER)
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/capsid-bytecode-compile.cc")
     target_include_directories(capsid-bytecode-compile PRIVATE
         "${CAPSID_GENERATED_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${CAPSID_TXIKI_OVERLAY}/deps/quickjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/jansson/src")
     target_link_libraries(capsid-bytecode-compile PRIVATE

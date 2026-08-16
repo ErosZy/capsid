@@ -964,7 +964,7 @@ capsid::WorkerBindingDescriptor binding_descriptor(
 void test_binding_policy_origin_isolation() {
     const capsid::WorkerBindingDescriptor mongo = binding_descriptor(
         "mongo",
-        {"tjs:internal/core", "tjs:utils"},
+        {"capsid:internal/core", "capsid:utils"},
         {"network-client", "filesystem-write"},
         {"127.0.0.1:27017"},
         {"/var/lib/capsid/mongo"});
@@ -991,22 +991,22 @@ void test_binding_policy_origin_isolation() {
     require(!policy->egress.allows_host("evil.example.com", 27017),
             "unknown host was allowed by the binding net policy");
 
-    require(policy->module_decision("tjs:internal/core") ==
+    require(policy->module_decision("capsid:internal/core") ==
                 capsid::kModuleGranted,
             "granted binding module was denied");
-    require(policy->module_decision("tjs:utils") ==
+    require(policy->module_decision("capsid:utils") ==
                 capsid::kModuleGranted,
             "granted binding module was denied");
-    require(policy->module_decision("tjs:posix-socket") ==
+    require(policy->module_decision("capsid:posix-socket") ==
                 capsid::kModuleForbidden,
             "raw Posix Socket was not permanently forbidden");
     require(policy->module_decision("capsid:fs") ==
                 capsid::kModuleDenied,
             "user facade was granted to the binding policy");
-    require(policy->module_decision("tjs:ffi") ==
+    require(policy->module_decision("capsid:ffi") ==
                 capsid::kModuleForbidden,
             "permanently forbidden module was not forbidden");
-    require(policy->module_decision("tjs:uuid") ==
+    require(policy->module_decision("capsid:uuid") ==
                 capsid::kModuleDenied,
             "ungranted module was allowed");
 
@@ -1049,7 +1049,7 @@ void test_binding_policy_origin_isolation() {
 
     // §3.2: the User policy is never widened by any Binding grant. The
     // user gate below holds a user-only policy and must still deny the
-    // binding's write path and the binding's tjs modules.
+    // Binding's write path and Binding-only Capsid modules.
     capsid::CapabilityPolicy user_policy;
     std::vector<capsid_permission_rule> user_rules;
     user_rules.push_back(rule(
@@ -1074,7 +1074,7 @@ void test_binding_policy_origin_isolation() {
                 "/var/lib/capsid/mongo")
                 .state == CAPSID_PERMISSION_STATE_DENIED,
             "binding fs read widened the user policy");
-    require(user_policy.module_decision("tjs:internal/core") !=
+    require(user_policy.module_decision("capsid:internal/core") !=
                 capsid::kModuleGranted,
             "binding module grant widened the user module policy");
 
@@ -1082,7 +1082,7 @@ void test_binding_policy_origin_isolation() {
     // leaves no partial state behind.
     const capsid::WorkerBindingDescriptor forbidden_module =
         binding_descriptor(
-            "bad-module", {"tjs:ffi"}, {}, {}, {});
+            "bad-module", {"capsid:ffi"}, {}, {}, {});
     capsid::BindingPolicySet partial;
     require(!partial.configure(
                 std::vector<capsid::WorkerBindingDescriptor>{
@@ -1095,7 +1095,7 @@ void test_binding_policy_origin_isolation() {
 
     const capsid::WorkerBindingDescriptor bad_target =
         binding_descriptor(
-            "bad-target", {"tjs:utils"}, {}, {"noport"}, {});
+            "bad-target", {"capsid:utils"}, {}, {"noport"}, {});
     capsid::BindingPolicySet target_set;
     require(!target_set.configure(
                 std::vector<capsid::WorkerBindingDescriptor>{bad_target},
@@ -1105,7 +1105,7 @@ void test_binding_policy_origin_isolation() {
 
     const capsid::WorkerBindingDescriptor bad_profile =
         binding_descriptor(
-            "bad-profile", {"tjs:utils"}, {"network-server"}, {}, {});
+            "bad-profile", {"capsid:utils"}, {"network-server"}, {}, {});
     capsid::BindingPolicySet profile_set;
     require(!profile_set.configure(
                 std::vector<capsid::WorkerBindingDescriptor>{bad_profile},
@@ -1115,7 +1115,7 @@ void test_binding_policy_origin_isolation() {
 
     const capsid::WorkerBindingDescriptor same_id =
         binding_descriptor(
-            "mongo", {"tjs:utils"}, {}, {}, {});
+            "mongo", {"capsid:utils"}, {}, {}, {});
     capsid::BindingPolicySet duplicate_set;
     require(!duplicate_set.configure(
                 std::vector<capsid::WorkerBindingDescriptor>{
@@ -1168,13 +1168,13 @@ void test_binding_policy_origin_isolation() {
 void test_binding_profile_digest_and_consistency() {
     const capsid::WorkerBindingDescriptor mongo = binding_descriptor(
         "mongo",
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         {"network-client", "filesystem-write"},
         {"127.0.0.1:27017"},
         {"/var/lib/capsid/mongo"});
     const capsid::WorkerBindingDescriptor redis = binding_descriptor(
         "redis",
-        {"tjs:utils"},
+        {"capsid:utils"},
         {"network-client", "filesystem-read"},
         {"127.0.0.1:6379"},
         {});
@@ -1211,7 +1211,7 @@ void test_binding_profile_digest_and_consistency() {
     // A second binding that shares every profile adds nothing to the union.
     const capsid::WorkerBindingDescriptor mongo_tls = binding_descriptor(
         "mongo-tls",
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         {"network-client", "filesystem-write"},
         {"db.example.com:27017"},
         {"/var/lib/capsid/mongo"});
@@ -1226,7 +1226,7 @@ void test_binding_profile_digest_and_consistency() {
     // policy set rejects an inconsistent descriptor atomically.
     const capsid::WorkerBindingDescriptor net_without_profile =
         binding_descriptor(
-            "net-bad", {"tjs:utils"}, {}, {"127.0.0.1:27017"}, {});
+            "net-bad", {"capsid:utils"}, {}, {"127.0.0.1:27017"}, {});
     capsid::BindingPolicySet net_set;
     std::string error;
     require(!net_set.configure(
@@ -1238,7 +1238,7 @@ void test_binding_profile_digest_and_consistency() {
 
     const capsid::WorkerBindingDescriptor write_without_profile =
         binding_descriptor(
-            "fs-bad", {"tjs:utils"}, {}, {}, {"/var/lib/capsid/mongo"});
+            "fs-bad", {"capsid:utils"}, {}, {}, {"/var/lib/capsid/mongo"});
     capsid::BindingPolicySet fs_set;
     require(!fs_set.configure(
                 std::vector<capsid::WorkerBindingDescriptor>{
@@ -1249,7 +1249,7 @@ void test_binding_profile_digest_and_consistency() {
 
     capsid::WorkerBindingDescriptor read_without_profile =
         binding_descriptor(
-            "fs-read-bad", {"tjs:utils"}, {}, {}, {});
+            "fs-read-bad", {"capsid:utils"}, {}, {}, {});
     read_without_profile.fs_read.push_back("/etc/capsid/mongo");
     capsid::BindingPolicySet read_set;
     require(!read_set.configure(
@@ -1261,35 +1261,75 @@ void test_binding_profile_digest_and_consistency() {
 
     const capsid::WorkerBindingDescriptor sqlite_without_profile =
         binding_descriptor(
-            "sqlite-bad", {"tjs:sqlite"}, {}, {}, {});
+            "sqlite-bad", {"capsid:sqlite"}, {}, {}, {});
     capsid::BindingPolicySet sqlite_set;
     require(!sqlite_set.configure(
                 std::vector<capsid::WorkerBindingDescriptor>{
                     sqlite_without_profile},
                 &error) &&
                 error.find("sqlite") != std::string::npos,
-            "tjs:sqlite without the sqlite profile was accepted");
+            "capsid:sqlite without the sqlite profile was accepted");
 
     const capsid::WorkerBindingDescriptor wasi_without_profile =
         binding_descriptor(
-            "wasi-bad", {"tjs:wasi"}, {}, {}, {});
+            "wasi-bad", {"capsid:wasi"}, {}, {}, {});
     capsid::BindingPolicySet wasi_set;
     require(!wasi_set.configure(
                 std::vector<capsid::WorkerBindingDescriptor>{
                     wasi_without_profile},
                 &error) &&
                 error.find("wasi") != std::string::npos,
-            "tjs:wasi without the wasi profile was accepted");
+            "capsid:wasi without the wasi profile was accepted");
 
     // An empty allow list needs no profile.
     const capsid::WorkerBindingDescriptor empty_net = binding_descriptor(
-        "empty-net", {"tjs:utils"}, {}, {}, {});
+        "empty-net", {"capsid:utils"}, {}, {}, {});
     capsid::BindingPolicySet empty_set;
     require(empty_set.configure(
                 std::vector<capsid::WorkerBindingDescriptor>{empty_net},
                 &error),
             "empty net allow list without a profile was rejected");
 }
+
+#if defined(_WIN32)
+void test_windows_drive_path_normalization() {
+    std::vector<capsid_permission_rule> rules;
+    rules.push_back(rule(
+        CAPSID_PERMISSION_READ,
+        CAPSID_PERMISSION_ALLOW,
+        "C:/srv/app/data",
+        70));
+    capsid::CapabilityPolicy compiled;
+    std::string error;
+    require(configure(
+                &compiled,
+                std::vector<const char *>(),
+                rules,
+                NULL,
+                &error),
+            error);
+    require(
+        compiled.evaluate(CAPSID_PERMISSION_READ,
+                          "C:/srv/app/data/public/file.txt").state ==
+            CAPSID_PERMISSION_STATE_GRANTED,
+        "Windows forward-slash path was not normalized");
+    require(
+        compiled.evaluate(CAPSID_PERMISSION_READ,
+                          "C:\\srv\\app\\data\\public\\file.txt").state ==
+            CAPSID_PERMISSION_STATE_GRANTED,
+        "Windows backslash path was not normalized");
+    require(
+        compiled.evaluate(CAPSID_PERMISSION_READ,
+                          "D:/srv/app/data/file.txt").state ==
+            CAPSID_PERMISSION_STATE_DENIED,
+        "Windows path escaped to another drive");
+    require(
+        compiled.evaluate(CAPSID_PERMISSION_READ,
+                          "C:/srv/app/../../etc").state ==
+            CAPSID_PERMISSION_STATE_DENIED,
+        "Windows path traversal escaped the root");
+}
+#endif
 
 }  // namespace
 
@@ -1305,5 +1345,8 @@ int main() {
     test_malformed_rules();
     test_binding_policy_origin_isolation();
     test_binding_profile_digest_and_consistency();
+#if defined(_WIN32)
+    test_windows_drive_path_normalization();
+#endif
     return 0;
 }

@@ -5,6 +5,7 @@
 #include <openssl/evp.h>
 
 #include <algorithm>
+#include <cctype>
 #include <limits>
 #include <map>
 #include <set>
@@ -43,18 +44,40 @@ std::uint32_t rule_id(const std::string& label) {
 }
 
 // Lexical path normalization: resolve "." and ".." without touching the
-// filesystem; rejects escapes above the root.
+// filesystem; rejects escapes above the root. POSIX paths keep the "/"
+// root; on Windows drive-letter absolute paths (C:/..., C:\...) normalize
+// to the canonical C:/... form shared with the capability policy.
 bool normalize_path(const std::string& path, std::string* out) {
-    if (path.empty() || path[0] != '/') {
+    if (path.empty() || path.size() > 4096) {
+        return false;
+    }
+    std::string root = "/";
+    std::size_t begin = 1;
+    bool windows_drive = false;
+#if defined(_WIN32)
+    if (path.size() >= 3 &&
+        std::isalpha(static_cast<unsigned char>(path[0])) &&
+        path[1] == ':' && (path[2] == '/' || path[2] == '\\')) {
+        root.clear();
+        root.push_back(static_cast<char>(
+            std::toupper(static_cast<unsigned char>(path[0]))));
+        root += ":/";
+        begin = 3;
+        windows_drive = true;
+    }
+#endif
+    if (!windows_drive && path[0] != '/') {
         return false;
     }
     std::vector<std::string> components;
-    std::size_t begin = 1;
     while (begin <= path.size()) {
-        const std::size_t end = path.find('/', begin);
+        const std::size_t end = windows_drive
+            ? path.find_first_of("/\\", begin)
+            : path.find('/', begin);
+        const std::size_t component_end =
+            end == std::string::npos ? path.size() : end;
         const std::string component =
-            path.substr(begin, end == std::string::npos ? std::string::npos
-                                                        : end - begin);
+            path.substr(begin, component_end - begin);
         if (component == "..") {
             if (components.empty()) {
                 return false;  // escapes the root
@@ -63,16 +86,21 @@ bool normalize_path(const std::string& path, std::string* out) {
         } else if (!component.empty() && component != ".") {
             components.push_back(component);
         }
-        if (end == std::string::npos) {
+        if (component_end == path.size()) {
             break;
         }
-        begin = end + 1;
+        begin = component_end + 1;
     }
-    std::ostringstream out_stream;
+    *out = root;
     for (const std::string& component : components) {
-        out_stream << '/' << component;
+        if (!out->empty() && out->back() != '/') {
+            out->push_back('/');
+        }
+        *out += component;
     }
-    *out = out_stream.str().empty() ? "/" : out_stream.str();
+    if (out->size() > root.size() && out->back() == '/') {
+        out->pop_back();
+    }
     return true;
 }
 
@@ -282,6 +310,34 @@ PolicyCompileResult compile_policy(
         }
         result.effective.fs_read.push_back(normalized);
     }
+    // fs read denials: normalized deny paths must also stay within the
+    // Host roots (a deny outside every root is a no-op and therefore an
+    // operator error, not a silent rule), and deny always wins over allow
+    // in the Runtime's capability evaluation.
+    std::set<std::string> requested_fs_deny;
+    for (const std::string& raw : app.fs_read_deny) {
+        if (!requested_fs_deny.insert(raw).second) {
+            result.error = "duplicate filesystem denial";
+            return result;
+        }
+        std::string normalized;
+        if (!normalize_path(raw, &normalized)) {
+            result.error = "invalid filesystem deny path";
+            return result;
+        }
+        bool within = false;
+        for (const std::string& root : normalized_roots) {
+            if (path_within(normalized, root)) {
+                within = true;
+                break;
+            }
+        }
+        if (!within) {
+            result.error = "filesystem deny path outside the Host roots";
+            return result;
+        }
+        result.effective.fs_read_deny.push_back(normalized);
+    }
 
     // Fetch: app host:port must be covered by a host target.
     for (const FetchTarget& target : app.fetch) {
@@ -457,6 +513,18 @@ PolicyCompileResult compile_policy(
         result.error = "process memory ceiling below the JS heap limit";
         return result;
     }
+#if defined(__APPLE__)
+    // Darwin refuses the address-space limit by design (sandbox.cc's
+    // __APPLE__ branch; the worker also rejects a nonzero
+    // process_memory_limit at spawn). Reject the document at compile
+    // time so a deployment with processAddressSpace fails closed here
+    // instead of activating and then dying on its first worker spawn.
+    if (result.effective.process_address_bytes > 0) {
+        result.error = "process memory limit is unsupported on macOS; "
+                       "remove processAddressSpace or set it to 0";
+        return result;
+    }
+#endif
     // Canonical fetch ordering.
     std::sort(result.effective.fetch.begin(), result.effective.fetch.end(),
               [](const FetchTarget& a, const FetchTarget& b) {
@@ -464,6 +532,8 @@ PolicyCompileResult compile_policy(
               });
     // Canonical fs ordering.
     std::sort(result.effective.fs_read.begin(), result.effective.fs_read.end());
+    std::sort(result.effective.fs_read_deny.begin(),
+              result.effective.fs_read_deny.end());
 
     // Canonical ordering: semantically identical inputs in any order must
     // produce the same effective config, JSON and digests.
@@ -533,6 +603,16 @@ PolicyCompileResult compile_policy(
             return result;
         }
         result.effective.fs_rule_ids.push_back(rule_id("fs:" + path));
+    }
+    for (const std::string& path : result.effective.fs_read_deny) {
+        // Distinct label namespace from allow rules: an allow and a deny on
+        // the same path must each keep a unique id, and the Runtime applies
+        // the deny before the allow regardless of path specificity.
+        if (!add_rule("fs-deny:" + path)) {
+            return result;
+        }
+        result.effective.fs_deny_rule_ids.push_back(
+            rule_id("fs-deny:" + path));
     }
     for (const FetchTarget& target : result.effective.fetch) {
         if (!add_rule("fetch:" + target.host)) {
@@ -614,6 +694,22 @@ PolicyCompileResult compile_policy(
              << json_escape(result.effective.fs_read[index])
              << "\",\"ruleId\":" << id->second << '}';
     }
+    json << "],\"fsDeny\":[";
+    for (std::size_t index = 0;
+         index < result.effective.fs_read_deny.size(); ++index) {
+        if (index > 0) {
+            json << ',';
+        }
+        const std::map<std::string, std::uint32_t>::const_iterator id =
+            id_by_label.find("fs-deny:" + result.effective.fs_read_deny[index]);
+        if (id == id_by_label.end()) {
+            result.error = "missing fs deny rule id";
+            return result;
+        }
+        json << "{\"path\":\""
+             << json_escape(result.effective.fs_read_deny[index])
+             << "\",\"ruleId\":" << id->second << '}';
+    }
     json << "],\"fetch\":[";
     for (std::size_t index = 0; index < result.effective.fetch.size(); ++index) {
         if (index > 0) {
@@ -692,6 +788,9 @@ PolicyCompileResult compile_policy(
     for (const std::string& path : app.fs_read) {
         app_stream << "f:" << path << ';';
     }
+    for (const std::string& path : app.fs_read_deny) {
+        app_stream << "fd:" << path << ';';
+    }
     for (const FetchTarget& target : app.fetch) {
         app_stream << "t:" << target.host << ':';
         for (const std::uint16_t port : target.ports) {
@@ -724,6 +823,239 @@ PolicyCompileResult compile_policy(
 
     result.ok = true;
     return result;
+}
+
+void RuntimePolicy::apply(capsid_worker_config* config) const {
+    config->capability_policy = &capability;
+    // A null egress policy keeps the Runtime's deny-all default for empty
+    // fetch sets; an empty-but-present policy must never be confused with
+    // "no policy" (see the managed builder's net_policy note).
+    config->egress_policy = has_egress ? &egress : nullptr;
+}
+
+bool build_runtime_policy(
+    const EffectiveConfig& effective,
+    const std::vector<std::pair<std::string, std::string>>& env_values,
+    RuntimePolicy* out,
+    std::string* error) {
+    // Two-phase descriptor build: every owning vector is fully populated
+    // before any pointer into it is taken. A c_str() taken after one
+    // push_back and read after a later push_back dangles when the vector
+    // reallocates (the double-env RED test caught exactly this
+    // heap-use-after-free under ASan).
+    out->module_names.clear();
+    out->module_names.reserve(effective.modules.size());
+    for (const std::string& module : effective.modules) {
+        out->module_names.push_back(module);
+    }
+    out->rule_resources.clear();
+    out->rule_resources.reserve(effective.env.size() +
+                                effective.fs_read.size() +
+                                effective.fs_read_deny.size() +
+                                effective.storage_namespaces.size() +
+                                effective.stdio_streams.size());
+    for (const EffectiveEnvEntry& entry : effective.env) {
+        out->rule_resources.push_back(entry.name);
+    }
+    for (const std::string& path : effective.fs_read) {
+        out->rule_resources.push_back(path);
+    }
+    for (const std::string& path : effective.fs_read_deny) {
+        out->rule_resources.push_back(path);
+    }
+    for (const std::string& namespace_name : effective.storage_namespaces) {
+        out->rule_resources.push_back(namespace_name);
+    }
+    for (const std::string& stream : effective.stdio_streams) {
+        out->rule_resources.push_back(stream);
+    }
+    out->rules.clear();
+    out->rules.reserve(out->rule_resources.size());
+    std::size_t resource_index = 0;
+    for (const EffectiveEnvEntry& entry : effective.env) {
+        // The policy compiler assigns a stable non-zero rule id per entry;
+        // the Runtime rejects a zero or duplicate id across the policy.
+        if (entry.rule_id == 0) {
+            *error = "missing env rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_ENV;
+        rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = entry.rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    for (std::size_t index = 0; index < effective.fs_read.size(); ++index) {
+        const std::uint32_t rule_id =
+            index < effective.fs_rule_ids.size()
+                ? effective.fs_rule_ids[index]
+                : 0;
+        if (rule_id == 0) {
+            *error = "missing fs rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_READ;
+        rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    for (std::size_t index = 0;
+         index < effective.fs_read_deny.size(); ++index) {
+        const std::uint32_t rule_id =
+            index < effective.fs_deny_rule_ids.size()
+                ? effective.fs_deny_rule_ids[index]
+                : 0;
+        if (rule_id == 0) {
+            *error = "missing fs deny rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_READ;
+        rule.action = CAPSID_PERMISSION_DENY;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    // Storage namespaces and stdio streams are exact-match resources: the
+    // Runtime module gates on CAPSID_PERMISSION_STORAGE/STDIO with the
+    // verbatim namespace/stream name. Each rule carries the compiler's
+    // stable unique id, exactly like env/fs/fetch.
+    for (std::size_t index = 0; index < effective.storage_namespaces.size();
+         ++index) {
+        const std::uint32_t rule_id =
+            index < effective.storage_rule_ids.size()
+                ? effective.storage_rule_ids[index]
+                : 0;
+        if (rule_id == 0) {
+            *error = "missing storage rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_STORAGE;
+        rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    for (std::size_t index = 0; index < effective.stdio_streams.size();
+         ++index) {
+        const std::uint32_t rule_id =
+            index < effective.stdio_rule_ids.size()
+                ? effective.stdio_rule_ids[index]
+                : 0;
+        if (rule_id == 0) {
+            *error = "missing stdio rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_STDIO;
+        rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    // Fetch is NOT a CAPSID_PERMISSION_NET rule: the Runtime rejects
+    // resource-carrying NET rules and requires the network policy to live
+    // in the egress policy (config.egress_policy). Targets and rules are
+    // again populated in two phases. Explicit rule ids are left zero so
+    // the ABI assigns index + 1: a host, expanded to several port rules,
+    // must not repeat one explicit id (the Runtime rejects duplicates).
+    out->egress_targets.clear();
+    out->egress_rules.clear();
+    out->has_egress = !effective.fetch.empty();
+    std::size_t egress_rule_count = 0;
+    for (const FetchTarget& target : effective.fetch) {
+        egress_rule_count += target.ports.empty() ? 1 : target.ports.size();
+    }
+    out->egress_targets.reserve(effective.fetch.size());
+    out->egress_rules.reserve(egress_rule_count);
+    for (const FetchTarget& target : effective.fetch) {
+        out->egress_targets.push_back(target.host);
+    }
+    for (std::size_t index = 0; index < effective.fetch.size(); ++index) {
+        const FetchTarget& target = effective.fetch[index];
+        if (target.ports.empty()) {
+            capsid_egress_rule rule;
+            capsid_egress_rule_init(&rule);
+            rule.action = CAPSID_EGRESS_ALLOW;
+            rule.target = out->egress_targets[index].c_str();
+            rule.port_start = 0;  // any port
+            rule.port_end = 0;
+            rule.rule_id = 0;
+            out->egress_rules.push_back(rule);
+        } else {
+            for (const std::uint16_t port : target.ports) {
+                capsid_egress_rule rule;
+                capsid_egress_rule_init(&rule);
+                rule.action = CAPSID_EGRESS_ALLOW;
+                rule.target = out->egress_targets[index].c_str();
+                rule.port_start = port;
+                rule.port_end = port;
+                rule.rule_id = 0;
+                out->egress_rules.push_back(rule);
+            }
+        }
+    }
+    capsid_egress_policy_init(&out->egress);
+    out->egress.default_action = CAPSID_EGRESS_DENY;
+    out->egress.rules =
+        out->egress_rules.empty() ? nullptr : out->egress_rules.data();
+    out->egress.rule_count =
+        static_cast<std::uint32_t>(out->egress_rules.size());
+
+    out->env_values = env_values;
+    out->env_entries.clear();
+    out->env_entries.reserve(out->env_values.size());
+    // Entry pointers reference the policy's own copy, not the caller's
+    // vector: on the local-capsid.json path the caller's env_values dies
+    // when load_local_capsid_policy returns, long before the spawn.
+    for (const std::pair<std::string, std::string>& entry : out->env_values) {
+        capsid_env_entry env_entry;
+        capsid_env_entry_init(&env_entry);
+        env_entry.name = entry.first.c_str();
+        env_entry.value = entry.second.c_str();
+        out->env_entries.push_back(env_entry);
+    }
+    // The capability table wants const char* pointers, which must point
+    // into this policy's own storage; module_names is stable here (the
+    // two-phase build never touches it after this point).
+    out->module_pointers.clear();
+    out->module_pointers.reserve(out->module_names.size());
+    for (const std::string& module : out->module_names) {
+        out->module_pointers.push_back(module.c_str());
+    }
+    capsid_capability_policy_init(&out->capability);
+    out->capability.allowed_modules =
+        out->module_pointers.empty() ? nullptr : out->module_pointers.data();
+    out->capability.allowed_module_count =
+        static_cast<std::uint32_t>(out->module_names.size());
+    out->capability.rules =
+        out->rules.empty() ? nullptr : out->rules.data();
+    out->capability.rule_count =
+        static_cast<std::uint32_t>(out->rules.size());
+    out->capability.env_entries =
+        out->env_entries.empty() ? nullptr : out->env_entries.data();
+    out->capability.env_entry_count =
+        static_cast<std::uint32_t>(out->env_entries.size());
+    // Without this the worker's egress check consults a default-constructed
+    // (deny-all) net policy whenever a capability policy is present — which
+    // is always the case in managed mode — so every fetch was rejected.
+    // nullptr keeps the deny-all fail-closed default for empty fetch sets.
+    out->capability.net_policy = out->has_egress ? &out->egress : nullptr;
+    return true;
 }
 
 }  // namespace capsid::host

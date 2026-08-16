@@ -467,6 +467,105 @@ jobs:
           if-no-files-found: error
           path: build-macos/macos-junit.xml
 
+  windows-host-library:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out recursively pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          # The txiki vendor audit derives the pinned tag via git describe;
+          # submodule checkouts must carry the tag refs.
+          fetch-tags: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      # Ninja invokes `cl` via PATH, unlike the MSBuild generator that
+      # resolves the toolchain itself; without the VS developer
+      # environment CMake cannot find the MSVC compiler.
+      - name: Set up the MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1 (v1.13.0; default-branch commits carry no node_modules)
+
+      # The worker bootstrap bundles via esbuild from the locked txiki.js
+      # node_modules; without this the Windows configure fails with
+      # "esbuild is missing".
+      - name: Install locked JavaScript dependencies
+        run: |
+          set -euo pipefail
+          for directory in \
+            vendor/txiki.js \
+            examples/hono-reference \
+            examples/itty-router-reference \
+            examples/h3-v2-reference
+          do
+            npm ci --ignore-scripts --prefix "${directory}"
+          done
+          # The vendor audit's expected tag must match cmake/build_tests.cmake
+          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
+          git -C vendor/txiki.js fetch --depth=1 origin \
+            refs/tags/v26.6.0:refs/tags/v26.6.0
+        shell: bash
+
+      # OpenSSL (static) and Boost.System/Asio (header-only) come from the
+      # runner's preinstalled vcpkg; the static triplet matches the /MT CRT
+      # policy pinned by the vendored txiki build. boost-asio is a separate
+      # port from boost-system (the Host data plane needs <boost/asio.hpp>).
+      - name: Install Windows build dependencies (vcpkg)
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
+            openssl boost-system boost-asio boost-beast --triplet x64-windows-static
+        shell: pwsh
+
+      # §12.5 Windows row: Host units plus the non-strict worker contracts.
+      # Linux-only strict-sandbox and managed-suite tests are not registered
+      # on Windows (they SKIP by absence, never FAIL), and the §12.3 package
+      # suite is excluded here (the Release job packages Windows).
+      # Ninja keeps this single-config like every other job; the Visual
+      # Studio generator would default to Debug builds and require ctest
+      # -C <config>, which quietly "Not Run"s the whole matrix. Pin the
+      # compiler to cl: in a non-vcvars shell Ninja otherwise grabs mingw
+      # gcc off PATH, which cannot build the CRT/winsock port.
+      - name: Configure Windows host library and worker contracts
+        run: |
+          cmake -S . -B build-windows `
+            -G Ninja `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCAPSID_BUILD_HOST=ON `
+            -DCAPSID_BUILD_WORKER=ON `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+        shell: pwsh
+
+      - name: Build Windows Host and worker contracts
+        run: |
+          cmake --build build-windows --parallel 2
+          # The named gate mirrors the macOS job: a quietly skipped
+          # Boost-backed Host surface would fail this step explicitly.
+          cmake --build build-windows --parallel 2 --target capsid-host
+
+      - name: Run Windows host-side matrix
+        run: |
+          ctest --test-dir build-windows `
+            --output-on-failure `
+            --output-junit windows-junit.xml `
+            -E '^(wpt_conformance_not_configured|worker_package_.*)$'
+        shell: pwsh
+
+      - name: Save Windows evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: windows-host-library-evidence
+          if-no-files-found: error
+          path: build-windows/windows-junit.xml
+
   hosted-evidence-index:
     if: always()
     needs:
@@ -474,6 +573,7 @@ jobs:
       - sanitizers
       - fuzz
       - posix-host-library
+      - windows-host-library
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -491,6 +591,7 @@ jobs:
           SANITIZER_RESULT: ${{ needs.sanitizers.result }}
           FUZZ_RESULT: ${{ needs.fuzz.result }}
           MACOS_RESULT: ${{ needs.posix-host-library.result }}
+          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
         run: |
           set -euo pipefail
           mkdir -p hosted-evidence/inputs
@@ -504,6 +605,7 @@ jobs:
             printf 'sanitizers=%s\n' "${SANITIZER_RESULT}"
             printf 'fuzz=%s\n' "${FUZZ_RESULT}"
             printf 'macos=%s\n' "${MACOS_RESULT}"
+            printf 'windows=%s\n' "${WINDOWS_RESULT}"
           } > hosted-evidence/run.txt
           # §12.5: the index also records the Release package identity —
           # build ID, compatibility ID, package hash and SBOM hash — from
@@ -539,8 +641,10 @@ jobs:
           SANITIZER_RESULT: ${{ needs.sanitizers.result }}
           FUZZ_RESULT: ${{ needs.fuzz.result }}
           MACOS_RESULT: ${{ needs.posix-host-library.result }}
+          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
         run: |
           test "${RELEASE_RESULT}" = success
           test "${SANITIZER_RESULT}" = success
           test "${FUZZ_RESULT}" = success
           test "${MACOS_RESULT}" = success
+          test "${WINDOWS_RESULT}" = success

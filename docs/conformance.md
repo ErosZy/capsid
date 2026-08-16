@@ -1,144 +1,131 @@
-# 标准与合规
+# Standards and Conformance
 
-目标 profile：`CAPSID-MIN-2025-subset-v0`。本文合并标准来源锁、合规偏差与
-能力追踪矩阵；机器读取的 WPT 选择以
-[`tests/wpt/manifest.json`](../tests/wpt/manifest.json) 为准。测试执行方式见
-[测试与持续门禁](testing.md)。
+Target profile: `CAPSID-MIN-2025-subset-v0`. This document combines the standard source lock, conformance deviations, and capability tracking matrix; the machine-readable WPT selection is [`tests/wpt/manifest.json`](../tests/wpt/manifest.json). Test execution is described in [Testing and Continuous Gates](testing.md).
 
-## 1. 标准来源锁
+## 1. Standard Source Lock
 
-### 规范基线
+### Specification Baseline
 
-- 标准：ECMA-429《Minimum common web API》第一版，2025 年 12 月；
-- 发布文档：
-  `https://ecma-international.org/wp-content/uploads/ECMA-429_1st_edition_december_2025.pdf`；
-- PDF SHA-256：
-  `9f8abe3fa86517675cb8388b8b2b3a4024bb6d5d9e3467b89ae4013d20ae30b5`；
-- 建锁时参考的编辑源：`WinterTC55/proposal-minimum-common-api`
-  commit `fe94bc2b0e349d7aae635c27c653b5165039ab66`。
+- Standards body: ECMA TC55 (WinterTC), Web-interoperable Runtimes Community Group;
+- Standard: ECMA-429 *Minimum common web API*, first edition, December 2025;
+- Capsid profile: `CAPSID-MIN-2025-subset-v0` (a versioned, testable subset of
+  ECMA-429; full conformance is not claimed outside the profile);
+- published document:
+  `https://ecma-international.org/wp-content/uploads/ECMA-429_1st_edition_december_2025.pdf`;
+- PDF SHA-256:
+  `9f8abe3fa86517675cb8388b8b2b3a4024bb6d5d9e3467b89ae4013d20ae30b5`;
+- editorial source referenced when locking: `WinterTC55/proposal-minimum-common-api` commit `fe94bc2b0e349d7aae635c27c653b5165039ab66`.
 
-在线 editor draft 只供参考，不能静默替换已发布版本。ECMA-429 引用的 living
-standard 通过固定 WPT revision 提供可复现测试；移动 WPT commit 本身就是
-需要审查的 conformance 更新。
+The online editor draft is for reference only and cannot silently replace the published version. Living standards referenced by ECMA-429 are made reproducible through a pinned WPT revision; moving the WPT commit is itself a conformance update requiring review.
 
-### WPT 锁
+### WinterTC Alignment
 
-- 仓库：`https://github.com/web-platform-tests/wpt.git`；
-- commit：`1985b47aa8972a970f005957f2bfa036da1787c6`；
-- 精确路径：`tests/wpt/manifest.json`；
-- branch name 不能作为构建或 CI 输入；
-- 测试文件和传递资源必须来自同一 commit；
-- WPT checkout 只作为测试输入，不链接到运行时。
+Capsid follows the WinterTC runtime model: applications export a Web-standard
+`fetch(request)` handler and receive `Request`/`Response`, Web Streams, `URL` and
+`URLPattern`, Text Encoding, Web Crypto, timers and microtasks, `AbortController`,
+`MessageChannel`/`MessagePort`, and WebAssembly through the profile listed above.
+The profile is enforced by the restricted build and is evidenced by the pinned
+WPT batch plus process-level contract tests. Anything outside the profile (for
+example a Node-style server API) is an intentional product boundary, not a hidden
+conformance gap; see the capability tracking matrix below.
 
-当前 profile 执行 manifest 中 `executedProfile` 的 84 个路径。每个文件与
-项目 adapter 组合后，在独立 worker/realm 中执行。CMake 会拒绝 `HEAD` 与
-锁定 commit 不一致的 checkout。
+### WPT Lock
 
-HTML 输入只提取原 inline script，不修改 assertion。每个 bundle 使用固定的
-WPT URL 作为逻辑源码名，便于错误定位。
+- Repo: `https://github.com/web-platform-tests/wpt.git`;
+- commit: `1985b47aa8972a970f005957f2bfa036da1787c6`;
+- exact path: `tests/wpt/manifest.json`;
+- branch names cannot be build or CI inputs;
+- test files and transitive resources must come from the same commit;
+- WPT checkout is only a test input and is not linked into the runtime.
 
-`promise-rejection-events.html` 的 document-scoped harness 不适合当前
-one-file-per-worker-realm 模型，因此 manifest 将其列入 `notExecuted`；
-对应 worker support source 直接执行，ordering 语义由项目 contract 补足。
+The current profile executes the 84 paths in `executedProfile` in the manifest. Each file runs in an independent worker/realm after being combined with the project adapter. CMake rejects checkouts whose `HEAD` does not equal the pinned commit.
 
-### 证据分层
+HTML inputs extract only the original inline script; assertions are not modified. Each bundle uses the fixed WPT URL as the logical source name to make error location easier.
 
-1. `worker_p1_platform_contract`：项目自有的进程级回归，不标记为 WPT；
-2. adapted WPT：保留上游 assertion 和 metadata，adapter 只提供 harness、
-   固定资源和结果传输；
-3. host integration：覆盖 IPC、生命周期、网络、资源限制和 C ABI。
+The document-scoped harness in `promise-rejection-events.html` is not suitable for the current one-file-per-worker-realm model, so the manifest lists it as `notExecuted`; the corresponding worker support source executes directly, and ordering semantics are supplied by the project contract.
 
-第一层通过不能推出第二层通过。能力矩阵会分别记录。
+### Evidence Layers
 
-adapter 支持当前选择所需的 sync/async/promise test primitives。任何未支持
-harness 能力必须使批次失败，不能静默 skip。测试专用的 `location.href`、
-固定 resource map 和 rejection trigger 只存在于测试 realm，不进入产品表面。
+1. `worker_p1_platform_contract`: the project's own process-level regression, not marked as WPT;
+2. adapted WPT: preserves upstream assertions and metadata; the adapter only provides harness, pinned resources, and result transport;
+3. host integration: covers IPC, lifecycle, network, resource limits, and the C ABI.
 
-已审查的机械适配包括：
+Passing the first layer cannot imply passing the second. The capability matrix records them separately.
 
-- classic-script 资源在 ESM bundling 前按固定顺序拼接；
-- 去除拼接后会产生重复声明的 helper tail；
-- 将 strict ESM 中非法的 rest parameter `arguments` 改为
-  `importArguments`；
-- CAPSID-D009 下用等价 `Reflect.construct` 探针替换 QuickJS 有问题的
-  Proxy constructor probe。
+The adapter supports the sync/async/promise test primitives required by the current selection. Any unsupported harness capability must fail the batch, not silently skip. Test-only `location.href`, the pinned resource map, and rejection triggers exist only in the test realm and do not enter the product surface.
 
-expected failure 必须精确到 path/subtest，并引用已登记偏差；unexpected
-failure 和 unexpected pass 都使结果失败。
+Reviewed mechanical adaptations include:
 
-### 选择与排除
+- classic-script resources are concatenated in fixed order before ESM bundling;
+- helper tails that would create duplicate declarations after concatenation are removed;
+- the rest parameter `arguments`, illegal in strict ESM, is renamed to `importArguments`;
+- under CAPSID-D009, a problematic QuickJS Proxy constructor probe is replaced with an equivalent `Reflect.construct` probe.
 
-- 只有属于 ECMA-429 且纳入本 profile 的 API 才在范围内；
-- profile 内测试若不执行，必须引用偏差或开放 gap ID；
-- harness 不兼容是需要修复的工作，不能当成语义 expected failure；
-- Window、Document、ServiceWorker、WASI 等 profile 外 API 无需偏差 ID；
-- tentative test 默认不选，除非有明确且稳定的 profile 需求；
-- 不得编辑测试去迎合当前 txiki.js 行为；
-- 网络测试必须使用确定性的本地 fixture，公共互联网不是 conformance 依赖。
+Expected failures must be exact to path/subtest and reference a registered deviation; unexpected failures and unexpected passes both fail the result.
 
-### 更新流程
+### Selection and Exclusion
 
-更新必须记录旧/新 commit，审查所有已选文件变化，运行完整
-contract/WPT/integration 矩阵，确认 vendor clean，并同步能力矩阵与偏差表。
-CI 必须拒绝与 manifest commit 不一致的 WPT checkout。
+- Only APIs that belong to ECMA-429 and are included in this profile are in scope;
+- if an in-profile test does not run, it must reference a deviation or an open gap ID;
+- harness incompatibility is work to fix, not a semantic expected failure;
+- out-of-profile APIs such as Window, Document, ServiceWorker, and WASI do not need a deviation ID;
+- tentative tests are not selected by default unless there is a clear, stable profile need;
+- tests must not be edited to accommodate current txiki.js behavior;
+- network tests must use deterministic local fixtures; the public internet is not a conformance dependency.
 
-## 2. 合规偏差
+### Update Process
 
-本表区分主动接受的 profile 排除与已经关闭的实现缺口。开放的实现 bug 不能
-当成受支持偏差，也会阻止对应能力的 conformance 声明。
+Updates must record old/new commits, review all selected file changes, run the full contract/WPT/integration matrix, confirm vendor clean, and sync the capability matrix and deviation table. CI must reject WPT checkouts inconsistent with the manifest commit.
 
-| ID | 能力 | 分类 | 当前行为 | 影响 | 退出条件 |
+## 2. Conformance Deviations
+
+This table distinguishes actively accepted profile exclusions from implementation gaps that have already been closed. Open implementation bugs cannot be treated as supported deviations and also block the conformance claim for the corresponding capability.
+
+| ID | Capability | Classification | Current behavior | Impact | Exit criteria |
 | --- | --- | --- | --- | --- | --- |
-| CAPSID-D001 | `WebAssembly.Tag`、`WebAssembly.Exception`、`WebAssembly.JSTag` | 接受的 profile 排除 | 固定 WAMR/txiki 组合不暴露 exception-handling JS 接口。 | 依赖异常处理 proposal 的 Wasm 不受支持；不得宣称完整 ECMA-429 Wasm conformance。 | 采用具备所需语义的引擎/配置，并通过固定 Wasm JS API 测试。 |
-| CAPSID-D002 | WebAssembly 固定宽度 SIMD | 接受的 profile 排除 | `WAMR_BUILD_SIMD=0`；进程契约确认 SIMD module 被 `WebAssembly.validate()` 拒绝。 | SIMD module 验证或编译失败。 | 在不引入失控依赖下载的前提下启用 SIMD，通过固定测试并发布新版 profile。 |
-| CAPSID-D003 | Console Standard | 已关闭实现缺口 | 方法名、代表操作和 `console-is-a-namespace.any.js` 均通过。 | 选定批次无已知缺口。 | 2026-07-25 关闭；扩展测试暴露语义缺口时重开。 |
-| CAPSID-D004 | `Performance` 接口 | 已关闭实现缺口 | `Performance` 继承 `EventTarget`；branding、`timeOrigin`、`now()`、`toJSON()` 和两个 HR-Time 文件通过。 | 选定批次无已知缺口。 | 2026-07-25 关闭；扩展测试暴露语义缺口时重开。 |
-| CAPSID-D005 | 错误与 rejection reporting | 已关闭实现缺口 | `reportError`、`PromiseRejectionEvent`、`unhandledrejection`/`rejectionhandled` identity 与 task ordering 通过。上游 `promise-rejection-events.html` 未执行，因为它依赖 document-scoped harness；manifest 将其列为 `notExecuted`，ordering 由项目 contract 证明。 | 已执行批次无已知缺口；上游 document harness 仍是显式证据缺口。 | 2026-07-25 关闭；支持该执行模型后若暴露语义差异则重开。 |
-| CAPSID-D006 | TextDecoder legacy multibyte encoding | 已关闭实现缺口 | GBK、GB18030、Big5、EUC-JP、EUC-KR、ISO-2022-JP、Shift_JIS 由项目标准状态机和压缩 index 实现；选定 decode/stream/EOF/fatal corpus 通过。 | 选定 Encoding 批次无已知缺口。 | 2026-07-25 关闭；扩展 corpus 暴露缺口时重开。 |
-| CAPSID-D007 | Compression Streams brotli | 接受的 profile 排除 | 只支持 gzip、deflate、deflate-raw；`brotli` 被拒绝。 | 依赖 Compression Streams brotli 的应用不受支持。 | 在不增加 ambient capability 的情况下实现 brotli，通过固定测试并修订 profile。 |
-| CAPSID-D008 | WebAssembly shared memory/threads | 接受的 profile 排除 | `WAMR_BUILD_SHARED_MEMORY=0`；shared Memory 不具备合规 grow 语义，对应精确 WPT 为 expected failure。 | Wasm thread/shared linear memory 应用不受支持；非 shared 行为已通过选定 corpus。 | 启用 WAMR shared memory 和宿主原语，移除 expected failure 并通过固定测试。 |
-| CAPSID-D009 | QuickJS Proxy constructor probe | 暂定引擎偏差 | 即使 target 可构造，QuickJS 也会拒绝标准 Proxy-based `IsConstructor` 探针；Encoding IDL harness 使用等价 `Reflect.construct` 并继续检查全部 interface constructor。 | 依赖该 Proxy constructibility pattern 的用户代码观察到非标准行为。 | 修复/升级 QuickJS，恢复原探针并通过固定 IDL harness。 |
-| CAPSID-D010 | `MessagePort_initial_disabled` WPT 陈旧 | 接受的 WPT 上游分歧 | 该文件断言新建端口初始 stopped，与当前 WHATWG 规范相反；文件自身也标记可能是未维护重复用例。 | 单个子测试 `Untitled test` 为 expected failure，不影响 profile 能力。 | WPT 上游修正并重新发布后移除 expected-failure 项。 |
-| CAPSID-D011 | GB18030-2022 新增码位 | 暂定引擎偏差 | QuickJS/txiki 的 `TextDecoder` 编码表基于 GB18030-2005；GB18030-2022 标准新增的 18 个码位（U+9FB4–U+9FBB 汉字及 U+FE10–U+FE19 竖排标点对应映射）解码结果与 WPT 期望不符。`gb18030-decoder.any.js` 的 18 个子测试（`GB18030-2022 19`–`GB18030-2022 36`）为 expected failure。 | 依赖 GB18030-2022 新增码位解密的文本会得到替代映射字符；GB18030-2005 既有码位全部正确。 | 升级/修复 QuickJS 编码表至 GB18030-2022，移除 expected-failure 项并通过固定 WPT。 |
+| CAPSID-D001 | `WebAssembly.Tag`, `WebAssembly.Exception`, `WebAssembly.JSTag` | Accepted profile exclusion | The pinned WAMR/txiki combination does not expose exception-handling JS interfaces. | Wasm depending on the exception-handling proposal is unsupported; full ECMA-429 Wasm conformance must not be claimed. | Adopt an engine/configuration with the required semantics and pass pinned Wasm JS API tests. |
+| CAPSID-D002 | WebAssembly fixed-width SIMD | Accepted profile exclusion | `WAMR_BUILD_SIMD=0`; the process contract confirms SIMD modules are rejected by `WebAssembly.validate()`. | SIMD modules fail validation or compilation. | Enable SIMD without uncontrolled dependency downloads, pass pinned tests, and publish a new profile version. |
+| CAPSID-D003 | Console Standard | Closed implementation gap | Method names, representative operations, and `console-is-a-namespace.any.js` pass. | No known gap in the selected batch. | Closed 2026-07-25; reopen if extended tests expose a semantic gap. |
+| CAPSID-D004 | `Performance` interface | Closed implementation gap | `Performance` inherits `EventTarget`; branding, `timeOrigin`, `now()`, `toJSON()`, and the two HR-Time files pass. | No known gap in the selected batch. | Closed 2026-07-25; reopen if extended tests expose a semantic gap. |
+| CAPSID-D005 | Error and rejection reporting | Closed implementation gap | `reportError`, `PromiseRejectionEvent`, `unhandledrejection`/`rejectionhandled` identity and task ordering pass. Upstream `promise-rejection-events.html` is not executed because it depends on a document-scoped harness; the manifest lists it as `notExecuted`, and ordering is proven by the project contract. | No known gap in the executed batch; the upstream document harness remains an explicit evidence gap. | Closed 2026-07-25; reopen if supporting that execution model exposes semantic differences. |
+| CAPSID-D006 | TextDecoder legacy multibyte encoding | Closed implementation gap | GBK, GB18030, Big5, EUC-JP, EUC-KR, ISO-2022-JP, and Shift_JIS are implemented by project standard state machines and compact indexes; the selected decode/stream/EOF/fatal corpus passes. | No known gap in the selected Encoding batch. | Closed 2026-07-25; reopen if an extended corpus exposes a gap. |
+| CAPSID-D007 | Compression Streams brotli | Accepted profile exclusion | Only gzip, deflate, and deflate-raw are supported; `brotli` is rejected. | Applications depending on Compression Streams brotli are unsupported. | Implement brotli without adding ambient capability, pass pinned tests, and revise the profile. |
+| CAPSID-D008 | WebAssembly shared memory/threads | Accepted profile exclusion | `WAMR_BUILD_SHARED_MEMORY=0`; shared Memory lacks compliant grow semantics, and the corresponding precise WPT is an expected failure. | Wasm thread/shared linear memory applications are unsupported; non-shared behavior passes the selected corpus. | Enable WAMR shared memory and host primitives, remove the expected failure, and pass pinned tests. |
+| CAPSID-D009 | QuickJS Proxy constructor probe | Provisional engine deviation | QuickJS rejects the standard Proxy-based `IsConstructor` probe even when the target is constructible; the Encoding IDL harness uses an equivalent `Reflect.construct` and continues checking all interface constructors. | User code relying on that Proxy constructibility pattern observes non-standard behavior. | Fix/upgrade QuickJS, restore the original probe, and pass the pinned IDL harness. |
+| CAPSID-D010 | `MessagePort_initial_disabled` WPT stale | Accepted WPT upstream divergence | The file asserts a newly created port is initially stopped, contrary to the current WHATWG spec; the file itself also marks the case as possibly an unmaintained duplicate. | The single subtest `Untitled test` is an expected failure and does not affect profile capability. | Remove the expected-failure item after WPT upstream fixes and republishes. |
+| CAPSID-D011 | GB18030-2022 new code points | Provisional engine deviation | QuickJS/txiki's `TextDecoder` encoding tables are based on GB18030-2005; the 18 code points added by GB18030-2022 (U+9FB4–U+9FBB CJK characters and U+FE10–U+FE19 vertical punctuation mappings) decode differently from WPT expectations. The 18 subtests of `gb18030-decoder.any.js` (`GB18030-2022 19`–`GB18030-2022 36`) are expected failures. | Text depending on GB18030-2022 new code points decodes to replacement mapping characters; all existing GB18030-2005 code points are correct. | Upgrade/fix the QuickJS encoding tables to GB18030-2022, remove expected-failure items, and pass pinned WPT. |
 
-### 部署资源策略
+### Deployment Resource Policy
 
-以下限制会拒绝某些规范上有效的工作负载，因此部署者必须公布，但它们不是新增
-JavaScript API：
+The following limits reject some spec-valid workloads, so deployers must publish them, but they are not new JavaScript APIs:
 
-- Wasm linear memory 最多 256 pages（16 MiB），table 最多 1024 elements；
-- `max_fetch_request_body_bytes` / `max_fetch_response_body_bytes` 可限制出站
-  Fetch 聚合 body，默认 `0` 表示不增加总量限制；
-- strict sandbox、namespace、cgroup、CPU/内存/swap/PID/fd 均可导致启动或
-  工作负载失败。
+- Wasm linear memory is capped at 256 pages (16 MiB) and table at 1024 elements;
+- `max_fetch_request_body_bytes` / `max_fetch_response_body_bytes` can limit aggregate egress Fetch bodies; default `0` means no additional total limit is imposed;
+- strict sandbox, namespace, cgroup, CPU/memory/swap/PID/fd can cause startup or workload failure.
 
-WASI、Hono/Workers 的 `env`/`ExecutionContext`、txiki `tjs:*`、process、
-raw socket、HTTP server、FFI、SQLite，以及 Capsid 自己的只读文件模块都属于
-产品能力边界，不属于 ECMA-429 合规偏差。
+WASI, Hono/Workers `env`/`ExecutionContext`, txiki `tjs:*`, process, raw socket, HTTP server, FFI, SQLite, and Capsid's own read-only file module are product capability boundaries, not ECMA-429 conformance deviations.
 
-## 3. 能力追踪矩阵
+## 3. Capability Tracking Matrix
 
-一项能力只有在 conformance test 和进程集成测试都通过时才能标为完成。
+A capability can only be marked complete when both its conformance test and process integration test pass.
 
-| 能力组 | 规范/合规证据 | 进程证据 | 状态 |
+| Capability group | Spec/conformance evidence | Process evidence | Status |
 | --- | --- | --- | --- |
-| 全局表面与 txiki 隔离 | 版本化 profile manifest | `worker_global_surface`、module denial、`worker_p1_platform_contract` | 选定表面与隔离通过 |
-| Event 与 rejection reporting | 3 个 EventTarget 文件、`reportError`、PromiseRejectionEvent 与 rejection lifecycle | `worker_p1_platform_contract` | 选定批次通过；CAPSID-D005 已关闭 |
-| Timer 与 microtask | 2 个 timer、1 个 `queueMicrotask` 文件 | `worker_p1_platform_contract` | 通过 |
-| Encoding | 39 个固定文件，含 Web IDL、stream、legacy multibyte corpus | `worker_p1_platform_contract` | 选定 corpus 通过；CAPSID-D006 已关闭 |
-| URL / URLPattern | URL、URLSearchParams、URLPattern constructor | `worker_p1_platform_contract` | 3/3 文件通过，含 893 个 URL constructor case |
-| Streams / MessageChannel | 4 个 Streams、4 个 MessageChannel/Port 文件 | `worker_p1_platform_contract` | 8/8 文件通过 |
-| Blob / File / FormData | Blob、File constructor | `worker_p1_platform_contract` | 2/2 文件通过；FormData 有进程覆盖 |
-| Compression | compression-stream 与固定资源 | `worker_p1_platform_contract` | gzip/deflate/deflate-raw 通过；brotli 为 CAPSID-D007 |
-| Console | `console-is-a-namespace.any.js` | `worker_p1_platform_contract` | 通过；CAPSID-D003 已关闭 |
-| Web Crypto | getRandomValues、randomUUID | `worker_p1_platform_contract` | 2/2 文件与 digest/random 进程行为通过 |
-| Fetch | 5 个 Headers/Request/Response 文件 | direct fetch、cancel、HTTP/HTTPS、egress、netns 测试 | 选定 constructor/WebIDL 与真实出站矩阵通过 |
-| Performance | HR-Time `basic`、`monotonic-clock` | `worker_p1_platform_contract` | 通过；CAPSID-D004 已关闭 |
-| WebAssembly 子集 | 12 个 compile/instantiate/validate、Memory/Table/Global 与 streaming 文件 | `worker_wasm_minimal` 及 shared/exported resource 回归 | 12/12 文件通过；CAPSID-D001/002/008 为接受的排除 |
-| 宿主能力策略（非 conformance 扩展） | capability manifest、module contract、policy/audit/parser 与 fuzz | permissions、utility、env、system、storage、stdio、fs 真实 worker contract，逐模块拒绝矩阵与最终二进制审计 | ABI v7 / policy v2 三层门禁通过；十二个 `capsid:` 模块可逐项授权，已知延后模块和操作保持 `unavailable` |
+| Global surface and txiki isolation | versioned profile manifest | `worker_global_surface`, module denial, `worker_p1_platform_contract` | Selected surface and isolation pass |
+| Event and rejection reporting | 3 EventTarget files, `reportError`, PromiseRejectionEvent, and rejection lifecycle | `worker_p1_platform_contract` | Selected batch passes; CAPSID-D005 closed |
+| Timer and microtask | 2 timer files, 1 `queueMicrotask` file | `worker_p1_platform_contract` | Pass |
+| Encoding | 39 pinned files, including Web IDL, stream, legacy multibyte corpus | `worker_p1_platform_contract` | Selected corpus passes; CAPSID-D006 closed |
+| URL / URLPattern | URL, URLSearchParams, URLPattern constructors | `worker_p1_platform_contract` | 3/3 files pass, including 893 URL constructor cases |
+| Streams / MessageChannel | 4 Streams, 4 MessageChannel/Port files | `worker_p1_platform_contract` | 8/8 files pass |
+| Blob / File / FormData | Blob, File constructors | `worker_p1_platform_contract` | 2/2 files pass; FormData has process coverage |
+| Compression | compression-stream and pinned resources | `worker_p1_platform_contract` | gzip/deflate/deflate-raw pass; brotli is CAPSID-D007 |
+| Console | `console-is-a-namespace.any.js` | `worker_p1_platform_contract` | Pass; CAPSID-D003 closed |
+| Web Crypto | getRandomValues, randomUUID | `worker_p1_platform_contract` | 2/2 files and digest/random process behavior pass |
+| Fetch | 5 Headers/Request/Response files | direct fetch, cancel, HTTP/HTTPS, egress, netns tests | Selected constructor/WebIDL and real egress matrix pass |
+| Performance | HR-Time `basic`, `monotonic-clock` | `worker_p1_platform_contract` | Pass; CAPSID-D004 closed |
+| WebAssembly subset | 12 compile/instantiate/validate, Memory/Table/Global and streaming files | `worker_wasm_minimal` and shared/exported resource regressions | 12/12 files pass; CAPSID-D001/002/008 are accepted exclusions |
+| Host capability policy (non-conformance extension) | capability manifest, module contract, policy/audit/parser and fuzz | permissions, utility, env, system, storage, stdio, fs real worker contracts, per-module denial matrix and final binary audit | ABI v7 / policy v2 three-layer gates pass; the twelve `capsid:` modules can be authorized item by item, with known deferred modules and operations staying `unavailable` |
 
-expected failure 只接受精确 test name 和偏差 ID。标准测试优先于现有 txiki.js
-行为；偏差变化必须作为 profile 变更审查。
+Expected failures are accepted only with an exact test name and deviation ID. Standard tests take precedence over existing txiki.js behavior; deviation changes must be reviewed as profile changes.
 
-当前 adapted batch 在独立 realm 中执行 84 个上游文件。它只证明这些固定文件，
-不代表全部 WPT 或完整 ECMA-429 conformance。
+The current adapted batch executes 84 upstream files in separate realms. It only proves those pinned files, not all of WPT or full ECMA-429 conformance.

@@ -31,20 +31,25 @@
 // Validation never inspects JSON text by keyword or string matching; the
 // vendored Jansson parser is the only JSON front end.
 
+#include "win32_compat.h"
+
 #include "host/config.h"
+#include "host/policy_compiler.h"
 #include "host/secret_snapshot.h"
 
 #include <jansson.h>
 
 #include <algorithm>
-#include <arpa/inet.h>
 #include <array>
 #include <cctype>
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -109,7 +114,7 @@ struct Schema {
     // (apiVersion v1/v2 pairs).
     std::span<const std::string_view> allowed_strings{};
     // kArray of strings only: element values must be pairwise distinct
-    // ("重复权限" rejection for manifest module/profile lists).
+    // (duplicate-permission rejection for manifest module/profile lists).
     bool unique_elements = false;
 };
 
@@ -696,16 +701,16 @@ bool is_sandbox_profile(std::string_view value) {
                      value) != std::end(kSandboxProfiles);
 }
 
-// The §3.3 grantable-module set, restricted to what this TJS build actually
-// dispatches (the builtins table plus tjs:internal/core). tjs:ffi and
-// tjs:internal/worker are not built/not listed and fail closed. capsid:*
-// user facades are never grantable to the Binding Runtime.
+// The §3.3 grantable-module set, restricted to what this TJS build dispatches
+// behind public Capsid aliases. Upstream tjs:* names are implementation
+// details and fail closed in package manifests. User facades with ambient
+// authority are also never grantable to the Binding Runtime.
 constexpr std::string_view kBindingKnownModules[] = {
-    "tjs:assert",       "tjs:getopts",     "tjs:hashing",
-    "tjs:internal/core", "tjs:internal/path", "tjs:ipaddr",
-    "tjs:path",         "tjs:readline",
-    "tjs:sqlite",       "tjs:utils",       "tjs:uuid",
-    "tjs:wasi",
+    "capsid:assert",        "capsid:getopts",       "capsid:hashing",
+    "capsid:internal/core", "capsid:internal/path", "capsid:ipaddr",
+    "capsid:path",          "capsid:readline",      "capsid:sqlite",
+    "capsid:utils",         "capsid:uuid",
+    "capsid:wasi",
 };
 
 bool is_binding_module(std::string_view value) {
@@ -1375,18 +1380,18 @@ bool check_manifest_consistency(json_t* root, ConfigError& error) {
                 json_string_value(json_array_get(module_list, index)));
         }
     }
-    if (modules.count("tjs:sqlite") && !profiles.count("sqlite")) {
+    if (modules.count("capsid:sqlite") && !profiles.count("sqlite")) {
         error.code = ConfigErrorCode::kInvalidValue;
         error.path = "/permissions/modules";
         error.message =
-            "tjs:sqlite requires the sqlite sandbox profile";
+            "capsid:sqlite requires the sqlite sandbox profile";
         return false;
     }
-    if (modules.count("tjs:wasi") && !profiles.count("wasi")) {
+    if (modules.count("capsid:wasi") && !profiles.count("wasi")) {
         error.code = ConfigErrorCode::kInvalidValue;
         error.path = "/permissions/modules";
         error.message =
-            "tjs:wasi requires the wasi sandbox profile";
+            "capsid:wasi requires the wasi sandbox profile";
         return false;
     }
     const json_t* net = json_object_get(permissions, "net");
@@ -1438,6 +1443,483 @@ ConfigValidationResult validate_binding_manifest(std::string_view json) {
     return validate_document(kMaxBindingManifestBytes, json,
                              &select_manifest_root,
                              &check_manifest_consistency);
+}
+
+namespace {
+
+// Size grammar for worker.memoryMax: a decimal number with an explicit
+// upper-case IEC/SI suffix (KiB, MiB, GiB, KB, MB, GB). A bare number is
+// rejected: an ambiguous "1" must not silently mean 1 byte when the
+// operator meant 1 MiB, and the limit is forwarded to the worker's
+// js_heap_limit. Rejects overflow, fractional values and unknown suffixes.
+bool parse_size_bytes(const std::string& text, std::uint64_t* out) {
+    if (text.empty()) {
+        return false;
+    }
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long long base = std::strtoull(text.c_str(), &end, 10);
+    if (errno == ERANGE || end == text.c_str()) {
+        return false;
+    }
+    std::uint64_t multiplier = 0;
+    const std::string suffix(end);
+    if (suffix == "KiB") {
+        multiplier = 1024ULL;
+    } else if (suffix == "MiB") {
+        multiplier = 1024ULL * 1024ULL;
+    } else if (suffix == "GiB") {
+        multiplier = 1024ULL * 1024ULL * 1024ULL;
+    } else if (suffix == "KB") {
+        multiplier = 1000ULL;
+    } else if (suffix == "MB") {
+        multiplier = 1000ULL * 1000ULL;
+    } else if (suffix == "GB") {
+        multiplier = 1000ULL * 1000ULL * 1000ULL;
+    } else {
+        return false;
+    }
+    if (base > std::numeric_limits<std::uint64_t>::max() / multiplier) {
+        return false;
+    }
+    *out = static_cast<std::uint64_t>(base) * multiplier;
+    return true;
+}
+
+// Duration grammar for pool.queueTimeout: "250ms" / "5s" / "1m" — the same
+// explicit-suffix rule as main.cc's parse_duration_ms. A bare number is
+// rejected: an ambiguous "1" must not silently mean 1 second (or 1 ms)
+// when the operator meant something else. Rejects overflow and unknown
+// suffixes. 0 is a valid value (queueing without a deadline).
+bool parse_duration_ms(const std::string& text, std::uint64_t* out) {
+    if (text.empty()) {
+        return false;
+    }
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long long base = std::strtoull(text.c_str(), &end, 10);
+    if (errno == ERANGE || end == text.c_str()) {
+        return false;
+    }
+    std::uint64_t multiplier = 0;
+    const std::string suffix(end);
+    if (suffix == "ms") {
+        multiplier = 1;
+    } else if (suffix == "s") {
+        multiplier = 1000;
+    } else if (suffix == "m") {
+        multiplier = 60ULL * 1000ULL;
+    } else {
+        return false;
+    }
+    if (base > std::numeric_limits<std::uint64_t>::max() / multiplier) {
+        return false;
+    }
+    *out = static_cast<std::uint64_t>(base) * multiplier;
+    return true;
+}
+
+// "host" / "host:443" / "host:443,8443". A bare host covers any port;
+// an empty or malformed port list is rejected.
+bool parse_fetch_target(const std::string& text, FetchTarget* out) {
+    const std::string::size_type colon = text.find(':');
+    if (colon == std::string::npos) {
+        if (text.empty()) {
+            return false;
+        }
+        out->host = text;
+        return true;
+    }
+    out->host = text.substr(0, colon);
+    if (out->host.empty()) {
+        return false;
+    }
+    std::istringstream ports(text.substr(colon + 1));
+    std::string part;
+    while (std::getline(ports, part, ',')) {
+        if (part.empty()) {
+            return false;
+        }
+        char* end = nullptr;
+        const long value = std::strtol(part.c_str(), &end, 10);
+        if (end == nullptr || *end != '\0' || value <= 0 || value > 65535) {
+            return false;
+        }
+        out->ports.push_back(static_cast<std::uint16_t>(value));
+    }
+    return !out->ports.empty();
+}
+
+}  // namespace
+
+// Parse capsid.json (the authoritative capsid/app-v1 shape) into the
+// AppRequest. The authoritative schema boundary runs first in the deploy
+// pipeline (validate_config_json); this parse maps the schema's fields onto
+// the request and stays fail-closed on any shape it cannot map. There is no
+// legacy {modules, env-array} fallback shape here. Kept outside the
+// anonymous namespace and declared in config.h: the local-capsid.json
+// data planes (single-worker / static-pool) reuse the same parser so one
+// document grammar cannot diverge into two.
+bool parse_app_request(const std::vector<std::uint8_t>& bytes,
+                       AppRequest* app,
+                       std::string* error) {
+    json_error_t parse_error;
+    json_t* root = json_loadb(
+        reinterpret_cast<const char*>(bytes.data()), bytes.size(),
+        JSON_REJECT_DUPLICATES, &parse_error);
+    if (root == nullptr || !json_is_object(root)) {
+        *error = "invalid capsid.json";
+        if (root) {
+            json_decref(root);
+        }
+        return false;
+    }
+    const auto string_array = [&](json_t* parent, const char* key,
+                                  std::vector<std::string>* out) -> bool {
+        json_t* value = json_object_get(parent, key);
+        if (value == nullptr) {
+            return true;
+        }
+        if (!json_is_array(value)) {
+            return false;
+        }
+        std::size_t index = 0;
+        json_t* item = nullptr;
+        json_array_foreach(value, index, item) {
+            if (!json_is_string(item)) {
+                return false;
+            }
+            out->push_back(json_string_value(item));
+        }
+        return true;
+    };
+    json_t* permissions = json_object_get(root, "permissions");
+    if (permissions != nullptr && json_is_object(permissions)) {
+        if (!string_array(permissions, "modules", &app->modules)) {
+            *error = "invalid capsid.json permissions.modules";
+            json_decref(root);
+            return false;
+        }
+        json_t* env_map = json_object_get(permissions, "env");
+        if (env_map != nullptr) {
+            if (!json_is_object(env_map)) {
+                *error = "invalid capsid.json permissions.env";
+                json_decref(root);
+                return false;
+            }
+            const char* name = nullptr;
+            json_t* entry = nullptr;
+            json_object_foreach(env_map, name, entry) {
+                if (!json_is_object(entry)) {
+                    *error = "invalid capsid.json permissions.env entry";
+                    json_decref(root);
+                    return false;
+                }
+                AppRequest::EnvRequest request;
+                request.name = name;
+                json_t* literal = json_object_get(entry, "value");
+                json_t* from = json_object_get(entry, "valueFrom");
+                if (from != nullptr && json_is_string(from)) {
+                    request.from_secret = true;
+                    request.secret_key_id = json_string_value(from);
+                } else if (literal != nullptr && json_is_string(literal)) {
+                    request.literal = json_string_value(literal);
+                } else {
+                    *error = "invalid capsid.json env entry value";
+                    json_decref(root);
+                    return false;
+                }
+                app->env.push_back(std::move(request));
+            }
+        }
+        json_t* fs = json_object_get(permissions, "fs");
+        if (fs != nullptr && json_is_object(fs)) {
+            json_t* read = json_object_get(fs, "read");
+            if (read != nullptr && json_is_object(read)) {
+                if (!string_array(read, "allow", &app->fs_read)) {
+                    *error = "invalid capsid.json permissions.fs.read.allow";
+                    json_decref(root);
+                    return false;
+                }
+                if (!string_array(read, "deny", &app->fs_read_deny)) {
+                    *error = "invalid capsid.json permissions.fs.read.deny";
+                    json_decref(root);
+                    return false;
+                }
+            }
+        }
+        json_t* fetch = json_object_get(permissions, "fetch");
+        if (fetch != nullptr && json_is_object(fetch)) {
+            std::vector<std::string> targets;
+            if (!string_array(fetch, "allow", &targets)) {
+                *error = "invalid capsid.json permissions.fetch.allow";
+                json_decref(root);
+                return false;
+            }
+            for (const std::string& target : targets) {
+                FetchTarget parsed;
+                if (!parse_fetch_target(target, &parsed)) {
+                    *error = "invalid capsid.json permissions.fetch.allow entry";
+                    json_decref(root);
+                    return false;
+                }
+                app->fetch.push_back(std::move(parsed));
+            }
+        }
+        json_t* storage = json_object_get(permissions, "storage");
+        if (storage != nullptr && json_is_object(storage)) {
+            std::vector<std::string> namespaces;
+            if (!string_array(storage, "namespaces", &namespaces)) {
+                *error = "invalid capsid.json permissions.storage.namespaces";
+                json_decref(root);
+                return false;
+            }
+            // The Runtime storage module matches the exact namespace
+            // grammar (alphanumeric, '_', '-', '.', <= 128 chars); reject
+            // anything else before staging.
+            for (const std::string& namespace_name : namespaces) {
+                if (namespace_name.empty() || namespace_name.size() > 128) {
+                    *error = "invalid capsid.json storage namespace";
+                    json_decref(root);
+                    return false;
+                }
+                for (const unsigned char ch : namespace_name) {
+                    if (!(std::isalnum(ch) || ch == '_' || ch == '-' ||
+                          ch == '.')) {
+                        *error = "invalid capsid.json storage namespace";
+                        json_decref(root);
+                        return false;
+                    }
+                }
+            }
+            app->storage = !namespaces.empty();
+            app->storage_namespaces = std::move(namespaces);
+        }
+        json_t* stdio = json_object_get(permissions, "stdio");
+        if (stdio != nullptr) {
+            if (!json_is_array(stdio)) {
+                *error = "invalid capsid.json permissions.stdio";
+                json_decref(root);
+                return false;
+            }
+            std::size_t index = 0;
+            json_t* item = nullptr;
+            json_array_foreach(stdio, index, item) {
+                if (!json_is_string(item)) {
+                    *error = "invalid capsid.json permissions.stdio";
+                    json_decref(root);
+                    return false;
+                }
+                // The Runtime stdio grammar is exactly stdin/stdout/stderr;
+                // reject an unknown stream name before staging.
+                const std::string stream = json_string_value(item);
+                if (stream != "stdin" && stream != "stdout" &&
+                    stream != "stderr") {
+                    *error = "invalid capsid.json permissions.stdio stream";
+                    json_decref(root);
+                    return false;
+                }
+                app->stdio_streams.push_back(stream);
+            }
+            app->stdio = !app->stdio_streams.empty();
+        }
+    }
+    json_t* pool = json_object_get(root, "pool");
+    if (pool != nullptr && json_is_object(pool)) {
+        json_t* min_ready = json_object_get(pool, "minReady");
+        json_t* max_workers = json_object_get(pool, "maxWorkers");
+        if (json_is_integer(min_ready)) {
+            const json_int_t value = json_integer_value(min_ready);
+            if (value <= 0 ||
+                value > static_cast<json_int_t>(
+                            std::numeric_limits<std::uint32_t>::max())) {
+                *error = "invalid capsid.json pool.minReady";
+                json_decref(root);
+                return false;
+            }
+            app->min_ready = static_cast<std::uint32_t>(value);
+        }
+        if (json_is_integer(max_workers)) {
+            const json_int_t value = json_integer_value(max_workers);
+            if (value <= 0 ||
+                value > static_cast<json_int_t>(
+                            std::numeric_limits<std::uint32_t>::max())) {
+                *error = "invalid capsid.json pool.maxWorkers";
+                json_decref(root);
+                return false;
+            }
+            app->workers = static_cast<std::uint32_t>(value);
+        }
+        // E-1 admission queue (§10.3): parsed here so the effective config
+        // can enforce the Host maximums (compile_policy) and forward the
+        // queue to the data plane (queueRequests / queueHeaderBytes /
+        // queueTimeout). 0 = queueing disabled or field not set — the same
+        // sentinel the data plane uses.
+        json_t* queue_requests = json_object_get(pool, "queueRequests");
+        if (json_is_integer(queue_requests)) {
+            const json_int_t value = json_integer_value(queue_requests);
+            if (value < 0) {
+                *error = "invalid capsid.json pool.queueRequests";
+                json_decref(root);
+                return false;
+            }
+            app->queue_requests = static_cast<std::uint64_t>(value);
+        }
+        json_t* queue_header_bytes = json_object_get(pool, "queueHeaderBytes");
+        if (json_is_string(queue_header_bytes)) {
+            if (!parse_size_bytes(json_string_value(queue_header_bytes),
+                                  &app->queue_header_bytes)) {
+                *error = "invalid capsid.json pool.queueHeaderBytes";
+                json_decref(root);
+                return false;
+            }
+        }
+        json_t* queue_timeout = json_object_get(pool, "queueTimeout");
+        if (json_is_string(queue_timeout)) {
+            if (!parse_duration_ms(json_string_value(queue_timeout),
+                                   &app->queue_timeout_ms)) {
+                *error = "invalid capsid.json pool.queueTimeout";
+                json_decref(root);
+                return false;
+            }
+        }
+    }
+    // Worker resources. Each field keeps its own slot: jsHeap bounds the
+    // QuickJS heap, processAddressSpace bounds the process address space,
+    // memoryMax is the overall process-memory ceiling, and fileDescriptors
+    // bounds open descriptors. No field impersonates another (memoryMax
+    // must not be forwarded as the JS heap limit), and every field feeds
+    // the normalized App digest so the generation identity changes when
+    // the operator changes any of them.
+    json_t* worker = json_object_get(root, "worker");
+    if (worker != nullptr && json_is_object(worker)) {
+        json_t* memory_max = json_object_get(worker, "memoryMax");
+        if (json_is_string(memory_max)) {
+            if (!parse_size_bytes(json_string_value(memory_max),
+                                  &app->memory_bytes)) {
+                *error = "invalid capsid.json worker.memoryMax";
+                json_decref(root);
+                return false;
+            }
+        }
+        json_t* js_heap = json_object_get(worker, "jsHeap");
+        if (json_is_string(js_heap)) {
+            if (!parse_size_bytes(json_string_value(js_heap),
+                                  &app->js_heap_bytes)) {
+                *error = "invalid capsid.json worker.jsHeap";
+                json_decref(root);
+                return false;
+            }
+        }
+        json_t* address_space = json_object_get(worker, "processAddressSpace");
+        if (json_is_string(address_space)) {
+            if (!parse_size_bytes(json_string_value(address_space),
+                                  &app->process_address_bytes)) {
+                *error = "invalid capsid.json worker.processAddressSpace";
+                json_decref(root);
+                return false;
+            }
+        }
+        json_t* descriptors = json_object_get(worker, "fileDescriptors");
+        if (json_is_integer(descriptors)) {
+            const json_int_t value = json_integer_value(descriptors);
+            if (value <= 0 ||
+                value > std::numeric_limits<std::uint32_t>::max()) {
+                *error = "invalid capsid.json worker.fileDescriptors";
+                json_decref(root);
+                return false;
+            }
+            app->file_descriptors = static_cast<std::uint64_t>(value);
+        }
+    }
+    // Request window: maxInflightPerWorker is parsed here so the effective
+    // config can enforce the Host maximum (compile_policy) and forward the
+    // window to the worker (max_inflight_requests).
+    json_t* request = json_object_get(root, "request");
+    if (request != nullptr && json_is_object(request)) {
+        json_t* max_inflight = json_object_get(request, "maxInflightPerWorker");
+        if (json_is_integer(max_inflight)) {
+            const json_int_t value = json_integer_value(max_inflight);
+            if (value <= 0) {
+                *error = "invalid capsid.json request.maxInflightPerWorker";
+                json_decref(root);
+                return false;
+            }
+            app->requests_per_worker = static_cast<std::uint64_t>(value);
+        }
+        // E-2 SSE permit (§9.3): parsed here so the effective config can
+        // enforce the Host maximums (compile_policy) and forward the
+        // values to the data plane (maxStreamingInflightPerWorker /
+        // streamIdleTimeoutMs). 0 = field not set (the shard keeps its
+        // defaults of 2 slots and 60s idle).
+        json_t* max_streaming = json_object_get(
+            request, "maxStreamingInflightPerWorker");
+        if (json_is_integer(max_streaming)) {
+            const json_int_t value = json_integer_value(max_streaming);
+            if (value < 0) {
+                *error = "invalid capsid.json "
+                         "request.maxStreamingInflightPerWorker";
+                json_decref(root);
+                return false;
+            }
+            app->max_streaming_inflight_per_worker =
+                static_cast<std::uint64_t>(value);
+        }
+        json_t* stream_idle = json_object_get(request, "streamIdleTimeoutMs");
+        if (json_is_integer(stream_idle)) {
+            const json_int_t value = json_integer_value(stream_idle);
+            if (value < 0) {
+                *error = "invalid capsid.json request.streamIdleTimeoutMs";
+                json_decref(root);
+                return false;
+            }
+            app->stream_idle_timeout_ms = static_cast<std::uint64_t>(value);
+        }
+        // E-3 slow-client write deadline (§9.2): the Host-side socket-view
+        // deadline for a write that does not complete. 0 = field not set
+        // (the shard keeps its 60s default).
+        json_t* write_timeout = json_object_get(request, "writeTimeoutMs");
+        if (json_is_integer(write_timeout)) {
+            const json_int_t value = json_integer_value(write_timeout);
+            if (value < 0) {
+                *error = "invalid capsid.json request.writeTimeoutMs";
+                json_decref(root);
+                return false;
+            }
+            app->write_timeout_ms = static_cast<std::uint64_t>(value);
+        }
+    }
+    // M2 item 6: the active health probe (design §7.4). A healthCheck
+    // object with a usable path arms the probe; the timeout defaults to
+    // 5s. A healthCheck without a path, or an empty path, is NOT a probe
+    // config (fail closed: the Host never invents a probe target), and a
+    // zero deadline is rejected — an immediate-timeout probe is a
+    // degenerate config, not a decision.
+    json_t* health_check = json_object_get(root, "healthCheck");
+    if (health_check != nullptr && json_is_object(health_check)) {
+        json_t* path = json_object_get(health_check, "path");
+        if (json_is_string(path)) {
+            const std::string value = json_string_value(path);
+            if (!value.empty()) {
+                app->health_check.configured = true;
+                app->health_check.path = value;
+            }
+        }
+        json_t* timeout = json_object_get(health_check, "timeout");
+        if (json_is_string(timeout)) {
+            std::uint64_t timeout_ms = 0;
+            if (!parse_duration_ms(json_string_value(timeout),
+                                   &timeout_ms) ||
+                timeout_ms == 0) {
+                *error = "invalid capsid.json healthCheck.timeout";
+                json_decref(root);
+                return false;
+            }
+            app->health_check.timeout_ms = timeout_ms;
+        }
+    }
+    json_decref(root);
+    return true;
 }
 
 }  // namespace capsid::host

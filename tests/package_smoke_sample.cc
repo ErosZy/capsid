@@ -16,7 +16,11 @@
 
 #include "capsid/runtime.hpp"
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <poll.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,12 +40,18 @@ void require(bool condition, const char *message) {
 }
 
 double now_seconds() {
+#if defined(_WIN32)
+    /* GetTickCount64 is monotonic at millisecond resolution, which the
+     * deadline pacing here only needs as a coarse clock. */
+    return static_cast<double>(GetTickCount64()) / 1000.0;
+#else
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         fail("clock_gettime");
     }
     return static_cast<double>(ts.tv_sec) +
            static_cast<double>(ts.tv_nsec) / 1000000000.0;
+#endif
 }
 
 std::string read_file(const char *path) {
@@ -81,10 +91,16 @@ capsid_result wait_for_event(capsid_worker *worker, double deadline,
         if (now_seconds() >= deadline) {
             fail("timed out waiting for event");
         }
+#if defined(_WIN32)
+        /* next_event above polls the channel; the sleep only paces the
+         * loop, so a plain Sleep stands in for poll(). */
+        Sleep(50);
+#else
         struct pollfd descriptor;
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
         poll(&descriptor, 1, 50);
+#endif
     }
 }
 

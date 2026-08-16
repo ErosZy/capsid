@@ -359,14 +359,14 @@ std::vector<uint8_t> binding_blob(
     const std::string &source = "export default () => ({});",
     const std::vector<std::string> &fs_read = {},
     const std::vector<std::string> &profiles = {"network-client"},
-    const std::vector<std::string> &modules = {"tjs:internal/core"},
+    const std::vector<std::string> &modules = {"capsid:internal/core"},
     const std::vector<std::string> &fs_write = {},
     const std::vector<std::string> &stdio = {},
     const std::vector<std::string> &net_rules = {},
     const std::string &config_json = "{}",
     const std::vector<std::pair<std::string, std::string>> &secrets = {}) {
     // A minimal valid descriptor with the selected sandbox profiles,
-    // tjs:internal/core granted, and a configurable factory source.
+    // capsid:internal/core granted, and a configurable factory source.
     std::vector<uint8_t> descriptor;
     append_string16(&descriptor, binding_name);
     append_string32(&descriptor, config_json);
@@ -422,7 +422,7 @@ std::vector<uint8_t> mongo_binding_blob(
     const std::string &source = "export default () => ({});",
     const std::vector<std::string> &fs_read = {},
     const std::vector<std::string> &profiles = {"network-client"},
-    const std::vector<std::string> &modules = {"tjs:internal/core"},
+    const std::vector<std::string> &modules = {"capsid:internal/core"},
     const std::vector<std::string> &fs_write = {},
     const std::vector<std::string> &stdio = {},
     const std::vector<std::string> &net_rules = {},
@@ -529,7 +529,7 @@ void expect_binding_startup_failure(const char *worker_path,
         capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     binding.payload = mongo_binding_blob(
-        source, {}, {"network-client"}, {"tjs:internal/core"}, {}, {}, {},
+        source, {}, {"network-client"}, {"capsid:internal/core"}, {}, {}, {},
         config_json, secrets);
     send_frame(fd, binding);
     send_bundle(fd, read_file(p0_path));
@@ -610,7 +610,7 @@ void test_binding_factory_failures(const char *worker_path,
         "symbol");
     expect_binding_startup_failure(
         worker_path, p0_path,
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "const socket = new core.TCP();"
         "export default () => ({ find() { return socket; } });",
         "CAPSID_BINDING_OWNER_UNAVAILABLE");
@@ -621,7 +621,7 @@ void test_binding_factory_failures(const char *worker_path,
         "CAPSID_BINDING_OWNER_UNAVAILABLE");
     expect_binding_startup_failure(
         worker_path, p0_path,
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default () => { new core.TCP();"
         " return { find() { return 'unreachable'; } }; };",
         "CAPSID_BINDING_OWNER_UNAVAILABLE");
@@ -630,6 +630,16 @@ void test_binding_factory_failures(const char *worker_path,
         "export default () => { setTimeout(() => {}, 0);"
         " return { find() {} }; };",
         "CAPSID_BINDING_OWNER_UNAVAILABLE");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import * as utils from 'tjs:utils';"
+        "export default () => ({ find() { return utils; } });",
+        "module is not authorized for this binding: tjs:utils");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import * as utils from 'capsid:utils';"
+        "export default () => ({ find() { return utils; } });",
+        "module is not authorized for this binding: capsid:utils");
 }
 
 // Binding v1 §7.6 end-to-end: the App's fetch calls mongo.find through
@@ -753,7 +763,7 @@ void test_binding_rpc_lifecycle(const char *worker_path,
         capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     binding.payload = mongo_binding_blob(
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "let dispatchCount = 0; let abortStatus = 'not-aborted';"
         "export default () => ({"
         " inspect(_input, call) {"
@@ -945,7 +955,7 @@ void test_binding_init_object_contract(const char *worker_path,
         "};";
     const std::string body = invoke_binding_method(
         worker_path, call_path, source, {}, {"network-client"},
-        {"tjs:internal/core"}, 106, {}, {}, {},
+        {"capsid:internal/core"}, 106, {}, {}, {},
         R"json({"items":[{"name":"item"}],"nested":{"value":"ok"}})json",
         {{"password", "secret-value"}});
     require(body == "result:ok:item:secret-value",
@@ -963,7 +973,7 @@ void test_binding_method_table_is_frozen(const char *worker_path,
         " });"
         " return table;"
         "};",
-        {}, {"network-client"}, {"tjs:internal/core"}, 107);
+        {}, {"network-client"}, {"capsid:internal/core"}, 107);
     require(body == "result:original",
             "Binding method table was mutable after discovery: " + body);
 }
@@ -982,7 +992,7 @@ void test_binding_log_envelope_and_redaction(const char *worker_path,
         "   { password: secrets.password, safe: 'visible' });"
         " return 'logged';"
         "} });",
-        {}, {"network-client"}, {"tjs:internal/core"}, 108,
+        {}, {"network-client"}, {"capsid:internal/core"}, 108,
         {}, {}, {}, "{}", {{"password", "SECRET_CANARY_108"}}, &logs);
     require(body == "result:logged", "Binding log call failed: " + body);
     require(logs.size() == 1, "Binding log call did not emit exactly one log");
@@ -1030,8 +1040,8 @@ void test_binding_native_handle_owner(const char *worker_path,
     mongo.request_id = 0;
     mongo.payload = binding_blob(
         "mongo",
-        std::string("import core from 'tjs:internal/core';") +
-            "import { Database } from 'tjs:sqlite';" +
+        std::string("import core from 'capsid:internal/core';") +
+            "import { Database } from 'capsid:sqlite';" +
             "const wasmBytes = new Uint8Array([" +
             "0,97,115,109,1,0,0,0,1,4,1,96,0,0," +
             "3,2,1,0,7,8,1,4,110,111,111,112,0,0,10,4,1,2,0,11]);" +
@@ -1070,7 +1080,7 @@ void test_binding_native_handle_owner(const char *worker_path,
             "});",
         {file_path},
         {"filesystem-read", "filesystem-watch", "network-client", "sqlite"},
-        {"tjs:internal/core", "tjs:sqlite"},
+        {"capsid:internal/core", "capsid:sqlite"},
         {}, {}, {websocket_target});
     send_frame(fd, mongo);
 
@@ -1104,7 +1114,7 @@ void test_binding_native_handle_owner(const char *worker_path,
         "} });",
         {file_path},
         {"filesystem-read", "filesystem-watch", "network-client", "sqlite"},
-        {"tjs:internal/core", "tjs:sqlite"},
+        {"capsid:internal/core", "capsid:sqlite"},
         {}, {}, {websocket_target});
     send_frame(fd, redis);
     send_bundle(fd, read_file(owner_path));
@@ -1189,7 +1199,7 @@ void test_binding_core_is_client_only(const char *worker_path,
     const std::string body = invoke_binding_method(
         worker_path,
         call_path,
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "const has = (value, name) => !!value &&"
         "  typeof value[name] === 'function';"
         "export default () => ({ find() {"
@@ -1215,13 +1225,13 @@ void test_binding_core_is_client_only(const char *worker_path,
         "} });",
         {},
         {"network-client"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         83);
     require(body == "result:0000000000000000000",
             "Binding core exposes a server/fd surface: " + body);
 }
 
-// tjs:readline is grantable only as a pure transformer over caller-provided
+// capsid:readline is grantable only as a pure transformer over caller-provided
 // Web Streams. It must not gain ambient stdin/stdout through a hidden tjs
 // global, while a memory-backed line read remains usable.
 void test_binding_readline_has_no_ambient_stdio(const char *worker_path,
@@ -1229,7 +1239,7 @@ void test_binding_readline_has_no_ambient_stdio(const char *worker_path,
     const std::string body = invoke_binding_method(
         worker_path,
         call_path,
-        "import { createInterface, isColorSupported } from 'tjs:readline';"
+        "import { createInterface, isColorSupported } from 'capsid:readline';"
         "export default () => ({ async find() {"
         "  if (globalThis.tjs !== undefined || isColorSupported())"
         "    return 'ambient-stdio';"
@@ -1249,7 +1259,7 @@ void test_binding_readline_has_no_ambient_stdio(const char *worker_path,
         "} });",
         {},
         {"network-client"},
-        {"tjs:internal/core", "tjs:readline"},
+        {"capsid:internal/core", "capsid:readline"},
         91);
     require(body == "result:hello:",
             "readline acquired ambient stdio or failed pure streams: " +
@@ -1545,7 +1555,7 @@ void test_binding_open_file_has_no_descriptor_surface(
     const std::string body = invoke_binding_method(
         worker_path,
         call_path,
-        std::string("import core from 'tjs:internal/core';") +
+        std::string("import core from 'capsid:internal/core';") +
             "export default () => ({ async find() {" +
             "  const file = await core.fs.open('" + file_path + "','r');" +
             "  const result = typeof file.fileno;" +
@@ -1553,7 +1563,7 @@ void test_binding_open_file_has_no_descriptor_surface(
             "} });",
         {file_path},
         {"filesystem-read"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         94);
     unlink(file_path);
     require(body == "result:fileno:undefined",
@@ -1563,7 +1573,7 @@ void test_binding_open_file_has_no_descriptor_surface(
 void test_binding_dns_egress_gate(const char *worker_path,
                                   const char *call_path) {
     const std::string source =
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default () => ({ async find() {"
         "  try {"
         "    const result = await core.getaddrinfo('localhost',{family:0});"
@@ -1576,7 +1586,7 @@ void test_binding_dns_egress_gate(const char *worker_path,
         source,
         {},
         {"network-client"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         95);
     require(denied.find(
                 "result:dns-denied:CAPSID_DNS_EGRESS_DENIED:") == 0,
@@ -1588,7 +1598,7 @@ void test_binding_dns_egress_gate(const char *worker_path,
         source,
         {},
         {"network-client"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         96,
         {},
         {},
@@ -1603,7 +1613,7 @@ std::string wasi_fd_close_binding_source(const std::string &options,
     // The module imports fd_close, exports one page of memory (required by
     // WAMR WASI), and exports _start. Its preopen is guest fd 3.
     return
-        "import WASI from 'tjs:wasi';"
+        "import WASI from 'capsid:wasi';"
         "const bytes = new Uint8Array(["
         "0,97,115,109,1,0,0,0,"
         "1,9,2,96,1,127,1,127,96,0,0,"
@@ -1637,7 +1647,7 @@ void test_binding_wasi_preopen_is_policy_gated(const char *worker_path,
             "preopens:{'/guest':'/tmp'}}"),
         {},
         {"wasi"},
-        {"tjs:internal/core", "tjs:wasi"},
+        {"capsid:internal/core", "capsid:wasi"},
         84);
     require(body.find(
                 "result:wasi-denied:CAPSID_WASI_FS_DENIED:") == 0,
@@ -1654,7 +1664,7 @@ void test_binding_wasi_allowed_preopen_runs(const char *worker_path,
             "preopens:{'/guest':'/tmp'}}"),
         {},
         {"filesystem-write", "wasi"},
-        {"tjs:internal/core", "tjs:wasi"},
+        {"capsid:internal/core", "capsid:wasi"},
         85,
         {"/tmp"});
     require(body == "result:wasi-allowed",
@@ -1670,7 +1680,7 @@ void test_binding_wasi_stdio_is_policy_gated(const char *worker_path,
             "{version:'wasi_snapshot_preview1',stdin:0}", false),
         {},
         {"wasi"},
-        {"tjs:internal/core", "tjs:wasi"},
+        {"capsid:internal/core", "capsid:wasi"},
         86);
     require(denied.find(
                 "result:wasi-denied:CAPSID_WASI_STDIO_DENIED:") == 0,
@@ -1683,7 +1693,7 @@ void test_binding_wasi_stdio_is_policy_gated(const char *worker_path,
             "{version:'wasi_snapshot_preview1',stdout:1}", false),
         {},
         {"wasi"},
-        {"tjs:internal/core", "tjs:wasi"},
+        {"capsid:internal/core", "capsid:wasi"},
         87,
         {},
         {"stdout"});
@@ -1697,7 +1707,7 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
     const std::string memory = invoke_binding_method(
         worker_path,
         call_path,
-        "import { Database } from 'tjs:sqlite';"
+        "import { Database } from 'capsid:sqlite';"
         "export default () => ({ find() {"
         "  try {"
         "    const db = new Database(':memory:');"
@@ -1709,7 +1719,7 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
         "} });",
         {},
         {"sqlite"},
-        {"tjs:internal/core", "tjs:sqlite"},
+        {"capsid:internal/core", "capsid:sqlite"},
         88);
     require(memory.find(
                 "result:extension:CAPSID_SQLITE_EXTENSION_DENIED") == 0,
@@ -1718,7 +1728,7 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
     const std::string denied = invoke_binding_method(
         worker_path,
         call_path,
-        "import { Database } from 'tjs:sqlite';"
+        "import { Database } from 'capsid:sqlite';"
         "export default () => ({ find() {"
         "  try { new Database('/tmp/capsid-sqlite-denied.db').close();"
         "    return 'opened'; }"
@@ -1726,7 +1736,7 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
         "} });",
         {},
         {"filesystem-write", "sqlite"},
-        {"tjs:internal/core", "tjs:sqlite"},
+        {"capsid:internal/core", "capsid:sqlite"},
         89);
     require(denied.find("result:denied:fs denied") == 0,
             "SQLite opened an undeclared database path: " + denied);
@@ -1739,7 +1749,7 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
     const std::string allowed = invoke_binding_method(
         worker_path,
         call_path,
-        std::string("import { Database } from 'tjs:sqlite';") +
+        std::string("import { Database } from 'capsid:sqlite';") +
             "export default () => ({ find() {" +
             "  const db = new Database('" + path + "');" +
             "  db.exec('CREATE TABLE ok(value INTEGER)');" +
@@ -1747,7 +1757,7 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
             "} });",
         {},
         {"filesystem-write", "sqlite"},
-        {"tjs:internal/core", "tjs:sqlite"},
+        {"capsid:internal/core", "capsid:sqlite"},
         90,
         {path});
     unlink(path);
@@ -1840,7 +1850,7 @@ void test_binding_egress_denial(const char *worker_path,
 void test_binding_raw_tcp_egress_gate(const char *worker_path,
                                       const char *call_path) {
     const std::string source_prefix =
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
         "  const socket = new core.TCP();"
         "  if (typeof socket.connect !== 'function')"
@@ -1866,7 +1876,7 @@ void test_binding_raw_tcp_egress_gate(const char *worker_path,
         source_prefix + std::to_string(denied_port) + source_suffix,
         {},
         {"network-client"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         92);
     require(denied.find("result:tcp-denied:egress denied") == 0,
             "raw TCP denial did not come from the native gate: " + denied);
@@ -1881,7 +1891,7 @@ void test_binding_raw_tcp_egress_gate(const char *worker_path,
         source_prefix + std::to_string(allowed_port) + source_suffix,
         {},
         {"network-client"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         93,
         {},
         {},
@@ -1897,7 +1907,7 @@ void test_binding_raw_tcp_egress_gate(const char *worker_path,
 void test_binding_raw_tls_egress_gate(const char *worker_path,
                                       const char *call_path) {
     const std::string source =
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
         " const socket = new core.TLSTcp({isServer:false,verifyPeer:false});"
         " return new Promise(resolve => {"
@@ -1912,13 +1922,13 @@ void test_binding_raw_tls_egress_gate(const char *worker_path,
 
     const std::string denied = invoke_binding_method(
         worker_path, call_path, source, {}, {"network-client"},
-        {"tjs:internal/core"}, 201);
+        {"capsid:internal/core"}, 201);
     require(denied.find("result:tls-denied:egress denied") == 0,
             "raw TLS denial did not come from the native gate: " + denied);
 
     const std::string allowed = invoke_binding_method(
         worker_path, call_path, source, {}, {"network-client"},
-        {"tjs:internal/core"}, 202, {}, {}, {"127.0.0.1:9"});
+        {"capsid:internal/core"}, 202, {}, {}, {"127.0.0.1:9"});
     require(allowed.find("result:tls-reached:") == 0 ||
                 allowed == "result:tls-allowed",
             "raw TLS did not reach an explicitly allowed target: " + allowed);
@@ -1938,7 +1948,7 @@ void test_binding_http_async_owner_and_redirect_gate(
     const pid_t owner_server =
         spawn_http_responder(owner_listener, ok_response);
     const std::string owner_source =
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default () => ({ async find() {"
         " const response = await fetch('http://127.0.0.1:" +
         std::to_string(owner_port) +
@@ -1953,7 +1963,7 @@ void test_binding_http_async_owner_and_redirect_gate(
         worker_path, call_path, owner_source,
         {"/tmp/capsid-binding-http-owner-missing"},
         {"network-client", "filesystem-read"},
-        {"tjs:internal/core"}, 203, {}, {},
+        {"capsid:internal/core"}, 203, {}, {},
         {"127.0.0.1:" + std::to_string(owner_port)});
     finish_http_responder(owner_server, owner_listener, true);
     require(owner_result == "result:http-owner-ok:ok",
@@ -1980,7 +1990,7 @@ void test_binding_http_async_owner_and_redirect_gate(
         "} });";
     const std::string denied = invoke_binding_method(
         worker_path, call_path, redirect_source, {}, {"network-client"},
-        {"tjs:internal/core"}, 204, {}, {},
+        {"capsid:internal/core"}, 204, {}, {},
         {"127.0.0.1:" + std::to_string(redirect_port)});
     finish_http_responder(redirect_server, redirect_listener, true);
     finish_http_responder(target_server, target_listener, false);
@@ -2011,7 +2021,7 @@ void test_binding_http_async_owner_and_redirect_gate(
         "} });";
     const std::string allowed = invoke_binding_method(
         worker_path, call_path, allowed_redirect_source, {},
-        {"network-client"}, {"tjs:internal/core"}, 205, {}, {},
+        {"network-client"}, {"capsid:internal/core"}, 205, {}, {},
         {"127.0.0.1:" + std::to_string(allowed_redirect_port),
          "127.0.0.1:" + std::to_string(allowed_target_port)});
     finish_http_responder(
@@ -2030,7 +2040,7 @@ void test_binding_websocket_egress_and_async_owner(
     const char *worker_path,
     const char *call_path) {
     const std::string denied_source =
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
         " const invalid = ["
         "  () => new core.WebSocket(),"
@@ -2048,7 +2058,7 @@ void test_binding_websocket_egress_and_async_owner(
         "} });";
     const std::string denied = invoke_binding_method(
         worker_path, call_path, denied_source, {}, {"network-client"},
-        {"tjs:internal/core"}, 206);
+        {"capsid:internal/core"}, 206);
     require(denied.find("result:ws-denied:egress denied") == 0,
             "WebSocket denial did not come from the native gate: " + denied);
 
@@ -2058,7 +2068,7 @@ void test_binding_websocket_egress_and_async_owner(
     const std::string target =
         "127.0.0.1:" + std::to_string(allowed_port);
     const std::string allowed_source =
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
         " return new Promise(resolve => {"
         "  const ws = new core.WebSocket('ws://" + target +
@@ -2073,7 +2083,7 @@ void test_binding_websocket_egress_and_async_owner(
         "} });";
     const std::string allowed = invoke_binding_method(
         worker_path, call_path, allowed_source, {}, {"network-client"},
-        {"tjs:internal/core"}, 207, {}, {}, {target});
+        {"capsid:internal/core"}, 207, {}, {}, {target});
     finish_websocket_responder(server, listener);
     require(allowed == "result:ws-allowed",
             "WebSocket rejected an allowed target or lost its async owner: " +
@@ -2083,7 +2093,7 @@ void test_binding_websocket_egress_and_async_owner(
 void test_binding_raw_udp_egress_gate(const char *worker_path,
                                       const char *call_path) {
     const std::string source_prefix =
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
         "  const socket = new core.UDP();"
         "  try { socket.send(new Uint8Array([7]),"
@@ -2099,7 +2109,7 @@ void test_binding_raw_udp_egress_gate(const char *worker_path,
         source_prefix + "9" + source_suffix,
         {},
         {"network-client"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         97);
     require(denied.find("result:udp-denied:egress denied") == 0,
             "raw UDP denial did not come from the native gate: " + denied);
@@ -2114,7 +2124,7 @@ void test_binding_raw_udp_egress_gate(const char *worker_path,
         source_prefix + std::to_string(allowed_port) + source_suffix,
         {},
         {"network-client"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         98,
         {},
         {},
@@ -2138,7 +2148,7 @@ void test_binding_fs_native_gate(const char *worker_path,
         capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     binding.payload = mongo_binding_blob(
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default ({ config, secrets, log }) => {"
         "  return { find() {"
         "    return core.fs.open('/tmp/capsid-binding-fs-probe', 'w');"
@@ -2210,7 +2220,7 @@ void test_binding_fswatch_profile_and_path_gate(const char *worker_path,
     require(fixture >= 0, "could not create FSWatch fixture");
     close(fixture);
     const std::string source =
-        std::string("import core from 'tjs:internal/core';") +
+        std::string("import core from 'capsid:internal/core';") +
         "export default () => ({ find() { try {" +
         " const watcher = core.watch('" + path + "', () => {});" +
         " watcher.close(); return 'watch-allowed';" +
@@ -2223,7 +2233,7 @@ void test_binding_fswatch_profile_and_path_gate(const char *worker_path,
         source,
         {path},
         {"filesystem-read"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         101);
     require(
         no_profile ==
@@ -2236,7 +2246,7 @@ void test_binding_fswatch_profile_and_path_gate(const char *worker_path,
         source,
         {},
         {"filesystem-read", "filesystem-watch"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         102);
     require(no_path.find(
                 "result:watch-denied:fs denied by binding policy:") == 0,
@@ -2248,7 +2258,7 @@ void test_binding_fswatch_profile_and_path_gate(const char *worker_path,
         source,
         {path},
         {"filesystem-read", "filesystem-watch"},
-        {"tjs:internal/core"},
+        {"capsid:internal/core"},
         103);
     unlink(path);
     require(allowed == "result:watch-allowed",
@@ -2269,7 +2279,7 @@ void test_binding_async_identity(const char *worker_path,
         capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     binding.payload = mongo_binding_blob(
-        "import core from 'tjs:internal/core';"
+        "import core from 'capsid:internal/core';"
         "export default ({ config, secrets, log }) => {"
         "  return { find() {"
         "    return new Promise((resolve, reject) => {"
@@ -2361,7 +2371,7 @@ void test_binding_wasi_workload(const char *worker_path,
             "preopens:{'/guest':'/tmp'}}"),
         {},
         {"filesystem-write", "wasi"},
-        {"tjs:internal/core", "tjs:wasi"},
+        {"capsid:internal/core", "capsid:wasi"},
         {"/tmp"});
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
@@ -2424,18 +2434,18 @@ void test_binding_grantable_modules_exist(const char *worker_path,
         capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     binding.payload = mongo_binding_blob(
-        "import assert_mod from 'tjs:assert';"
-        "import getopts_mod from 'tjs:getopts';"
-        "import * as hashing_mod from 'tjs:hashing';"
-        "import core from 'tjs:internal/core';"
-        "import internal_path from 'tjs:internal/path';"
-        "import ipaddr_mod from 'tjs:ipaddr';"
-        "import path_mod from 'tjs:path';"
-        "import readline_mod from 'tjs:readline';"
-        "import * as sqlite_mod from 'tjs:sqlite';"
-        "import * as utils_mod from 'tjs:utils';"
-        "import uuid_mod from 'tjs:uuid';"
-        "import wasi_mod from 'tjs:wasi';"
+        "import assert_mod from 'capsid:assert';"
+        "import getopts_mod from 'capsid:getopts';"
+        "import * as hashing_mod from 'capsid:hashing';"
+        "import core from 'capsid:internal/core';"
+        "import internal_path from 'capsid:internal/path';"
+        "import ipaddr_mod from 'capsid:ipaddr';"
+        "import path_mod from 'capsid:path';"
+        "import readline_mod from 'capsid:readline';"
+        "import * as sqlite_mod from 'capsid:sqlite';"
+        "import * as utils_mod from 'capsid:utils';"
+        "import uuid_mod from 'capsid:uuid';"
+        "import wasi_mod from 'capsid:wasi';"
         "const seen = [assert_mod, getopts_mod, hashing_mod, core,"
         "  internal_path, ipaddr_mod, path_mod,"
         "  readline_mod, sqlite_mod, utils_mod, uuid_mod, wasi_mod];"
@@ -2444,10 +2454,10 @@ void test_binding_grantable_modules_exist(const char *worker_path,
         "};",
         {},
         {"network-client", "sqlite", "wasi"},
-        {"tjs:assert", "tjs:getopts", "tjs:hashing",
-         "tjs:internal/core", "tjs:internal/path", "tjs:ipaddr",
-         "tjs:path", "tjs:readline",
-         "tjs:sqlite", "tjs:utils", "tjs:uuid", "tjs:wasi"});
+        {"capsid:assert", "capsid:getopts", "capsid:hashing",
+         "capsid:internal/core", "capsid:internal/path", "capsid:ipaddr",
+         "capsid:path", "capsid:readline",
+         "capsid:sqlite", "capsid:utils", "capsid:uuid", "capsid:wasi"});
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 

@@ -1,79 +1,39 @@
-# 文档中心
+# Documentation
 
-这里维护当前契约、使用说明和可复核的证据规则。首次接触项目请从
-[项目首页](../README.md)开始；准备提交变更请阅读[贡献指南](../CONTRIBUTING.md)，
-敏感问题按[安全策略](../SECURITY.md)处理。
+Capsid documentation is organized around selection → integration → configuration → validation. If you are new, start with the [project homepage](../README.md); see [CONTRIBUTING.md](../CONTRIBUTING.md) for contributions and [SECURITY.md](../SECURITY.md) for security issues.
 
-## 按任务查找
+## Find by Task
 
-| 你想做什么 | 从这里开始 | 深入阅读 |
-| --- | --- | --- |
-| 理解 Capsid 是否适合我的场景 | [架构与产品边界](architecture.md) | [标准与合规](conformance.md) |
-| 把 Runtime 嵌入现有网关 | [宿主嵌入规范](host-integration.md) | [能力策略](capability-policy.md) |
-| 部署第一方 managed Host | [Host 配置参考](host-config.md) | [Host v1 详细设计](host-technical-design-review.md) |
-| 编写并授权应用 | [capsid.json 教程](capsid-json.md) | [模块与权限参考](module-permissions.md) |
-| 设计或实现 Host Binding | [Binding v1 技术设计](binding-technical-design.md) | [Linux 严格沙箱](linux-sandbox.md) |
-| 运行不可信代码 | [Linux 严格沙箱](linux-sandbox.md) | [能力策略](capability-policy.md) |
-| 移植现有 Fetch 框架 | [框架兼容性](framework-compatibility/README.md) | 各框架验证页 |
-| 复现质量或性能结论 | [测试门禁](testing.md) | [性能证据](performance-benchmarks.md) |
+**Selection and Architecture**
 
-## 维护规则
+- Product boundary: [architecture.md](architecture.md)
+- Platform differences and selection: [platform-support.md](platform-support.md);
+  Linux isolation: [linux-sandbox.md](linux-sandbox.md);
+  Windows build: [windows.md](windows.md)
 
-不保存一次性评审过程、每日状态快照或生成报告的副本。原始样本与 profile 保存在
-`bench/results/`，CI 证据保存在 workflow artifact。事实发生冲突时，优先级如下：
+**Host Integration and Deployment**
 
-1. 公共头文件、manifest、构建配置和测试；
-2. 由当前 commit 生成的原始测试或 benchmark artifact；
-3. Markdown 说明。
+- Embedding a C/C++ host: [host-integration.md](host-integration.md)
+- First-party Host configuration: [host-config.md](host-config.md) ·
+  [capsid-json.md](capsid-json.md)
+- Capability policies and module permissions: [capability-policy.md](capability-policy.md) ·
+  [module-permissions.md](module-permissions.md)
+- managed Host design: [host-technical-design-review.md](host-technical-design-review.md)
+- Host-authored Binding packages and isolated runtimes:
+  [binding-technical-design.md](binding-technical-design.md) ·
+  [binding-modules.md](binding-modules.md)
+- Binding v1 adversarial audit and TDD remediation plan:
+  [2026-08-16-binding-v1-security-audit-remediation.md](superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md)
 
-当前代码线的 Runtime、worker 与第一方 `capsid-host`（`--mode single-worker`
-/ `static-pool` / `managed`）均可构建、可测试，属可运行的 benchmark/integration
-模式，**非生产部署接口**；里程碑状态以源码和测试为准，不单独维护易漂移的状态
-文档。
+**Compatibility and Quality**
 
-## 全部文档
+- Standards/framework compatibility: [conformance.md](conformance.md) ·
+  [framework-compatibility/README.md](framework-compatibility/README.md)
+- Test gate: [testing.md](testing.md)
+- Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
 
-### 入门与架构
+## Maintenance Rules
 
-- [项目首页](../README.md)：定位、适用场景、快速开始、权限与安全配置
-- [架构与产品边界](architecture.md)：进程模型、平台契约、JavaScript 表面、
-  受限构建、安全边界、资源策略与限制
-- [Host v1 详细设计](host-technical-design-review.md)：第一方 Host 的权威
-  设计、已冻结契约、验收门与实施顺序
-
-### 宿主嵌入与集成
-
-- [宿主嵌入与集成规范](host-integration.md)：C ABI 生命周期、线程与事件循环、
-  请求/credit 背压、SSE/streaming、取消与关闭、ABI 版本策略与上线清单
-- [host.json 与 capsid.json 配置参考](host-config.md)：managed 模式两层
-  JSON 配置的字段速查、目录布局、secret 文件与 Admin API
-- [capsid.json 怎么写（教程）](capsid-json.md)：从最小配置逐步到完整
-  配置的手把手教程，含字段值域、常见错误表与部署三步
-- [宿主能力策略](capability-policy.md)：三层门禁、可用模块、环境快照、
-  storage/stdio/fs 契约、审计事件与逃逸级能力门禁
-- [JavaScript 模块与权限参考](module-permissions.md)：bundle 可导入的模块、
-  API→权限映射与配置配方
-- [Linux 严格沙箱](linux-sandbox.md)：strict baseline、cgroup v2、网络
-  namespace、出站网络策略与明确限制
-- [Binding v1 技术设计](binding-technical-design.md)：同进程双 Runtime、
-  Package/配置契约、异步 RPC、TJS 能力门禁及 Seccomp/Landlock Profile
-- [Binding v1 安全审计修复计划](superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md)：
-  对抗性验收顺序、Red/Green 测试要求及最终证据门禁
-
-### 正确性与兼容性
-
-- [测试与持续门禁](testing.md)：测试分层、有效性规则、sanitizer/TSan 与
-  平台契约门
-- [标准与合规](conformance.md)：ECMA-429 与 WPT 来源锁、合规偏差表、
-  能力追踪矩阵
-- [框架兼容性](framework-compatibility/README.md)：固定版本的 Hono、itty-router
-  和 H3 v2
-
-### 性能
-
-- [性能：证据规则与当前形态](performance-benchmarks.md)：结论门槛、测量
-  分层、池规模结论、三栈对照与第一方 Host 优化结果。runner 与证据目录约定
-  见 `bench/` 下的脚本与 `bench/results/`。
-
-txiki.js 升级报告由 CI 生成并作为 workflow artifact 保存；仓库只保留构建身份所需的
-[`txiki-upgrade-baseline.json`](txiki-upgrade-baseline.json)，不提交会过期的报告副本。
+- Maintain only the contracts and reproducible conclusions of the current commit; do not preserve review processes, status snapshots, or generated reports.
+- Source-of-truth priority: public headers and build configuration > raw test/benchmark artifacts > Markdown.
+- Every `docs/*.md` file must be reachable from this page; relative links are validated by `tests/audit-current-docs.mjs`.

@@ -41,9 +41,16 @@ set(JSON_STRTOINT "strtoll")
 set(JSON_INTEGER_FORMAT "\"lld\"")
 set(JSON_INLINE "inline")
 # Clang and GCC support both builtin families on all supported platforms;
-# the checks upstream performs would also succeed here.
-set(JSON_HAVE_ATOMIC_BUILTINS 1)
-set(JSON_HAVE_SYNC_BUILTINS 1)
+# the checks upstream performs would also succeed here. MSVC has neither
+# family: the interlocked-intrinsic tier in jansson.h takes over (see
+# vendor/jansson/VENDOR.txt).
+if(MSVC)
+    set(JSON_HAVE_ATOMIC_BUILTINS 0)
+    set(JSON_HAVE_SYNC_BUILTINS 0)
+else()
+    set(JSON_HAVE_ATOMIC_BUILTINS 1)
+    set(JSON_HAVE_SYNC_BUILTINS 1)
+endif()
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/jansson_config.h.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/include/jansson_config.h"
@@ -52,8 +59,8 @@ configure_file(
 # Private jansson_private_config.h. The int32_t/uintN_t/ssize_t fallback
 # values are never used because the HAVE_*_T definitions are enabled, but
 # configure_file needs them to exist.
-set(HAVE_SYNC_BUILTINS 1)
-set(HAVE_ATOMIC_BUILTINS 1)
+set(HAVE_SYNC_BUILTINS ${JSON_HAVE_SYNC_BUILTINS})
+set(HAVE_ATOMIC_BUILTINS ${JSON_HAVE_ATOMIC_BUILTINS})
 set(HAVE_INT32_T 1)
 set(HAVE_UINT32_T 1)
 set(HAVE_UINT16_T 1)

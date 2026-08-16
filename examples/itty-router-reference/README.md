@@ -1,19 +1,17 @@
-# itty-router 参考应用
+# itty-router reference app
 
-本目录固定 Capsid Runtime 兼容套件使用的 itty-router 版本：
+This directory pins the itty-router version used by the Capsid Runtime compatibility suite:
 
 ```sh
 npm ci --ignore-scripts
 npm run build
 ```
 
-`src/shared-handlers.js` 同时用于 Node reference controller 和真实 worker
-bundle。三个入口覆盖：
+`src/shared-handlers.js` is used by both the Node reference controller and the real worker bundle. The three entries cover:
 
-- 默认 `AutoRouter`；
-- `Router` 的默认 `{ fetch: router.fetch }`；
-- 手工 `IttyRouter` promise pipeline 的 named `fetch`。
+- default `AutoRouter`;
+- `Router`'s default `{ fetch: router.fetch }`;
+- the named `fetch` for the hand-written `IttyRouter` promise pipeline.
 
-CMake 使用同一 `build.mjs`，并在 worker 测试加载前审计每个自包含 ESM。
-验证范围、排除项和差分规则见
-[`../../docs/framework-compatibility/itty-router.md`](../../docs/framework-compatibility/itty-router.md)。
+CMake uses the same `build.mjs` and audits each self-contained ESM before worker tests load it. See the verification scope, exclusions, and differential rules in
+[`../../docs/framework-compatibility/itty-router.md`](../../docs/framework-compatibility/itty-router.md).

@@ -1,54 +1,68 @@
-# JavaScript 模块与权限参考
+# JavaScript Modules and Permissions Reference
 
-本文面向编写 bundle 和配置宿主策略的用户，回答两个问题：
+This article is for users writing bundles and configuring host policy. It
+answers two questions:
 
-1. 应用可以 import 哪些模块；
-2. 每个 JavaScript API 需要哪个宿主权限。
+1. Which modules an application can import;
+2. Which host permission each JavaScript API requires.
 
-机器权威清单是
-[`capability-manifest.json`](capability-manifest.json)，C ABI 权威定义是
-[`include/capsid/runtime.h`](../include/capsid/runtime.h)。
+The machine-readable authoritative list is
+[`capability-manifest.json`](capability-manifest.json), and the C ABI
+authoritative definition is
+[`include/capsid/runtime.h`](../include/capsid/runtime.h).
 
-## 最重要的规则
+Host-authored Binding packages run under a separate module and capability
+model. Their exact grantable `capsid:*` modules, private implementation
+dependencies, sandbox profiles, and resource gates are documented in
+[binding-modules.md](binding-modules.md). A Binding module grant never makes a
+`tjs:*` module available to untrusted application code.
 
-- 应用只允许 import 宿主白名单中的 `capsid:*` 公共模块；
-- `tjs:*` 和 `tjs:internal/*` 对应用永久禁止，不能配置开放；
-- `allowed_modules` 只决定模块能否 import，不自动允许模块里的资源操作；
-- `fetch()` 不属于 `capsid:net`，它使用独立的 egress policy；
-- 没有模块 import 的 Web API 大多不需要 capability rule，例外是 `fetch()`；
-- deny rule 总是优先，未知或格式错误的策略会让 worker 启动失败。
+## The most important rules
 
-这套查询描述符借鉴了 Deno permission 的表达方式，但不是
-`Deno.permissions` API，也不提供 `request()`、`revoke()` 或 permission prompt。
-JavaScript 只能通过 `capsid:permissions` 查询宿主给出的不可变结果。
+- Applications may only import public `capsid:*` modules from the host
+  allowlist;
+- `tjs:*` and `tjs:internal/*` are permanently forbidden to applications and
+  cannot be opened through configuration;
+- `allowed_modules` only decides whether a module can be imported; it does not
+  automatically allow resource operations inside the module;
+- `fetch()` is not `capsid:net`; it uses a separate egress policy;
+- Most Web APIs that do not require a module import need no capability rule,
+  with the exception of `fetch()`;
+- deny rules always take precedence, and unknown or malformed policy makes
+  worker startup fail.
 
-## 模块 specifier 如何判定
+This query descriptor family borrows from Deno's permission expression, but it
+is not the `Deno.permissions` API and does not provide `request()`, `revoke()`,
+or permission prompts. JavaScript can only query the immutable result given by
+the host through `capsid:permissions`.
 
-| bundle 中的 specifier | 能否配置 | 结果 |
+## How module specifiers are determined
+
+| Specifier in the bundle | Configurable? | Result |
 | --- | --- | --- |
-| 已构建的 `capsid:*` | 可以 | 必须列入 `allowed_modules`，否则 `module is not authorized` |
-| 已知但未构建的 `capsid:*` | 可以列入，但不能使用 | import 时 `module is unavailable` |
-| 任意 `tjs:*` | 不可以 | 永久 `module is forbidden` |
-| `tjs:internal/*` | 不可以 | 永久 `module is forbidden` |
-| `node:`、`file:`、`http:`、`https:`、`data:` | 不可以 | 永久 `module is forbidden` |
-| `/绝对路径`、`./相对路径`、`../相对路径` | 不可以 | 永久 `module is forbidden` |
-| 未知 specifier | 不可以 | `module is unavailable` |
+| Built `capsid:*` | Yes | Must be listed in `allowed_modules`, otherwise `module is not authorized` |
+| Known but not built `capsid:*` | Can be listed but cannot be used | `module is unavailable` on import |
+| Any `tjs:*` | No | Permanently `module is forbidden` |
+| `tjs:internal/*` | No | Permanently `module is forbidden` |
+| `node:`, `file:`, `http:`, `https:`, `data:` | No | Permanently `module is forbidden` |
+| `/absolute/path`, `./relative/path`, `../relative/path` | No | Permanently `module is forbidden` |
+| Unknown specifier | No | `module is unavailable` |
 
-因此下面不是有效配置：
+Therefore the following is not a valid configuration:
 
 ```cpp
 capsid::CapabilityPolicyBuilder policy;
-policy.allow_module("tjs:assert"); // 错误：spawn 返回 CAPSID_INVALID_ARGUMENT
+policy.allow_module("tjs:assert"); // error: spawn returns CAPSID_INVALID_ARGUMENT
 ```
 
-正确做法是使用 Capsid 公共名称：
+The correct approach is to use a public Capsid name:
 
 ```cpp
 capsid::CapabilityPolicyBuilder policy;
 policy.allow_module("capsid:assert");
 ```
 
-等价的 C 配置是：
+The equivalent C configuration is:
 
 ```c
 const char *modules[] = {
@@ -67,72 +81,78 @@ capsid_worker_config_init(&config);
 config.capability_policy = &capability;
 ```
 
-`allowed_modules` 中出现 `tjs:*`、未知模块、重复模块或永久禁止项时，不会等到
-JavaScript import 才失败，而是让 `capsid_worker_spawn()` 直接返回
-`CAPSID_INVALID_ARGUMENT`。
+If `allowed_modules` contains `tjs:*`, unknown modules, duplicate modules, or
+permanently forbidden items, it does not wait for a JavaScript import to fail;
+instead `capsid_worker_spawn()` returns `CAPSID_INVALID_ARGUMENT` directly.
 
-应用必须在发布阶段打成自包含 ESM。bundle 内遗留的相对、绝对、远程或 npm
-运行时 import 都会被拒绝。
+Applications must be bundled as self-contained ESM at release time. Relative,
+absolute, remote, or npm runtime imports left in the bundle are rejected.
 
-## txiki.js 工具模块的公共映射
+## Public mapping for txiki.js utility modules
 
-Capsid restricted runtime 内部复用了六个不带 ambient authority 的 txiki.js
-工具实现，但应用只能使用对应的 `capsid:*` 名称：
+The Capsid restricted runtime internally reuses six txiki.js utility
+implementations that carry no ambient authority, but applications may only use
+the corresponding `capsid:*` names:
 
-| 禁止应用直接 import | 可授权的公共模块 | 公共导出 | 操作权限 |
+| Forbidden direct application import | Authorizable public module | Public exports | Operation permission |
 | --- | --- | --- | --- |
-| `tjs:assert` | `capsid:assert` | 默认 assertion 对象：`equal`、`notEqual`、`is`、`isNot`、`ok`、`notOk`、`fail`、`throws`、`doesNotThrow` 及别名 | 无 |
-| `tjs:getopts` | `capsid:getopts` | 默认 `getopts(args, options)` | 无 |
-| `tjs:hashing` | `capsid:hashing` | `SUPPORTED_TYPES`、`createHash()`；hash 对象提供 `update()`、`digest()`、`bytes()` | 无 |
-| `tjs:ipaddr` | `capsid:ipaddr` | 默认 ipaddr.js 对象 | 无 |
-| `tjs:utils` | `capsid:utils` | `format()`、`inspect()` | 无 |
-| `tjs:uuid` | `capsid:uuid` | 默认 uuid 对象 | 无 |
+| `tjs:assert` | `capsid:assert` | Default assertion object: `equal`, `notEqual`, `is`, `isNot`, `ok`, `notOk`, `fail`, `throws`, `doesNotThrow`, and aliases | None |
+| `tjs:getopts` | `capsid:getopts` | Default `getopts(args, options)` | None |
+| `tjs:hashing` | `capsid:hashing` | `SUPPORTED_TYPES`, `createHash()`; hash objects provide `update()`, `digest()`, `bytes()` | None |
+| `tjs:ipaddr` | `capsid:ipaddr` | Default ipaddr.js object | None |
+| `tjs:utils` | `capsid:utils` | `format()`, `inspect()` | None |
+| `tjs:uuid` | `capsid:uuid` | Default uuid object | None |
 
-“操作权限为无”不等于模块自动可见。这六个模块仍需逐个写入
-`allowed_modules`，只是导入成功后调用其纯计算 API 不再经过资源 rule。
+"Operation permission: none" is not the same as "module automatically visible."
+These six modules still need to be listed individually in `allowed_modules`;
+only after a successful import do their pure computation APIs avoid a resource
+rule.
 
-`capsid:hashing` 的实现需要一次 `tjs:internal/core`。loader 只允许
-`tjs:hashing` 在解析自身依赖时取得该模块；应用直接或动态 import
-`tjs:internal/core` 始终被拒绝，包括它已经进入模块缓存的情况。
-`globalThis.tjs`、`process`、`Deno` 和 `Bun` 也不存在。
+`capsid:hashing`'s implementation needs `tjs:internal/core` once. The loader
+only allows `tjs:hashing` to obtain that module while resolving its own
+dependencies; an application directly or dynamically importing
+`tjs:internal/core` is always rejected, including when it is already in the
+module cache. `globalThis.tjs`, `process`, `Deno`, and `Bun` do not exist.
 
-## API 到权限的完整映射
+## Complete API-to-permission mapping
 
-| JavaScript API | 必须授权的模块 | C/C++ 权限配置 | rule resource | 匹配语义 |
+| JavaScript API | Module that must be authorized | C/C++ permission configuration | rule resource | Match semantics |
 | --- | --- | --- | --- | --- |
-| `permissions.query()` | `capsid:permissions` | 无操作 rule | 查询描述符决定 | 只查询，不授予权限 |
-| `env.get(name)` | `capsid:env` | `CAPSID_PERMISSION_ENV` | 环境变量名，如 `APP_MODE` | exact，rule 可使用单个末尾 `*` |
+| `permissions.query()` | `capsid:permissions` | No operation rule | Determined by the query descriptor | Query only; grants no permission |
+| `env.get(name)` | `capsid:env` | `CAPSID_PERMISSION_ENV` | Environment variable name, e.g. `APP_MODE` | exact; a rule may use a single trailing `*` |
 | `system.get("runtimeVersion")` | `capsid:system` | `CAPSID_PERMISSION_SYS` | `runtimeVersion` | exact |
 | `system.get("featureFlags")` | `capsid:system` | `CAPSID_PERMISSION_SYS` | `featureFlags` | exact |
 | `storage.get/set/delete/clear/keys(namespace, ...)` | `capsid:storage` | `CAPSID_PERMISSION_STORAGE` | namespace | exact |
 | `stdio.write("stdout", message)` | `capsid:stdio` | `CAPSID_PERMISSION_STDIO` | `stdout` | exact |
 | `stdio.write("stderr", message)` | `capsid:stdio` | `CAPSID_PERMISSION_STDIO` | `stderr` | exact |
-| `fs.readText(path)` | `capsid:fs` | `CAPSID_PERMISSION_READ` | canonical absolute path | 本路径及其子树 |
-| `fs.stat(path)` | `capsid:fs` | `CAPSID_PERMISSION_READ` | canonical absolute path | 本路径及其子树 |
-| `fs.list(path)` | `capsid:fs` | `CAPSID_PERMISSION_READ` | canonical absolute path | 本路径及其子树 |
-| 全局 `fetch(url, init)` | 无 | `capsid_egress_policy`；推荐同时配置 capability `net_policy` | hostname/IP/CIDR + port | 两层策略取交集 |
-| 六个纯工具模块 | 对应 `capsid:*` | 无操作 rule | 无 | 只有模块 gate |
+| `fs.readText(path)` | `capsid:fs` | `CAPSID_PERMISSION_READ` | canonical absolute path | This path and its subtree |
+| `fs.stat(path)` | `capsid:fs` | `CAPSID_PERMISSION_READ` | canonical absolute path | This path and its subtree |
+| `fs.list(path)` | `capsid:fs` | `CAPSID_PERMISSION_READ` | canonical absolute path | This path and its subtree |
+| Global `fetch(url, init)` | None | `capsid_egress_policy`; also recommended to configure capability `net_policy` | hostname/IP/CIDR + port | The two policy layers intersect |
+| Six pure utility modules | Corresponding `capsid:*` | No operation rule | None | Module gate only |
 
-`CAPSID_PERMISSION_NET` 不能写进普通 `capsid_permission_rule`。网络规则必须使用
-`capsid_egress_rule` / `capsid_egress_policy`，C++ builder 对应 `.net()`。
+`CAPSID_PERMISSION_NET` cannot be written into an ordinary
+`capsid_permission_rule`. Network rules must use `capsid_egress_rule` /
+`capsid_egress_policy`; the C++ builder counterpart is `.net()`.
 
-以下 permission 名称能被策略解析或查询，但当前没有对应产品 API：
+The following permission names can be parsed or queried by policy, but currently
+have no corresponding product API:
 
-| 权限 | C 枚举 | 当前状态 |
+| Permission | C enum | Current status |
 | --- | --- | --- |
-| `write` | `CAPSID_PERMISSION_WRITE` | unavailable；没有文件写入、删除、rename 或 mkdir |
+| `write` | `CAPSID_PERMISSION_WRITE` | unavailable; no file write, delete, rename, or mkdir |
 | `ffi` | `CAPSID_PERMISSION_FFI` | unavailable |
 | `rawSocket` | `CAPSID_PERMISSION_RAW_SOCKET` | unavailable |
 | `engine` | `CAPSID_PERMISSION_ENGINE` | unavailable |
-| `sys` 的其他 kind | `CAPSID_PERMISSION_SYS` | unavailable |
-| `stdio` 的 `stdin` | `CAPSID_PERMISSION_STDIO` | unavailable |
+| Other `sys` kinds | `CAPSID_PERMISSION_SYS` | unavailable |
+| `stdio`'s `stdin` | `CAPSID_PERMISSION_STDIO` | unavailable |
 
-给这些项目添加 allow rule 不会使操作出现，`permissions.query()` 仍返回
-`unavailable`。
+Adding allow rules for these does not make the operations appear;
+`permissions.query()` still returns `unavailable`.
 
-## 宿主配置配方
+## Host configuration recipes
 
-### 只开放纯工具
+### Expose pure utilities only
 
 ```cpp
 capsid::CapabilityPolicyBuilder capability;
@@ -144,12 +164,12 @@ capability
     .allow_module("capsid:uuid");
 ```
 
-这里不需要任何 `allow(CAPSID_PERMISSION_...)`，应用也不会因此获得文件、环境变量
-或网络访问。
+No `allow(CAPSID_PERMISSION_...)` is needed here, and the application does not
+gain file, environment, or network access from this configuration.
 
-### 环境变量
+### Environment variables
 
-模块、operation rule 和环境快照缺一不可：
+The module, operation rule, and environment snapshot are all required:
 
 ```cpp
 capsid::CapabilityPolicyBuilder capability;
@@ -166,10 +186,11 @@ import { env } from "capsid:env";
 env.get("APP_MODE"); // "production"
 ```
 
-worker 不读取宿主进程环境。`.environment()` 没有对应 allow rule、存在重复键或
-模块未授权时，spawn 会 fail closed。
+The worker does not read the host process environment. If `.environment()` has
+no matching allow rule, contains duplicate keys, or the module is not
+authorized, spawn fails closed.
 
-### 只读目录，并拒绝其中一个子目录
+### Read-only directory with one denied subdirectory
 
 ```cpp
 capsid::CapabilityPolicyBuilder capability;
@@ -185,10 +206,11 @@ capability
         1102);
 ```
 
-`/srv/capsid/orders/config.json` 被允许，
-`/srv/capsid/orders/secrets/token` 被拒绝。路径必须是 canonical absolute
-path；deny 优先于 allow。strict sandbox 还会把有效只读根写入 Landlock，
-授权根本身若是 symlink 会导致启动失败。
+`/srv/capsid/orders/config.json` is allowed;
+`/srv/capsid/orders/secrets/token` is denied. Paths must be canonical absolute
+paths; deny takes precedence over allow. Strict sandbox also writes effective
+read-only roots into Landlock; if an authorization root itself is a symlink,
+startup fails.
 
 ### storage namespace
 
@@ -208,12 +230,14 @@ storage.delete("tenant-a", "session");
 storage.clear("tenant-a");
 ```
 
-namespace 必须逐个精确授权。数据只存在于单 worker 内存中，不跨 worker
-共享，worker 销毁即丢失。
+Namespaces must be individually authorized exactly. Data exists only in a single
+worker's memory, is not shared across workers, and is lost when the worker is
+destroyed.
 
-### 出站 Fetch
+### Outbound Fetch
 
-推荐把同一目标同时写入宿主直接 egress policy 和 capability net policy：
+It is recommended to write the same target into both the host direct egress
+policy and the capability net policy:
 
 ```cpp
 capsid_egress_rule direct_rule;
@@ -246,18 +270,19 @@ config.egress_policy = &direct;
 config.capability_policy = &descriptor;
 ```
 
-两个策略同时存在时取交集。每次请求都会检查初始 hostname、DNS 解析后的地址和
-redirect。loopback、私网、link-local 等受保护地址还需要显式 IP/CIDR allow。
+When both policies exist, the intersection applies. Every request checks the
+initial hostname, DNS-resolved addresses, and redirects. Protected addresses
+such as loopback, private, and link-local also need explicit IP/CIDR allows.
 
-## JavaScript 权限查询
+## JavaScript permission query
 
-先授权查询模块：
+First authorize the query module:
 
 ```cpp
 capability.allow_module("capsid:permissions");
 ```
 
-然后应用可以查询有效状态：
+Then the application can query the effective state:
 
 ```js
 import { permissions } from "capsid:permissions";
@@ -294,49 +319,57 @@ permissions.query({
 });
 ```
 
-查询返回 `"granted"`、`"denied"`、`"partial"` 或 `"unavailable"`。
-支持的 descriptor 字段如下：
+Queries return `"granted"`, `"denied"`, `"partial"`, or `"unavailable"`. The
+supported descriptor fields are:
 
-| `name` | 资源字段 |
+| `name` | Resource field |
 | --- | --- |
-| `read`、`write`、`ffi` | `path` |
-| `net` | `host` 和 `port`，必须同时提供 |
+| `read`, `write`, `ffi` | `path` |
+| `net` | `host` and `port`, both required |
 | `env` | `variable` |
 | `sys` | `kind` |
 | `stdio` | `stream` |
 | `storage` | `namespace` |
 | `engine` | `operation` |
-| `rawSocket` | 无 |
+| `rawSocket` | None |
 
-只有 `net` 支持同时省略 `host` 和 `port` 来查询两层网络策略的汇总状态；
-此时可能返回 `"partial"`。其他 permission 应提供表中的资源字段。查询不会
-申请权限，也不会改变后续操作结果。
+Only `net` supports omitting both `host` and `port` to query the aggregate
+status of the two-layer network policy; in that case `"partial"` may be
+returned. Other permissions should provide the resource field shown in the
+table. Queries do not request permission and do not change the result of later
+operations.
 
-## 不通过 capability rule 的全局 API
+## Global APIs that do not go through capability rules
 
-固定 Web profile 中的以下类别不需要模块白名单或 operation rule：
+The fixed Web profile includes the following categories that need neither a
+module allowlist nor operation rules:
 
-- Request、Response、Headers、URL、Streams、Encoding、Events；
-- timers、queueMicrotask、structuredClone、Compression；
-- Web Crypto 和随机数；
-- 固定限制下的 WebAssembly；
-- `console.*`。
+- Request, Response, Headers, URL, Streams, Encoding, Events;
+- timers, queueMicrotask, structuredClone, Compression;
+- Web Crypto and random numbers;
+- WebAssembly within fixed limits;
+- `console.*`.
 
-其中 `console.*` 会形成有界的 `CAPSID_EVENT_LOG`，但不等同于
-`capsid:stdio.write()`：console 是固定 Web profile 的一部分，
-`capsid:stdio` 是需要显式 module + stream rule 的 stdout/stderr 通道。
-宿主仍需持续排空或丢弃日志事件，并自行执行脱敏和限速。
+Among these, `console.*` produces bounded `CAPSID_EVENT_LOG` events, but it is
+not equivalent to `capsid:stdio.write()`: console is part of the fixed Web
+profile, while `capsid:stdio` is a stdout/stderr channel that requires an
+explicit module + stream rule. The host still needs to keep draining or dropping
+log events and handle redaction and rate limiting itself.
 
-全局 `fetch()` 是唯一直接接入 capability/egress policy 的标准 Web API。
+Global `fetch()` is the only standard Web API that directly connects to the
+capability/egress policy.
 
-## 错误与审计
+## Errors and audit
 
-模块拒绝分为三类：
+Module rejections fall into three categories:
 
-- `module is forbidden`：specifier 永久禁止，任何配置都不能开放；
-- `module is unavailable`：当前 build 没有该模块或 specifier 未知；
-- `module is not authorized`：模块已构建，但不在本 worker 的白名单中。
+- `module is forbidden`: the specifier is permanently forbidden; no
+  configuration can open it;
+- `module is unavailable`: the current build does not have the module or the
+  specifier is unknown;
+- `module is not authorized`: the module is built but is not in this worker's
+  allowlist.
 
-模块、operation 和 query 判定都会产生 `CAPSID_EVENT_AUDIT`。宿主可使用
-`capsid_audit_record_decode()` 读取阶段、决策、rule ID、应用 identity、资源和
-manifest hash。
+Module, operation, and query decisions all produce `CAPSID_EVENT_AUDIT`. Hosts
+can use `capsid_audit_record_decode()` to read the stage, decision, rule ID,
+application identity, resource, and manifest hash.

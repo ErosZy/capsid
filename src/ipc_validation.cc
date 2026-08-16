@@ -1,13 +1,13 @@
+#include "win32_compat.h"
+
 #include "ipc_validation.h"
 
 #include "capsid/runtime.h"
 
 #include <algorithm>
-#include <arpa/inet.h>
 #include <cctype>
 #include <cstddef>
 #include <limits>
-#include <netinet/in.h>
 
 namespace {
 

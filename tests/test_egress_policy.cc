@@ -1,9 +1,21 @@
 #include "egress_policy.h"
 #include "capsid/runtime.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <arpa/inet.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <netinet/in.h>
+#endif
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/socket.h>
+#endif
 
 #include <cstdlib>
 #include <cstring>

@@ -1,113 +1,86 @@
-# Linux 严格沙箱
+﻿# Linux strict sandbox
 
-Linux sandbox 只由宿主通过 C ABI 配置，不会暴露为 JavaScript global、
-module 或 permission prompt。
+> For a cross-platform capability overview and selection guidance, see [Platform Support Overview](platform-support.md).
 
-## 严格基线
+The Linux sandbox is configured by the host only through the C ABI; it is not exposed as a JavaScript global, module, or permission prompt.
 
-所有 worker 都会在初始化 txiki.js 前关闭无关继承 fd，并以显式空环境启动。
-严格模式还会关闭继承的 stdin/stdout/stderr；应用日志继续走 FetchRPC。bundle
-只在 HELLO 校验和沙箱安装完成后才解析。
+## Strict baseline
 
-`strict_sandbox = 1` 要求 `CAPSID_SANDBOX_FEATURE_STRICT_BASE` 全部成功：
+All workers close unrelated inherited fds before initializing txiki.js and start with an explicitly empty environment. Strict mode also closes inherited stdin/stdout/stderr; application logs continue to go through FetchRPC. The bundle is parsed only after the HELLO checksum and sandbox installation complete.
 
-- rlimit；
-- `no_new_privs`；
-- 默认拒绝的 Landlock 文件系统规则；
-- seccomp BPF syscall allowlist。
+`strict_sandbox = 1` requires every item in `CAPSID_SANDBOX_FEATURE_STRICT_BASE` to succeed:
 
-Landlock 只读开放 resolver/hosts 配置、系统 CA、时区数据、内核随机设备和
-显式 `tls_ca_bundle_path`。应用 bundle 始终在内存中。
+- rlimit;
+- `no_new_privs`;
+- default-deny Landlock filesystem rules;
+- seccomp BPF syscall allowlist.
 
-seccomp 允许 txiki.js 标准 `fetch()` 所需的进程内存、event loop、DNS、TLS
-和 IPv4/IPv6 stream/datagram 操作；拒绝 listener、Unix/raw socket、
-process/thread 创建、exec、ptrace、沙箱安装后的 namespace/mount 变更、文件
-系统写入、可执行映射以及 key/BPF/perf 等内核接口。
+Landlock opens only resolver/hosts configuration, system CAs, timezone data, the kernel random device, and the explicit `tls_ca_bundle_path` read-only. The application bundle always stays in memory.
 
-严格模式目前要求 Linux x86-64/AArch64，以及可用的 Landlock 和 seccomp。
-缺少任一强制特性都会启动失败，不能以部分严格模式报告 READY。其他平台请求
-严格模式同样 fail-closed。
+seccomp allows the process memory, event loop, DNS, TLS, and IPv4/IPv6 stream/datagram operations required by txiki.js standard `fetch()`; it denies listeners, Unix/raw sockets, process/thread creation, exec, ptrace, namespace/mount changes after sandbox installation, filesystem writes, executable mappings, and kernel interfaces such as key/BPF/perf.
 
-## 可选隔离
+Strict mode currently requires Linux x86-64/AArch64 with usable Landlock and seccomp. If any mandatory feature is missing, startup fails; READY cannot be reported in a partially strict mode. Requesting strict mode on other platforms also fails closed.
 
-`sandbox_required_features` 可强制要求：
+## Optional isolation
 
-- user namespace；
-- private mount namespace；
-- IPC namespace；
-- UTS namespace；
-- cgroup v2 membership；
-- 进入宿主预配置的 network namespace。
+`sandbox_required_features` can require:
 
-需要 namespace 时，runtime 会先建立 user namespace；所有 namespace 设置都
-发生在 Landlock/seccomp 之前。
+- user namespace;
+- private mount namespace;
+- IPC namespace;
+- UTS namespace;
+- cgroup v2 membership;
+- entering a host-preconfigured network namespace.
+
+When namespaces are required, the runtime first establishes a user namespace; all namespace setup happens before Landlock/seccomp.
 
 ### cgroup v2
 
-`sandbox_cgroup_path` 必须是已存在、绝对、已委派的 cgroup v2 目录。宿主负责
-创建目录并在父层启用 controller；runtime 不修改
-`cgroup.subtree_control`。
+`sandbox_cgroup_path` must be an existing, absolute, delegated cgroup v2 directory. The host is responsible for creating the directory and enabling controllers at the parent level; the runtime does not modify `cgroup.subtree_control`.
 
-ABI v7 的 `capsid_resource_limits.enabled_fields` 区分“未设置”和“显式为零”。
-支持：
+ABI v7 `capsid_resource_limits.enabled_fields` distinguishes "unset" from "explicitly zero". Supported fields:
 
-- `file_descriptors` → `RLIMIT_NOFILE`；
-- CPU quota/period → `cpu.max`；
-- CPU weight → `cpu.weight`；
-- memory high/max/swap max；
-- PID max。
+- `file_descriptors` → `RLIMIT_NOFILE`;
+- CPU quota/period → `cpu.max`;
+- CPU weight → `cpu.weight`;
+- memory high/max/swap max;
+- PID max.
 
-`CAPSID_RESOURCE_UNLIMITED` 和 `CAPSID_RESOURCE_PIDS_UNLIMITED` 写入内核的
-`max`。runtime 会保存旧值、逐项写入并回读；任一步失败都逆序尽力回滚，并在
-HELLO 前验证 child PID 已进入目标 cgroup。目录清理由宿主负责。
+`CAPSID_RESOURCE_UNLIMITED` and `CAPSID_RESOURCE_PIDS_UNLIMITED` write the kernel `max`. The runtime saves old values, writes each item, and reads back; any failed step triggers a best-effort rollback in reverse order, and it verifies before HELLO that the child PID has entered the target cgroup. Directory cleanup is the host's responsibility.
 
-### 网络命名空间
+### Network namespace
 
-`sandbox_network_namespace_fd` 接收宿主已配置好的 Linux network namespace
-fd。非负 fd 要求 strict mode，并隐式要求
-`CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE`。
+`sandbox_network_namespace_fd` accepts a host-configured Linux network namespace fd. A non-negative fd requires strict mode and implicitly requires `CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE`.
 
-runtime 校验 fd 类型，进入 namespace 后比较 inode，并保持调用方 fd
-ownership 不变。宿主负责 veth、route、DNS、firewall/NAT 和 namespace
-生命周期；runtime 不会替宿主建立网络。
+The runtime validates the fd type, compares the inode after entering the namespace, and leaves caller fd ownership unchanged. The host is responsible for veth, route, DNS, firewall/NAT, and namespace lifecycle; the runtime does not set up networking for the host.
 
-## 出站网络策略
+## Egress network policy
 
-`egress_policy == NULL` 表示 deny-all。rule target 支持：
+`egress_policy == NULL` means deny-all. Rule targets support:
 
-- 精确 ASCII hostname；
-- `*.example.com` 形式的单标签通配；
-- 数字 IP；
-- canonical IPv4/IPv6 CIDR。
+- exact ASCII hostname;
+- single-label wildcards of the form `*.example.com`;
+- numeric IP;
+- canonical IPv4/IPv6 CIDR.
 
-deny 始终优先。即使 `default_action` 为 allow，loopback、link-local、
-private/unique-local、metadata-adjacent、multicast、unspecified、documentation
-等受保护地址仍需显式 CIDR allow。
+Deny always takes precedence. Even when `default_action` is allow, protected addresses such as loopback, link-local, private/unique-local, metadata-adjacent, multicast, unspecified, and documentation still require an explicit CIDR allow.
 
-策略会检查原始 hostname、DNS 选择后的实际 connect 地址和每次 redirect。
-hostname allow 不能绕过 DNS rebinding 防护。若 capability policy 也提供
-`net_policy`，两者必须同时允许。
+The policy checks the original hostname, the actual connect address chosen after DNS, and every redirect. A hostname allow cannot bypass DNS rebinding protection. If the capability policy also provides `net_policy`, both must allow.
 
-CA bundle、请求/响应 body 上限都属于宿主配置，不暴露给 JavaScript。
-证书链和 hostname 验证不会因为自定义 CA 而关闭。
+CA bundle and request/response body limits are host configuration and are not exposed to JavaScript. Certificate chain and hostname verification are not disabled by a custom CA.
 
-## 明确限制
+## Explicit limitations
 
-- 允许标准 Fetch 意味着 seccomp 不能禁止所有 socket syscall；
-- Landlock 不是网络边界，network namespace/firewall 才是更强的网络隔离；
-- cgroup/namespace 前置条件由部署环境提供，runtime 不获取额外权限；
-- strict sandbox 不是多租户调度器，也不替代宿主的 worker 池和审计；
-- capability policy 与 OS sandbox 互相补充，不能相互代替。
+- Allowing standard Fetch means seccomp cannot forbid all socket syscalls;
+- Landlock is not a network boundary; a network namespace/firewall provides stronger network isolation;
+- cgroup/namespace prerequisites are provided by the deployment environment; the runtime does not acquire extra privileges;
+- strict sandbox is not a multi-tenant scheduler and does not replace the host's worker pool and auditing;
+- capability policy and the OS sandbox complement each other and cannot replace each other.
 
-## 测试与 CI
+## Testing and CI
 
-进程测试覆盖 strict enforcement、fd hygiene、namespace、cgroup controller
-写入/回读/回滚、network namespace inode、direct HTTP/HTTPS Fetch 和自定义
-CA。
+Process tests cover strict enforcement, fd hygiene, namespace, cgroup controller write/read-back/rollback, network namespace inode, direct HTTP/HTTPS Fetch, and custom CA.
 
-普通宿主缺少 delegation 或 namespace 权限时，相应测试返回 CTest skip 77。
-这不是正向证据。hosted validity workflow 会在
-`--privileged --cgroupns=private` 容器中运行
-`scripts/run-delegated-sandbox-tests.sh`，并把任何 77 当成失败。
+When ordinary hosts lack delegation or namespace permissions, the corresponding tests return CTest skip 77. This is not positive evidence. The hosted validity workflow runs `scripts/run-delegated-sandbox-tests.sh` in a `--privileged --cgroupns=private` container and treats any 77 as a failure.
 
-完整测试分层和命令见[测试与持续门禁](testing.md)。
+For the full test layering and commands, see [Testing and Continuous Gate](testing.md).

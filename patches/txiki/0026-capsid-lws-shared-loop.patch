@@ -20,12 +20,12 @@ index 2fbcbbc..112f6c0 100644
      uv_unref((uv_handle_t *) &qrt->lws.keepalive);
      qrt->lws.active_conns = 0;
  }
-@@ -584,7 +584,7 @@ int tjs__lws_load_http(TJSRuntime *qrt, TBuf *dbuf, const char *url) {
+@@ -584,7 +584,7 @@ static int tjs__lws_load_http_once(TJSRuntime *qrt, TJSHttpLoadCtx *load_ctx, const char *url) {
      hints.ai_socktype = SOCK_STREAM;
  
      uv_getaddrinfo_t dns_req;
 -    if (uv_getaddrinfo(&qrt->loop, &dns_req, NULL, uri->host, NULL, &hints)) {
 +    if (uv_getaddrinfo(TJS_GetLoop(qrt), &dns_req, NULL, uri->host, NULL, &hints)) {
          lws_parse_uri_destroy(&uri);
-         return NULL;
+         return -1;
      }

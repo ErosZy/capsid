@@ -119,7 +119,7 @@ string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
 string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
     "versionInfo" "\"${CAPSID_SBOM_VERSION}\"")
 string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
-    "licenseConcluded" "\"MIT\"")
+    "licenseConcluded" "\"Apache-2.0\"")
 string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
     "downloadLocation" "\"NOASSERTION\"")
 string(JSON CAPSID_GPA_PKG_CAPSID SET "${CAPSID_GPA_PKG_CAPSID}"
@@ -203,7 +203,7 @@ foreach(CAPSID_GPA_ENTRY IN LISTS CAPSID_GPA_ENTRIES)
     string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
         "fileName" "\"/${CAPSID_GPA_REL}\"")
     string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
-        "licenseConcluded" "\"MIT\"")
+        "licenseConcluded" "\"Apache-2.0\"")
     string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
         "copyrightText" "\"NOASSERTION\"")
     string(JSON CAPSID_GPA_CHECKSUM SET "{}"

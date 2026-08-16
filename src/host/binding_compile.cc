@@ -3,6 +3,8 @@
 // CIDR block containment (never DNS results); fs paths by prefix; env and
 // stdio by exact membership.
 
+#include "win32_compat.h"
+
 #include "host/binding_compile.h"
 
 #include "host/config.h"
@@ -12,7 +14,6 @@
 #include <jansson.h>
 
 #include <algorithm>
-#include <arpa/inet.h>
 #include <cstdlib>
 #include <cstring>
 #include <span>
@@ -1090,6 +1091,37 @@ bool build_binding_descriptor(const EffectiveBinding& binding,
     if (!secrets.empty()) {
         out->secrets = &secrets[0];
         out->secret_count = static_cast<uint32_t>(secrets.size());
+    }
+    return true;
+}
+
+bool load_effective_bindings_into_worker(
+    capsid_worker* worker,
+    const std::vector<EffectiveBinding>& bindings,
+    std::string* error) {
+    if (worker == nullptr) {
+        if (error != nullptr) {
+            *error = "binding worker is null";
+        }
+        return false;
+    }
+    for (const EffectiveBinding& binding : bindings) {
+        capsid_binding_descriptor descriptor;
+        if (!build_binding_descriptor(binding, &descriptor)) {
+            if (error != nullptr) {
+                *error = "binding descriptor build failed: " + binding.id;
+            }
+            return false;
+        }
+        const capsid_result result =
+            capsid_worker_load_binding(worker, &descriptor);
+        if (result != CAPSID_OK) {
+            if (error != nullptr) {
+                *error = "binding load failed: " + binding.id + ": " +
+                         capsid_result_string(result);
+            }
+            return false;
+        }
     }
     return true;
 }

@@ -2,10 +2,16 @@
 #define CAPSID_HOST_CONFIG_H
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace capsid::host {
+
+// Defined in policy_compiler.h; declared here so the parse boundary below
+// can reference it without pulling the policy compiler into the schema.
+struct AppRequest;
 
 // Raw host.json / capsid.json resource limits. The byte limit is inclusive
 // and applies before parsing. JSON nesting counts the root value as depth 1.
@@ -63,6 +69,16 @@ ConfigValidationResult validate_binding_manifest(std::string_view json);
 // Shared by the configuration schema (bindings map keys) and the
 // bindingsRoot scanner (package directory names).
 bool valid_binding_id(std::string_view value);
+
+// Parses capsid.json (the authoritative capsid/app-v1 shape) into the
+// AppRequest. The frozen schema boundary (validate_config_json) runs first
+// in the deploy pipeline; this parse maps the schema's fields onto the
+// request and stays fail-closed on any shape it cannot map. Shared with the
+// local-capsid.json data planes (single-worker / static-pool) so one
+// document grammar cannot diverge into two.
+bool parse_app_request(const std::vector<std::uint8_t>& bytes,
+                       AppRequest* app,
+                       std::string* error);
 
 }  // namespace capsid::host
 

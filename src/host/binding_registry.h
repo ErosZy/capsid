@@ -10,7 +10,11 @@
 #ifndef CAPSID_HOST_BINDING_REGISTRY_H
 #define CAPSID_HOST_BINDING_REGISTRY_H
 
+#if defined(_WIN32)
+#include <cstdint>
+#else
 #include <sys/types.h>
+#endif
 
 #include <functional>
 #include <string>
@@ -18,6 +22,12 @@
 #include <vector>
 
 namespace capsid::host {
+
+#if defined(_WIN32)
+using BindingOwnerId = std::uint32_t;
+#else
+using BindingOwnerId = uid_t;
+#endif
 
 // Binding v1 committed-snapshot ceiling. Source is capped at 64 MiB per
 // generation before JSON encoding; 160 MiB leaves room for JSON escaping,
@@ -48,7 +58,7 @@ struct BindingRegistrySnapshot {
 // must not be group- or world-writable. On failure `error` carries a static
 // operator-facing diagnostic that names the offending path, never content.
 bool scan_bindings_root(const std::string &root,
-                        const std::vector<uid_t> &allowed_uids,
+                        const std::vector<BindingOwnerId> &allowed_uids,
                         BindingRegistrySnapshot *out,
                         std::string *error);
 
@@ -63,7 +73,7 @@ using BindingRegistryScanHook = std::function<void(
     BindingRegistryScanPhase phase, std::string_view package_id)>;
 bool scan_bindings_root_with_test_hook(
     const std::string &root,
-    const std::vector<uid_t> &allowed_uids,
+    const std::vector<BindingOwnerId> &allowed_uids,
     const BindingRegistryScanHook &hook,
     BindingRegistrySnapshot *out,
     std::string *error);

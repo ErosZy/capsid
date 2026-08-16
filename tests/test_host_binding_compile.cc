@@ -42,7 +42,7 @@ std::string replace_once(std::string input,
 }
 
 const std::string kManifest =
-    R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client","filesystem-read"]},"permissions":{"modules":["tjs:internal/core","tjs:utils"],"net":{"allow":["*.internal.example.com:443","10.0.0.0/8:3306","127.0.0.1:27017"]},"fs":{"read":["/etc/capsid/mongo"],"write":[]},"env":["APP_MODE"],"stdio":[]}})json";
+    R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client","filesystem-read"]},"permissions":{"modules":["capsid:internal/core","capsid:utils"],"net":{"allow":["*.internal.example.com:443","10.0.0.0/8:3306","127.0.0.1:27017"]},"fs":{"read":["/etc/capsid/mongo"],"write":[]},"env":["APP_MODE"],"stdio":[]}})json";
 
 BindingPackageSnapshot package(const std::string &id,
                                const std::string &manifest) {
@@ -237,7 +237,7 @@ void test_digest_sensitivity_and_immutability() {
     // Manifest change alters the digest.
     BindingRegistrySnapshot changed_registry;
     changed_registry.packages.push_back(package("mongo",
-        R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["tjs:utils"]}})json"));
+        R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"]}})json"));
     require(compile_effective_bindings(changed_registry, {request})
                 .set_digest != baseline,
             "manifest change did not alter the set digest");
@@ -334,7 +334,7 @@ void test_snapshot_parser_is_exact_and_revalidates() {
              "manifest/profile mismatch");
     rejected(replace_once(
                  baseline,
-                 "\"modules\":[\"tjs:internal/core\",\"tjs:utils\"]",
+                 "\"modules\":[\"capsid:internal/core\",\"capsid:utils\"]",
                  "\"modules\":[]"),
              "manifest/module mismatch");
     rejected(replace_once(
@@ -369,7 +369,7 @@ void test_snapshot_parser_is_exact_and_revalidates() {
 
 void test_snapshot_serializer_is_canonical_and_bounded() {
     const std::string manifest =
-        R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["tjs:utils"]}})json";
+        R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"]}})json";
     BindingRegistrySnapshot registry;
     registry.packages.push_back(package("alpha", manifest));
     registry.packages.push_back(package("mongo", manifest));
@@ -501,7 +501,7 @@ void test_binding_snapshot_carries_opaque_secret_revision() {
     const std::string snapshot = R"json([
       {
         "id":"mongo",
-        "manifest":"{\"apiVersion\":\"capsid/binding-v1\",\"permissions\":{\"modules\":[\"tjs:utils\"]}}",
+        "manifest":"{\"apiVersion\":\"capsid/binding-v1\",\"permissions\":{\"modules\":[\"capsid:utils\"]}}",
         "source":"export default () => ({ find() {} });",
         "config":"{}",
         "net":[],
@@ -510,7 +510,7 @@ void test_binding_snapshot_carries_opaque_secret_revision() {
         "env":[],
         "stdio":[],
         "profiles":[],
-        "modules":["tjs:utils"],
+        "modules":["capsid:utils"],
         "secrets":[["password","mongo-password","file-v1:11:22:33:44"]]
       }
     ])json";

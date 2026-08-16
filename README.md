@@ -1,65 +1,49 @@
-# Capsid Runtime
+![Capsid](logo.png)
 
 [![Testing validity](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml/badge.svg)](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/ErosZy/capsid?label=release)](https://github.com/ErosZy/capsid/releases)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 JavaScript
-运行时。宿主通过 `libcapsid_runtime` 把 HTTP 请求转换为 Fetch 请求；每个
-`capsid-worker` 只加载一个自包含 ESM 应用，并以流式事件返回响应。
+**Run AI-generated backend code without giving it your process, filesystem, or
+network.** Capsid is an embeddable JavaScript data plane for untrusted
+Web-standard Fetch handlers. Your Host keeps control of listeners, TLS,
+routing, worker pools, and policy; each worker receives one self-contained ESM
+bundle and only the capabilities the Host approves.
 
-它不是 Node/Deno 的替代品，也不是直接运行 `.js` 的命令行服务器。Runtime
-不监听端口、不终止 TLS、不管理路由或 worker pool；这些职责属于嵌入它的宿主。
-仓库同时提供第一方 `capsid-host`，用于开发、集成和基准验证。
+> **Status**: `0.2.0-beta`, ABI v7. The first-party `capsid-host` is a
+> development/benchmark entry point, not a production deployment interface;
+> production isolation is only promised by the Linux strict sandbox.
 
-> **项目状态：** 当前版本为 `0.1.x`。Runtime ABI 为 v7，第一方 Host 仍是
-> 非生产部署接口。Linux strict sandbox 是 v1 的生产隔离目标；未启用严格沙箱
-> 时，只能运行受信任代码。
+Capsid is aimed at AI app builders, multi-tenant automation, and plugin systems
+that need to execute generated code as a service—not as trusted code inside the
+main application process.
 
-## 为什么是 Capsid
+## Why Capsid Is Different
 
-- **AI 生成服务端代码的受控执行**：把 AI 生成的 Fetch handler 视为不可信输入，
-  放入独立 worker，并以能力白名单、Linux strict sandbox、资源上限和审计事件约束行为。
-- **进程级故障边界**：应用独占 worker，崩溃、超时和回收由宿主控制。
-- **Fetch 原生应用模型**：支持原生 handler，以及可打包为自包含 ESM、以 Fetch
-  handler 为入口的轻量 Web 框架；Hono、itty-router 和 H3 v2 已通过兼容性验证。
-- **最小权限能力面**：模块、文件、环境变量、存储、stdio 和出站网络均显式授权。
-- **宿主拥有数据面**：C ABI、C++11 RAII、非阻塞 IPC、credit 背压、取消、
-  streaming 与审计事件可接入现有 reactor。
-- **高吞吐 Fetch 执行**：当前 4 核基准测试中，2 个 workers 每秒完成约
-  **6,800 个 JSON 请求**，约为同机 Flask 的 **1.5 倍**、Slim 的 **3.7 倍**。
-- **低常驻资源**：同一环境下，Host + 2 workers 空闲 PSS 为 **12.3 MB**，
-  适合需要进程隔离又关注部署密度的场景。
-- **快速冷启动**：小型 bundle 冷启动约 **8–10 ms**；约 1 MB bundle 使用可信
-  字节码约 **42 ms**。
-- **可复核的正确性**：固定 WPT revision、框架差分、sanitizer、fuzz、沙箱门禁
-  和带身份的 benchmark artifact。
+| Concern | Host-controlled boundary | What untrusted code receives |
+| --- | --- | --- |
+| HTTP | Listener, TLS, routing, admission, and pool lifecycle | A standard `fetch(request)` call |
+| Authority | Module and resource policy, Linux sandbox, limits, and audit | Deny-by-default `capsid:*` facades |
+| Databases and services | Trusted Binding implementation, credentials, and maximum permissions | A narrow asynchronous `capsid:binding/<id>` API |
+| Failure | Process lifetime, timeout, cancellation, crash budget, and replacement | No process-control API |
 
-测试环境、对照组和限制见[性能概览](#性能概览)。
+This is not a general-purpose Node.js replacement. Capsid intentionally omits
+runtime package installation, server adapters and listeners, FFI, raw sockets,
+and ambient process APIs. In return, the Host gets a non-blocking C ABI/C++11
+data plane with streaming, credit backpressure, explicit lifecycle control,
+and a capability boundary designed for hostile code.
 
-```text
-客户端 ──HTTP/TLS──▶ 宿主网关 / capsid-host
-                         │ libcapsid_runtime / FetchRPC
-                         ├── capsid-worker：应用 A
-                         ├── capsid-worker：应用 A
-                         └── capsid-worker：应用 B
-```
+The implementation is small and measurable: the published 4-core baseline
+reaches about **6,800 QPS**, starts small bundles in **8–10 ms**, and uses about
+**12.3 MB** idle PSS for the Host plus two workers. Claims are backed by pinned
+WPT, framework differentials, sanitizers, fuzzing, privileged sandbox probes,
+and identity-linked performance evidence.
 
-在 AI 代码执行场景中，推荐流程是：生成 Fetch handler → 打包为自包含 ESM →
-由宿主固定权限与资源上限 → worker 在 strict sandbox 中加载 → 验证 READY 后进入调度。
-生成代码不能自行申请权限，也不能直接访问 Node 内置模块、进程、raw socket 或任意
-文件；它只能使用明确授权的环境变量、文件、存储、stdio 和出站目标。协议错误、超时
-或崩溃时，宿主可摘除并替换对应 worker。Capsid 提供的是可审计、可回收的纵深执行
-边界，不是对任意生成代码“绝对安全”的承诺。
+## Quick Start
 
-Capsid 实现固定的 Minimum Common Web API 子集
-`CAPSID-MIN-2025-subset-v0`，不宣称完整 ECMA-429 或全部 WPT conformance。
-
-## 快速开始
-
-### 1. 编写 Fetch 应用
+### 1. Application
 
 ```js
-// app.js
 export default {
   async fetch(request) {
     return Response.json({
@@ -70,61 +54,106 @@ export default {
 };
 ```
 
-### 2. 构建 Runtime 与第一方 Host
+### 2. Build
 
-需要 CMake、C/C++ 工具链、Node.js/npm、OpenSSL，以及构建 Host 所需的 Boost。
+Linux / macOS:
 
 ```sh
 git submodule update --init --recursive
 npm ci --ignore-scripts --prefix vendor/txiki.js
-
-cmake -S . -B build-release \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_TESTING=OFF \
-  -DCAPSID_BUILD_HOST=ON \
-  -DCAPSID_ENABLE_LTO=ON \
-  -DCAPSID_USE_MIMALLOC=OFF
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=OFF -DCAPSID_BUILD_HOST=ON
 cmake --build build-release --parallel
 ```
 
-### 3. 打包并运行
+Windows (PowerShell + MSVC + vcpkg):
 
-应用及依赖必须在发布阶段打成单个 ESM；运行时不会从磁盘、URL 或 npm 解析依赖。
+```powershell
+vcpkg install openssl boost-system boost-asio boost-beast --triplet x64-windows-static
+cmake -S . -B build-release -G Ninja `
+  -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl `
+  -DCMAKE_BUILD_TYPE=Release -DCAPSID_BUILD_HOST=ON `
+  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+  -DVCPKG_TARGET_TRIPLET=x64-windows-static
+cmake --build build-release --parallel
+```
+
+### 3. Bundle and Run
+
+For a single-machine run, explicitly using a least-privilege `capsid.json` is
+recommended: when the file is absent, the baseline is deny-all, and you add
+allows item by item when `capsid:*` modules or egress `fetch` are needed.
+
+```json
+// capsid.json
+{
+  "apiVersion": "capsid/app-v1",
+  "permissions": {
+    "modules": [],
+    "fetch": { "allow": [] }
+  },
+  "pool": { "minReady": 1, "maxWorkers": 1 }
+}
+```
 
 ```sh
-vendor/txiki.js/node_modules/.bin/esbuild app.js \
-  --bundle \
-  --format=esm \
-  --platform=neutral \
-  --target=esnext \
-  --outfile=app.bundle.js
+npx esbuild app.js --bundle --format=esm \
+  --platform=neutral --target=esnext --outfile=app.bundle.js
 
-./build-release/capsid-host \
-  --mode single-worker \
+./build-release/capsid-host --mode single-worker \
   --worker ./build-release/capsid-worker \
   --source-bundle app.bundle.js \
   --source-name "file://$PWD/app.bundle.js" \
-  --application orders \
-  --listen 127.0.0.1:8080 \
-  --routing path \
-  --public-scheme http
+  --application orders --listen 127.0.0.1:8080 \
+  --routing path --public-scheme http \
+  --capsid-json ./capsid.json
 ```
-
-另一个终端中请求：
 
 ```sh
 curl http://127.0.0.1:8080/@capsid/orders/
 # {"message":"hello from Capsid","path":"/"}
 ```
 
-`capsid-host` 还提供固定 worker 池的 `static-pool` 模式，以及由 `host.json`、
-Admin API 和 durable active state 驱动的 `managed` 模式。生产集成应先阅读
-[宿主嵌入规范](docs/host-integration.md)与[配置参考](docs/host-config.md)。
+`capsid-host` supports `single-worker`, `static-pool`, and `managed`;
+step-by-step permission field configuration is in the
+[capsid.json tutorial](docs/capsid-json.md).
 
-## 集成模型
+## Configuration Guide
 
-生产宿主通常链接 `libcapsid_runtime`，并自行管理 listener、TLS、路由、worker
-池和发布生命周期：
+Application permissions are written in `capsid.json`; `managed` mode adds a
+Host-authoritative `host.json`.
+
+```json
+// capsid.json — what capabilities the application requests
+{
+  "apiVersion": "capsid/app-v1",
+  "permissions": {
+    "modules": ["capsid:env"],
+    "fetch": { "allow": ["api.example.com"] }
+  },
+  "pool": { "minReady": 1, "maxWorkers": 1 }
+}
+```
+
+```json
+// host.json — managed mode: what the Host allows, where data lives
+{
+  "apiVersion": "capsid/host-v1",
+  "applicationsRoot": "/srv/capsid/applications",
+  "stateRoot": "/srv/capsid/state",
+  "secretRootTemplate": "/srv/capsid/secrets/{application}",
+  "admin": { "unix": "/run/capsid/admin.sock", "mode": "0600" }
+}
+```
+
+See [docs/capsid-json.md](docs/capsid-json.md) for the `capsid.json`
+tutorial, and [docs/host-config.md](docs/host-config.md) for `host.json`
+fields.
+
+## Integration Model
+
+The host links `libcapsid_runtime` and manages the listener, TLS, routing,
+and pool lifecycle itself:
 
 ```c
 #include <capsid/runtime.h>
@@ -138,117 +167,148 @@ capsid_worker *worker = NULL;
 capsid_result result = capsid_worker_spawn(&config, &worker);
 ```
 
-`capsid_worker_fd()` 返回非阻塞 Unix socket，可接入 epoll、kqueue 或现有
-reactor。`CAPSID_WOULD_BLOCK` 表示正常背压；事件 payload 只保证有效到下一次
-`capsid_worker_next_event()`，异步使用前必须复制。完整的 READY、request credit、
-response credit、streaming、取消与回收契约见[宿主嵌入规范](docs/host-integration.md)。
-
-项目安装公开 C 头 `<capsid/runtime.h>` 与 C++11 封装
-`<capsid/runtime.hpp>`：
+Install the header `<capsid/runtime.h>` and the C++11 wrapper
+`<capsid/runtime.hpp>`:
 
 ```sh
 cmake --install build-release --prefix "$PWD/dist"
 ```
 
-也可从宿主 CMake 项目直接使用：
+Or embed Capsid into the host build:
 
 ```cmake
 add_subdirectory(path/to/capsid EXCLUDE_FROM_ALL)
 target_link_libraries(my_gateway PRIVATE capsid::runtime)
 ```
 
-## 权限与安全边界
+The full READY/credit/streaming/cancel contract is described in the
+[host embedding specification](docs/host-integration.md).
 
-默认配置遵循最小权限：没有 capability policy 时不能导入 `capsid:*` 模块，
-`egress_policy == NULL` 时出站 Fetch 全部拒绝。但 `strict_sandbox` 默认是关闭的，
-所以默认配置仅适合开发与受信任代码，不能作为不可信代码的生产隔离方案。
+## Permissions and Security
 
-授权由三层门禁共同决定：能力必须构建进 restricted runtime；模块必须在
-`allowed_modules` 中；具体资源必须命中 allow rule 且未命中 deny rule。
-Host 上限与应用 `capsid.json` 申请取交集，应用不能扩大 Host 权限。
+Least privilege by default: without a capability policy, `capsid:*` modules cannot be imported. When `egress_policy == NULL`, all egress Fetch requests are denied. `strict_sandbox` is off by default, and the default configuration is only suitable for trusted code.
 
-当前公共模块如下；每一个都必须显式授权：
+Authorization goes through three gates: build-time capabilities → module
+whitelist → resource allow/deny rules; Host limits and application requests
+are intersected.
 
-| 类别 | 模块 |
+Current public modules (each requires explicit authorization):
+
+- Policy-constrained: `capsid:env`, `capsid:fs`, `capsid:stdio`,
+  `capsid:storage`, `capsid:system`
+- Permission query: `capsid:permissions`
+- Pure utilities: `capsid:assert`, `capsid:getopts`, `capsid:hashing`,
+  `capsid:ipaddr`, `capsid:utils`, `capsid:uuid`
+
+`tjs:*` modules cannot be enabled through configuration. Linux production environments must explicitly enable the strict sandbox and verify that `CAPSID_EVENT_READY.flags` contains the sandbox features required by the deployment. See [Linux strict sandbox](docs/linux-sandbox.md), [capability policy](docs/capability-policy.md), and [security policy](SECURITY.md).
+
+## Host Bindings
+
+Bindings let the Host install trusted integrations such as MongoDB, MySQL, or
+Redis clients and expose only a small asynchronous method surface:
+
+```js
+import mongo from "capsid:binding/mongo";
+
+const rows = await mongo.find({ collection: "orders", filter: { open: true } });
+```
+
+Each package is a Host-managed directory containing `manifest.json` and
+`index.js`. Its manifest fixes the maximum modules, network targets,
+filesystem paths, and Linux sandbox profiles; the App can only narrow those
+resources. When an App declares a Binding, Capsid creates a separate Binding
+Runtime in the same worker process and crosses the runtime boundary through
+bounded asynchronous queues and structured-cloned values. If no Binding is
+declared, Capsid keeps the original single-runtime path and pays no Binding
+runtime or sandbox cost.
+
+Application code receives the generated `capsid:binding/<id>` facade, never
+the Binding's TJS modules, sockets, native handles, or credentials. See the
+[technical design](docs/binding-technical-design.md) and the exact
+[module and permission reference](docs/binding-modules.md).
+
+## Standards and Frameworks
+
+Capsid targets **ECMA-429 Minimum Common Web API** — the WinterTC (ECMA TC55)
+specification, first edition, December 2025 — through the profile
+`CAPSID-MIN-2025-subset-v0`. Conformance evidence is a pinned Web Platform Tests
+revision plus process-level regressions; Capsid does not claim full ECMA-429
+coverage beyond this profile. See
+[standards and conformance](docs/conformance.md).
+
+Frameworks that compile to a single self-contained ESM exporting a standard
+`fetch(request)` handler are the supported integration path, provided they avoid
+Node/server adapters, listeners, and filesystem static serving. External
+services can be exposed through Host-authored Capsid Bindings. The compatibility
+suite pins and continuously verifies **Hono 4.12.32**,
+**itty-router 5.0.24**, and **H3 v2 2.0.1-rc.26**; other Web-standard frameworks
+can be evaluated against the same rules, but only pinned versions carry evidence.
+See [framework compatibility](docs/framework-compatibility/README.md).
+
+## Performance
+
+4-core benchmark (Ryzen 3300X, Alpine v3.24/WSL2):
+
+| Dimension | Capsid | Comparison |
+| --- | ---: | ---: |
+| JSON 1 KiB throughput | **6,820 QPS** | Flask 4,625 · Slim 1,826 |
+| Small bundle cold start | **8–10 ms** | Node 110 ms · Deno 39 ms |
+| 1 MB trusted bytecode cold start | **42 ms** | Node 149 ms · Deno 53 ms |
+| Host + 2 workers idle PSS | **12.3 MB** | Python 3 stack 62.6 MB |
+
+Full methodology, 12 workloads, and evidence rules are in
+[performance-benchmarks.md](docs/performance-benchmarks.md).
+
+## Platform Support
+
+- **Linux**: full support. `single-worker` / `static-pool` (multi-shard) /
+  `managed` are available; strict sandbox and `capsid:fs` are complete.
+  **For production, run untrusted code only on Linux.**
+- **macOS**: development only. Runtime, worker, bytecode compiler, and the
+  single/static-pool Host are available; `capsid:fs` is degraded (symlinks
+  are rejected); strict sandbox and `managed` are unavailable, and
+  `--mode managed` prints a notice and exits at runtime.
+- **Windows**: development only (MSVC, since v0.1.2). Runtime, worker,
+  bytecode compiler, and the single/static-pool Host are available;
+  multi-shard static-pool is distributed by a pool-level acceptor;
+  `capsid:fs` is degraded (`C:/...` paths only, reparse points are rejected);
+  strict sandbox and `managed` are unavailable, and `--mode managed` prints a
+  notice and exits at runtime.
+
+The full matrix and build requirements are in
+[docs/platform-support.md](docs/platform-support.md).
+
+## Documentation Index
+
+| Topic | Entry |
 | --- | --- |
-| 受策略约束 | `capsid:env`、`capsid:fs`、`capsid:stdio`、`capsid:storage`、`capsid:system` |
-| 权限查询 | `capsid:permissions` |
-| 纯工具 | `capsid:assert`、`capsid:getopts`、`capsid:hashing`、`capsid:ipaddr`、`capsid:utils`、`capsid:uuid` |
+| Architecture & boundaries | [architecture.md](docs/architecture.md) |
+| Platform differences | [platform-support.md](docs/platform-support.md) · [windows.md](docs/windows.md) |
+| Host embedding | [host-integration.md](docs/host-integration.md) |
+| Configuration & permissions | [host-config.md](docs/host-config.md) · [capsid-json.md](docs/capsid-json.md) |
+| Host Bindings | [binding-technical-design.md](docs/binding-technical-design.md) · [binding-modules.md](docs/binding-modules.md) |
+| Security & sandbox | [capability-policy.md](docs/capability-policy.md) · [linux-sandbox.md](docs/linux-sandbox.md) |
+| Compatibility | [conformance.md](docs/conformance.md) · [framework-compatibility/](docs/framework-compatibility/README.md) |
+| Quality & performance | [testing.md](docs/testing.md) · [performance-benchmarks.md](docs/performance-benchmarks.md) |
 
-### `tjs:*` 不能通过配置开放
+The full task index is in [docs/README.md](docs/README.md).
 
-应用只能导入 `capsid:*` 公共模块；`tjs:*` 与 `tjs:internal/*` 永久禁止。全局
-`fetch()` 则由目标域名、端口和必要 IP/CIDR 的出站规则控制，每次 DNS 解析和
-redirect 都会重新检查。权威能力清单见
-[`capability-manifest.json`](docs/capability-manifest.json)。
-
-Linux 生产环境必须显式启用 strict sandbox，并根据部署要求验证实际结果：
-`CAPSID_EVENT_READY.flags` 必须包含部署要求的 sandbox feature。cgroup、network
-namespace/firewall、网关侧请求限制与日志持久化仍由宿主负责。详见
-[Linux 严格沙箱](docs/linux-sandbox.md)与[安全策略](SECURITY.md)。
-
-## 性能概览
-
-以下是 2026-08-14 在 Ryzen 3300X 4C/8T、Alpine v3.24（WSL2）上的代表性结果。
-吞吐测试使用 2 workers、64 connections、12 种负载各 3 轮；冷启动和内存采用各自
-独立口径，不能与吞吐数字混合解读。
-
-| 维度 | Capsid 结果 | 对照与说明 |
-| --- | ---: | --- |
-| JSON 1 KiB 吞吐 | **6,820 QPS** | Python 3 + Flask 4,625；PHP 8 + Slim 1,826 |
-| 约 10 kB 冷启动 | **9.5 ms** 源码 / **8.2 ms** 可信字节码 | Node 24：110 ms；Deno 2.9：39 ms |
-| 约 1 MB 冷启动 | 141 ms 源码 / **42 ms** 可信字节码 | Node 24：149 ms；Deno 2.9：53 ms |
-| 双 worker 空闲 PSS | **12.3 MB** | Host + 2 workers；Python 3 栈为 62.6 MB |
-
-Capsid 在该矩阵的常规 JSON 负载中领先；大字节流并非全部领先，例如
-`stream 32k` 低于 Python 3 栈。冷启动的可信字节码只接受由完全相同构建生成并经
-宿主校验的产物，不能加载不可信输入。完整的 12 组吞吐结果、PSS/RSS 口径、原始
-样本位置和证据门槛见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
-
-## 文档
-
-| 目标 | 文档 |
-| --- | --- |
-| 了解系统边界 | [架构与产品边界](docs/architecture.md) |
-| 嵌入 C/C++ 宿主 | [宿主嵌入与集成规范](docs/host-integration.md) |
-| 部署第一方 Host | [host.json / capsid.json 参考](docs/host-config.md) |
-| 配置应用权限 | [capsid.json 教程](docs/capsid-json.md) · [模块与权限参考](docs/module-permissions.md) |
-| 验证安全隔离 | [能力策略](docs/capability-policy.md) · [Linux 严格沙箱](docs/linux-sandbox.md) |
-| 了解兼容性 | [标准与合规](docs/conformance.md) · [框架兼容性](docs/framework-compatibility/README.md) |
-| 复现测试与性能 | [测试门禁](docs/testing.md) · [性能证据](docs/performance-benchmarks.md) |
-
-完整导航及事实来源优先级见[文档中心](docs/README.md)。
-
-## 开发与验证
-
-初始化三个框架 fixture 后运行 Release 测试：
+## Development and Validation
 
 ```sh
-for directory in \
-  examples/hono-reference \
-  examples/itty-router-reference \
-  examples/h3-v2-reference
-do
-  npm ci --ignore-scripts --prefix "$directory"
+for d in examples/hono-reference examples/itty-router-reference examples/h3-v2-reference; do
+  npm ci --ignore-scripts --prefix "$d"
 done
-
-cmake -S . -B build-release \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_TESTING=ON \
-  -DCAPSID_BUILD_HOST=ON \
-  -DCAPSID_ENABLE_LTO=ON \
-  -DCAPSID_USE_MIMALLOC=OFF
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=ON -DCAPSID_BUILD_HOST=ON
 cmake --build build-release --parallel
 ctest --test-dir build-release --output-on-failure \
   -E '^wpt_conformance_not_configured$'
 ```
 
-未配置固定 WPT checkout 时，CTest 会登记失败哨兵，避免合规测试静默空跑。
-sanitizer、fuzz、WPT 与 delegated sandbox 的完整命令见[测试门禁](docs/testing.md)。
-
-提交代码或文档前，请阅读[贡献指南](CONTRIBUTING.md)。性能数字只在满足证据规则
-时进入项目文档，最新结果与原始样本位置见[性能证据](docs/performance-benchmarks.md)。
+The full CI matrix is in [testing.md](docs/testing.md); contribution
+guidelines are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © Capsid contributors
+[Apache-2.0](LICENSE) © Capsid contributors

@@ -115,10 +115,10 @@ ctest --test-dir build-audit -R 'host_binding_compile|host_secret_snapshot|host_
 
 **Red tests:**
 
-- `tjs:wasi` cannot preopen an undeclared host path or attach undeclared stdio;
+- `capsid:wasi` cannot preopen an undeclared host path or attach undeclared stdio;
   its positive test instantiates and runs a real WASI module against an allowed
   preopen.
-- `tjs:posix-socket` is either a usable, gated client-only facade or is absent
+- `capsid:posix-socket` is either a usable, gated client-only facade or is absent
   from the v1 grantable set. `createFromFD`, `bind`, `listen`, `accept`, raw
   sockets, and AF_UNIX are always unavailable.
 - Raw TCP/TLS/UDP, DNS, HTTP redirects, connection reuse, and reconnects each

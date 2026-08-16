@@ -1,10 +1,11 @@
 name: Release
 
 # Tag pushes (v*) package the pinned checkout and attach the CPack TGZ +
-# SHA256 to a GitHub Release. Two platform packages ship:
-#   - linux-x86_64: fully static (musl) built in an Alpine container —
+# SHA256 to a GitHub Release. Three platform packages ship:
+#   - linux-musl: fully static (musl) built in an Alpine container —
 #     one portable binary, no libc version matrix to manage;
-#   - darwin-arm64: native macOS build (Apple ships no static libSystem).
+#   - darwin-arm64: native macOS build (Apple ships no static libSystem);
+#   - windows-x86_64: MSVC static-CRT ZIP (see docs/windows.md).
 # testing-validity does not run on tags (scoped to main/PR), so the tag
 # must point at a commit whose main-branch checks already passed.
 
@@ -32,6 +33,7 @@ jobs:
           - os: ubuntu-24.04
           - os: macos-15
             deps: brew install ninja boost
+          - os: windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
@@ -50,11 +52,19 @@ jobs:
         with:
           node-version: 24
 
+      # Ninja invokes `cl` via PATH, unlike the MSBuild generator that
+      # resolves the toolchain itself; without the VS developer
+      # environment CMake cannot find the MSVC compiler.
+      - name: Set up the MSVC developer environment
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1 (v1.13.0; default-branch commits carry no node_modules)
+
       - name: Install platform build dependencies
         if: matrix.deps
         run: ${{ matrix.deps }}
 
       - name: Install pinned node modules
+        shell: bash
         run: |
           set -euo pipefail
           # --ignore-scripts: pure JS, no native bindings, so the musl
@@ -140,7 +150,9 @@ jobs:
           echo "${OPENSSL_SHA256}  openssl-3.5.7.tar.gz" > openssl.sha256
           if ! {
             curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-            sha256sum -c openssl.sha256
+            # macOS ships shasum, not GNU sha256sum; the two-space
+            # checksum-file format works with both.
+            shasum -a 256 -c openssl.sha256
             tar xzf openssl-3.5.7.tar.gz
             cd openssl-3.5.7
             ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests
@@ -180,7 +192,31 @@ jobs:
           fi
           ls -la build/capsid-*
 
+      - name: Configure and build Windows Release
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
+            openssl boost-system boost-asio boost-beast --triplet x64-windows-static
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCAPSID_BUILD_HOST=ON `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --target package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem build/capsid-*
+
       - name: Publish package to GitHub Release
+        # The bash script must not run under the Windows default shell:
+        # pwsh parses `--title` as the unary `--` operator and the step
+        # dies with a ParserError before gh even runs.
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -191,14 +227,20 @@ jobs:
           # is exactly what happens for every concurrent job that arrives
           # after the first one. Tolerate that specific race; upload is the
           # real gate and fails loudly on anything else.
+          release_flags=()
+          if [[ "${tag}" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
           gh release create "${tag}" \
             --title "capsid ${tag}" \
-            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. Linux package is fully static (musl, runs on any Linux kernel without a libc version matrix); macOS package is native arm64. Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            --notes "capsid ${tag} — static worker runtime, first-party host, trusted-bytecode compiler, C ABI headers and SBOM. Linux package is fully static (musl, runs on any Linux kernel without a libc version matrix); macOS package is native arm64; Windows package is native x86_64 (static CRT, ZIP). Package contents: bin/capsid-host, bin/capsid-worker, bin/capsid-bytecode-compile, lib/libcapsid_runtime.a, include/capsid/*, LICENSE, file manifest and SPDX SBOM." \
+            "${release_flags[@]}" \
             --verify-tag || true
+          shopt -s nullglob
           for dir in build build-musl; do
-            if ls "${dir}"/capsid-*.tar.gz >/dev/null 2>&1; then
+            for archive in "${dir}"/capsid-*.tar.gz "${dir}"/capsid-*.zip; do
               gh release upload --clobber "${tag}" \
-                "${dir}"/capsid-*.tar.gz \
-                "${dir}"/capsid-*.tar.gz.sha256
-            fi
+                "${archive}" \
+                "${archive}.sha256"
+            done
           done

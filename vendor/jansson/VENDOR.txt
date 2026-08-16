@@ -40,6 +40,12 @@ Deliberate deviations from the upstream build
   generated jansson_config.h is produced from this modified template at
   configure time, so the change is only effective after reconfiguring.
 - USE_DTOA is off (the upstream default); dtoa.c is vendored but not built.
+- MSVC atomic tier: upstream jansson.h only has the GCC/Clang builtin
+  families for refcounting. A guarded `_MSC_VER` tier using the Win32
+  `_InterlockedIncrement64`/`_InterlockedDecrement64` intrinsics was added
+  after the __sync tier, and the CMakeLists sets both builtin macros to 0
+  on MSVC so that tier is selected. Refcount semantics (atomic inc/dec)
+  are unchanged.
 - Only the static library target `capsid_jansson` is created; no install, no
   docs, no examples, no tests.
 - The generated configuration headers are produced from the vendored CMake

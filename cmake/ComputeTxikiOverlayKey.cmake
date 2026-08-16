@@ -167,7 +167,7 @@ function(capsid_compute_txiki_overlay_key)
     endif()
 
     # --- prepare script hash ------------------------------------------------
-    file(SHA256 "${CTOK_PREPARE_SCRIPT}" CTOK_PREPARE_HASH)
+    capsid_sha256_normalized("${CTOK_PREPARE_SCRIPT}" CTOK_PREPARE_HASH)
 
     # --- patches -------------------------------------------------------------
     # The count is a sanity guard: adding or removing a patch file changes
@@ -192,7 +192,7 @@ function(capsid_compute_txiki_overlay_key)
             message(FATAL_ERROR "Patch file is not readable: ${CTOK_PATCH}")
         endif()
         get_filename_component(CTOK_PATCH_NAME "${CTOK_PATCH}" NAME)
-        file(SHA256 "${CTOK_PATCH}" CTOK_PATCH_HASH)
+        capsid_sha256_normalized("${CTOK_PATCH}" CTOK_PATCH_HASH)
         list(APPEND CTOK_PATCH_LINES "patch=${CTOK_PATCH_NAME} ${CTOK_PATCH_HASH}")
     endforeach()
 
@@ -265,6 +265,19 @@ function(capsid_compute_txiki_overlay_key)
     endif()
 endfunction()
 
+# Hash file content with CRLF normalized to LF. The key/manifest inputs
+# (prepare script, patch stack, prepared overlay files) come out of a git
+# checkout whose line endings follow the platform's autocrlf setting;
+# without normalization the lock computed on Windows (CRLF) can never match
+# the Linux CI checkout (LF) even though the content is identical.
+function(capsid_sha256_normalized path out_var)
+    file(READ "${path}" capsid_normalized_content)
+    string(REPLACE "\r\n" "\n"
+        capsid_normalized_content "${capsid_normalized_content}")
+    string(SHA256 capsid_normalized_hash "${capsid_normalized_content}")
+    set("${out_var}" "${capsid_normalized_hash}" PARENT_SCOPE)
+endfunction()
+
 # Hash the files whose final contents are produced by the patch stack.  This
 # binds the stamp to a concrete prepared overlay instead of merely proving
 # that somebody copied the right key into an arbitrary file.
@@ -326,7 +339,7 @@ function(capsid_compute_txiki_overlay_manifest)
                 "prepared txiki.js overlay is missing patched file: "
                 "${CTOM_PATH}")
         endif()
-        file(SHA256 "${CTOM_FILE}" CTOM_HASH)
+        capsid_sha256_normalized("${CTOM_FILE}" CTOM_HASH)
         string(APPEND CTOM_CANONICAL
             "file=${CTOM_PATH} ${CTOM_HASH}\n")
     endforeach()

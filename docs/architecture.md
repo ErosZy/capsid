@@ -1,21 +1,15 @@
-# 架构与产品边界
+# Architecture and Product Boundary
 
-Capsid Runtime 是基于固定 txiki.js vendor 树构建的、进程隔离的 JavaScript
-运行时。它面向嵌入式 HTTP 宿主，提供版本化 Minimum Common Web API 子集，
-不宣称完整 ECMA-429 conformance。Capsid 是唯一产品名称；外部组织名称仅用于说明
-标准来源和历史内部实现。
+Capsid Runtime is a process-isolated JavaScript runtime built from a pinned txiki.js vendor tree. It targets embedded HTTP hosts and provides a versioned Minimum Common Web API subset; it does not claim full ECMA-429 conformance. Capsid is the only product name; external organization names are used only to identify standard sources and historical internal implementation.
 
-## 交付物与应用模型
+## Deliverables and Application Model
 
-项目生成两个主要产物：
+The project produces two primary artifacts:
 
-- `capsid-worker`：可进入沙箱的持久 JavaScript 子进程；
-- `libcapsid_runtime`：稳定 C ABI，以及头文件中的 C++11 RAII 封装。
+- `capsid-worker`: a sandboxable persistent JavaScript subprocess;
+- `libcapsid_runtime`: a stable C ABI, plus a C++11 RAII wrapper in the headers.
 
-每个 worker 从内存加载一个自包含 ESM bundle。常规路径加载源码；宿主也可加载
-由完全相同 Capsid/QuickJS 构建生成并校验过的可信字节码。字节码不是租户输入
-格式，也不能作为 sandbox 边界。bundle 不得依赖外部、远程或
-文件模块，并导出以下任一形式：
+Each worker loads a self-contained ESM bundle from memory. The regular path loads source; the host may also load trusted bytecode generated and validated by the exact same Capsid/QuickJS build. Bytecode is not a tenant input format and cannot serve as a sandbox boundary. Bundles must not depend on external, remote, or file modules, and must export one of the following forms:
 
 ```js
 export default { fetch(request) { /* ... */ } }
@@ -25,142 +19,102 @@ export default { fetch(request) { /* ... */ } }
 export function fetch(request) { /* ... */ }
 ```
 
-Runtime library 不提供 HTTP server、TLS 终止、路由、worker 池或租户调度。这些由
-embedding host 负责；仓库内正在开发的第一方 C++ Host 也是该边界上的独立宿主，
-不会把这些职责塞回 Runtime ABI。
+The Runtime library does not provide an HTTP server, TLS termination, routing, worker pool, or tenant scheduling. Those responsibilities belong to the embedding host; the first-party C++ Host being developed in this repository is an independent host on that boundary and will not push these responsibilities back into the Runtime ABI.
 
-它也不是通用 POSIX 应用容器：terminal readline、任意 TCP、长期 fswatch 和
-WebSocket server 不属于 request-worker 产品面。需要持续连接或后台 watcher
-时，由宿主拥有生命周期；worker 只接收有界、可取消、可归属到请求的输入。
+It is also not a general-purpose POSIX application container: terminal readline, arbitrary TCP, long-running fswatch, and WebSocket server are outside the request-worker product surface. When persistent connections or background watchers are needed, the host owns the lifecycle; workers only receive bounded, cancelable input attributable to a request.
 
-## 进程与数据路径
+## Process and Data Paths
 
 ```text
-宿主 HTTP/TLS、路由、worker 池、审计
-                  │
-                  │ FetchRPC v1 / platform worker transport
-                  ▼
+Host HTTP/TLS, routing, worker pool, audit
+                   │
+                   │ FetchRPC v1 / platform worker transport
+                   ▼
 capsid-worker
   QuickJS-ng + libuv
   Capsid Web API bootstrap
-  内存中的应用 bundle
+  in-memory application bundle
   restricted native core
     ├─ timers / encoding / URL / streams / crypto / compression
     ├─ WAMR
-    └─ DNS + TLS + HTTP client（仅供标准 fetch）
+    └─ DNS + TLS + HTTP client (standard fetch only)
 ```
 
-入站请求和应用响应经过带长度前缀的 FetchRPC。应用调用的出站 `fetch()` 直接
-使用 worker 内部的 txiki.js HttpClient/libwebsockets，不经过宿主 HTTP
-代理或 FetchRPC broker。
+Inbound requests and application responses pass through length-prefixed FetchRPC. Outbound `fetch()` calls made by the application use the worker's internal txiki.js HttpClient/libwebsockets directly, bypassing the host HTTP proxy or FetchRPC broker.
 
-## 平台契约
+## Platform Contract
 
-平台支持分为“原生开发”和“生产隔离”两个独立承诺：
+Platform support splits into two independent commitments: native development and production isolation.
 
-| 平台 | 原生开发目标 | 生产契约 |
+| Platform | Native development target | Production contract |
 | --- | --- | --- |
-| Linux x86-64/AArch64 | 支持 | strict sandbox，为 v1 生产发布目标 |
-| macOS | 支持 | v1 不声称等价 Linux 隔离；生产一致性使用 Linux 容器或 VM |
-| Windows | 获得 hosted Windows 环境后建立原生开发链路 | v1 使用 Linux 容器/WSL2；原生生产隔离单独验证 |
+| Linux x86-64/AArch64 | Supported | strict sandbox, target for the v1 production release |
+| macOS | Supported | v1 does not claim Linux-equivalent isolation; use Linux containers or VMs for production consistency |
+| Windows x86-64 (MSVC) | Supported since v0.1.2 | v1 uses Linux containers/WSL2; native production isolation is validated separately |
 
-“原生开发”至少要求 Host 与 worker 能在目标系统构建和启动，完成
-源码/可信字节码加载、`capsid:env`、HTTP 请求、streaming、cancel、worker
-替换和集成测试。未具备生产级隔离的原生开发模式必须显式开启，只能
-绑定 loopback，不得被文档、日志或 READY 状态表述为生产隔离。
+Native development at minimum requires that the Host and worker can build and start on the target system and complete source/trusted bytecode loading, `capsid:env`, HTTP requests, streaming, cancel, worker replacement, and integration tests. Native development modes that do not yet have production-grade isolation must be enabled explicitly, may only bind to loopback, and must not be described as production isolation in documentation, logs, or READY status.
 
-平台边界保持单一责任：Host 决定所需能力并在 READY 时验证实际 feature
-bits；Runtime 实现进程创建、IPC、终止/回收和 OS sandbox。Linux 使用
-seccomp、Landlock、namespace 和 cgroup；未来的 Windows 后端使用 Windows
-原生进程与安全机制，不得把 Job Object、Restricted Token 或 AppContainer
-伪报为 Linux feature bit。部署环境仍负责额外网络边界，Host 不创建
-privileged network supervisor。
+Platform boundaries keep a single responsibility. The host decides which capabilities it needs and verifies the actual features at READY. The runtime implements process creation, IPC, termination/reclamation, and OS sandboxing. Linux uses seccomp, Landlock, namespace, and cgroup; a future Windows production backend will use Windows native process and security mechanisms and must not misreport Job Object, Restricted Token, or AppContainer as a Linux feature bit. The deployment environment remains responsible for additional network boundaries; the Host does not create a privileged network supervisor.
 
-当前 ABI v7 的 worker event source 仍是 Unix fd，Runtime 的 spawn/reap 也仍是
-POSIX 实现，因此 Windows 原生开发目标尚未交付，也不在没有真实
-Windows 机器/hosted runner 时开始实现。第一方 Host 不得把这个
-当前事实泄漏到 pool、routing 或 lifecycle；仅平台 worker-event adapter 可以
-直接访问 fd/HANDLE。可信字节码继续受 compatibility identity 约束，Windows
-本地构建的字节码不得绕过 identity 校验部署到不兼容的 Linux worker。
+For the current ABI v7, the worker event source is a Unix fd on POSIX and a CRT fd on Windows (backed by a loopback TCP socket); spawn/reap and the worker-event adapter are implemented per platform. The Windows native development toolchain has been delivered since v0.1.2. It covers source/trusted-bytecode identity, requests, streaming, cancel, crash/reap, and loopback-only negative controls. Multi-shard static-pool is available through a pool-level shared acceptor, while strict sandbox and the managed Host remain unavailable and `capsid:fs` is degraded (drive-letter absolute paths, reparse points rejected); see the [platform support overview](platform-support.md) and [Windows build and platform capabilities](windows.md). The first-party Host must not leak platform differences into pool, routing, or lifecycle; only the platform worker-event adapter may access fd/HANDLE directly. Trusted bytecode remains subject to compatibility identity, and bytecode built locally on Windows must not bypass identity validation to be deployed to an incompatible Linux worker.
 
-## JavaScript 表面
+## JavaScript Surface
 
-profile 名称为 `CAPSID-MIN-2025-subset-v0`。主要包含：
+The profile name is `CAPSID-MIN-2025-subset-v0`, targeting the WinterTC
+**ECMA-429 Minimum Common Web API** (first edition, December 2025). It mainly
+includes:
 
-- Event、Abort、timers、microtask 和错误/rejection reporting；
-- Encoding、URL/URLSearchParams/URLPattern；
-- Blob、File、FormData、Fetch、Streams、Compression；
-- Web Crypto、Console、Performance；
-- MessageChannel/MessagePort；
-- WebAssembly Module、Instance、Memory、Table、Global 与
-  compile/instantiate/validate（含 streaming 版本）；
-- `navigator.userAgent`。
+- Event, Abort, timers, microtask, and error/rejection reporting;
+- Encoding, URL/URLSearchParams/URLPattern;
+- Blob, File, FormData, Fetch, Streams, Compression;
+- Web Crypto, Console, Performance;
+- MessageChannel/MessagePort;
+- WebAssembly Module, Instance, Memory, Table, Global, and compile/instantiate/validate (including streaming variants);
+- `navigator.userAgent`.
 
-正式偏差和资源上限见[标准与合规](conformance.md)。txiki.js 的 `globalThis.tjs`、
-`tjs:internal/*`、process/child process、server、WASI、外部模块加载、REPL、
-文件执行和宿主 IPC 控制永久不暴露。
+Formal deviations and resource limits are documented in [standards and conformance](conformance.md). The following are never exposed: txiki.js `globalThis.tjs`, `tjs:internal/*`, process/child process, server, WASI, external module loading, REPL, file execution, and host IPC control.
 
-框架只是普通 bundle。当前验证 Hono 4.12.32、itty-router 5.0.24 和
-H3 2.0.1-rc.26；运行时源码没有框架探测或专用分支。
+Frameworks are just ordinary bundles. The current validation covers Hono 4.12.32, itty-router 5.0.24, and H3 2.0.1-rc.26; the runtime source contains no framework detection or special branches.
 
-## 受限构建
+## Restricted Build
 
-当前 overlay 在 restricted profile 下直接排除 txiki.js 的通用 core
-bootstrap，以及 FFI、path、POSIX socket、readline、SQLite、WASI 等危险
-builtin bytecode；其余 native translation unit 即使进入静态 archive，也必须
-经链接裁剪和最终二进制正/负控审计证明没有进入 `capsid-worker`。因此安全声明
-同时由编译条件、module loader 和最终产物审计支撑，不能只依赖“运行时不可达”。
+The current overlay directly excludes txiki.js's generic core bootstrap and dangerous builtin bytecode such as FFI, path, POSIX socket, readline, SQLite, and WASI in the restricted profile; any remaining native translation unit, even if it enters the static archive, must be proven absent from `capsid-worker` through link-time stripping and final-binary positive/negative control audits. Security claims are therefore supported by compile-time conditions, the module loader, and final artifact audits together, not by relying solely on "unreachable at runtime".
 
-最终产物保留 QuickJS-ng、libuv、WAMR、Web API 实现及标准 `fetch()` 所需的
-DNS/TLS/HTTP client。mimalloc 可选且默认关闭。vendor 不原地修改：
-CMake 在构建目录创建 overlay，并按顺序应用 `patches/txiki/`。
+The final artifact retains QuickJS-ng, libuv, WAMR, the Web API implementation, and the DNS/TLS/HTTP client required for standard `fetch()`. mimalloc is optional and disabled by default. The vendor tree is not modified in place: CMake creates an overlay in the build directory and applies `patches/txiki/` in order.
 
-## 安全边界
+## Security Boundary
 
-安全策略分为互相独立的层：
+The security policy is divided into mutually independent layers:
 
-1. 构建层决定能力是否存在；
-2. module loader 决定 bundle 能否导入；
-3. capability/egress policy 决定具体资源操作；
-4. Linux seccomp、Landlock、namespace、cgroup 和宿主 firewall 提供进程边界。
+1. The build layer determines which capabilities exist;
+2. The module loader determines whether a bundle can import them;
+3. Capability/egress policy determines concrete resource operations;
+4. Linux seccomp, Landlock, namespace, cgroup, and the host firewall provide the process boundary.
 
-JavaScript 不能自行申请或扩大权限。当前可构建模块包括只读的
-`capsid:permissions`，以及六个无 ambient authority 的纯 utility：
-`capsid:assert`、`capsid:getopts`、`capsid:hashing`、`capsid:ipaddr`、`capsid:utils`、
-`capsid:uuid`；`capsid:env` 只读取宿主显式提供、逐键授权且按 worker 隔离的
-不可变快照，不读取进程环境；`capsid:system` 只返回编译期版本与 feature
-flags，不采集宿主系统信息；`capsid:storage` 提供按 namespace 授权、带固定
-quota、仅存活于单 worker 的内存键值存储，不接触磁盘；`capsid:stdio` 只把
-获准的 stdout/stderr 消息送入有界 IPC 日志事件，不暴露真实 fd 或 stdin。
-`capsid:fs` 只提供经 path rule、Landlock 与 `openat2` 三重约束的有界读取，
-拒绝所有 symlink 和写操作。
-每个模块仍需宿主显式授权；未列入机器清单可用集合的扩展保持不可用。具体契约见
-[宿主能力策略](capability-policy.md)和
-[Linux 严格沙箱](linux-sandbox.md)。
+JavaScript cannot request or expand permissions on its own. The currently buildable modules include the read-only `capsid:permissions` and six pure utilities with no ambient authority: `capsid:assert`, `capsid:getopts`, `capsid:hashing`, `capsid:ipaddr`, `capsid:utils`, `capsid:uuid`. `capsid:env` only reads an immutable snapshot that the host explicitly provides, is authorized per key, and is isolated per worker; it does not read the process environment. `capsid:system` only returns compile-time version and feature flags; it does not collect host system information. `capsid:storage` provides an in-memory key-value store that is authorized by namespace, has a fixed quota, and lives only within a single worker; it does not touch disk. `capsid:stdio` only routes approved stdout/stderr messages into bounded IPC log events; it does not expose real fds or stdin. `capsid:fs` provides bounded reads constrained by path rules, Landlock, and `openat2`, and rejects all symlinks and write operations.
+Every module still requires explicit host authorization; extensions not listed in the machine-readable available set remain unavailable. See [host capability policy](capability-policy.md) and [Linux strict sandbox](linux-sandbox.md) for the concrete contracts.
 
-## 资源策略
+## Resource Policy
 
-- 单个 Wasm linear memory 最多 256 pages（16 MiB）；
-- 单个 Wasm table 最多 1024 elements；
-- IPC frame、headers、bundle、并发请求、队列和逐请求缓冲均有显式上限；
-- `capsid:stdio` 单条消息最多 16 KiB，且受同一 IPC queue 上限约束；
-- `capsid:fs` 单文件最多 1 MiB、单次目录枚举最多 1024 项；
-- request/response body 使用逐 request ID 的 credit window；
-- 同步 CPU timeout 会令 worker 不再可复用；异步 timeout 只取消对应请求；
-- 销毁按 graceful shutdown → SIGTERM → SIGKILL 有界升级。
+- A single Wasm linear memory is limited to 256 pages (16 MiB);
+- A single Wasm table is limited to 1024 elements;
+- IPC frames, headers, bundles, concurrent requests, queues, and per-request buffers all have explicit limits;
+- A single `capsid:stdio` message is at most 16 KiB and is also bounded by the same IPC queue limit;
+- `capsid:fs` files are at most 1 MiB each, and a single directory enumeration is limited to 1024 entries;
+- Request/response bodies use a per-request-ID credit window;
+- A synchronous CPU timeout makes the worker no longer reusable; an asynchronous timeout only cancels the corresponding request;
+- Destruction escalates in a bounded sequence: graceful shutdown → SIGTERM → SIGKILL.
 
-部署者还可配置 JS heap、进程地址空间、fd、cgroup CPU/内存/PID、出站 body
-大小和网络策略。宿主负责根据工作负载公布实际资源与隔离策略。
+Deployers can also configure JS heap, process address space, fd, cgroup CPU/memory/PID, egress body size, and network policy. The host is responsible for publishing the actual resource and isolation policy based on workload.
 
-## vendor 更新原则
+## Vendor Update Principles
 
-`vendor/txiki.js` 与递归 submodule 必须固定版本且保持 clean。升级时必须：
+`vendor/txiki.js` and its recursive submodules must stay pinned and clean. When upgrading, you must:
 
-1. 更新固定版本并重新生成 overlay；
-2. 逐个验证 patch 可应用；
-3. 审查 native module、全局对象和最终二进制差异；
-4. 运行完整 contract、WPT、framework、sandbox 与负控矩阵；
-5. 更新合规偏差和升级报告。
+1. Update the pinned version and regenerate the overlay;
+2. Verify each patch applies;
+3. Review native modules, global objects, and final-binary differences;
+4. Run the full contract, WPT, framework, sandbox, and negative-control matrix;
+5. Update conformance deviations and the upgrade report.
 
-overlay key、stamp、实际内容 manifest 和 configure dependencies 均采用
-fail-closed 校验，不能复用来源不明或被篡改的构建树。
+Overlay keys, stamps, actual-content manifests, and configure dependencies all use fail-closed validation; build trees of unknown origin or tampered with must not be reused.

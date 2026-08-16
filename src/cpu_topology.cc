@@ -7,6 +7,11 @@
 
 #if defined(__linux__)
 #include <sched.h>
+#elif defined(_WIN32)
+#include "win32_compat.h"
+#elif defined(__APPLE__)
+#include <sys/sysctl.h>
+#include <sys/types.h>
 #endif
 
 namespace capsid {
@@ -24,6 +29,38 @@ std::vector<uint32_t> available_cpus() {
         if (CPU_ISSET(cpu, &affinity)) {
             output.push_back(cpu);
         }
+    }
+#elif defined(_WIN32)
+    // The process affinity mask reports the CPUs the worker may run on,
+    // mirroring sched_getaffinity on Linux. GetProcessAffinityMask covers
+    // only the process's current processor group (one DWORD_PTR), so on
+    // >64-logical-processor machines CPUs in other groups are not
+    // enumerated; see docs/windows.md.
+    DWORD_PTR process_mask = 0;
+    DWORD_PTR system_mask = 0;
+    if (!GetProcessAffinityMask(
+            GetCurrentProcess(), &process_mask, &system_mask)) {
+        return output;
+    }
+    const uint32_t width = sizeof(DWORD_PTR) * 8;
+    for (uint32_t cpu = 0; cpu < width; ++cpu) {
+        if ((process_mask & (static_cast<DWORD_PTR>(1) << cpu)) != 0) {
+            output.push_back(cpu);
+        }
+    }
+#elif defined(__APPLE__)
+    // macOS has no per-process CPU-affinity restriction (and no
+    // sched_getaffinity equivalent): the available set is the logical
+    // CPU count (hw.ncpu), which mirrors the unrestricted sched_getaffinity
+    // result on Linux.
+    int cpu_count = 0;
+    std::size_t size = sizeof(cpu_count);
+    if (sysctlbyname("hw.ncpu", &cpu_count, &size, nullptr, 0) != 0 ||
+        size != sizeof(cpu_count) || cpu_count <= 0) {
+        return output;
+    }
+    for (int cpu = 0; cpu < cpu_count; ++cpu) {
+        output.push_back(static_cast<uint32_t>(cpu));
     }
 #endif
     return output;

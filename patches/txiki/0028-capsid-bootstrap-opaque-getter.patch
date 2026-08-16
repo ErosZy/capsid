@@ -11,7 +11,7 @@
   * by the owning runtime's loop; it never calls TJS_Run itself. */
 --- a/src/vm.c
 +++ b/src/vm.c
-@@ -1032,6 +1032,10 @@ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt) {
+@@ -1032,5 +1032,9 @@ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt) {
      return tjs__effective_loop(qrt);
  }
  

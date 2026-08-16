@@ -19,8 +19,12 @@
 #include <string>
 #include <vector>
 
-#include <poll.h>
+#include "win32_compat.h"
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <unistd.h>
+#endif
 
 #include "capsid/runtime.h"
 
@@ -61,11 +65,11 @@ void pump(capsid_worker *worker) {
     }
     const int fd = capsid_worker_fd(worker);
     if (fd >= 0) {
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events =
             POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 10);
+        capsid::win32::capsid_poll(&descriptor, 1, 10);
     }
 }
 
@@ -646,10 +650,10 @@ void test_timeout_once_under_saturation(const char *worker_path,
         std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
     while (std::chrono::steady_clock::now() < sat_deadline) {
         const int fd = capsid_worker_fd(worker);
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = fd;
         descriptor.events = 0;  // never readable: keep the queue full
-        poll(&descriptor, 1, 10);
+        capsid::win32::capsid_poll(&descriptor, 1, 10);
     }
 
     // Phase C: read + grant everything, then probe the abort counter.

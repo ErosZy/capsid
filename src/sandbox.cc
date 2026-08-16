@@ -1,10 +1,16 @@
 #include "sandbox.h"
 
 #include <errno.h>
-#include <sys/resource.h>
 
 #include <cstdio>
 #include <cstring>
+#include <limits>
+
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
+#include <sys/resource.h>
+#endif
 
 #if defined(__linux__)
 #include <fcntl.h>
@@ -75,6 +81,61 @@ std::string network_namespace_identity(int descriptor) {
 
 namespace {
 
+#if defined(_WIN32)
+bool install_windows_memory_limit(uint64_t limit_bytes, std::string *error) {
+    // Windows job objects bound committed memory (JOB_OBJECT_LIMIT_PROCESS_MEMORY),
+    // not the virtual address range RLIMIT_AS bounds on Linux and not the
+    // working set. The enforcement is real but the semantics differ; see
+    // docs/windows.md for the capability matrix.
+    if (limit_bytes > static_cast<uint64_t>(
+                          std::numeric_limits<SIZE_T>::max())) {
+        if (error) {
+            *error = "process memory limit exceeds platform range";
+        }
+        return false;
+    }
+    HANDLE job = CreateJobObjectW(NULL, NULL);
+    if (job == NULL) {
+        if (error) {
+            *error = std::string("CreateJobObject failed: ") +
+                std::to_string(GetLastError());
+        }
+        return false;
+    }
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
+    std::memset(&info, 0, sizeof(info));
+    info.BasicLimitInformation.LimitFlags =
+        JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+    info.ProcessMemoryLimit = static_cast<SIZE_T>(limit_bytes);
+    if (!SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info,
+            sizeof(info))) {
+        const DWORD saved_error = GetLastError();
+        CloseHandle(job);
+        if (error) {
+            *error = std::string("SetInformationJobObject failed: ") +
+                std::to_string(saved_error);
+        }
+        return false;
+    }
+    if (!AssignProcessToJobObject(job, GetCurrentProcess())) {
+        const DWORD saved_error = GetLastError();
+        CloseHandle(job);
+        if (error) {
+            *error = std::string("AssignProcessToJobObject failed: ") +
+                std::to_string(saved_error);
+        }
+        return false;
+    }
+    // Limits stay enforced for member processes after the handle closes.
+    CloseHandle(job);
+    return true;
+}
+#endif
+
+#if !defined(_WIN32)
 bool set_limit(const char *name,
                int resource,
                rlim_t current,
@@ -91,6 +152,7 @@ bool set_limit(const char *name,
     }
     return false;
 }
+#endif  // !defined(_WIN32)
 
 #if defined(__linux__)
 
@@ -1172,6 +1234,37 @@ bool apply_sandbox(const SandboxConfig &config,
         *seccomp_mode = 0;
     }
     uint32_t features = config.preinstalled_features;
+#if defined(_WIN32)
+    // Windows has no setrlimit. The job-object limit below bounds the
+    // committed working set (not the virtual address range RLIMIT_AS
+    // bounds on Linux). Per-process file-descriptor limits have no Windows
+    // equivalent: a nonzero config.file_descriptor_limit is accepted but
+    // NOT enforced (documented in docs/windows.md). Strict sandbox mode
+    // (seccomp/Landlock/namespaces) has no Windows equivalent and is
+    // rejected below, matching the non-Linux behavior of every other
+    // platform.
+    if (config.address_space_limit != 0) {
+        if (!install_windows_memory_limit(
+                config.address_space_limit, error)) {
+            return false;
+        }
+        features |= CAPSID_SANDBOX_FEATURE_RLIMITS;
+    }
+    // RLIMIT_CORE analog: suppress the WER crash dialog so a poisoned
+    // worker can never hang a foreground host session.
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    if (config.strict) {
+        if (error) {
+            *error =
+                "strict sandbox is unavailable on this platform/build";
+        }
+        return false;
+    }
+    if (applied_features) {
+        *applied_features = features;
+    }
+    return true;
+#else
     if (!set_limit("RLIMIT_CORE", RLIMIT_CORE, 0, 0, error)) {
         return false;
     }
@@ -1284,6 +1377,7 @@ bool apply_sandbox(const SandboxConfig &config,
     }
     return false;
 #endif
+#endif  // !defined(_WIN32)
 }
 
 }  // namespace capsid

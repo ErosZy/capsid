@@ -1,15 +1,13 @@
-# H3 v2 参考应用
+# H3 v2 reference app
 
-本目录固定 Capsid Runtime 兼容套件使用的 H3 版本。安装依赖并生成自包含 ESM：
+This directory pins the H3 version used by the Capsid Runtime compatibility suite. Install dependencies and generate the self-contained ESM:
 
 ```sh
 npm ci --ignore-scripts
 npm run build
 ```
 
-reference controller 与真实 worker bundle 共享应用逻辑。构建产物仅供测试；
-CMake 还会审计 external/dynamic import、Node/server adapter、platform global
-和大小边界。
+The reference controller and the real worker bundle share the same application logic. Build artifacts are for testing only; CMake also audits external/dynamic imports, Node/server adapters, platform globals, and size boundaries.
 
-验证范围、排除项和测试命令见
-[`../../docs/framework-compatibility/h3-v2.md`](../../docs/framework-compatibility/h3-v2.md)。
+See the verification scope, exclusions, and test commands in
+[`../../docs/framework-compatibility/h3-v2.md`](../../docs/framework-compatibility/h3-v2.md).

@@ -1,29 +1,45 @@
-# 框架兼容性
+# Framework compatibility
 
-框架以普通、自包含 ESM 应用运行，不属于 Capsid Web API profile，也不会进入 runtime
-ABI 或 native capability policy。运行时没有框架探测、专用分支或修改后的 npm
-源码。
+Capsid implements the WinterTC **ECMA-429 Minimum Common Web API** profile
+`CAPSID-MIN-2025-subset-v0` (see [standards and conformance](../conformance.md)).
+Any framework that compiles to a single self-contained ESM exporting a standard
+`fetch(request)` handler can be run on Capsid, provided it stays inside the
+Web-standard surface and does not depend on a Node/server adapter, a listener,
+filesystem static serving, or provider-specific bindings.
 
-| 框架 | 固定版本 | 差分规模 | 说明 |
+Frameworks run as ordinary, self-contained ESM applications. They are not part of the Capsid Web API profile and do not enter the runtime ABI or native capability policy. The runtime has no framework detection, no special branches, and no modified npm source.
+
+## Verified frameworks
+
+The compatibility suite pins these versions and continuously verifies them with
+differential vectors and independent absolute assertions:
+
+| Framework | Pinned version | Differential scope | Notes |
 | --- | --- | ---: | --- |
-| [Hono](hono.md) | 4.12.32 | 68 vectors | 核心路由、中间件、streaming 与生命周期 |
-| [itty-router](itty-router.md) | 5.0.24 | 96 vectors × 3 variants | AutoRouter、Router、IttyRouter |
-| [H3 v2](h3-v2.md) | 2.0.1-rc.26 | 129 vectors | Core、middleware/hooks、部分 Web-standard utilities |
+| [Hono](hono.md) | 4.12.32 | 68 vectors | Core routing, middleware, streaming, and lifecycle |
+| [itty-router](itty-router.md) | 5.0.24 | 96 vectors × 3 variants | AutoRouter, Router, IttyRouter |
+| [H3 v2](h3-v2.md) | 2.0.1-rc.26 | 129 vectors | Core, middleware/hooks, some Web-standard utilities |
 
-共同验证路径：
+## Using other frameworks
+
+Other Web-standard frameworks that target the same fetch-handler model can be
+evaluated against the same rules: bundle to one audited ESM, avoid the excluded
+surfaces listed below, and run the differential/lifecycle/global-surface matrix.
+Only the pinned versions above carry Capsid evidence; adding a framework requires
+the same reference app, vector suite, negative controls, and upgrade process as
+the existing three.
+
+Common validation path:
 
 ```text
 spawn worker
-  → LOAD_BUNDLE（单个已审计 ESM）
+  → LOAD_BUNDLE (single audited ESM)
   → READY
   → FetchRPC request/credit
   → exported fetch(Request)
   → FetchRPC response/credit
 ```
 
-reference 与真实 worker 的差分只是证据的一部分。每个含 `expect` 的向量还有
-独立绝对断言，避免 reference 与 runtime 同时出错仍显示通过。
+The differential between the reference and the real worker is only part of the evidence. Every vector containing `expect` also has independent absolute assertions, so a reference and runtime failing at the same time cannot still appear as a pass.
 
-共同排除 Node/Deno/Bun/Cloudflare adapter、server/listener、文件系统静态服务、
-WebSocket server、外部/远程/`file:` import 和 provider ambient binding。
-这些边界由单独的 expected-rejection 测试维护，不算框架核心不兼容。
+Common exclusions: Node/Deno/Bun/Cloudflare adapters, server/listener, filesystem static serving, WebSocket server, external/remote/`file:` imports, and provider ambient bindings. These boundaries are maintained by separate expected-rejection tests and are not counted as framework core incompatibilities.

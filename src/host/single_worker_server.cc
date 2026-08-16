@@ -21,6 +21,8 @@
 
 #include "host/single_worker_server.h"
 
+#include "host/local_capsid_policy.h"
+
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/http.hpp>
@@ -42,12 +44,16 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 #include <set>
 #include <string>
-#include <sys/socket.h>
 #include <thread>
-#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -393,6 +399,7 @@ public:
     // M2 item 7: the process-wide structured log (null in unit fixtures).
     StructuredLog* log() const { return options_.log; }
     bool activate_accept(std::string* error);
+    bool adopt_socket(tcp::socket socket);
     bool worker_available() const {
         return worker_available_.load(std::memory_order_relaxed);
     }
@@ -586,6 +593,11 @@ private:
     // control thread races the reactor.
     std::optional<asio::executor_work_guard<asio::io_context::executor_type>>
         accept_guard_;
+    // External-accept mode: no listener work exists, so this guard pins the
+    // io_context alive until shutdown/drain completes. Owned by the io
+    // thread, like accept_guard_.
+    std::optional<asio::executor_work_guard<asio::io_context::executor_type>>
+        external_guard_;
     std::atomic<bool> accept_activated_ = false;
     // Activation acknowledgement: the io thread sets accept_armed_ after
     // do_accept ran (or was rejected); activate_accept() waits for it so
@@ -869,6 +881,30 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         }
         return false;
     }
+    // ---- 0. local capsid.json permissions (v0.1.3, --capsid-json) ----
+    // Loaded once at start, before any spawn: a missing explicit file, a
+    // schema violation or a not-applicable section fails startup here
+    // instead of silently dropping permissions. The policy descriptors live
+    // on this frame and outlive every spawn the factory makes inside
+    // executor_->start(); absent a capsid.json (default path), the worker
+    // keeps the deny-all defaults below.
+    std::shared_ptr<const LocalCapsidPolicy> local_policy =
+        options_.prepared_local_policy;
+    if (!local_policy) {
+        auto loaded_policy = std::make_shared<LocalCapsidPolicy>();
+        std::string policy_error;
+        if (!load_local_capsid_policy(options_.capsid_json_path,
+                                      options_.capsid_json_required,
+                                      options_.binding_registry.get(),
+                                      loaded_policy.get(), &policy_error)) {
+            if (error != nullptr) {
+                *error = policy_error;
+            }
+            return false;
+        }
+        local_policy = std::move(loaded_policy);
+    }
+
     // ---- 1. spawn / load / flush (the same two-phase prepare as the
     // legacy run path), now inside the executor's factory. The factory
     // recycles what it created on failure; from the executor's start()
@@ -885,8 +921,11 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     // share the same ceiling.
     config.max_inflight_requests =
         static_cast<std::uint32_t>(max_inflight_);
-    // egress_policy and capability_policy stay NULL: every outbound Fetch
-    // is denied by the Runtime default.
+    // Local capsid.json permissions (v0.1.3): wire the compiled policy in
+    // place of the deny-all defaults.
+    if (local_policy->present) {
+        local_policy->policy.apply(&config);
+    }
 
     // Diagnostic IPC metrics: CAPSID_HOST_IPC_METRICS=1 enables counters
     // with zero overhead in headline runs (branch is off by default).
@@ -932,8 +971,9 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     }
 
     WorkerExecutor::WorkerFactory factory =
-        [this, &config, &bundle](capsid_worker** out,
-                                 std::string* factory_error) -> bool {
+        [this, &config, &bundle, local_policy](
+            capsid_worker** out,
+            std::string* factory_error) -> bool {
         capsid_worker* worker = nullptr;
         const capsid_result spawn_result =
             capsid_worker_spawn(&config, &worker);
@@ -942,6 +982,11 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
                 *factory_error = "worker spawn failed: " +
                                  std::string(capsid_result_string(spawn_result));
             }
+            return false;
+        }
+        if (!load_effective_bindings_into_worker(
+                worker, local_policy->bindings, factory_error)) {
+            capsid_worker_destroy(worker);
             return false;
         }
         const capsid_result load_result = capsid_worker_load_bundle_named(
@@ -975,6 +1020,8 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         *out = worker;
         return true;
     };
+    factory.expected_ready = expected_worker_ready_proof(
+        local_policy->bindings, options_.strict_sandbox);
 
     // The executor's worker thread takes exclusive ownership of every
     // further Runtime API call (READY arrives through next_event). On
@@ -983,29 +1030,31 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         return false;
     }
     worker_available_ = true;
-    if (!bind_listener()) {
-        // bind_listener may have partially succeeded (open, set_option,
-        // bind, listen or local_endpoint): the acceptor is closed and
-        // reset here so a failed start never leaves the port occupied.
-        worker_available_ = false;
-        close_listener();
-        executor_->stop_and_join();
-        if (error != nullptr) {
-            *error = "listener bind failed";
+    if (!options_.external_accept) {
+        if (!bind_listener()) {
+            // bind_listener may have partially succeeded (open, set_option,
+            // bind, listen or local_endpoint): the acceptor is closed and
+            // reset here so a failed start never leaves the port occupied.
+            worker_available_ = false;
+            close_listener();
+            executor_->stop_and_join();
+            if (error != nullptr) {
+                *error = "listener bind failed";
+            }
+            return false;
         }
-        return false;
-    }
-    if (!write_ready_line()) {
-        // The listener was fully bound when the READY record failed: the
-        // port must be released BEFORE start() returns, so a caller that
-        // keeps the object alive (StaticPoolServer retry) can rebind.
-        worker_available_ = false;
-        close_listener();
-        executor_->stop_and_join();
-        if (error != nullptr) {
-            *error = "failed to write the READY record";
+        if (!write_ready_line()) {
+            // The listener was fully bound when the READY record failed: the
+            // port must be released BEFORE start() returns, so a caller that
+            // keeps the object alive (StaticPoolServer retry) can rebind.
+            worker_available_ = false;
+            close_listener();
+            executor_->stop_and_join();
+            if (error != nullptr) {
+                *error = "failed to write the READY record";
+            }
+            return false;
         }
-        return false;
     }
 
     // ---- 2. signals + accept loop, then the event-loop thread. The
@@ -1026,7 +1075,12 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
             });
     }
 
-    if (options_.defer_accept) {
+    if (options_.external_accept) {
+        // The pool owns the only listener. Keep the io_context alive so
+        // adopt_socket() sessions and timers have somewhere to run; the
+        // guard is released by shutdown/drain.
+        external_guard_.emplace(asio::make_work_guard(ioc_));
+    } else if (options_.defer_accept) {
         // Pool barrier: the shard is fully prepared (worker READY,
         // listener bound) but must not accept a single connection until
         // the pool activates it. The work guard keeps the event loop
@@ -1073,6 +1127,12 @@ bool Impl::activate_accept(std::string* error) {
         }
         return false;
     }
+    if (options_.external_accept) {
+        if (error != nullptr) {
+            *error = "external-accept shards do not own an accept loop";
+        }
+        return false;
+    }
     // A dead worker or an already-stopping server rejects the activation
     // synchronously: no post, no wait, no hang.
     if (!worker_available_.load(std::memory_order_relaxed) ||
@@ -1104,6 +1164,28 @@ bool Impl::activate_accept(std::string* error) {
         }
         return false;
     }
+    return true;
+}
+
+bool Impl::adopt_socket(tcp::socket socket) {
+    if (shutting_down_ || !worker_available_.load(std::memory_order_relaxed) ||
+        !io_running_.load(std::memory_order_relaxed) || !options_.external_accept) {
+        return false;
+    }
+    auto transport = std::make_shared<tcp::socket>(std::move(socket));
+    io_post([weak = weak_from_this(), transport] {
+        const std::shared_ptr<Impl> alive = weak.lock();
+        if (!alive || alive->shutting_down_ ||
+            !alive->worker_available_.load(std::memory_order_relaxed)) {
+            boost::system::error_code ignored;
+            transport->close(ignored);
+            return;
+        }
+        auto session = std::make_shared<Session>(
+            alive, std::move(*transport));
+        alive->sessions_[alive->next_session_id_++] = session;
+        session->start();
+    });
     return true;
 }
 
@@ -1252,6 +1334,9 @@ void Impl::on_signal(int) {
     if (accept_guard_) {
         accept_guard_->reset();
     }
+    if (external_guard_) {
+        external_guard_->reset();
+    }
 }
 
 void Impl::begin_drain(std::uint64_t deadline_ms) {
@@ -1279,6 +1364,9 @@ void Impl::start_drain_on_io(std::uint64_t deadline_ms) {
     }
     if (accept_guard_) {
         accept_guard_->reset();
+    }
+    if (external_guard_) {
+        external_guard_->reset();
     }
     if (deadline_ms != 0) {
         drain_deadline_ = SteadyClock::now() +
@@ -1355,6 +1443,9 @@ void Impl::complete_drain() {
     }
     if (accept_guard_) {
         accept_guard_->reset();
+    }
+    if (external_guard_) {
+        external_guard_->reset();
     }
     // The deadline timer must not pin the io loop after the drain finished:
     // destroy it here (safe from within its own handler) or run() would
@@ -1828,6 +1919,9 @@ void Impl::handle_worker_event(WorkerEvent event) {
         if (accept_guard_) {
             accept_guard_->reset();
         }
+        if (external_guard_) {
+            external_guard_->reset();
+        }
         const std::vector<std::uint64_t> request_ids = [this] {
             std::vector<std::uint64_t> ids;
             ids.reserve(requests_.size());
@@ -2160,7 +2254,7 @@ void Impl::pump_queue() {
         queue_.pop_front();
         queue_bytes_ -= entry.bytes;
         // Deadline expiry while parked maps to 504 (§10.3: queue or Host
-        // deadline 到期 → 504). The connection stays eligible for the next
+        // deadline expiry). The connection stays eligible for the next
         // request: this was a scheduling rejection, not a worker fault.
         if (entry.deadline &&
             SteadyClock::now() >= *entry.deadline) {
@@ -2406,8 +2500,18 @@ bool Impl::bind_listener() {
     // address:port. SO_REUSEPORT is set before bind and is mandatory — an
     // unsupported platform is rejected with a static, redacted message
     // instead of silently degrading to a fake multi-process pool. The
-    // default (single-worker) path never asks for it.
+    // default (single-worker) path never asks for it. Windows has no
+    // SO_REUSEPORT: the multi-shard static pool is rejected there with
+    // the same message (a one-worker pool never asks for the option, so
+    // single-shard static-pool remains supported on Windows).
     if (options_.so_reuseport) {
+#if defined(_WIN32)
+        emit_log(log(), LogLane::kControl,
+                 {.event = log_events::kStartup,
+                  .result = "fail",
+                  .message = "listener reuse_port option is unavailable"});
+        return false;
+#else
         const int enable = 1;
         if (::setsockopt(acceptor_->native_handle(), SOL_SOCKET,
                          SO_REUSEPORT, &enable, sizeof(enable)) != 0) {
@@ -2418,6 +2522,7 @@ bool Impl::bind_listener() {
                           "listener reuse_port option is unavailable"});
             return false;
         }
+#endif
     }
     acceptor_->bind(endpoint, ec);
     if (ec) {
@@ -2475,9 +2580,19 @@ bool Impl::write_ready_line() {
         "\",\"port\":" + std::to_string(bound_port_) + "}\n";
     std::size_t offset = 0;
     while (offset < line.size()) {
+#if defined(_WIN32)
+        // The ready channel may be a loopback socketpair (in-process
+        // harnesses) or a stdio pipe (process harnesses); write_any_fd
+        // covers both.
+        const ssize_t written = capsid::win32::write_any_fd(
+            options_.ready_fd,
+            line.data() + offset,
+            line.size() - offset);
+#else
         const ssize_t written = ::write(options_.ready_fd,
                                         line.data() + offset,
                                         line.size() - offset);
+#endif
         if (written < 0 && errno == EINTR) {
             continue;
         }
@@ -2849,7 +2964,7 @@ void Impl::write_metrics_line() {
         (unsigned long)client_metrics.socket_read_calls,
         (unsigned long)client_metrics.socket_read_bytes,
         (unsigned long)client_metrics.socket_read_eagain,
-        (unsigned long)client_metrics.queued_bytes_high_water);
+        (size_t)client_metrics.queued_bytes_high_water);
 }
 
 SingleWorkerServer::SingleWorkerServer(SingleWorkerServerOptions options)
@@ -2893,6 +3008,10 @@ std::uint16_t SingleWorkerServer::bound_port() const {
 
 bool SingleWorkerServer::activate_accept(std::string* error) {
     return impl_->activate_accept(error);
+}
+
+bool SingleWorkerServer::adopt_socket(boost::asio::ip::tcp::socket socket) {
+    return impl_->adopt_socket(std::move(socket));
 }
 
 bool SingleWorkerServer::worker_available() const {

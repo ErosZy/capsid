@@ -1,103 +1,129 @@
-# 宿主能力策略
+# Host Capability Policy
 
-公开 ABI 提供可选且不可变的 `capsid_capability_policy`。它是 worker 启动时
-由宿主给出的策略快照，不是 JavaScript permission prompt。
+The public ABI provides an optional and immutable `capsid_capability_policy`. It
+is a policy snapshot given by the host at worker startup, not a JavaScript
+permission prompt.
 
-## 三层门禁
+## Three-layer gate
 
-能力按以下顺序独立判断：
+Capabilities are evaluated independently in the following order:
 
-1. module 或 operation 必须存在于 restricted build；
-2. module 必须出现在 `allowed_modules`；
-3. 具体资源必须匹配 allow rule，且不能匹配任何 deny rule。
+1. The module or operation must exist in the restricted build;
+2. The module must appear in `allowed_modules`;
+3. The concrete resource must match an allow rule and must not match any deny
+   rule.
 
-未知 descriptor、`allowed_modules` 中的未知模块、重复或为零的 rule ID、
-非 canonical resource 和不支持的 policy version 都会令
-`capsid_worker_spawn()` 返回 `CAPSID_INVALID_ARGUMENT`。spawn 在返回前同步校验并
-复制全部嵌套字符串和规则，因此策略变更必须新建 worker。
+Unknown descriptors, unknown modules in `allowed_modules`, duplicate or zero
+rule IDs, non-canonical resources, and unsupported policy versions all make
+`capsid_worker_spawn()` return `CAPSID_INVALID_ARGUMENT`. spawn validates
+synchronously and copies all nested strings and rules before returning, so a
+policy change requires creating a new worker.
 
-`allowed_modules` 只接受已知的 `capsid:*` 公共名称。所有 `tjs:*` 和
-`tjs:internal/*` 都是永久禁止的实现命名空间，不能通过策略开放；把它们写入
-allowlist 会使 spawn 失败。完整 specifier 判定和
-API→permission 映射见
-[JavaScript 模块与权限参考](module-permissions.md)。
+`allowed_modules` accepts only known public `capsid:*` names. All `tjs:*` and
+`tjs:internal/*` are permanently forbidden implementation namespaces and cannot
+be opened through policy; writing them into the allowlist makes spawn fail. For
+the complete specifier determination and API→permission mapping, see the
+[JavaScript Modules and Permissions Reference](module-permissions.md).
 
-## 当前可用范围
+## Currently available scope
 
-当前 restricted build 提供十二个可显式授权的模块：
+The current restricted build provides twelve explicitly authorizable modules:
 
-- `capsid:permissions`：只读查询宿主能力策略；
-- `capsid:env`：读取宿主显式提供、逐键授权的不可变环境快照；
-- `capsid:system`：只读取编译期 runtime version 与 feature flags；
-- `capsid:storage`：按 namespace 授权、只存活于单个 worker 的内存键值存储；
-- `capsid:stdio`：把获准的 stdout/stderr 写入转换为有界宿主日志事件；
-- `capsid:fs`：读取获准的 canonical host path，不提供写入或 watcher；
-- `capsid:assert`、`capsid:getopts`、`capsid:hashing`、`capsid:ipaddr`、
-  `capsid:utils`、`capsid:uuid`：无 ambient authority 的纯 utility。
+- `capsid:permissions`: read-only query of the host capability policy;
+- `capsid:env`: reads the immutable environment snapshot the host explicitly
+  provides, authorized per key;
+- `capsid:system`: reads only the compile-time runtime version and feature
+  flags;
+- `capsid:storage`: in-memory key-value storage authorized per namespace, alive
+  only in a single worker;
+- `capsid:stdio`: converts allowed stdout/stderr writes into bounded host log
+  events;
+- `capsid:fs`: reads allowed canonical host paths; no write or watcher support;
+- `capsid:assert`, `capsid:getopts`, `capsid:hashing`, `capsid:ipaddr`,
+  `capsid:utils`, `capsid:uuid`: pure utilities with no ambient authority.
 
-utility 模块仍必须逐个列入 `allowed_modules`；“已构建”不等于“应用可导入”。
-它们没有资源操作，因此不会绕过第三层 operation gate，也不会获得
-`globalThis.tjs`、process、文件系统、环境变量或网络能力。
-`capsid:hashing` 只允许 loader 代它解析一次受信任的
-`tjs:internal/core` 哈希原语；应用直接导入该 internal module 始终被拒绝，
-包括它已经进入 module cache 的情况。
+Utility modules still must be listed one by one in `allowed_modules`; "built" is
+not the same as "importable by an application." They have no resource
+operations, so they cannot bypass the third-layer operation gate, and they gain
+no `globalThis.tjs`, process, filesystem, environment, or network capabilities.
+`capsid:hashing` only lets the loader resolve the trusted
+`tjs:internal/core` hashing primitive on its behalf once; direct application
+import of that internal module is always rejected, including when it is already
+in the module cache.
 
-标准 `fetch()` 通过 `net_policy` 接入 operation gate；`capsid:env.get()`
-、`capsid:system.get()`、`capsid:storage` 和 `capsid:stdio.write()` 操作分别通过
-`CAPSID_PERMISSION_ENV`、`CAPSID_PERMISSION_SYS` 与
-`CAPSID_PERMISSION_STORAGE`、`CAPSID_PERMISSION_STDIO` rule 接入同一门禁。
+Standard `fetch()` reaches the operation gate through `net_policy`;
+`capsid:env.get()`, `capsid:system.get()`, `capsid:storage`, and
+`capsid:stdio.write()` operations reach the same gate through
+`CAPSID_PERMISSION_ENV`, `CAPSID_PERMISSION_SYS`, `CAPSID_PERMISSION_STORAGE`,
+and `CAPSID_PERMISSION_STDIO` rules respectively.
 
-`fetch()` 的域名规则是授权边界：域名及端口在 host 阶段获准后，该域名由
-客户端 DNS 解析出的地址（包括私网、loopback 和 link-local 地址）也视为获准，
-调用方无需、也不应枚举会随 DNS 变化的 IP。解析地址仍会匹配显式 IP/CIDR
-规则，任何显式 deny 都优先于域名 allow。直接以数字 IP 发起请求则继续执行
-protected-range 防护；私网、loopback、link-local 等地址必须有显式 IP/CIDR
-allow 才能以数字 IP 直接访问。因此，不论 `internal-api.example:443` 被视为
-内网域名还是公网域名，只要它已获授权，就可以访问它实际解析到的全部地址，
-包括 `10/8` 等 protected range；这一判断不依赖域名的“公网/内网”分类。
+`fetch()`'s domain rules are the authorization boundary: after a domain and port
+are allowed at the host stage, the addresses that client-side DNS resolves for
+that domain (including private, loopback, and link-local addresses) are also
+considered allowed; callers do not need to — and should not — enumerate IPs that
+change with DNS. Resolved addresses still match explicit IP/CIDR rules, and any
+explicit deny takes precedence over a domain allow. Requests made directly to a
+numeric IP continue to undergo protected-range protection; private, loopback,
+link-local, and similar addresses need an explicit IP/CIDR allow to be accessed
+directly by numeric IP. Therefore, regardless of whether
+`internal-api.example:443` is treated as an internal or public domain, as long
+as it has been authorized, all addresses it actually resolves to — including
+protected ranges such as `10/8` — are accessible; this determination does not
+depend on a "public/internal" classification of the domain.
 
-被拒绝的 `fetch()` 错误会区分三种原因：host/端口没有匹配授权规则、地址位于
-protected range 且未被显式授权，以及命中了显式 deny 规则。错误文本仅用于
-诊断；策略判断仍以规则和 deny 优先级为准，应用不应解析错误字符串来实施授权。
+Rejected `fetch()` errors distinguish three causes: the host/port has no
+matching authorization rule, the address is in a protected range and was not
+explicitly authorized, or an explicit deny rule was hit. Error text is for
+diagnostics only; policy decisions still follow the rules and deny precedence,
+and applications should not parse error strings to enforce authorization.
 
-`write`、`ffi`、`rawSocket` 和 `engine`
-matcher 已能解析和测试，但对应操作未构建，JavaScript 查询返回
-`unavailable`。`read`、`env` 与 `storage` 已构建；`stdio` 只提供 stdout/stderr
-输出，stdin 仍为 `unavailable`；`sys` 只有 `runtimeVersion` 与
-`featureFlags` 可用，其他资源仍为 `unavailable`。
+The `write`, `ffi`, `rawSocket`, and `engine` matchers can already be parsed and
+tested, but the corresponding operations are not built; JavaScript queries
+return `unavailable`. `read`, `env`, and `storage` are built; `stdio` provides
+only stdout/stderr output, stdin remains `unavailable`; `sys` has only
+`runtimeVersion` and `featureFlags` available, other resources remain
+`unavailable`.
 
-capability policy 当前版本是 2；解码器仍接受没有环境快照字段的版本 1，
-并保持原有语义。未知版本、版本 1 携带环境数据或版本 2 缺失快照段都会
-fail closed。
+The capability policy current version is 2; the decoder still accepts version 1
+without an environment snapshot field, preserving its original semantics.
+Unknown versions, version 1 carrying environment data, or version 2 missing the
+snapshot section all fail closed.
 
-机器可读的权威清单是
-[`capability-manifest.json`](capability-manifest.json)。CMake 在 configure
-阶段计算 SHA-256，并把该值写入每条 audit record。
+The machine-readable authoritative list is
+[`capability-manifest.json`](capability-manifest.json). CMake computes SHA-256 at
+configure time and writes that value into every audit record.
 
-process、worker、HTTP/WebSocket server、WASI、内部 runtime module、远程
-import 和 file/path import 永久禁止，不能通过 capability descriptor 开启。
-`capsid:path` 暂不构建，因为其完整上游 API 的 `resolve()`/`relative()` 会隐式
-读取 `tjs.cwd`；只有引入 capability-scoped virtual cwd 后才可重新评估。
+process, worker, HTTP/WebSocket server, WASI, internal runtime modules, remote
+import, and file/path import are permanently forbidden and cannot be enabled
+through a capability descriptor. `capsid:path` is not built yet because the full
+upstream API's `resolve()`/`relative()` would implicitly read `tjs.cwd`; it can
+be reconsidered only after a capability-scoped virtual cwd is introduced.
 
-其余已知扩展继续 fail closed，原因和重开条件也写入机器清单：
+All other known extensions remain fail closed, and the reasons and reopening
+conditions are also recorded in the machine manifest:
 
-- `capsid:net` 不复用上游 POSIX socket；它绕过 resolved-address egress hook。
-  HTTP(S) 客户端需求使用已经覆盖 hostname、每个 DNS 地址和每次 redirect 的
-  标准 `fetch()`；
-- `capsid:websocket` 要等 client-only 路径同样完成 DNS/地址复核、队列上限、
-  cancel 和 request ownership，server/upgrade 不在产品范围；
-- `capsid:sqlite` 的 benchmark-only 固定只读数据库不等于产品 API。正式开放
-  前必须禁用 extension loader，加入 SQL authorizer、内存/行数/执行时间 quota，
-  并只允许内存库或经 path capability 授权的文件；
-- `capsid:readline` 依赖已明确关闭的 terminal stdin；请求输入应由宿主通过
-  FetchRPC 提供；
-- `capsid:fs.write` 会重开 seccomp/Landlock 写边界，`capsid:fs.watch` 会引入
-  跨请求回调；两者在各自 mutation/ownership 设计完成前保持 unavailable。
+- `capsid:net` does not reuse the upstream POSIX socket; it would bypass the
+  resolved-address egress hook. HTTP(S) client needs should use standard
+  `fetch()`, which already covers the hostname, every DNS address, and every
+  redirect;
+- `capsid:websocket` must wait until the client-only path also completes
+  DNS/address rechecking, queue limits, cancel, and request ownership;
+  server/upgrade is out of product scope;
+- `capsid:sqlite`'s benchmark-only fixed read-only database is not a product
+  API. Before official release it must disable the extension loader, add an SQL
+  authorizer and memory/row-count/execution-time quotas, and allow only in-memory
+  databases or files authorized by a path capability;
+- `capsid:readline` depends on terminal stdin, which is explicitly closed; input
+  should be provided by the host through FetchRPC;
+- `capsid:fs.write` would reopen the seccomp/Landlock write boundary, and
+  `capsid:fs.watch` would introduce cross-request callbacks; both remain
+  unavailable until their mutation/ownership designs are complete.
 
-这些条目不是“允许但尚未写文档”，而是由 manifest 审计、逐模块启动拒绝测试
-和最终二进制负控共同保证的显式不提供结论。
+These entries are not "allowed but not yet documented"; they are explicit
+non-provision conclusions guaranteed by manifest audit, per-module startup
+rejection tests, and final binary negative controls.
 
-## C 嵌入示例
+## C embedding example
 
 ```c
 capsid_egress_rule net_rule;
@@ -146,18 +172,19 @@ config.worker_path = "/path/to/capsid-worker";
 config.capability_policy = &capability;
 ```
 
-C++11 头文件提供 `capsid::CapabilityPolicyBuilder`，用于在
-`capsid_worker_spawn()` 调用前持有临时字符串和 descriptor；环境快照用
-`.environment("APP_MODE", "production")` 添加。
+The C++11 header provides `capsid::CapabilityPolicyBuilder` to hold temporary
+strings and descriptors before calling `capsid_worker_spawn()`; environment
+snapshots are added with `.environment("APP_MODE", "production")`.
 
-如果同时配置 `capsid_worker_config.egress_policy` 与
-`capsid_capability_policy.net_policy`，有效策略是两者交集：请求 hostname、
-DNS 解析后的每个地址和每次 redirect 都必须同时获准。native HTTP client
-仍在 worker 内，不会引入宿主 HTTP broker。
+If both `capsid_worker_config.egress_policy` and
+`capsid_capability_policy.net_policy` are configured, the effective policy is
+the intersection: the request hostname, every DNS-resolved address, and every
+redirect must all be allowed. The native HTTP client remains inside the worker
+and does not introduce a host HTTP broker.
 
-## JavaScript 查询
+## JavaScript query
 
-获准导入的 bundle 只能查询不可变的有效状态：
+An authorized bundle can only query the immutable effective state:
 
 ```js
 import { permissions } from "capsid:permissions";
@@ -166,71 +193,80 @@ permissions.query({
   name: "net",
   host: "api.example.com",
   port: 443,
-}); // "granted"、"denied"、"partial" 或 "unavailable"
+}); // "granted", "denied", "partial" or "unavailable"
 ```
 
-导出对象被冻结，不提供 `request()`、`revoke()`、prompt 或 mutation API。
-import 错误会区分：
+The exported object is frozen and provides no `request()`, `revoke()`, prompt,
+or mutation API. Import errors distinguish:
 
-- `module is forbidden`：该类别永久不能启用；
-- `module is unavailable`：类别已知，但当前 build 没有实现；
-- `module is not authorized`：模块存在，但不在 `allowed_modules`。
+- `module is forbidden`: the category can never be enabled;
+- `module is unavailable`: the category is known, but the current build does not
+  implement it;
+- `module is not authorized`: the module exists but is not in `allowed_modules`.
 
-## 环境快照
+## Environment snapshot
 
 ```js
 import { env } from "capsid:env";
 
-env.get("APP_MODE"); // "production"、"" 或 undefined
+env.get("APP_MODE"); // "production", "" or undefined
 ```
 
-worker 进程环境始终清空；运行时不会调用 `getenv()`，也不会枚举宿主环境。
-只有 `capsid_env_entry` 中显式提供、且同时被有效 allow rule 覆盖的键才能进入
-HELLO。deny rule 优先；越权键、重复键、通配符键名、空指针、超限值和未授权
-`capsid:env` 的快照都会使 spawn 失败。值在 spawn 返回前完成深复制，因此
-调用方随后修改原始缓冲不会改变 worker；不同 worker 持有独立快照。
+The worker process environment is always cleared; the runtime never calls
+`getenv()` and never enumerates the host environment. Only keys explicitly
+provided in `capsid_env_entry` and simultaneously covered by a valid allow rule
+can enter HELLO. deny rules take precedence; unauthorized keys, duplicate keys,
+wildcard key names, null pointers, oversized values, and snapshots for an
+unauthorized `capsid:env` all make spawn fail. Values are deep-copied before
+spawn returns, so later modifications to the caller's original buffers do not
+affect the worker; different workers hold independent snapshots.
 
-`env.get()` 对每次访问重新执行 operation gate：已授权但未提供的键返回
-`undefined`，被拒绝的键抛错，两者都不会回退到宿主 ambient environment。
+`env.get()` re-executes the operation gate on every access: authorized-but-not-
+provided keys return `undefined`, denied keys throw, and neither falls back to
+the host ambient environment.
 
-## 运行时元数据
+## Runtime metadata
 
 ```js
 import { system } from "capsid:system";
 
-system.get("runtimeVersion"); // "0.1.1"
-system.get("featureFlags");   // 冻结的编译期能力对象
+system.get("runtimeVersion"); // "0.2.0"
+system.get("featureFlags");   // frozen compile-time capability object
 ```
 
-该模块不调用 uname/gethostname，不读取用户、网络接口、负载、uptime 或内存
-状态。即使策略中存在这些 sys allow rule，operation 仍返回
-`unavailable`；这使“规则解析器认识某个资源”不会被误解成“build 已实现它”。
+This module does not call uname/gethostname and does not read users, network
+interfaces, load, uptime, or memory state. Even if such sys allow rules exist in
+the policy, the operations still return `unavailable`; this keeps "the rule
+parser recognizes a resource" from being mistaken for "the build implements it."
 
-## Worker 内存存储
+## Worker in-memory storage
 
 ```js
 import { storage } from "capsid:storage";
 
 storage.set("tenant-a", "session", "value");
-storage.get("tenant-a", "session"); // "value" 或 undefined
-storage.keys("tenant-a");           // 冻结且按 key 排序的数组
+storage.get("tenant-a", "session"); // "value" or undefined
+storage.keys("tenant-a");           // frozen array sorted by key
 storage.delete("tenant-a", "session");
 storage.clear("tenant-a");
 ```
 
-每次操作都重新校验精确 namespace rule；namespace 只允许
-ASCII 字母、数字、`_`、`-`、`.`，长度最多 128 bytes，不支持通配符。
-key 必须非空、最多 256 UTF-8 bytes 且不能包含 NUL；value 最多
-16 KiB。每个 namespace 最多 256 项、key 与 value 合计最多 64 KiB。
-越权、非法输入、单值超限和 quota 拒绝都会产生 operation deny audit。
-成功访问只在每个 worker 首次使用该 namespace 时记录 allow，避免正常键值操作
-淹没后续拒绝事件。
+Each operation revalidates the exact namespace rule; namespaces allow only ASCII
+letters, digits, `_`, `-`, `.`, at most 128 bytes, and no wildcards. Keys must be
+non-empty, at most 256 UTF-8 bytes, and cannot contain NUL; values are at most
+16 KiB. Each namespace holds at most 256 entries, with keys and values totaling
+at most 64 KiB. Unauthorized access, invalid input, single-value overruns, and
+quota rejections all produce operation deny audits. Successful access records an
+allow only the first time each worker uses that namespace, so normal key-value
+operations do not drown out subsequent denial events.
 
-状态只保存在 `capsid-worker` 的私有内存中：同一 worker 的后续请求可见，
-不同 worker 不共享，worker 销毁即清空。模块不打开文件、不读取路径，也不复用
-txiki.js 基于 SQLite 的 localStorage，因此没有隐含的磁盘或目录权限。
+State lives only in `capsid-worker`'s private memory: subsequent requests in the
+same worker can see it, different workers do not share it, and destroying the
+worker clears it. The module does not open files, read paths, or reuse
+txiki.js's SQLite-backed localStorage, so there is no implicit disk or directory
+permission.
 
-## 有界标准输出
+## Bounded standard output
 
 ```js
 import { stdio } from "capsid:stdio";
@@ -239,74 +275,92 @@ stdio.write("stdout", "started");
 stdio.write("stderr", "warning");
 ```
 
-`write()` 不接触 worker 的真实 fd。它把 stream 名和最多 16 KiB 的字符串
-编码为带当前 request ID 的 `CAPSID_EVENT_LOG`，由宿主决定是否以及如何落盘。
-stdout 与 stderr 必须分别有精确 allow rule；stdin 即使配置 allow 也保持
-`unavailable`。非法 stream、超限消息和越权写入都 fail closed 并产生审计。
-成功 stream 每个 worker 只记录一次 allow，避免日志循环挤掉拒绝事件。
+`write()` never touches the worker's real fds. It encodes the stream name and at
+most 16 KiB of string into a `CAPSID_EVENT_LOG` carrying the current request ID;
+the host decides whether and how to persist it. stdout and stderr must each have
+an exact allow rule; stdin stays `unavailable` even if configured with allow.
+Invalid streams, over-limit messages, and unauthorized writes all fail closed and
+produce audit. A successful stream records allow only once per worker to keep
+log churn from crowding out denial events.
 
-消息按 UTF-8 bytes 计量并保留内嵌 NUL。输出还受 worker 的有界 IPC queue
-限制；队列满时同步抛错，不会阻塞进程或绕到真实标准输出。
+Messages are measured in UTF-8 bytes and embedded NULs are preserved. Output is
+also bounded by the worker's bounded IPC queue; when the queue is full, writes
+throw synchronously rather than blocking the process or falling through to real
+standard output.
 
-## 只读文件系统
+## Read-only filesystem
 
 ```js
 import { fs } from "capsid:fs";
 
 fs.readText("/srv/app/config.json");
-fs.stat("/srv/app/config.json"); // 冻结的 { type, size }
-fs.list("/srv/app/assets");      // 冻结且排序的名称数组
+fs.stat("/srv/app/config.json"); // frozen { type, size }
+fs.list("/srv/app/assets");      // frozen sorted name array
 ```
 
-只接受 canonical absolute path，并在每次调用时执行 `CAPSID_PERMISSION_READ`
-allow/deny 匹配。strict sandbox 会把有效 allow 根同步加入只读 Landlock
-规则；配置根若是 symlink，worker 在执行 bundle 前即启动失败。实际打开使用
-`openat2(RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS)`，因此末端和中间路径的
-symlink 都不会被跟随，也不存在先检查再打开的竞态窗口。
+Only canonical absolute paths are accepted, and every call performs
+`CAPSID_PERMISSION_READ` allow/deny matching. Strict sandbox synchronously adds
+effective allow roots to read-only Landlock rules; if a configuration root is a
+symlink, the worker fails startup before executing the bundle. Actual opens use
+`openat2(RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS)`, so symlinks in both final
+and intermediate path components are never followed, and there is no
+check-then-open race window.
 
-`readText()` 只接受普通文件且最多读取 1 MiB；`stat()` 只报告普通文件或目录的
-类型与大小；`list()` 最多返回 1024 项，不跟随目录项。所有 API 同步、有界，
-返回对象被冻结。写入、删除、rename、mkdir 和 fswatch 不在该模块中；
-`CAPSID_PERMISSION_WRITE` 继续查询为 `unavailable`，Landlock 也保持全局拒写。
+`readText()` accepts only regular files and reads at most 1 MiB; `stat()` reports
+type and size only for regular files or directories; `list()` returns at most
+1024 entries and does not follow directory entries. All APIs are synchronous and
+bounded, and returned objects are frozen. Writing, deletion, rename, mkdir, and
+fswatch are not in this module; `CAPSID_PERMISSION_WRITE` continues to query as
+`unavailable`, and Landlock remains globally write-denying.
 
-## 审计事件
+## Audit events
 
-能力判定通过 `CAPSID_EVENT_AUDIT` 交给宿主，用
-`capsid_audit_record_decode()` 解码。记录包含 worker、application identity、
-request ID、stage、decision、rule ID、policy version、module、capability、
-规范化资源和 capability manifest SHA-256。
+Capability decisions are delivered to the host through `CAPSID_EVENT_AUDIT` and
+decoded with `capsid_audit_record_decode()`. Records include worker, application
+identity, request ID, stage, decision, rule ID, policy version, module,
+capability, canonical resource, and capability manifest SHA-256.
 
-audit view 指向事件缓冲，只在同一 worker 的下一次 event API 调用前有效。
-worker 对相同的连续非 allow 判定最多记录 8 次，并把总速率限制为每秒 64 条。
-宿主必须持续排空事件，不能把该通道当成无界日志。
+The audit view points into the event buffer and is valid only until the same
+worker's next event API call. For the same consecutive non-allow decision, a
+worker records at most 8 occurrences and caps the overall rate at 64 per second.
+The host must keep draining events and must not treat this channel as an
+unbounded log.
 
-capability rule 是应用授权边界；seccomp、Landlock、namespace、cgroup 和
-宿主 firewall 是独立且更强的进程边界。未来若开放 FFI 或 raw socket，宿主
-必须接受它们可能绕过普通 JavaScript policy。
+The capability rule is the application authorization boundary; seccomp,
+Landlock, namespaces, cgroups, and host firewall are independent and stronger
+process boundaries. If FFI or raw sockets are opened in the future, the host
+must accept that they can bypass ordinary JavaScript policy.
 
-### 逃逸级能力门禁
+### Escape-level capability gate
 
-`capsid:ffi` 与 `capsid:raw-socket` 不属于普通 capability。它们可以绕过路径、
-DNS、redirect 和逐操作授权，因此当前安全结论是"不提供"，而不是"依赖规则
-谨慎开放"。
+`capsid:ffi` and `capsid:raw-socket` are not ordinary capabilities. They can
+bypass path, DNS, redirect, and per-operation authorization, so the current
+security conclusion is "not provided," not "open cautiously with rules."
 
-- `CAPSID_ENABLE_FFI_CAPABILITY` 与
-  `CAPSID_ENABLE_RAW_SOCKET_CAPABILITY` 明确存在且默认 `OFF`；
-  任一开关设为 `ON` 都在 configure 阶段 fail closed，因为项目尚无独立 ABI、
-  OS sandbox profile 与完整负控；
-- 直接传入 txiki 的 `BUILD_WITH_FFI=ON` 同样被顶层配置拒绝，不能绕过 Capsid
-  开关；restricted txiki overlay 不打包 FFI、POSIX socket 或相关 bytecode，
-  最终 worker 还必须通过符号、translation unit 和 module specifier 审计。
+- `CAPSID_ENABLE_FFI_CAPABILITY` and
+  `CAPSID_ENABLE_RAW_SOCKET_CAPABILITY` explicitly exist and default to `OFF`;
+  setting either switch to `ON` fails closed at configure time because the
+  project has no standalone ABI, OS sandbox profile, or complete negative
+  controls yet;
+- Passing `BUILD_WITH_FFI=ON` directly to txiki is also rejected by the
+  top-level configuration and cannot bypass the Capsid switch; the restricted
+  txiki overlay does not package FFI, POSIX sockets, or related bytecode, and
+  the final worker must additionally pass symbol, translation unit, and module
+  specifier audits.
 
-自动化证据：`escape_capability_defaults`（两开关默认 OFF 且 txiki FFI 未暗中
-启用）、`escape_capability_configure_negative_controls`（开启即 configure
-失败）、`worker_binary_audit` 及其负控（危险 initializer/translation unit/
-loader specifier 未进入最终 worker，且审计器能捕获注入）、
-`worker_sandbox_enforcement`（真实进程 strict seccomp/Landlock，含 raw socket
-拒绝）和 capability manifest 拒绝矩阵（应用导入这两个模块得到
-`unavailable`）。
+Automated evidence: `escape_capability_defaults` (both switches default OFF and
+txiki FFI is not silently enabled),
+`escape_capability_configure_negative_controls` (enabling fails configure),
+`worker_binary_audit` and its negative controls (dangerous
+initializers/translation units/loader specifiers do not enter the final worker,
+and the auditor can catch injection), `worker_sandbox_enforcement` (real process
+strict seccomp/Landlock, including raw socket denial), and the capability
+manifest rejection matrix (importing either module from an application returns
+`unavailable`).
 
-将来若产品确实需要其中任一能力，应新开安全设计和 ABI 版本，至少覆盖库路径
-与符号约束、socket family/type/protocol、DNS/redirect 绕过、fd 传递、资源
-配额、跨请求/跨租户隔离和独立 OS sandbox。不能把当前 fail-closed 开关改成
-"实验性可用"来规避这些前置条件。
+If the product genuinely needs either capability in the future, a new security
+design and ABI version should be opened, covering at least library path and
+symbol constraints, socket family/type/protocol, DNS/redirect bypass, fd
+passing, resource quotas, cross-request/cross-tenant isolation, and a standalone
+OS sandbox. The current fail-closed switches cannot be changed to
+"experimentally available" to circumvent these prerequisites.

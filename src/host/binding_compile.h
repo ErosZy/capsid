@@ -115,6 +115,15 @@ BindingSnapshotParseResult parse_bindings_snapshot(const std::string& json);
 bool build_binding_descriptor(const EffectiveBinding& binding,
                               capsid_binding_descriptor* out);
 
+// Loads an already-compiled immutable Binding set into one worker. This is
+// the single Host-side spawn primitive used by managed, single-worker and
+// static-pool modes: every Binding is queued after spawn and before the App
+// bundle, and an empty set is a true no-op (no Binding Runtime is created).
+bool load_effective_bindings_into_worker(
+    capsid_worker* worker,
+    const std::vector<EffectiveBinding>& bindings,
+    std::string* error);
+
 // Compiles the effective binding set: every declared id must exist in the
 // registry snapshot, and every App permission must be statically provable
 // as a subset of its manifest's (no DNS-derived containment). The digest

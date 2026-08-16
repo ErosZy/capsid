@@ -58,21 +58,37 @@ void tjs__execute_jobs(JSContext *ctx);
 }
 
 #include <errno.h>
-#include <fcntl.h>
+// Included on every platform: capsid_pollfd/capsid_poll are used
+// unconditionally in read_startup, and the header's POSIX branch is
+// self-contained passthroughs.
+#include "win32_compat.h"
+#if !defined(_WIN32)
 #include <dirent.h>
-#ifdef __linux__
-#include <linux/openat2.h>
-#include <sys/syscall.h>
-#endif
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#endif
+#if defined(__linux__)
+#include <linux/openat2.h>
+#include <sys/syscall.h>
+#endif
+
+#if defined(_WIN32)
+#define CAPSID_FS_ISREG(mode) (((mode) & _S_IFREG) != 0)
+#define CAPSID_FS_ISDIR(mode) (((mode) & _S_IFDIR) != 0)
+#else
+#define CAPSID_FS_ISREG(mode) (S_ISREG(mode))
+#define CAPSID_FS_ISDIR(mode) (S_ISDIR(mode))
+#endif
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 #include <deque>
 #include <limits>
 #include <map>
@@ -113,7 +129,10 @@ static const uint64_t kPoisonGraceNs = 100 * 1000000ull;  // 100ms
 static const uint64_t kReclaimSettleWindowNs = 2 * 1000000000ull;  // 2s
 
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
-#ifdef MSG_NOSIGNAL
+#if defined(_WIN32)
+    // Winsock send() takes the raw SOCKET handle, not the CRT fd.
+    return capsid::win32::send_fd(fd, data, size, 0);
+#elif defined(MSG_NOSIGNAL)
     return send(fd, data, size, MSG_NOSIGNAL);
 #else
     return send(fd, data, size, 0);
@@ -164,8 +183,252 @@ const size_t kStorageEntryLimit = 256u;
 const size_t kStorageKeyLimit = 256u;
 const size_t kStorageValueLimit = 16u * 1024u;
 const size_t kStdioMessageLimit = 16u * 1024u;
+// Consumed by the capsid:fs permission module on Linux, macOS and Windows.
 const size_t kFsFileLimit = 1024u * 1024u;
 const size_t kFsDirectoryEntryLimit = 1024u;
+
+#if defined(_WIN32)
+// Windows fs paths use the canonical drive-letter absolute form
+// (C:/dir/file). Backslashes are accepted on input but normalized away, so
+// the policy compiler, capability policy and worker compare one canonical
+// string. Only drive-letter absolute paths are supported; UNC paths and
+// drive-relative paths fail closed.
+bool normalize_windows_fs_path(const std::string &input,
+                               std::string *normalized) {
+    if (input.size() < 3 ||
+        !std::isalpha(static_cast<unsigned char>(input[0])) ||
+        input[1] != ':' || (input[2] != '/' && input[2] != '\\')) {
+        return false;
+    }
+    std::vector<std::string> components;
+    std::size_t start = 3;
+    while (start <= input.size()) {
+        const std::size_t end = input.find_first_of("/\\", start);
+        const std::size_t component_end =
+            end == std::string::npos ? input.size() : end;
+        const std::string component = input.substr(
+            start, component_end - start);
+        if (component.empty() || component == ".") {
+            // Repeated separators normalize away.
+        } else if (component == "..") {
+            if (components.empty()) {
+                return false;
+            }
+            components.pop_back();
+        } else {
+            components.push_back(component);
+        }
+        if (component_end == input.size()) {
+            break;
+        }
+        start = component_end + 1;
+    }
+    std::string out;
+    out.push_back(static_cast<char>(
+        std::toupper(static_cast<unsigned char>(input[0]))));
+    out += ":/";
+    for (std::size_t index = 0; index < components.size(); ++index) {
+        if (index != 0) {
+            out.push_back('/');
+        }
+        out += components[index];
+    }
+    *normalized = std::move(out);
+    return true;
+}
+
+std::wstring windows_fs_wide(const std::string &utf8) {
+    const int size = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, utf8.c_str(), -1, nullptr, 0);
+    if (size <= 0) {
+        return {};
+    }
+    std::wstring wide(static_cast<std::size_t>(size - 1), L'\0');
+    MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, utf8.c_str(), -1,
+        &wide[0], size);
+    return wide;
+}
+
+std::string windows_fs_utf8(const std::wstring &wide) {
+    const int size = WideCharToMultiByte(
+        CP_UTF8, 0, wide.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (size <= 0) {
+        return {};
+    }
+    std::string utf8(static_cast<std::size_t>(size - 1), '\0');
+    WideCharToMultiByte(
+        CP_UTF8, 0, wide.c_str(), -1, &utf8[0], size, nullptr, nullptr);
+    return utf8;
+}
+
+// Opens a canonical Windows fs path without following any reparse point.
+// directory=true opens a directory handle, otherwise a read-only file
+// handle. On success the returned CRT fd owns the handle.
+int open_windows_read_path(const std::string &canonical_path,
+                           bool directory) {
+    std::string normalized;
+    if (!normalize_windows_fs_path(canonical_path, &normalized)) {
+        errno = EINVAL;
+        return -1;
+    }
+    std::wstring wide = windows_fs_wide(normalized);
+    if (wide.empty()) {
+        errno = EINVAL;
+        return -1;
+    }
+    for (wchar_t &character : wide) {
+        if (character == L'/') {
+            character = L'\\';
+        }
+    }
+    std::wstring current = wide.substr(0, 3);
+    const DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE |
+                        FILE_SHARE_DELETE;
+    const auto reject_reparse = [](HANDLE handle) -> bool {
+        FILE_ATTRIBUTE_TAG_INFO attributes = {};
+        if (!GetFileInformationByHandleEx(
+                handle, FileAttributeTagInfo, &attributes,
+                sizeof(attributes))) {
+            return true;
+        }
+        return (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+    };
+    HANDLE dir_handle = CreateFileW(
+        current.c_str(), FILE_LIST_DIRECTORY, share, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (dir_handle == INVALID_HANDLE_VALUE) {
+        errno = GetLastError() == ERROR_PATH_NOT_FOUND ||
+                        GetLastError() == ERROR_FILE_NOT_FOUND
+                    ? ENOENT
+                    : EACCES;
+        return -1;
+    }
+    if (reject_reparse(dir_handle)) {
+        CloseHandle(dir_handle);
+        errno = ELOOP;
+        return -1;
+    }
+    std::size_t begin = 3;
+    while (begin < wide.size()) {
+        const std::size_t end = wide.find(L'\\', begin);
+        const bool last = end == std::wstring::npos;
+        const std::wstring component = wide.substr(
+            begin, last ? std::wstring::npos : end - begin);
+        if (component.empty()) {
+            break;
+        }
+        if (!current.empty() && current.back() != L'\\') {
+            current.push_back(L'\\');
+        }
+        current += component;
+        const HANDLE next = CreateFileW(
+            current.c_str(),
+            last && !directory ? GENERIC_READ : FILE_LIST_DIRECTORY,
+            share, nullptr, OPEN_EXISTING,
+            (last && !directory ? FILE_ATTRIBUTE_NORMAL
+                                : FILE_FLAG_BACKUP_SEMANTICS) |
+                FILE_FLAG_OPEN_REPARSE_POINT,
+            nullptr);
+        if (next == INVALID_HANDLE_VALUE) {
+            const DWORD saved = GetLastError();
+            CloseHandle(dir_handle);
+            errno = saved == ERROR_PATH_NOT_FOUND ||
+                            saved == ERROR_FILE_NOT_FOUND
+                        ? ENOENT
+                        : EACCES;
+            return -1;
+        }
+        if (reject_reparse(next)) {
+            CloseHandle(next);
+            CloseHandle(dir_handle);
+            errno = ELOOP;
+            return -1;
+        }
+        if (!last) {
+            CloseHandle(dir_handle);
+            dir_handle = next;
+            begin = end + 1;
+            continue;
+        }
+        CloseHandle(dir_handle);
+        const int fd = _open_osfhandle(
+            reinterpret_cast<intptr_t>(next), _O_RDONLY | _O_BINARY);
+        if (fd < 0) {
+            CloseHandle(next);
+            errno = EMFILE;
+            return -1;
+        }
+        return fd;
+    }
+    // The canonical path was a drive root.
+    const int fd = _open_osfhandle(
+        reinterpret_cast<intptr_t>(dir_handle), _O_RDONLY | _O_BINARY);
+    if (fd < 0) {
+        CloseHandle(dir_handle);
+        errno = EMFILE;
+        return -1;
+    }
+    return fd;
+}
+
+bool list_windows_directory(const std::string &canonical_path,
+                            std::vector<std::string> *entries) {
+    const int fd = open_windows_read_path(canonical_path, true);
+    if (fd < 0) {
+        return false;
+    }
+    const HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+    const DWORD needed = GetFinalPathNameByHandleW(
+        handle, nullptr, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (needed == 0) {
+        _close(fd);
+        errno = EIO;
+        return false;
+    }
+    std::wstring directory(needed, L'\0');
+    const DWORD written = GetFinalPathNameByHandleW(
+        handle, &directory[0], needed,
+        FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (written == 0 || written > needed) {
+        _close(fd);
+        errno = EIO;
+        return false;
+    }
+    directory.resize(written);
+    _close(fd);
+    if (!directory.empty() && directory.back() != L'\\') {
+        directory.push_back(L'\\');
+    }
+    directory.push_back(L'*');
+    WIN32_FIND_DATAW find_data = {};
+    const HANDLE find = FindFirstFileW(directory.c_str(), &find_data);
+    if (find == INVALID_HANDLE_VALUE) {
+        errno = GetLastError() == ERROR_FILE_NOT_FOUND ? 0 : EIO;
+        return false;
+    }
+    do {
+        if (std::wcscmp(find_data.cFileName, L".") == 0 ||
+            std::wcscmp(find_data.cFileName, L"..") == 0) {
+            continue;
+        }
+        std::string name = windows_fs_utf8(find_data.cFileName);
+        if (name.empty()) {
+            FindClose(find);
+            errno = EINVAL;
+            return false;
+        }
+        entries->push_back(std::move(name));
+    } while (FindNextFileW(find, &find_data) != 0);
+    const DWORD saved = GetLastError();
+    FindClose(find);
+    if (saved != ERROR_NO_MORE_FILES) {
+        errno = EIO;
+        return false;
+    }
+    return true;
+}
+#endif
 
 bool is_utility_module(const char *name) {
     static const char *const modules[] = {
@@ -2668,7 +2931,11 @@ private:
             &frame.payload, static_cast<uint32_t>(decision));
         capsid::protocol::append_u64(
             &frame.payload,
+#if defined(_WIN32)
+            static_cast<uint64_t>(capsid::win32::getpid()));
+#else
             static_cast<uint64_t>(getpid()));
+#endif
         capsid::protocol::append_u32(&frame.payload, rule_id);
         capsid::protocol::append_u32(
             &frame.payload,
@@ -2715,7 +2982,12 @@ private:
                 continue;
             }
             uint8_t buffer[64 * 1024];
-            const ssize_t count = read(fd_, buffer, sizeof(buffer));
+            const ssize_t count =
+#if defined(_WIN32)
+                capsid::win32::read_fd(fd_, buffer, sizeof(buffer));
+#else
+                read(fd_, buffer, sizeof(buffer));
+#endif
             if (count > 0) {
                 if (!parser_.append(buffer, static_cast<size_t>(count))) {
                     return false;
@@ -2724,6 +2996,20 @@ private:
             }
             if (count < 0 && errno == EINTR) {
                 continue;
+            }
+            if (count < 0 && errno == EAGAIN) {
+                // The channel may arrive nonblocking on Windows before
+                // set_nonblocking() has been reached (line 532); wait for
+                // readability instead of treating the transient state as
+                // a dead worker.
+                capsid_pollfd descriptor = {};
+                descriptor.fd = fd_;
+                descriptor.events = POLLIN;
+                const int polled =
+                    capsid::win32::capsid_poll(&descriptor, 1, 2000);
+                if (polled > 0 && (descriptor.revents & POLLIN) != 0) {
+                    continue;
+                }
             }
             return false;
         }
@@ -2746,10 +3032,14 @@ private:
     }
 
     void set_nonblocking() {
+#if defined(_WIN32)
+        capsid::win32::set_socket_nonblocking(fd_);
+#else
         const int flags = fcntl(fd_, F_GETFL, 0);
         if (flags >= 0) {
             fcntl(fd_, F_SETFL, flags | O_NONBLOCK);
         }
+#endif
     }
 
     bool load_bridge_functions(std::string *error) {
@@ -3746,6 +4036,62 @@ private:
             path.c_str(),
             &how,
             sizeof(how)));
+#elif defined(__APPLE__)
+        // macOS has no openat2: reproduce the same no-symlink component
+        // semantics with a dirfd walk. Every intermediate component is
+        // opened O_NOFOLLOW|O_DIRECTORY and the final component is opened
+        // O_NOFOLLOW with the caller's flags, so a symlink anywhere in the
+        // path fails with ELOOP.
+        if (path.empty() || path[0] != '/') {
+            errno = EINVAL;
+            return -1;
+        }
+        if (path == "/") {
+            return open(
+                "/", flags | O_CLOEXEC | O_NONBLOCK);
+        }
+        int dir_fd = open("/", O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+        if (dir_fd < 0) {
+            return -1;
+        }
+        std::size_t begin = 1;
+        while (begin < path.size()) {
+            const std::size_t end = path.find('/', begin);
+            const std::string component = path.substr(
+                begin, end == std::string::npos ? std::string::npos
+                                                : end - begin);
+            const bool last = end == std::string::npos;
+            if (component.empty() || component == "." ||
+                component == "..") {
+                close(dir_fd);
+                errno = EINVAL;
+                return -1;
+            }
+            const int next = openat(
+                dir_fd,
+                component.c_str(),
+                (last ? flags : O_RDONLY | O_DIRECTORY) |
+                    O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+            const int saved = errno;
+            close(dir_fd);
+            if (next < 0) {
+                errno = saved;
+                return -1;
+            }
+            if (last) {
+                return next;
+            }
+            dir_fd = next;
+            begin = end + 1;
+        }
+        close(dir_fd);
+        errno = EINVAL;
+        return -1;
+#elif defined(_WIN32)
+        // Drive-letter canonical path opened without following any
+        // reparse point. O_DIRECTORY is handled by list_windows_directory.
+        (void)flags;
+        return open_windows_read_path(path, false);
 #else
         (void)path;
         (void)flags;
@@ -3769,6 +4115,17 @@ private:
         if (!to_bytes(ctx, argv[0], path)) {
             return false;
         }
+#if defined(_WIN32)
+        {
+            std::string normalized;
+            if (!normalize_windows_fs_path(*path, &normalized)) {
+                JS_ThrowRangeError(
+                    ctx, "invalid filesystem path");
+                return false;
+            }
+            *path = std::move(normalized);
+        }
+#endif
         *decision =
             g_worker->config_.capability_policy.query(
                 CAPSID_PERMISSION_READ, *path, 0);
@@ -3863,7 +4220,7 @@ private:
         }
         struct stat info = {};
         if (fstat(descriptor, &info) != 0 ||
-            !S_ISREG(info.st_mode)) {
+            !CAPSID_FS_ISREG(info.st_mode)) {
             const int saved =
                 errno == 0 ? EINVAL : errno;
             close(descriptor);
@@ -3892,10 +4249,19 @@ private:
             static_cast<size_t>(info.st_size));
         size_t offset = 0;
         while (offset < contents.size()) {
+#if defined(_WIN32)
+            // MSVC read() takes an unsigned int count; the 1 MiB cap keeps
+            // the cast lossless.
+            const ssize_t count = read(
+                descriptor,
+                &contents[offset],
+                static_cast<unsigned int>(contents.size() - offset));
+#else
             const ssize_t count = read(
                 descriptor,
                 &contents[offset],
                 contents.size() - offset);
+#endif
             if (count > 0) {
                 offset += static_cast<size_t>(count);
                 continue;
@@ -3939,8 +4305,8 @@ private:
         }
         struct stat info = {};
         if (fstat(descriptor, &info) != 0 ||
-            (!S_ISREG(info.st_mode) &&
-             !S_ISDIR(info.st_mode))) {
+            (!CAPSID_FS_ISREG(info.st_mode) &&
+             !CAPSID_FS_ISDIR(info.st_mode))) {
             const int saved =
                 errno == 0 ? EINVAL : errno;
             close(descriptor);
@@ -3953,7 +4319,7 @@ private:
             return result;
         }
         const char *type =
-            S_ISDIR(info.st_mode) ? "directory" : "file";
+            CAPSID_FS_ISDIR(info.st_mode) ? "directory" : "file";
         if (JS_DefinePropertyValueStr(
                 ctx,
                 result,
@@ -3986,6 +4352,17 @@ private:
                 ctx, argc, argv, &path, &decision)) {
             return JS_EXCEPTION;
         }
+        std::vector<std::string> entries;
+#if defined(_WIN32)
+        if (!list_windows_directory(path, &entries)) {
+            if (errno == 0) {
+                entries.clear();
+            } else {
+                return fs_open_error(
+                    ctx, path, decision, errno);
+            }
+        }
+#else
         const int descriptor =
             open_read_path(path, O_RDONLY | O_DIRECTORY);
         if (descriptor < 0) {
@@ -3999,7 +4376,6 @@ private:
             return fs_open_error(
                 ctx, path, decision, saved);
         }
-        std::vector<std::string> entries;
         errno = 0;
         for (;;) {
             struct dirent *entry = readdir(directory);
@@ -4010,22 +4386,6 @@ private:
                 std::strcmp(entry->d_name, "..") == 0) {
                 continue;
             }
-            if (entries.size() >=
-                kFsDirectoryEntryLimit) {
-                closedir(directory);
-                g_worker->emit_audit(
-                    CAPSID_AUDIT_STAGE_OPERATION,
-                    CAPSID_AUDIT_DENY,
-                    g_worker->active_request_id(),
-                    decision.rule_id,
-                    "capsid:fs",
-                    "read",
-                    "path",
-                    path);
-                return JS_ThrowRangeError(
-                    ctx,
-                    "filesystem directory exceeds 1024 entries");
-            }
             entries.push_back(entry->d_name);
         }
         const int read_error = errno;
@@ -4033,6 +4393,21 @@ private:
         if (read_error != 0) {
             return fs_open_error(
                 ctx, path, decision, read_error);
+        }
+#endif
+        if (entries.size() > kFsDirectoryEntryLimit) {
+            g_worker->emit_audit(
+                CAPSID_AUDIT_STAGE_OPERATION,
+                CAPSID_AUDIT_DENY,
+                g_worker->active_request_id(),
+                decision.rule_id,
+                "capsid:fs",
+                "read",
+                "path",
+                path);
+            return JS_ThrowRangeError(
+                ctx,
+                "filesystem directory exceeds 1024 entries");
         }
         std::sort(entries.begin(), entries.end());
         JSValue result = JS_NewArray(ctx);
@@ -4380,16 +4755,56 @@ private:
 
     // --- Binding v1 dual runtime (§5) -----------------------------------
 
-    // The Binding Runtime module gate: an import is authorized only when
-    // the binding currently initializing (or executing) granted it. The
-    // upstream loader then serves it; everything else fails at
-    // normalization before any code loads.
+    static bool binding_implementation_module(
+        const std::string &public_name,
+        std::string *implementation_name) {
+        if (!capsid::binding_module_known(public_name) ||
+            public_name.compare(0, 7, "capsid:") != 0) {
+            return false;
+        }
+        *implementation_name = "tjs:" + public_name.substr(7);
+        return true;
+    }
+
+    // TJS bytecode retains its upstream internal import names. Only these
+    // audited dependency edges may cross the private alias boundary; package
+    // source itself can name only the public capsid:* side.
+    static bool binding_internal_dependency(
+        const char *base_name,
+        const std::string &requested_name,
+        std::string *public_name) {
+        struct Dependency {
+            const char *base;
+            const char *requested;
+            const char *public_alias;
+        };
+        static const Dependency dependencies[] = {
+            {"tjs:hashing", "tjs:internal/core", "capsid:internal/core"},
+            {"tjs:path", "tjs:internal/path", "capsid:internal/path"},
+            {"tjs:sqlite", "tjs:internal/core", "capsid:internal/core"},
+            {"tjs:wasi", "tjs:internal/core", "capsid:internal/core"},
+        };
+        if (base_name == nullptr) {
+            return false;
+        }
+        for (const Dependency &dependency : dependencies) {
+            if (std::strcmp(base_name, dependency.base) == 0 &&
+                requested_name == dependency.requested) {
+                *public_name = dependency.public_alias;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The Binding Runtime module gate authorizes the public Capsid name, then
+    // normalizes it to the private TJS implementation module. The package
+    // contract and policy never contain tjs:* names.
     static char *binding_normalize_module(
         JSContext *ctx,
         const char *base_name,
         const char *name,
         void *opaque) {
-        (void)base_name;
         WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
         const std::string module = name ? name : "";
         // Linking needs the package identity, but that identity must never
@@ -4401,15 +4816,26 @@ private:
                 : self->current_binding_id_;
         const capsid::BindingPolicy *policy =
             self->binding_policies_.policy(binding_id);
-        if (policy == NULL ||
-            policy->module_decision(module) != capsid::kModuleGranted) {
+        std::string public_module = module;
+        std::string implementation_module;
+        const bool public_import = binding_implementation_module(
+            module, &implementation_module);
+        const bool internal_dependency = !public_import &&
+            binding_internal_dependency(
+                base_name, module, &public_module);
+        if (internal_dependency) {
+            implementation_module = module;
+        }
+        if ((!public_import && !internal_dependency) || policy == NULL ||
+            policy->module_decision(public_module) !=
+                capsid::kModuleGranted) {
             JS_ThrowReferenceError(
                 ctx,
                 "module is not authorized for this binding: %s",
                 module.c_str());
             return NULL;
         }
-        return js_strdup(ctx, module.c_str());
+        return js_strdup(ctx, implementation_module.c_str());
     }
 
     static JSModuleDef *binding_module_load(
@@ -4418,8 +4844,9 @@ private:
         void *opaque,
         JSValueConst attributes) {
         (void)opaque;
-        // The normalization gate already authorized the name; the upstream
-        // loader serves tjs:internal/core and the builtin bytecode modules.
+        // Normalization already authorized the public alias or an audited
+        // internal dependency edge. The upstream loader sees only its private
+        // implementation name.
         return tjs_module_loader(ctx, name, NULL, attributes);
     }
 
@@ -6098,7 +6525,12 @@ private:
         PhaseGuard guard(this, WorkerPhase::kRead);
         uint8_t buffer[64 * 1024];
         for (;;) {
-            const ssize_t count = read(fd_, buffer, sizeof(buffer));
+            const ssize_t count =
+#if defined(_WIN32)
+                capsid::win32::read_fd(fd_, buffer, sizeof(buffer));
+#else
+                read(fd_, buffer, sizeof(buffer));
+#endif
             if (count > 0) {
                 if (!parser_.append(buffer, static_cast<size_t>(count))) {
                     shutdown();

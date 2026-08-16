@@ -4,16 +4,20 @@
 // entries, opened objects, final names, and directory contents are checked
 // against the same dev/ino snapshots, so rename/replace races fail closed.
 
+#include "win32_compat.h"
+
 #include "host/binding_registry.h"
 
 #include "host/config.h"
 #include "host/generation_identity.h"
 
-#include <dirent.h>
 #include <errno.h>
+#if !defined(_WIN32)
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <cstdint>
@@ -23,6 +27,7 @@
 #include <vector>
 
 namespace capsid::host {
+#if !defined(_WIN32)
 namespace {
 
 class ScopedFd {
@@ -243,7 +248,7 @@ bool read_whole_file_at(int parent_fd,
 }
 
 bool scan_bindings_root_impl(const std::string &root,
-                             const std::vector<uid_t> &allowed_uids,
+                             const std::vector<BindingOwnerId> &allowed_uids,
                              const BindingRegistryScanHook &hook,
                              BindingRegistrySnapshot *out,
                              std::string *error) {
@@ -425,21 +430,40 @@ bool scan_bindings_root_impl(const std::string &root,
 }
 
 }  // namespace
+#endif
 
 bool scan_bindings_root(const std::string &root,
-                        const std::vector<uid_t> &allowed_uids,
+                        const std::vector<BindingOwnerId> &allowed_uids,
                         BindingRegistrySnapshot *out,
                         std::string *error) {
+#if defined(_WIN32)
+    (void)allowed_uids;
+    if (out != nullptr) {
+        out->packages.clear();
+    }
+    if (error != nullptr) {
+        *error = root +
+                 " cannot be used as bindingsRoot on Windows (secure "
+                 "reparse-point/ACL scanning is not implemented)";
+    }
+    return false;
+#else
     return scan_bindings_root_impl(root, allowed_uids, {}, out, error);
+#endif
 }
 
 bool scan_bindings_root_with_test_hook(
     const std::string &root,
-    const std::vector<uid_t> &allowed_uids,
+    const std::vector<BindingOwnerId> &allowed_uids,
     const BindingRegistryScanHook &hook,
     BindingRegistrySnapshot *out,
     std::string *error) {
+#if defined(_WIN32)
+    (void)hook;
+    return scan_bindings_root(root, allowed_uids, out, error);
+#else
     return scan_bindings_root_impl(root, allowed_uids, hook, out, error);
+#endif
 }
 
 }  // namespace capsid::host

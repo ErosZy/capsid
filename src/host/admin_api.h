@@ -7,7 +7,17 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#if defined(_WIN32)
+// The admin plane is not built on Windows (docs/windows.md); these
+// typedefs keep the option structs parseable for the portable core
+// sources that share this header (sys/types.h on MSVC has no
+// mode_t/gid_t/uid_t).
+typedef unsigned int mode_t;
+typedef unsigned int gid_t;
+typedef unsigned int uid_t;
+#else
 #include <sys/types.h>
+#endif
 
 namespace capsid::host {
 

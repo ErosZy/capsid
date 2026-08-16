@@ -2,13 +2,33 @@
 #include "egress_test_policy.h"
 #include "graceful_worker_exit.h"
 
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <arpa/inet.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <netinet/in.h>
-#include <poll.h>
+#endif
+#include "win32_compat.h"
 #include <signal.h>
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <sys/socket.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <sys/wait.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
 #include <unistd.h>
+#endif
 
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
@@ -84,7 +104,7 @@ std::string read_file(const char *path) {
 }
 
 uint16_t unused_port() {
-    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    const int fd = capsid::win32::create_tcp_socket_fd();
     if (fd < 0) {
         fail("cannot create TLS port socket");
     }
@@ -92,13 +112,13 @@ uint16_t unused_port() {
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
-    if (bind(fd, reinterpret_cast<const struct sockaddr *>(&address),
+    if (capsid::win32::bind_fd(fd, reinterpret_cast<const struct sockaddr *>(&address),
              sizeof(address)) != 0) {
         close(fd);
         fail("cannot bind TLS port socket");
     }
     socklen_t size = sizeof(address);
-    if (getsockname(fd, reinterpret_cast<struct sockaddr *>(&address), &size) != 0) {
+    if (capsid::win32::getsockname_fd(fd, reinterpret_cast<struct sockaddr *>(&address), &size) != 0) {
         close(fd);
         fail("cannot resolve TLS test port");
     }
@@ -113,8 +133,52 @@ public:
                         const char *certificate,
                         const char *private_key,
                         uint16_t port)
-        : pid_(-1) {
+        : pid_(-1)
+#if defined(_WIN32)
+          ,
+          process_handle_(NULL)
+#endif
+    {
         const std::string port_text = std::to_string(port);
+#if defined(_WIN32)
+        // CreateProcess launches the same s_server CLI surface and keeps
+        // the process handle for exit-code probing.
+        std::vector<std::string> arg_storage;
+        auto push_arg = [&arg_storage](const std::string& value) {
+            arg_storage.push_back(value);
+        };
+        push_arg(openssl_path);
+        push_arg("s_server");
+        push_arg("-accept");
+        push_arg(port_text);
+        push_arg("-cert");
+        push_arg(certificate);
+        push_arg("-key");
+        push_arg(private_key);
+        push_arg("-tls1_2");
+        push_arg("-sigalgs");
+        push_arg("rsa_pss_rsae_sha256");
+        push_arg("-www");
+        push_arg("-quiet");
+        std::string command_line;
+        for (const std::string& argument : arg_storage) {
+            command_line += "\"" + argument + "\" ";
+        }
+        STARTUPINFOA startup;
+        std::memset(&startup, 0, sizeof(startup));
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process;
+        std::memset(&process, 0, sizeof(process));
+        if (!CreateProcessA(
+                NULL, &command_line[0], NULL, NULL, TRUE, 0, NULL, NULL,
+                &startup, &process)) {
+            fail(std::string("cannot launch OpenSSL TLS test server: ") +
+                 std::to_string(GetLastError()));
+        }
+        pid_ = static_cast<pid_t>(process.dwProcessId);
+        process_handle_ = process.hProcess;
+        CloseHandle(process.hThread);
+#else
         pid_ = fork();
         if (pid_ == 0) {
             execl(openssl_path,
@@ -139,22 +203,21 @@ public:
             fail(std::string("cannot launch OpenSSL TLS test server: ") +
                  std::strerror(errno));
         }
+#endif
 
         for (int attempt = 0; attempt < 100; ++attempt) {
-            int status = 0;
-            if (waitpid(pid_, &status, WNOHANG) == pid_) {
-                pid_ = -1;
+            if (server_exited_early()) {
                 fail(std::string("OpenSSL TLS test server exited early: ") +
-                     std::to_string(status));
+                     std::to_string(child_exit_code()));
             }
 
-            const int probe = socket(AF_INET, SOCK_STREAM, 0);
+            const int probe = capsid::win32::create_tcp_socket_fd();
             if (probe >= 0) {
                 struct sockaddr_in address = {};
                 address.sin_family = AF_INET;
                 address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
                 address.sin_port = htons(port);
-                const int connected = connect(
+                const int connected = capsid::win32::connect_fd(
                     probe,
                     reinterpret_cast<const struct sockaddr *>(&address),
                     sizeof(address));
@@ -175,18 +238,53 @@ public:
     ~OpenSslRsaPssServer() { stop(); }
 
 private:
+#if defined(_WIN32)
+    DWORD child_exit_code() {
+        DWORD exit_code = 0;
+        GetExitCodeProcess(process_handle_, &exit_code);
+        return exit_code;
+    }
+#else
+    int child_exit_code() {
+        return 0;
+    }
+#endif
+
+    bool server_exited_early() {
+#if defined(_WIN32)
+        return WaitForSingleObject(process_handle_, 0) == WAIT_OBJECT_0;
+#else
+        int status = 0;
+        if (waitpid(pid_, &status, WNOHANG) == pid_) {
+            pid_ = -1;
+            return true;
+        }
+        return false;
+#endif
+    }
+
     void stop() {
         if (pid_ <= 0) {
             return;
         }
+#if defined(_WIN32)
+        TerminateProcess(process_handle_, 1);
+        WaitForSingleObject(process_handle_, 5000);
+        CloseHandle(process_handle_);
+        process_handle_ = NULL;
+#else
         kill(pid_, SIGTERM);
         int status = 0;
         while (waitpid(pid_, &status, 0) < 0 && errno == EINTR) {
         }
+#endif
         pid_ = -1;
     }
 
     pid_t pid_;
+#if defined(_WIN32)
+    HANDLE process_handle_;
+#endif
 };
 
 class MbedTlsServer {
@@ -253,7 +351,13 @@ public:
     ~MbedTlsServer() {
         stopping_ = true;
         if (listener_.fd >= 0) {
-            shutdown(listener_.fd, SHUT_RDWR);
+#if defined(_WIN32)
+            // mbedtls_net_context.fd is a raw SOCKET on Windows, not a
+            // CRT descriptor — the fd wrappers must not touch it.
+            shutdown(static_cast<SOCKET>(listener_.fd), SD_BOTH);
+#else
+            capsid::win32::shutdown_fd(listener_.fd);
+#endif
         }
         mbedtls_net_free(&listener_);
         if (thread_.joinable()) {
@@ -390,10 +494,10 @@ uint32_t wait_for_ready(capsid_worker *worker) {
             std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for TLS worker READY");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
@@ -453,10 +557,10 @@ Result run_request(capsid_worker *worker, uint64_t id, const std::string &url) {
             std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for TLS response");
         }
-        struct pollfd descriptor = {};
+        capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
-        poll(&descriptor, 1, 50);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 

@@ -1,6 +1,8 @@
 #ifndef CAPSID_HOST_SINGLE_WORKER_SERVER_H
 #define CAPSID_HOST_SINGLE_WORKER_SERVER_H
 
+#include <boost/asio/ip/tcp.hpp>
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -10,6 +12,8 @@ namespace capsid::host {
 
 class StructuredLog;
 class MetricsRegistry;
+struct BindingRegistrySnapshot;
+struct LocalCapsidPolicy;
 
 // Defined in single_worker_server.cc; the server keeps it behind a shared
 // pointer so the header exposes no Boost or worker-Runtime types.
@@ -40,6 +44,12 @@ struct SingleWorkerServerOptions {
     bool write_ready_record = true;
     bool install_process_signals = true;
     bool so_reuseport = false;
+    // External-accept mode (Windows multi-shard static-pool): the shard
+    // spawns its worker and runs its session reactor, but does NOT bind or
+    // accept a listener. The pool owns the single shared acceptor and hands
+    // accepted sockets in through adopt_socket(). Mutually exclusive with
+    // defer_accept and so_reuseport.
+    bool external_accept = false;
     // Pool barrier mode: the listener is bound and the worker is READY,
     // but the server does NOT accept connections until activate_accept()
     // is called. The pool starts every shard "prepared but not accepting"
@@ -77,6 +87,20 @@ struct SingleWorkerServerOptions {
     // (design §12). Null disables event logging/metrics on this path.
     StructuredLog* log = nullptr;
     MetricsRegistry* metrics = nullptr;
+    // v0.1.3 local capsid.json permissions (--capsid-json). Defaults to
+    // ./capsid.json; a missing default file is a no-op (the deny-all
+    // defaults stay), while capsid_json_required=true (an explicit
+    // --capsid-json) fails startup when the file is missing.
+    std::string capsid_json_path = "capsid.json";
+    bool capsid_json_required = false;
+    // Binding development in local data-plane modes. The CLI constructs
+    // this immutable Host Registry from an explicit --bindings-root. A
+    // capsid.json Binding declaration without one fails closed.
+    std::shared_ptr<const BindingRegistrySnapshot> binding_registry;
+    // Internal pool hand-off: static-pool loads and compiles capsid.json
+    // exactly once, then shares the same immutable result with every shard.
+    // Direct single-worker callers normally leave this empty.
+    std::shared_ptr<const LocalCapsidPolicy> prepared_local_policy;
 };
 
 // M1A single-worker Host data plane: one Boost.Asio io_context owner, one
@@ -133,6 +157,12 @@ public:
     // startup failure; false otherwise. Lets a pool report its live
     // capacity (N → N−1 on a worker fault) without caching.
     bool worker_available() const;
+
+    // External-accept mode only: hands an already-accepted, owned Asio
+    // socket to this shard's io thread. Returns false when the shard is not
+    // running or cannot take the connection; on false the socket is closed
+    // by the caller's move (or by its destructor).
+    bool adopt_socket(boost::asio::ip::tcp::socket socket);
 
     // M2 §7.5 bounded drain. Once the new pool has been published, the old
     // pool begins draining: the listener stops accepting new connections

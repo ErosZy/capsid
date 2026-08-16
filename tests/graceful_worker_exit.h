@@ -3,8 +3,12 @@
 
 #include "capsid/runtime.h"
 
+#if defined(_WIN32)
+#include "win32_compat.h"
+#else
 #include <sys/types.h>
 #include <sys/wait.h>
+#endif
 
 #include <cerrno>
 #include <chrono>
@@ -57,6 +61,27 @@ inline GracefulWorkerExit shutdown_and_wait(
             }
         }
 
+#if defined(_WIN32)
+        // The ABI exposes the numeric pid only; open a minimal handle to
+        // observe the natural exit (destroy still owns the reap).
+        HANDLE process = OpenProcess(
+            SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            FALSE,
+            static_cast<DWORD>(worker_pid));
+        if (process == NULL) {
+            result.wait_error = EINVAL;
+            return result;
+        }
+        if (WaitForSingleObject(process, 0) == WAIT_OBJECT_0) {
+            DWORD exit_code = 0;
+            GetExitCodeProcess(process, &exit_code);
+            CloseHandle(process);
+            result.reaped = true;
+            result.status = static_cast<int>(exit_code);
+            return result;
+        }
+        CloseHandle(process);
+#else
         int status = 0;
         const pid_t waited =
             waitpid(static_cast<pid_t>(worker_pid), &status, WNOHANG);
@@ -69,6 +94,7 @@ inline GracefulWorkerExit shutdown_and_wait(
             result.wait_error = errno;
             return result;
         }
+#endif
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     return result;

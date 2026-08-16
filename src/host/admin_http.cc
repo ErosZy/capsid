@@ -15,10 +15,13 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 
+#include "win32_compat.h"
+
+#if !defined(_WIN32)
 #include <fcntl.h>
-#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 
 #include <cerrno>
 #include <chrono>
@@ -76,7 +79,7 @@ std::string http_error_body(const char* message) {
 // Waits up to timeout_ms for the fd to become writable or readable.
 // Returns 1 on ready, 0 on timeout, -1 on error (EINTR retried).
 int wait_fd(int fd, short events, std::uint32_t timeout_ms) {
-    struct pollfd descriptor = {};
+    capsid_pollfd descriptor = {};
     descriptor.fd = fd;
     descriptor.events = events;
     // poll() takes a signed int timeout while the public Admin options use
@@ -84,7 +87,8 @@ int wait_fd(int fd, short events, std::uint32_t timeout_ms) {
     // a negative timeout (which poll interprets as "wait forever").
     const int poll_timeout = poll_timeout_ms(timeout_ms);
     for (;;) {
-        const int result = poll(&descriptor, 1, poll_timeout);
+        const int result =
+            capsid::win32::capsid_poll(&descriptor, 1, poll_timeout);
         if (result >= 0) {
             return result;
         }
@@ -120,8 +124,13 @@ bool write_all_bounded(int fd, const std::string& bytes,
 #else
         constexpr int send_flags = 0;
 #endif
+#if defined(_WIN32)
+        const ssize_t count = capsid::win32::send_fd(
+            fd, bytes.data() + offset, bytes.size() - offset, send_flags);
+#else
         const ssize_t count = send(fd, bytes.data() + offset,
                                    bytes.size() - offset, send_flags);
+#endif
         if (count < 0 && errno == EINTR) {
             continue;
         }
@@ -388,7 +397,11 @@ bool serve_one_admin_http_connection(int listener_fd,
                                      AdminBackend* backend,
                                      std::string* error) {
     // One Unix connection; the listener stays owned by the caller.
+#if defined(_WIN32)
+    const int fd = capsid::win32::accept_fd(listener_fd);
+#else
     const int fd = accept(listener_fd, nullptr, nullptr);
+#endif
     if (fd < 0) {
         if (error != nullptr) {
             *error = "cannot accept admin connection";

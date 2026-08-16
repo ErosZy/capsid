@@ -452,7 +452,7 @@ void test_binding_startup_state_machine() {
         "mongo",
         R"json({"database":"orders"})json",
         {{"password", "s3cr3t"}},
-        {"tjs:internal/core", "tjs:utils"},
+        {"capsid:internal/core", "capsid:utils"},
         {"network-client"},
         {"127.0.0.1:27017"},
         {"/etc/capsid/mongo"},
@@ -497,8 +497,8 @@ void test_binding_startup_state_machine() {
         require(binding.name == "mongo", "binding name decoded wrong");
         require(
             binding.modules.size() == 2 &&
-                binding.modules[0] == "tjs:internal/core" &&
-                binding.modules[1] == "tjs:utils",
+                binding.modules[0] == "capsid:internal/core" &&
+                binding.modules[1] == "capsid:utils",
             "binding modules decoded wrong");
         require(
             binding.config_json == R"json({"database":"orders"})json",
@@ -647,7 +647,7 @@ void test_binding_startup_state_machine() {
     }
     {
         const std::vector<uint8_t> dup_module = binding_blob(
-            "mongo", "{}", {}, {"tjs:utils", "tjs:utils"}, {}, {}, {}, {},
+            "mongo", "{}", {}, {"capsid:utils", "capsid:utils"}, {}, {}, {}, {},
             {}, {}, "x");
         capsid::WorkerStartupState state;
         std::string error;

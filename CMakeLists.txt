@@ -1,15 +1,65 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(capsid_runtime VERSION 0.1.1 LANGUAGES C CXX)
+project(capsid_runtime VERSION 0.2.0 LANGUAGES C CXX)
 
 include(CTest)
 include(GNUInstallDirs)
+
+if(WIN32 AND NOT MSVC)
+    message(FATAL_ERROR
+        "Capsid builds on Windows with MSVC only: the Ninja generator "
+        "otherwise picks mingw gcc off PATH, which cannot build the "
+        "CRT/winsock port. Pass -DCMAKE_C_COMPILER=cl "
+        "-DCMAKE_CXX_COMPILER=cl alongside -G Ninja.")
+endif()
+
+if(MSVC)
+    # Static CRT everywhere: the vendored txiki.js build pins
+    # CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreaded (its CMakeLists.txt line
+    # 23), and vcpkg's x64-windows-static triplet links /MT libraries, so
+    # mixing in the default /MD runtime would fail at link time with
+    # LNK2038 mismatches. Capsid's Windows package is fully static for the
+    # same self-containment reason as the musl Linux package.
+    cmake_policy(SET CMP0091 NEW)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    # Every project and vendored source is UTF-8 (comments include
+    # em-dashes etc.). MSVC otherwise assumes the ANSI codepage, and C4819
+    # becomes a hard error under /WX on non-Western-locale machines.
+    add_compile_options(/utf-8)
+    # single_worker_server.cc is compiled into ~20 host/test targets; in
+    # Debug, MSVC emits one COMDAT section per inline function and blows
+    # past the default 2^16-section object limit (C1128). /bigobj lifts
+    # the limit and is inert for ordinary TUs.
+    add_compile_options(/bigobj)
+    # The portability layer deliberately uses the POSIX-named CRT entry
+    # points (open/read/write/close/...); without these defines every
+    # such call warns C4996 and fails /WX. The secure-CRT deprecations
+    # (fopen/strcpy families) are suppressed too: this codebase is a
+    # POSIX port with explicit bounds checking and never relied on the
+    # ISO-secure variants; warning-level correctness still gates through
+    # /W4 /WX.
+    add_compile_definitions(
+        _CRT_NONSTDC_NO_DEPRECATE
+        _CRT_SECURE_NO_DEPRECATE
+    )
+endif()
 
 option(CAPSID_BUILD_WORKER "Build the txiki.js worker process" ON)
 option(CAPSID_BUILD_HOST "Build the first-party Capsid Host" OFF)
 option(CAPSID_STRICT_WARNINGS "Treat Capsid Runtime warnings as errors" ON)
 option(CAPSID_USE_MIMALLOC "Use mimalloc for the txiki.js worker" OFF)
 option(CAPSID_ENABLE_LTO "Enable interprocedural optimization for production targets" ON)
+if(WIN32 AND CAPSID_ENABLE_LTO)
+    # MSVC /GL binds operator new/delete at compile time, so replaceable
+    # global overrides — which the ABI guard tests use to inject
+    # allocation failures — no longer intercept allocations in IPO'd
+    # translation units. Disable IPO on Windows to keep that contract
+    # testable (GCC/Clang preserve the replaceable symbols under LTO).
+    set(CAPSID_ENABLE_LTO OFF CACHE BOOL
+        "Enable interprocedural optimization for production targets" FORCE)
+    message(STATUS "Disabling CAPSID_ENABLE_LTO on Windows (MSVC /GL binds "
+        "replaceable operator new/delete)")
+endif()
 option(CAPSID_ENABLE_ASAN "Build all runtime targets with AddressSanitizer" OFF)
 option(CAPSID_ENABLE_UBSAN "Build all runtime targets with UndefinedBehaviorSanitizer" OFF)
 option(CAPSID_ENABLE_TSAN "Build all runtime targets with ThreadSanitizer" OFF)
@@ -173,6 +223,11 @@ add_library(capsid_runtime STATIC
 add_library(capsid::runtime ALIAS capsid_runtime)
 set_target_properties(capsid_runtime PROPERTIES OUTPUT_NAME capsid_runtime)
 target_link_libraries(capsid_runtime PUBLIC capsid_sanitizers)
+if(WIN32)
+    # egress_policy uses inet_pton/ntohs; every consumer of the runtime
+    # (host, tests, embedders) must carry the Winsock import library.
+    target_link_libraries(capsid_runtime PUBLIC ws2_32)
+endif()
 if(CAPSID_ENABLE_LTO)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT CAPSID_IPO_SUPPORTED OUTPUT CAPSID_IPO_ERROR)

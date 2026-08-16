@@ -29,7 +29,7 @@ using capsid::host::scan_bindings_root;
 using capsid::host::scan_bindings_root_with_test_hook;
 
 constexpr char kValidManifest[] =
-    R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["tjs:internal/core","tjs:utils"],"net":{"allow":["*:27017"]}}})json";
+    R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["capsid:internal/core","capsid:utils"],"net":{"allow":["*:27017"]}}})json";
 
 [[noreturn]] void fail(const std::string &message) {
     std::cerr << "test-host-binding-registry: " << message << std::endl;
@@ -464,7 +464,7 @@ void test_manifest_content_is_validated() {
             "fixture: mkdir failed");
     fixture2.write(
         fixture2.package("mongo") + "/manifest.json",
-        R"json({"apiVersion":"capsid/binding-v9","permissions":{"modules":["tjs:utils"]}})json");
+        R"json({"apiVersion":"capsid/binding-v9","permissions":{"modules":["capsid:utils"]}})json");
     fixture2.write(fixture2.package("mongo") + "/index.js",
                    "export default () => ({});");
     fixture2.require_scan_fail(current_uid_only(), "manifest",
@@ -482,7 +482,7 @@ void test_snapshot_is_immutable() {
     const std::string digest_before = snapshot.packages[0].manifest_digest;
     const std::string manifest_before = snapshot.packages[0].manifest_json;
     fixture.write(fixture.package("mongo") + "/manifest.json",
-                  R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["tjs:utils"]}})json");
+                  R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"]}})json");
     require(snapshot.packages[0].manifest_json == manifest_before,
             "snapshot bytes changed after the file was rewritten");
     require(snapshot.packages[0].manifest_digest == digest_before,
