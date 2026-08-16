@@ -38,22 +38,37 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的**进程隔离 
 不等于该平台具备 Linux strict sandbox 同等的生产隔离。三平台差异是本项目
 最重要的部署决策因素，请在选型时先阅读[平台支持总览](docs/platform-support.md)。
 
-| 平台 | 原生构建与开发 | 生产隔离 | 关键差异与限制 |
-| --- | --- | --- | --- |
-| **Linux**（x86-64 / AArch64） | ✅ 完整 | ✅ strict sandbox（v1 生产目标） | 唯一具备 seccomp、Landlock、namespace、cgroup 完整隔离的平台；详见 [Linux 严格沙箱](docs/linux-sandbox.md) |
-| **macOS** | ✅ 完整 | ❌ 无等价隔离，生产请用 Linux 容器/VM | Runtime、worker、字节码编译器与 single-worker/static-pool Host 可用；`capsid:fs` 不可用；`strict_sandbox` 与 managed Host 无法提供有效隔离 |
-| **Windows**（x86-64，MSVC） | ✅ 自 v0.1.2 起 | ❌ 无等价隔离，生产请用 Linux 容器/WSL2 | Runtime、worker、字节码编译器与 single-worker/**单 shard** static-pool Host 可用；多 shard 池（SO_REUSEPORT）、managed Host、`capsid:fs`、strict sandbox 不可用；详见 [Windows 构建与平台能力](docs/windows.md) |
+### Linux（x86-64 / AArch64）
 
-统一结论：
+- **原生开发**：完整 ✅
+- **生产隔离**：完整 ✅ —— 唯一具备 strict sandbox（seccomp、Landlock、
+  namespace、cgroup）的平台，是 v1 的生产发布目标
+- 详见 [Linux 严格沙箱](docs/linux-sandbox.md)
 
-- **开发、联调、benchmark**：三平台均可；
-- **运行不可信代码的生产隔离**：只承诺 Linux；
-- **macOS/Windows 上的生产一致性**：在 Linux 容器或 VM 中运行。
+### macOS
 
-完整的能力矩阵、构建前置条件和测试覆盖差异见
-[平台支持总览](docs/platform-support.md)、
-[Windows 构建与平台能力](docs/windows.md) 与
-[Linux 严格沙箱](docs/linux-sandbox.md)。
+- **原生开发**：完整 ✅ —— Runtime、worker、字节码编译器与
+  single-worker/static-pool Host 可用
+- **生产隔离**：无 ❌ —— 没有等价隔离，生产请使用 Linux 容器或 VM
+- `capsid:fs` 不可用；`strict_sandbox` 与 managed Host 无法提供有效隔离
+
+### Windows（x86-64，MSVC）
+
+- **原生开发**：自 v0.1.2 起 ✅ —— Runtime、worker、字节码编译器与
+  single-worker/**单 shard** static-pool Host 可用
+- **生产隔离**：无 ❌ —— 生产请使用 Linux 容器或 WSL2
+- 多 shard 池（依赖 SO_REUSEPORT）、managed Host、`capsid:fs` 与
+  strict sandbox 不可用
+- 详见 [Windows 构建与平台能力](docs/windows.md)
+
+**统一结论：**
+
+- 开发、联调、benchmark：三平台均可；
+- 运行不可信代码的生产隔离：只承诺 Linux；
+- macOS/Windows 上的生产一致性：在 Linux 容器或 VM 中运行。
+
+完整能力矩阵、构建前置条件和测试覆盖差异见
+[平台支持总览](docs/platform-support.md)。
 
 ---
 
@@ -253,11 +268,11 @@ Host 上限与应用 `capsid.json` 申请取交集，应用不能扩大 Host 权
 
 当前公共模块如下；每一个都必须显式授权：
 
-| 类别 | 模块 |
-| --- | --- |
-| 受策略约束 | `capsid:env`、`capsid:fs`、`capsid:stdio`、`capsid:storage`、`capsid:system` |
-| 权限查询 | `capsid:permissions` |
-| 纯工具 | `capsid:assert`、`capsid:getopts`、`capsid:hashing`、`capsid:ipaddr`、`capsid:utils`、`capsid:uuid` |
+- **受策略约束**：`capsid:env`、`capsid:fs`、`capsid:stdio`、
+  `capsid:storage`、`capsid:system`
+- **权限查询**：`capsid:permissions`
+- **纯工具**：`capsid:assert`、`capsid:getopts`、`capsid:hashing`、
+  `capsid:ipaddr`、`capsid:utils`、`capsid:uuid`
 
 ### `tjs:*` 不能通过配置开放
 

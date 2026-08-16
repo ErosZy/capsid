@@ -6,17 +6,33 @@
 
 ## 按任务查找
 
-| 你想做什么 | 从这里开始 | 深入阅读 |
-| --- | --- | --- |
-| 理解 Capsid 是否适合我的场景 | [架构与产品边界](architecture.md) | [标准与合规](conformance.md) |
-| 选择部署平台 | [平台支持总览](platform-support.md) | [Linux 严格沙箱](linux-sandbox.md) · [Windows 构建与平台能力](windows.md) |
-| 把 Runtime 嵌入现有网关 | [宿主嵌入规范](host-integration.md) | [能力策略](capability-policy.md) |
-| 部署第一方 managed Host | [Host 配置参考](host-config.md) | [Host v1 详细设计](host-technical-design-review.md) |
-| 编写并授权应用 | [capsid.json 教程](capsid-json.md) | [模块与权限参考](module-permissions.md) |
-| 运行不可信代码 | [Linux 严格沙箱](linux-sandbox.md) | [平台支持总览](platform-support.md) |
-| 在 Windows/macOS 上构建或评估能力 | [平台支持总览](platform-support.md) | [Windows 构建与平台能力](windows.md) |
-| 移植现有 Fetch 框架 | [框架兼容性](framework-compatibility/README.md) | 各框架验证页 |
-| 复现质量或性能结论 | [测试门禁](testing.md) | [性能证据](performance-benchmarks.md) |
+**选型与架构**
+
+- 理解 Capsid 是否适合我的场景：先看
+  [架构与产品边界](architecture.md)，再看[标准与合规](conformance.md)。
+- 选择部署平台：先看[平台支持总览](platform-support.md)；Linux 隔离见
+  [Linux 严格沙箱](linux-sandbox.md)，Windows 构建见
+  [Windows 构建与平台能力](windows.md)。
+
+**宿主与部署**
+
+- 把 Runtime 嵌入现有网关：从[宿主嵌入规范](host-integration.md)开始，
+  深入阅读[能力策略](capability-policy.md)。
+- 部署第一方 managed Host：先看[Host 配置参考](host-config.md)，设计细节见
+  [Host v1 详细设计](host-technical-design-review.md)。
+
+**应用与权限**
+
+- 编写并授权应用：跟着[capsid.json 教程](capsid-json.md)逐步配置，
+  字段细节查[模块与权限参考](module-permissions.md)。
+- 运行不可信代码：只有[Linux 严格沙箱](linux-sandbox.md)提供生产隔离；
+  三平台边界见[平台支持总览](platform-support.md)。
+
+**兼容性与证据**
+
+- 移植现有 Fetch 框架：见[框架兼容性](framework-compatibility/README.md)。
+- 复现质量或性能结论：测试门见[测试门禁](testing.md)，性能证据见
+  [性能证据](performance-benchmarks.md)。
 
 ## 维护规则
 
