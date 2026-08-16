@@ -894,10 +894,6 @@ void test_binding_sync_loop_interrupts(const char *worker_path,
             frame.request_id == 1) {
             saw_error = true;
         }
-        if (frame.type == capsid::protocol::kExit) {
-            saw_exit = true;
-            break;
-        }
     }
     require(saw_error || saw_exit,
             "Binding CPU loop was neither interrupted nor worker-exited");
