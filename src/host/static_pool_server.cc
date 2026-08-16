@@ -410,6 +410,11 @@ private:
     // a partial pool startup. The failed shard itself already unwound its
     // own listener and worker inside its start().
     void rollback(std::size_t started, std::string* error) {
+#if defined(_WIN32)
+        // The pool-owned acceptor must not survive a rolled-back start:
+        // the port has to be released before start() returns.
+        stop_pool_acceptor();
+#endif
         for (std::size_t index = 0; index < started; ++index) {
             shards_[index]->request_stop();
         }

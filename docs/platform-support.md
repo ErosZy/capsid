@@ -31,8 +31,9 @@ single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为�
 
 **不属于三平台统一契约**（因此按不支持处理，除非显式使用单平台能力）：
 
-- Host `--mode managed`（coordinator/Admin/多 App）：仅 Linux
-- `capsid:fs`（read/stat/list）：Linux/macOS；Windows 不可用
+- Host `--mode managed`（coordinator/Admin/多 App）：仅 Linux；macOS/Windows
+  在 CLI 直接提示后退出
+- `capsid:fs`（read/stat/list）：仅 Linux；macOS/Windows 调用拒绝
 - strict sandbox（seccomp/Landlock/namespace/cgroup）：仅 Linux
 - 多 shard 共享端口（`SO_REUSEPORT`）：仅 Linux/macOS 的内部实现；
   Windows 使用池级共享 acceptor 实现同样的对外行为
@@ -58,8 +59,8 @@ single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为�
 - 使用系统 Clang 原生构建，Release 包为 `capsid-<版本>-darwin-arm64.tar.gz`；
 - single-worker 与 static-pool（single / multi shard）属三平台统一契约；
   multi shard 通过 `SO_REUSEPORT` 实现；
-- `capsid:fs` 可用：与 Linux 相同的 no-symlink 读取语义，通过逐组件
-  `openat(O_NOFOLLOW)` 实现；
+- `capsid:fs` 不可用：该模块保持 Linux-only，macOS 调用返回
+  “filesystem module is unavailable on this platform”；
 - 没有 `sched_setaffinity` 等价 API，CPU affinity 测试按 CTest 77 跳过；
 - 请求 strict sandbox 会在 worker 启动握手期失败；`--mode managed` 在 CLI
   直接失败并提示“managed coordinator requires Linux strict sandbox”，与
@@ -71,8 +72,10 @@ single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为�
   `capsid-<版本>-windows-x86_64.zip`；
 - single-worker 与 static-pool（single / multi shard）属三平台统一契约；
   没有 `SO_REUSEPORT`，multi shard 由池级共享 acceptor 轮询分发；
-- `capsid:fs`、strict sandbox、managed Host 不可用；`--mode managed` 在 CLI
-  直接失败并提示，与 macOS 行为一致；
+- `capsid:fs` 不可用：模块保持 Linux-only，Windows 调用返回
+  “filesystem module is unavailable on this platform”；
+- strict sandbox 与 managed Host 不可用；`--mode managed` 在 CLI 直接失败
+  并提示，与 macOS 行为一致；
 - CPU affinity 通过 `SetProcessAffinityMask` 实现，但只覆盖当前处理器组；
 - Worker 内存上限通过 Job Object 的 `JOB_OBJECT_LIMIT_PROCESS_MEMORY` 约束
   **已提交内存**，与 Linux `RLIMIT_AS`（虚拟地址空间）语义不同。
