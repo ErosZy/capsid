@@ -846,6 +846,64 @@ void test_binding_rpc_lifecycle(const char *worker_path,
     finish_worker(fd, pid, true);
 }
 
+// Binding v1 §5.3: a synchronous CPU loop inside a Binding method is
+// interruptible. The Binding Runtime handler observes the call deadline,
+// QuickJS aborts JS_Call, the call settles as an error, and the worker
+// enters poison/EXIT instead of hanging forever.
+void test_binding_sync_loop_interrupts(const char *worker_path,
+                                       const char *call_path) {
+    int fd = -1;
+    const pid_t pid = spawn_worker(worker_path, &fd);
+    send_hello(fd);
+    capsid::protocol::Frame binding;
+    binding.type = capsid::protocol::kLoadBinding;
+    binding.flags =
+        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.request_id = 0;
+    binding.payload = mongo_binding_blob(
+        "export default () => ({"
+        "  spin() { while (true) {} }"
+        "});",
+        {}, {}, {"capsid:utils"}, {}, {}, {}, "{}", {});
+    send_frame(fd, binding);
+    send_bundle(fd, read_file(call_path));
+
+    capsid::protocol::Parser parser;
+    capsid::protocol::Frame frame;
+    for (int index = 0; index < 8; ++index) {
+        require(read_frame(fd, &parser, &frame, 5000) ==
+                    ReadResult::kFrame,
+                "no frame arrived before interrupt-test READY");
+        if (frame.type == capsid::protocol::kReady) {
+            break;
+        }
+    }
+    require(frame.type == capsid::protocol::kReady,
+            "interrupt-test Binding worker did not report READY");
+
+    send_bodyless_get(fd, 1, "/");
+    bool saw_error = false;
+    bool saw_exit = false;
+    for (int index = 0; index < 64; ++index) {
+        const ReadResult read = read_frame(fd, &parser, &frame, 5000);
+        if (read == ReadResult::kEof) {
+            saw_exit = true;
+            break;
+        }
+        if (frame.type == capsid::protocol::kError &&
+            frame.request_id == 1) {
+            saw_error = true;
+        }
+        if (frame.type == capsid::protocol::kExit) {
+            saw_exit = true;
+            break;
+        }
+    }
+    require(saw_error || saw_exit,
+            "Binding CPU loop was neither interrupted nor worker-exited");
+    finish_worker(fd, pid, saw_error);
+}
+
 std::string invoke_binding_method(
     const char *worker_path,
     const char *call_path,
@@ -2574,6 +2632,7 @@ int main(int argc, char **argv) {
     test_binding_log_envelope_and_redaction(argv[1], argv[4]);
     test_binding_native_handle_owner(argv[1], argv[5]);
     test_binding_rpc_lifecycle(argv[1], argv[6]);
+    test_binding_sync_loop_interrupts(argv[1], argv[4]);
     test_binding_core_is_client_only(argv[1], argv[4]);
     test_binding_readline_has_no_ambient_stdio(argv[1], argv[4]);
     test_binding_open_file_has_no_descriptor_surface(argv[1], argv[4]);

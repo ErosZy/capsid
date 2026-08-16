@@ -644,11 +644,25 @@ class WorkerRuntime {
         JSValue binding_error;     // binding ctx (rejection reason)
         BindingCallState state;
     };
+    // Clears the Binding dispatch identity on every exit path from
+    // pump_binding_calls, including interrupt-driven JS exceptions.
+    struct BindingDispatchScope {
+        WorkerRuntime *self;
+        explicit BindingDispatchScope(WorkerRuntime *owner) : self(owner) {}
+        ~BindingDispatchScope() {
+            self->current_binding_call_id_ = 0;
+            self->binding_interrupted_call_id_ = 0;
+        }
+    };
     std::deque<uint64_t> user_to_binding_;
     std::deque<uint64_t> binding_to_user_;
     std::map<uint64_t, PendingBindingCall> pending_binding_calls_;
     uint64_t next_binding_call_id_ = 1;
     size_t inflight_binding_calls_ = 0;
+    // Binding Runtime interrupt authority: the call id currently executing
+    // inside the Binding Runtime, and the id that caused a CPU interrupt.
+    uint64_t current_binding_call_id_ = 0;
+    uint64_t binding_interrupted_call_id_ = 0;
     // binding id -> index into binding_tables_.
     std::map<std::string, size_t> binding_table_index_;
 public:
@@ -1050,6 +1064,34 @@ private:
             return 1;
         }
         return 0;
+    }
+
+    // Binding v1 §5.3: the Binding Runtime gets its own interrupt handler.
+    // It only fires while a Binding method is synchronously executing on the
+    // worker thread; the active call carries the absolute deadline and a
+    // poisoned worker keeps only the bounded poison-drain window.
+    static int binding_interrupt_handler(JSRuntime *, void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        if (!self || self->current_binding_call_id_ == 0 ||
+            self->binding_interrupted_call_id_ != 0) {
+            return 0;
+        }
+        const uint64_t now = uv_hrtime();
+        if (self->poisoned_) {
+            return now >= self->poison_deadline_ns_ ? 1 : 0;
+        }
+        const std::map<uint64_t, PendingBindingCall>::iterator found =
+            self->pending_binding_calls_.find(
+                self->current_binding_call_id_);
+        if (found == self->pending_binding_calls_.end() ||
+            found->second.state != BindingCallState::kDispatched ||
+            found->second.deadline_ns == 0 ||
+            now < found->second.deadline_ns) {
+            return 0;
+        }
+        self->binding_interrupted_call_id_ =
+            self->current_binding_call_id_;
+        return 1;
     }
 
     // WP-02 §6.2 job-context hooks. capture retains the active token (or
@@ -5602,6 +5644,8 @@ private:
             *error = "binding runtime has no context";
             return false;
         }
+        JS_SetInterruptHandler(
+            JS_GetRuntime(binding_ctx_), binding_interrupt_handler, this);
         // Capture the bootstrap intrinsics before any Host package evaluates.
         // A package may mutate its shared Binding global, but RPC plumbing for
         // every package must continue to use the original Promise and abort
@@ -6020,6 +6064,8 @@ private:
             return;
         }
         call.state = BindingCallState::kDispatched;
+        BindingDispatchScope dispatch_scope(this);
+        current_binding_call_id_ = call_id;
         // The dispatch window sets the binding context the egress gate
         // (and later native gates) read; all return paths restore it.
         BindingWindowGuard binding_window(
@@ -6098,10 +6144,18 @@ private:
         JS_FreeValue(binding_ctx_, call_object);
         JS_FreeValue(binding_ctx_, method);
         if (JS_IsException(result)) {
+            const bool interrupted =
+                binding_interrupted_call_id_ == call_id;
             JS_FreeValue(binding_ctx_, result);
             settle_binding_call_error(
                 call_id,
                 take_binding_exception("binding call threw"));
+            if (interrupted) {
+                // A synchronous CPU loop is an uninterruptible-cooperation
+                // violation: the call is settled as an error and the whole
+                // worker enters the bounded poison path (§5.3).
+                enter_poison("binding call interrupted");
+            }
             return;
         }
         // §5.2: Promise.resolve() unifies sync and async returns.
