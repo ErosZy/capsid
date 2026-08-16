@@ -6,7 +6,10 @@ Target profile: `CAPSID-MIN-2025-subset-v0`. This document combines the standard
 
 ### Specification Baseline
 
+- Standards body: ECMA TC55 (WinterTC), Web-interoperable Runtimes Community Group;
 - Standard: ECMA-429 *Minimum common web API*, first edition, December 2025;
+- Capsid profile: `CAPSID-MIN-2025-subset-v0` (a versioned, testable subset of
+  ECMA-429; full conformance is not claimed outside the profile);
 - published document:
   `https://ecma-international.org/wp-content/uploads/ECMA-429_1st_edition_december_2025.pdf`;
 - PDF SHA-256:
@@ -14,6 +17,17 @@ Target profile: `CAPSID-MIN-2025-subset-v0`. This document combines the standard
 - editorial source referenced when locking: `WinterTC55/proposal-minimum-common-api` commit `fe94bc2b0e349d7aae635c27c653b5165039ab66`.
 
 The online editor draft is for reference only and cannot silently replace the published version. Living standards referenced by ECMA-429 are made reproducible through a pinned WPT revision; moving the WPT commit is itself a conformance update requiring review.
+
+### WinterTC Alignment
+
+Capsid follows the WinterTC runtime model: applications export a Web-standard
+`fetch(request)` handler and receive `Request`/`Response`, Web Streams, `URL` and
+`URLPattern`, Text Encoding, Web Crypto, timers and microtasks, `AbortController`,
+`MessageChannel`/`MessagePort`, and WebAssembly through the profile listed above.
+The profile is enforced by the restricted build and is evidenced by the pinned
+WPT batch plus process-level contract tests. Anything outside the profile (for
+example a Node-style server API) is an intentional product boundary, not a hidden
+conformance gap; see the capability tracking matrix below.
 
 ### WPT Lock
 

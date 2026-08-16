@@ -60,7 +60,9 @@ For the current ABI v7, the worker event source is a Unix fd on POSIX and a CRT 
 
 ## JavaScript Surface
 
-The profile name is `CAPSID-MIN-2025-subset-v0`. It mainly includes:
+The profile name is `CAPSID-MIN-2025-subset-v0`, targeting the WinterTC
+**ECMA-429 Minimum Common Web API** (first edition, December 2025). It mainly
+includes:
 
 - Event, Abort, timers, microtask, and error/rejection reporting;
 - Encoding, URL/URLSearchParams/URLPattern;

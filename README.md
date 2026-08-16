@@ -33,6 +33,23 @@ belong to the host.
 - auditable: pinned WPT, framework differentials, sanitizers, fuzz, and
   identity-backed performance evidence.
 
+## Standards and Frameworks
+
+Capsid targets **ECMA-429 Minimum Common Web API** — the WinterTC (ECMA TC55)
+specification, first edition, December 2025 — through the profile
+`CAPSID-MIN-2025-subset-v0`. Conformance evidence is a pinned Web Platform Tests
+revision plus process-level regressions; Capsid does not claim full ECMA-429
+coverage beyond this profile. See
+[standards and conformance](docs/conformance.md).
+
+Frameworks that compile to a single self-contained ESM exporting a standard
+`fetch(request)` handler are the supported integration path, provided they avoid
+Node/server adapters, listeners, filesystem static serving, and provider-specific
+bindings. The compatibility suite pins and continuously verifies **Hono 4.12.32**,
+**itty-router 5.0.24**, and **H3 v2 2.0.1-rc.26**; other Web-standard frameworks
+can be evaluated against the same rules, but only pinned versions carry evidence.
+See [framework compatibility](docs/framework-compatibility/README.md).
+
 ## Quick Start
 
 ### 1. Application
