@@ -1072,9 +1072,10 @@ void test_binding_log_envelope_and_redaction(const char *worker_path,
 // Binding v1 §3.1/§5.1/§7.3: every Binding package runs in its own
 // QuickJS runtime/context. A value stashed on one Binding's globalThis must
 // stay invisible to another equally-permitted Binding — including a native
-// handle, the factory `log` object and a mutated builtin module. The owner
-// Binding must keep its own global and module-cache state untouched and be
-// able to reuse and close its resources afterwards.
+// handle, the factory `log` object, a 32 MiB heap allocation and a mutated
+// builtin module. The owner Binding must keep its own global and
+// module-cache state untouched and be able to reuse and close its resources
+// afterwards.
 void test_binding_isolation_globals_modules_and_handles(
     const char *worker_path,
     const char *owner_path) {
@@ -1127,15 +1128,19 @@ void test_binding_isolation_globals_modules_and_handles(
             "  owned = {file,tcp,udp,tls,database,statement,module,instance," +
             "           http,ws,watcher,timer};" +
             "  getopts.__capsidModuleMarker = 'mongo-module';" +
+            "  const chunk = new Uint8Array(32 * 1024 * 1024); chunk[0] = 1;" +
             "  globalThis.__capsidOwned = owned;" +
             "  globalThis.__capsidLog = log;" +
             "  globalThis.__capsidProbe = 'mongo-global';" +
+            "  globalThis.__capsidChunk = chunk;" +
             "  return 'stored:' + globalThis.__capsidProbe + ':' +" +
-            "    getopts.__capsidModuleMarker;" +
+            "    getopts.__capsidModuleMarker + ':' + chunk.length;" +
             " }," +
             " async cleanup() {" +
             "  const probe = globalThis.__capsidProbe;" +
             "  const moduleMarker = getopts.__capsidModuleMarker;" +
+            "  const chunkBytes = globalThis.__capsidChunk" +
+            "    ? globalThis.__capsidChunk.length : 0;" +
             "  await owned.file.close();" +
             "  owned.tcp.close(); owned.udp.close(); owned.tls.close();" +
             "  owned.statement.all(); owned.statement.finalize();" +
@@ -1148,8 +1153,10 @@ void test_binding_isolation_globals_modules_and_handles(
             "  delete globalThis.__capsidOwned;" +
             "  delete globalThis.__capsidLog;" +
             "  delete globalThis.__capsidProbe;" +
+            "  delete globalThis.__capsidChunk;" +
             "  delete getopts.__capsidModuleMarker;" +
-            "  return 'closed:' + probe + ':' + moduleMarker;" +
+            "  return 'closed:' + probe + ':' + moduleMarker + ':' +" +
+            "    chunkBytes;" +
             " }" +
             "});",
         {file_path},
@@ -1170,7 +1177,10 @@ void test_binding_isolation_globals_modules_and_handles(
         " const crossOwned = globalThis.__capsidOwned;"
         " const crossProbe = globalThis.__capsidProbe;"
         " const crossLog = globalThis.__capsidLog;"
+        " const crossChunk = globalThis.__capsidChunk;"
         " const crossModuleMarker = getopts.__capsidModuleMarker;"
+        " const ownChunk = new Uint8Array(32 * 1024 * 1024);"
+        " ownChunk[0] = 2;"
         " let logResult;"
         " try { crossLog.info('cross-binding probe');"
         "   logResult = 'CALLED'; }"
@@ -1182,7 +1192,9 @@ void test_binding_isolation_globals_modules_and_handles(
         "   String(crossOwned === undefined),"
         "   String(crossProbe === undefined),"
         "   String(crossLog === undefined),"
+        "   String(crossChunk === undefined),"
         "   String(crossModuleMarker === undefined),"
+        "   String(ownChunk.length === 33554432),"
         "   logResult"
         " ].join(':');"
         "} });",
@@ -1251,9 +1263,9 @@ void test_binding_isolation_globals_modules_and_handles(
     require(ended, "owner-test response never ended");
     require(
         body ==
-            "result:stored:mongo-global:mongo-module:"
-            "isolated:true:true:true:true:type-error:"
-            "closed:mongo-global:mongo-module",
+            "result:stored:mongo-global:mongo-module:33554432:"
+            "isolated:true:true:true:true:true:true:type-error:"
+            "closed:mongo-global:mongo-module:33554432",
         "a Binding value crossed the per-Binding isolation boundary: " +
             body);
     finish_worker(fd, pid, true);
