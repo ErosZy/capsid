@@ -12,22 +12,30 @@ Capsid 对 Linux、macOS 与 Windows 的承诺分为两个独立层次：
 
 ## 能力矩阵
 
-| 能力 | Linux | macOS | Windows |
-| --- | --- | --- | --- |
-| Runtime C ABI（spawn/request/credit/streaming） | ✅ | ✅ | ✅ |
-| `capsid-worker`（txiki.js + 受限核心） | ✅ | ✅ | ✅ |
-| `capsid-bytecode-compile`（可信字节码） | ✅ | ✅ | ✅ |
-| Host `--mode single-worker` | ✅ | ✅ | ✅ |
-| Host `--mode static-pool` | ✅ 多 shard | ✅ 多 shard | ✅ 仅单 shard（`--workers 1`） |
-| Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌ 运行时失败（无 strict sandbox） | ❌ 构建排除 |
-| 出站网络策略（egress host/address 规则） | ✅ | ✅ | ✅ |
-| 能力策略（模块/权限/环境快照） | ✅ | ✅ | ✅ |
-| `capsid:fs`（read/stat/list） | ✅ | ❌ 函数调用拒绝 | ❌ 函数调用拒绝 |
-| strict sandbox（seccomp/Landlock/namespace/cgroup） | ✅ | ❌ | ❌ |
-| 多 shard 共享端口（`SO_REUSEPORT`） | ✅ | ✅ | ❌ |
-| worker CPU affinity | ✅ | ❌ 无平台 API，SKIP | ✅ 当前处理器组内 |
-| `RLIMIT_AS`（processAddressSpace） | ✅ | ❌ 编译期拒绝 | 部分：Job Object 限制 committed memory |
-| `RLIMIT_NOFILE` / `RLIMIT_CORE` | ✅ | 部分 | 部分：无进程级句柄上限；`SetErrorMode` 抑制崩溃对话框 |
+矩阵中的 **macOS / Windows 列只显示两者的能力交集**：任一侧缺失、行为不一致或
+只能部分实现的能力，整行按不支持处理（❌），避免把单平台偶然行为当成跨平台承诺。
+平台之间的具体差异在本页下方分平台说明。
+
+| 能力 | Linux | macOS / Windows 交集 |
+| --- | --- | --- |
+| Runtime C ABI（spawn/request/credit/streaming） | ✅ | ✅ |
+| `capsid-worker`（txiki.js + 受限核心） | ✅ | ✅ |
+| `capsid-bytecode-compile`（可信字节码） | ✅ | ✅ |
+| Host `--mode single-worker` | ✅ | ✅ |
+| Host `--mode static-pool`（单 shard） | ✅ | ✅ |
+| Host `--mode static-pool`（多 shard） | ✅ | ❌ |
+| Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌ |
+| 出站网络策略（egress host/address 规则） | ✅ | ✅ |
+| 能力策略（模块/权限/环境快照） | ✅ | ✅ |
+| `capsid:fs`（read/stat/list） | ✅ | ❌ |
+| strict sandbox（seccomp/Landlock/namespace/cgroup） | ✅ | ❌ |
+| 多 shard 共享端口（`SO_REUSEPORT`） | ✅ | ❌ |
+| worker CPU affinity | ✅ | ❌ |
+| `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE` | ✅ | ❌ |
+
+macOS 单侧的额外可用项（如多 shard static-pool）和 Windows 单侧的额外可用项
+（如当前处理器组内的 CPU affinity）只记录为平台说明，不进入交集承诺；若你的
+部署需要跨 macOS/Windows 一致的行为，请只依赖矩阵中 ✅ 的行。
 
 ## 平台构建
 
