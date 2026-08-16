@@ -315,8 +315,8 @@ void test_drain_inflight_completes(const char* worker_path) {
     capsid::host::StaticPoolServer pool(
         make_options(worker_path, ready[1], 1));
     std::string error;
-    require(pool.start(slow_bundle(), &error),
-            "cannot start draining pool: " + error);
+    const bool started = pool.start(slow_bundle(), &error);
+    require(started, "cannot start draining pool: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     // Hold the single inflight slot (the slow bundle answers in ~700 ms).
@@ -371,8 +371,8 @@ void test_drain_deadline_forces(const char* worker_path) {
     options.worker_options.request_timeout_ms = 0;  // wedged worker model
     capsid::host::StaticPoolServer pool(std::move(options));
     std::string error;
-    require(pool.start(hang_bundle(), &error),
-            "cannot start drain deadline pool: " + error);
+    const bool started = pool.start(hang_bundle(), &error);
+    require(started, "cannot start drain deadline pool: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     // The hung request holds the only inflight slot forever.
@@ -418,8 +418,8 @@ void test_drain_idle_exits(const char* worker_path) {
     capsid::host::StaticPoolServer pool(
         make_options(worker_path, ready[1], 1));
     std::string error;
-    require(pool.start(fixture_bundle(), &error),
-            "cannot start idle draining pool: " + error);
+    const bool started = pool.start(fixture_bundle(), &error);
+    require(started, "cannot start idle draining pool: " + error);
     (void)ready_port(read_one_ready_line(ready[0]));
 
     pool.begin_drain(60000);  // an idle drain must not wait anywhere near this
@@ -442,8 +442,8 @@ void test_shared_port_lifecycle(const char* worker_path) {
     require(capsid::win32::create_socket_pair(ready), "cannot create static-pool READY pipe");
     capsid::host::StaticPoolServer pool(make_options(worker_path, ready[1], 3));
     std::string error;
-    require(pool.start(fixture_bundle(), &error),
-            "cannot start three-shard static pool: " + error);
+    const bool started = pool.start(fixture_bundle(), &error);
+    require(started, "cannot start three-shard static pool: " + error);
     require(!pool.start(fixture_bundle(), &error),
             "static pool accepted a duplicate start");
     require(pool.active_workers() == 3,

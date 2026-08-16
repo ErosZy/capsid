@@ -191,6 +191,13 @@ public:
                 }
             }
             if (!shard_started) {
+                // Preserve the shard's own diagnostic; rollback only fills
+                // in a generic message when nothing was reported.
+                if (error != nullptr) {
+                    *error = shard_error.empty()
+                        ? "static pool shard failed to start"
+                        : shard_error;
+                }
                 rollback(shards_.size(), error);
                 return false;
             }
@@ -358,7 +365,7 @@ private:
             std::string shard_error;
             shards_[index]->wait(&shard_error);
         }
-        if (error != nullptr) {
+        if (error != nullptr && error->empty()) {
             *error = "static pool startup failed";
         }
     }
@@ -376,11 +383,12 @@ private:
         std::size_t offset = 0;
         while (offset < line.size()) {
 #if defined(_WIN32)
-            // MSVC write() takes an unsigned int count; the READY record
-            // is a single small JSON line, well below UINT_MAX.
-            const ssize_t written = ::write(
+            // The READY channel may be a loopback socketpair (in-process
+            // harnesses) or a stdio pipe (process harnesses); write_any_fd
+            // covers both, unlike raw CRT write() on a socket fd.
+            const ssize_t written = capsid::win32::write_any_fd(
                 options_.worker_options.ready_fd, line.data() + offset,
-                static_cast<unsigned int>(line.size() - offset));
+                line.size() - offset);
 #else
             const ssize_t written = ::write(
                 options_.worker_options.ready_fd, line.data() + offset,
