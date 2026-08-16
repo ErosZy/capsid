@@ -48,14 +48,16 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的**进程隔离 
 ### macOS
 
 - **原生开发**：完整 ✅ —— Runtime、worker、字节码编译器与
-  single-worker/static-pool Host 可用
+  single-worker/static-pool Host 可用（统一契约为单 shard；多 shard 是
+  macOS 平台扩展）
 - **生产隔离**：无 ❌ —— 没有等价隔离，生产请使用 Linux 容器或 VM
 - `capsid:fs` 不可用；`strict_sandbox` 与 managed Host 无法提供有效隔离
 
 ### Windows（x86-64，MSVC）
 
 - **原生开发**：自 v0.1.2 起 ✅ —— Runtime、worker、字节码编译器与
-  single-worker/**单 shard** static-pool Host 可用
+  single-worker/**单 shard** static-pool Host 可用（与 Linux/macOS 对齐的
+  统一契约）
 - **生产隔离**：无 ❌ —— 生产请使用 Linux 容器或 WSL2
 - 多 shard 池（依赖 SO_REUSEPORT）、managed Host、`capsid:fs` 与
   strict sandbox 不可用
@@ -63,6 +65,8 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的**进程隔离 
 
 **统一结论：**
 
+- **single-worker 与 static-pool 以单 shard 为三平台统一行为**：Linux、macOS、
+  Windows 均支持；多 shard static-pool 仅 Linux/macOS，Windows 会拒绝启动；
 - 开发、联调、benchmark：三平台均可；
 - 运行不可信代码的生产隔离：只承诺 Linux；
 - macOS/Windows 上的生产一致性：在 Linux 容器或 VM 中运行。

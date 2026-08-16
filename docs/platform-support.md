@@ -10,32 +10,35 @@ Capsid 对 Linux、macOS 与 Windows 的承诺分为两个独立层次：
 “能构建”不等于“能生产隔离”。macOS 与 Windows 的原生构建用于开发、联调、CI
 与 benchmark；涉及不可信代码的生产部署应使用 Linux 容器或 VM。
 
-## 能力矩阵
+## 统一能力契约（三平台交集）
 
-矩阵中的 **macOS / Windows 列只显示两者的能力交集**：任一侧缺失、行为不一致或
-只能部分实现的能力，整行按不支持处理（❌），避免把单平台偶然行为当成跨平台承诺。
-平台之间的具体差异在本页下方分平台说明。
+**single-worker 与 static-pool 按三平台统一行为承诺**：`static-pool` 的统一契约
+固定为**单 shard**。只有 Linux、macOS、Windows 三者行为完全一致的能力才出现在
+下面的 ✅ 清单里；任何平台缺失、语义不一致或只能部分实现的能力，一律移出统一
+契约，作为平台差异单独说明。
 
-| 能力 | Linux | macOS / Windows 交集 |
-| --- | --- | --- |
-| Runtime C ABI（spawn/request/credit/streaming） | ✅ | ✅ |
-| `capsid-worker`（txiki.js + 受限核心） | ✅ | ✅ |
-| `capsid-bytecode-compile`（可信字节码） | ✅ | ✅ |
-| Host `--mode single-worker` | ✅ | ✅ |
-| Host `--mode static-pool`（单 shard） | ✅ | ✅ |
-| Host `--mode static-pool`（多 shard） | ✅ | ❌ |
-| Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌ |
-| 出站网络策略（egress host/address 规则） | ✅ | ✅ |
-| 能力策略（模块/权限/环境快照） | ✅ | ✅ |
-| `capsid:fs`（read/stat/list） | ✅ | ❌ |
-| strict sandbox（seccomp/Landlock/namespace/cgroup） | ✅ | ❌ |
-| 多 shard 共享端口（`SO_REUSEPORT`） | ✅ | ❌ |
-| worker CPU affinity | ✅ | ❌ |
-| `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE` | ✅ | ❌ |
+统一承诺：
 
-macOS 单侧的额外可用项（如多 shard static-pool）和 Windows 单侧的额外可用项
-（如当前处理器组内的 CPU affinity）只记录为平台说明，不进入交集承诺；若你的
-部署需要跨 macOS/Windows 一致的行为，请只依赖矩阵中 ✅ 的行。
+- Runtime C ABI（spawn/request/credit/streaming）✅
+- `capsid-worker`（txiki.js + 受限核心）✅
+- `capsid-bytecode-compile`（可信字节码）✅
+- Host `--mode single-worker` ✅
+- Host `--mode static-pool`（单 shard）✅
+- 出站网络策略（egress host/address 规则）✅
+- 能力策略（模块/权限/环境快照）✅
+
+**不属于三平台统一契约**（因此按不支持处理，除非显式使用单平台能力）：
+
+- Host `--mode static-pool` 多 shard：仅 Linux/macOS；Windows 启动时拒绝
+- Host `--mode managed`（coordinator/Admin/多 App）：仅 Linux
+- `capsid:fs`（read/stat/list）：仅 Linux
+- strict sandbox（seccomp/Landlock/namespace/cgroup）：仅 Linux
+- 多 shard 共享端口（`SO_REUSEPORT`）：仅 Linux/macOS
+- worker CPU affinity：Linux 完整；Windows 仅当前处理器组；macOS 无
+- `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE`：各平台语义不一致，无统一承诺
+
+部署若需要跨三平台一致行为，请只依赖 ✅ 清单；使用差异清单中的能力前必须先做
+平台分支或把部署锁定到明确支持的平台。
 
 ## 平台构建
 
@@ -51,7 +54,8 @@ macOS 单侧的额外可用项（如多 shard static-pool）和 Windows 单侧�
 ### macOS
 
 - 使用系统 Clang 原生构建，Release 包为 `capsid-<版本>-darwin-arm64.tar.gz`；
-- single-worker 与多 shard static-pool 可运行；
+- single-worker 与单 shard static-pool 属三平台统一契约；macOS 额外支持多
+  shard static-pool，但这不是统一承诺；
 - 没有 `sched_setaffinity` 等价 API，CPU affinity 测试按 CTest 77 跳过；
 - `capsid:fs` 依赖 Linux-only 的 `openat2` 语义，模块调用返回
   “filesystem module is unavailable on this platform”；
@@ -62,7 +66,8 @@ macOS 单侧的额外可用项（如多 shard static-pool）和 Windows 单侧�
 
 - 使用 MSVC + Ninja + vcpkg（静态 CRT），Release 包为
   `capsid-<版本>-windows-x86_64.zip`；
-- 支持 single-worker 与单 shard static-pool；多 shard 池在启动时被拒绝；
+- single-worker 与单 shard static-pool 属三平台统一契约；多 shard 池在启动
+  时被拒绝；
 - `capsid:fs`、strict sandbox、managed Host 不可用；
 - CPU affinity 通过 `SetProcessAffinityMask` 实现，但只覆盖当前处理器组；
 - Worker 内存上限通过 Job Object 的 `JOB_OBJECT_LIMIT_PROCESS_MEMORY` 约束
