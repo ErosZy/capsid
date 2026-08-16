@@ -1,6 +1,6 @@
 ![Capsid](logo.png)
 
-**Run untrusted JavaScript inside your application — process-isolated, capability-bound, no VM required.**
+**An embeddable JavaScript runtime for isolated, capability-based execution. Run untrusted and AI-generated code inside your application.**
 
 [![Testing validity](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml/badge.svg)](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml)
 [![Release](https://img.shields.io/github/v/release/ErosZy/capsid?label=release)](https://github.com/ErosZy/capsid/releases)
