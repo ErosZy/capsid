@@ -89,7 +89,7 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   （`CMakeLists.txt` 明确拒绝）；
 - `CAPSID_ENABLE_TSAN`：仅 Linux；
 - `CAPSID_GENERATE_LINK_MAP`：仅 Linux GNU/Clang；
-- `--mode managed`：见下文“Host”。
+- `--mode managed`（Windows）：构建直接排除；见下文“Host”。
 
 ## 平台能力矩阵
 
@@ -99,12 +99,14 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 | `capsid-worker`（txiki.js + 受限核心） | ✅ | ✅ | ✅ |
 | `capsid-bytecode-compile`（M1D 可信字节码） | ✅ | ✅ | ✅ |
 | Host `--mode single-worker` / `static-pool` | ✅ | ✅ | ✅ |
-| Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌ | ❌ |
+| Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌（运行时失败） | ❌（构建排除） |
 | 出站网络策略（egress host/address 规则、保护段） | ✅ | ✅ | ✅（JS 层） |
 | 能力策略（模块/权限/环境快照） | ✅ | ✅ | ✅ |
-| fs 权限模块（capsid:fs read/stat/list） | ✅ | ❌ | ❌（见下） |
-| RLIMIT_AS / RLIMIT_NOFILE / RLIMIT_CORE | ✅ | 部分 | 部分（见下） |
-| strict sandbox（seccomp/Landlock/namespace/cgroup） | ✅ | ❌ | ❌ |
+| fs 权限模块（capsid:fs read/stat/list） | ✅ | ❌（模块边界拒绝） | ❌（模块边界拒绝） |
+| RLIMIT_AS / RLIMIT_NOFILE / RLIMIT_CORE | ✅ | 部分（RLIMIT_AS 编译期拒绝） | 部分（见下） |
+| strict sandbox（seccomp/Landlock/namespace/cgroup） | ✅ | ❌ | ❌（见下） |
+| 多 shard 共享端口（SO_REUSEPORT） | ✅ | ✅ | ❌ |
+| worker CPU affinity（`capsid_worker_set_cpu_affinity`） | ✅ | ❌ | ✅ |
 
 ### worker 沙箱语义（Windows）
 
@@ -112,18 +114,23 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 
 - **进程内存上限**（`process_memory_limit`）：通过 Job Object
   （`JOB_OBJECT_LIMIT_PROCESS_MEMORY`）在 worker 进程内自施压。注意语义差异：
-  Linux 的 RLIMIT_AS 限制虚拟地址空间，Windows 的 job 限制**已提交内存**
-  （working set 上限），两者不等价；
+  Linux 的 RLIMIT_AS 限制虚拟地址空间，Windows 的 job 限制**已提交
+  （committed）内存**——既不是 working set 也不是虚拟地址空间，两者
+  不等价。若 `AssignProcessToJobObject` 失败（例如 worker 已被 CI runner
+  等外层 job 归属），worker 会拒绝启动而不是静默降级；
 - **文件描述符上限**：Windows 没有进程级句柄数限制。非零的
   `file_descriptor_limit` 会被**接受但不执行**（默认值 64 也在此列），
   并如实不在 applied features 中声明 `CAPSID_SANDBOX_FEATURE_RLIMITS`
   的该部分——申请了该 feature 的宿主会在 hello 校验中看到缺失并失败；
 - **core dump 抑制**（RLIMIT_CORE 等价）：`SetErrorMode` 抑制 WER 崩溃
   对话框，worker 崩溃不会阻塞前台会话；
-- **strict 模式**：spawn 阶段即拒绝（`CAPSID_INVALID_ARGUMENT`），worker
-  自身也会以 “strict sandbox is unavailable on this platform/build”
-  拒绝。网络 namespace fd、cgroup 路径等 strict-only 参数同样在 spawn
-  校验中拒绝。
+- **strict 模式**：与 Linux 在 spawn 阶段即返回错误不同，Windows 上
+  spawn 返回成功，strict-only 参数（网络 namespace fd、cgroup 路径等）
+  被接受；worker 启动后发现自己无法施加 strict sandbox，在启动握手期
+  异步报 “strict sandbox is unavailable on this platform/build” 并以
+  退出码 1 退出。宿主通过 worker 的退出事件感知失败，而不是 spawn 的
+  返回值。macOS 的 strict 语义与 Windows 一致（见下文 Host 的 managed
+  条目）。
 
 ### Host（Windows）
 
@@ -131,13 +138,21 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   `sigwait`，`static-pool` 用控制台控制处理器（CTRL_C/CTRL_BREAK/关闭）
   触发同一停止路径；`single-worker` 使用 Boost.Asio `signal_set`（Windows
   下同样可用）。
-- **多 shard 静态池不可用**：多 shard 共享端口依赖 `SO_REUSEPORT`
-  （Linux-only）。Windows 构建只支持单 shard 池；多 shard 启动会被拒绝。
-  依赖 3-shard 拓扑的 host 集成测试（m2 组）在 Windows 上不注册。
+- **多 shard 静态池不可用**：多 shard 共享端口依赖 `SO_REUSEPORT`。
+  Windows 不提供该选项（Linux/macOS 均可用），Windows 构建只支持单
+  shard 池；多 shard 启动会被拒绝。多 shard 场景测试
+  （`host_static_pool_server_shared_port_lifecycle`、
+  `host_admission_pool_forwards_options`、`host_concurrent_pool_wait`）
+  在 Windows 上不注册；m2 组其余测试（含 single-worker 与单 shard 池
+  场景）正常注册并运行。m2 组中另有两个因 POSIX 依赖而不注册的场景，
+  见下文“Windows 上的测试覆盖差异”。
 - **managed 模式不可用**：coordinator 的状态机依赖 dirfd 相对路径
   （openat/mkdirat/fstatat）、uid 属主校验与 UDS Admin 平面；这些语义
   无法在 Windows 上等价实现，构建直接排除（`--mode managed` 启动时报错
-  并指向本页）。进程快照（RSS/CPU）在 Windows 上通过
+  并指向本页）。macOS 上 managed 可编译且能启动，但每次 spawn 都会打开
+  strict sandbox（Landlock/seccomp/namespace 均无 macOS 实现），首个
+  worker 必然失败——macOS 上部署 managed 同样不可行，只是失败点在
+  spawn 而不是构建期。进程快照（RSS/CPU）在 Windows 上通过
   `GetProcessMemoryInfo`/`GetProcessTimes` 提供（PSS 无等价物，回退 RSS）。
 - **文件属主/权限校验**（trusted key store、部署读取、状态目录）：
   Windows 没有 uid/mode 位，属主检查被跳过；边界由 NTFS ACL 承担，
@@ -157,6 +172,15 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   （Linux-only），Windows 上模块调用返回 “filesystem module is
   unavailable on this platform”（与 macOS 一致）。需要读取文件的部署应
   使用 bundle 内资源或 storage 模块。
+- **连接终止语义**：Windows 上对端 reset 的 socket 读以 EOF（返回 0）
+  结束（`WSAECONNRESET` 并入正常关闭路径），因此 worker 异常终止时
+  host 观察到的是 EXIT 事件；Linux 能区分 CLOSED 与 ERROR。WSAPoll 不
+  报告 `POLLHUP`，连接关闭只能通过读返回 0 检测。
+- **启动握手超时**：worker 启动阶段的协议读取有 2s 上限（POSIX 侧无界），
+  启动过慢或僵住的 worker 会被宿主判定启动失败。
+- **进程终止退出码**：`TerminateProcess` 固定报退出码 1（SIGKILL 的
+  语义等价物），与 Linux 按信号映射的 128+N 退出码不同——该差异仅在
+  检查退出码的测试中可见。
 - **TextDecoder**：受限核心的任意编码→UTF-8 转换在 Windows 上由
   win-iconv 提供。win-iconv 不做严格编码校验（其 readme 明示），
   TextDecoder 语义与 Linux（glibc iconv）存在允许范围内的差异。
@@ -165,8 +189,8 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 
 - `.github/workflows/testing-validity.yml` 的 `windows-host-library` job：
   构建 Runtime/worker/Host + 运行全部平台中立测试（Linux-only 测试按
-  “不注册即跳过”原则缺席，与 macOS 行同一策略），产出 JUnit 证据并参与
-  `hosted-evidence-index` 硬门禁。
+  “不注册即跳过”或 `SKIP_RETURN_CODE 77` 原则缺席，与 macOS 行同一
+  策略），产出 JUnit 证据并参与 `hosted-evidence-index` 硬门禁。
 - `.github/workflows/release.yml` 的 Windows 矩阵项产出
   `capsid-<版本>-windows-x86_64.zip` 与 `.sha256` 并上传 Release。
 
@@ -182,7 +206,21 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   spawn 路径的注入 sweep（覆盖同一 guard 机制）仍然运行。
 - **WPT 一致性套件**：WPT 工具链仅 Linux；`wpt_conformance_not_configured`
   的“响亮失败”门禁在 Windows 上不注册。
-- **多 shard 池契约**：见上文 SO_REUSEPORT 限制。
+- **多 shard 池契约**：见上文 SO_REUSEPORT 限制（三个多 shard 场景
+  不注册）。
+- **m2 组的 POSIX 依赖场景**：`host_static_pool_activation_barrier` 用
+  POSIX shell 脚本（mkdir/sleep/exec 语义）包装 worker，
+  `host_static_pool_worker_exit_isolation` 需要 `/proc` 退出证据，
+  两者在 Windows 上不注册；m2 组其余测试正常运行。
+- **generation pool 的 kill-injection 场景**：`/proc/<pid>/status`
+  不可用时无法验证“杀掉的 worker 被替换”路径；create/drain 与启动
+  失败场景照常运行后，测试整体以 SKIP_RETURN_CODE 77 如实报告跳过
+  （Windows 与 macOS 一致）。
+- **A/B benchmark 证据契约**（`host_single_worker_ab_emits_complete_evidence`）：
+  runner 是 POSIX shell 包装（`bench/run-ab.sh`），Windows 无可用 perf
+  路径，按 77 跳过。
+- **worker_package_\* 打包四件套**：默认 ctest 命令以 `-E` 排除（见
+  上文构建步骤），CI 同样不跑；需要单独显式运行。
 
 ## 更新检查单
 
