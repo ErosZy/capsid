@@ -101,6 +101,14 @@ Configuration notes:
 - **managed mode**: the Windows build keeps the `--mode managed` CLI entry, but the runtime directly prints "managed coordinator requires Linux strict sandbox" and exits, matching macOS behavior; the coordinator implementation remains Linux-only and is not included in the Windows package. Process snapshots (RSS/CPU) on Windows are provided through `GetProcessMemoryInfo`/`GetProcessTimes` (PSS has no equivalent; RSS is the fallback).
 - **File owner/permission checks** (trusted key store, deployment reads, state directory): Windows has no uid/mode bits, so owner checks are skipped; the boundary is provided by NTFS ACLs, and deployment reads retain the reparse-point (symlink/junction) rejection semantics.
 
+### Binding v1 (Windows)
+
+- **Local Binding development is supported**: `single-worker` and `static-pool` accept `--bindings-root` and run the same production registry scanner, manifest validator, manifest/App intersection, `LOAD_BINDING` ordering, Binding Runtime, and `capsid:binding/*` facade as Linux/macOS.
+- **Registry trust boundary**: Windows rejects reparse points (symlink/junction) and hard links, requires the root/package/file owner to be the current user, rejects Everyone/Users writable ACLs, enforces the 1 MiB manifest / 16 MiB source / 64 MiB aggregate limits, and rechecks identities after every read.
+- **Sandbox profiles are Linux-only**: a Windows Binding package may declare profiles so the same package can run under Linux, but Windows does not enforce seccomp/Landlock. Packages must keep `sandbox.requires` empty when Windows-native behavior is the only environment, and profile enforcement must be validated on Linux.
+- **Managed mode remains unavailable** on Windows, so Binding `secrets.valueFrom` is rejected in local modes (there is no managed secret provider).
+- Tests: `host_binding_registry_win` (registry security fixtures) and `worker_binding_windows_smoke` (real worker LOAD_BINDING → Binding Runtime → facade response) run in the `windows-host-library` job; the full POSIX zero-binding regression stays Linux/macOS-only.
+
 ### Worker internal differences
 
 - **IPC transport**: host↔worker IPC switches from `socketpair(AF_UNIX)` to a loopback TCP socket pair. Child process handles are explicitly inherited through `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` (only the IPC socket and on-demand stdio cross the process boundary, equivalent to POSIX close_range cleanup). `--ipc-fd` carries a handle value rather than an fd number. An accepted socket must call `SO_UPDATE_ACCEPT_CONTEXT` to rebind the listener context before the listener is closed: otherwise, after AFD reclaims the listener's endpoint name, subsequent I/O on the accepted socket fails randomly with `ERROR_ALREADY_EXISTS` (both ends of the socket pair can be poisoned).

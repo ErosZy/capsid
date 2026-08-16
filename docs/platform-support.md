@@ -1,4 +1,4 @@
-﻿# Platform Support Overview
+# Platform Support Overview
 
 Capsid's commitments for Linux, macOS, and Windows are split into two independent levels:
 
@@ -29,9 +29,11 @@ Unified commitments:
 - Multi-shard shared port (`SO_REUSEPORT`): internal implementation only on Linux/macOS; Windows uses a pool-level shared acceptor to achieve the same external behavior
 - Worker CPU affinity: full on Linux; current processor group only on Windows; none on macOS
 - `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE`: semantics differ by platform, so there is no unified commitment
-- Secure `bindingsRoot` scanning for local Binding development: Linux/macOS;
-  Windows rejects `--bindings-root` until an equivalent reparse-point and ACL
-  scanner is implemented (zero-Binding single/static behavior is unchanged)
+- Secure `bindingsRoot` scanning for local Binding development: Linux/macOS
+  (POSIX owner/mode + fd-relative scan) and Windows native-dev
+  (reparse-point/hard-link rejection, current-user ownership, Everyone/Users
+  writable ACL rejection). Windows runs the Binding Runtime and native gates,
+  but Linux sandbox profile enforcement remains Linux-only
 
 For consistent cross-platform behavior, rely only on the ✅ list; before using any capability from the differences list, branch by platform or pin the deployment to an explicitly supported platform.
 

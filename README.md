@@ -272,8 +272,10 @@ Full methodology, 12 workloads, and evidence rules are in
   bytecode compiler, and the single/static-pool Host are available;
   multi-shard static-pool is distributed by a pool-level acceptor;
   `capsid:fs` is degraded (`C:/...` paths only, reparse points are rejected);
-  strict sandbox and `managed` are unavailable, and `--mode managed` prints a
-  notice and exits at runtime.
+  local Binding development (`--bindings-root`) is supported with
+  reparse-point/hard-link/ACL checks, while strict sandbox profiles and
+  `managed` remain Linux-only and `--mode managed` prints a notice and exits
+  at runtime.
 
 The full matrix and build requirements are in
 [docs/platform-support.md](docs/platform-support.md).

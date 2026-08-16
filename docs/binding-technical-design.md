@@ -160,8 +160,13 @@ explicitly. Secret integration must be tested in managed mode.
 
 If an App declares no Binding, `--bindings-root` is unnecessary, no
 `LOAD_BINDING` message is sent, and no Binding Runtime is created. Secure
-local registry scanning is supported on Linux and macOS. Windows fails closed
-for `--bindings-root` until equivalent reparse-point and ACL checks exist.
+local registry scanning is supported on Linux, macOS, and Windows native-dev.
+Windows uses reparse-point (symlink/junction) and hard-link rejection plus
+current-user ownership and Everyone/Users writable ACL checks. Sandbox
+profiles remain Linux kernel capabilities: Windows runs the same Binding
+Runtime and native gates, but profile enforcement must still be validated on
+Linux; a Windows-run package should not claim seccomp/Landlock profile
+protection.
 
 ### 2.2 Binding manifest
 
