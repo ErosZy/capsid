@@ -1,5 +1,7 @@
 # Windows 构建与平台能力
 
+> 三平台能力总览与选型建议见[平台支持总览](platform-support.md)。
+
 Capsid v0.1.2 起提供 Windows x86_64 支持：Runtime 静态库、`capsid-worker`、
 `capsid-bytecode-compile` 与第一方 `capsid-host`（`--mode single-worker` /
 `static-pool`）在 MSVC 下原生构建，并以 `capsid-<版本>-windows-x86_64.zip`

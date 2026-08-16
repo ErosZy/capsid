@@ -62,7 +62,7 @@ capsid-worker
 | --- | --- | --- |
 | Linux x86-64/AArch64 | 支持 | strict sandbox，为 v1 生产发布目标 |
 | macOS | 支持 | v1 不声称等价 Linux 隔离；生产一致性使用 Linux 容器或 VM |
-| Windows | 获得 hosted Windows 环境后建立原生开发链路 | v1 使用 Linux 容器/WSL2；原生生产隔离单独验证 |
+| Windows x86-64（MSVC） | 自 v0.1.2 起支持 | v1 使用 Linux 容器/WSL2；原生生产隔离单独验证 |
 
 “原生开发”至少要求 Host 与 worker 能在目标系统构建和启动，完成
 源码/可信字节码加载、`capsid:env`、HTTP 请求、streaming、cancel、worker
@@ -71,16 +71,20 @@ capsid-worker
 
 平台边界保持单一责任：Host 决定所需能力并在 READY 时验证实际 feature
 bits；Runtime 实现进程创建、IPC、终止/回收和 OS sandbox。Linux 使用
-seccomp、Landlock、namespace 和 cgroup；未来的 Windows 后端使用 Windows
+seccomp、Landlock、namespace 和 cgroup；未来的 Windows 生产后端使用 Windows
 原生进程与安全机制，不得把 Job Object、Restricted Token 或 AppContainer
 伪报为 Linux feature bit。部署环境仍负责额外网络边界，Host 不创建
 privileged network supervisor。
 
-当前 ABI v7 的 worker event source 仍是 Unix fd，Runtime 的 spawn/reap 也仍是
-POSIX 实现，因此 Windows 原生开发目标尚未交付，也不在没有真实
-Windows 机器/hosted runner 时开始实现。第一方 Host 不得把这个
-当前事实泄漏到 pool、routing 或 lifecycle；仅平台 worker-event adapter 可以
-直接访问 fd/HANDLE。可信字节码继续受 compatibility identity 约束，Windows
+当前 ABI v7 的 worker event source 在 POSIX 上为 Unix fd，在 Windows 上为
+CRT fd（底层是 loopback TCP socket）；spawn/reap 与 worker-event adapter
+均按平台实现。Windows 原生开发链路自 v0.1.2 起交付，覆盖
+source/trusted-bytecode identity、请求、streaming、cancel、crash/reap 与
+loopback-only 负控，但 strict sandbox、managed Host、多 shard static-pool 与
+`capsid:fs` 仍不可用，详见[平台支持总览](platform-support.md)与
+[Windows 构建与平台能力](windows.md)。第一方 Host 不得把平台差异泄漏到
+pool、routing 或 lifecycle；仅平台 worker-event adapter 可以直接访问
+fd/HANDLE。可信字节码继续受 compatibility identity 约束，Windows
 本地构建的字节码不得绕过 identity 校验部署到不兼容的 Linux worker。
 
 ## JavaScript 表面

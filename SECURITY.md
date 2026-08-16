@@ -8,8 +8,9 @@ namespace/firewall、资源限制与下游网关限制是否同时正确配置�
 
 项目目前处于 `0.1.x` 阶段，安全修复面向最新代码线；尚不承诺旧版本的长期安全
 维护。第一方 `capsid-host` 当前用于开发、集成和 benchmark，不是稳定的生产部署
-接口。Linux strict sandbox 是 v1 的生产隔离目标，macOS native-dev 和未隔离模式
-不得用于执行不可信代码。
+接口。Linux strict sandbox 是 v1 的生产隔离目标；macOS native-dev、Windows
+native-dev 和任何未隔离模式不得用于执行不可信代码。平台差异见
+[平台支持总览](docs/platform-support.md)。
 
 以下内容属于项目安全边界：
 
@@ -52,5 +53,6 @@ Capsid 单独保证，但 Capsid 与这些边界的接口缺陷仍欢迎报告�
   可信产物。
 - 协议错误、worker exit 或同步 CPU timeout 后必须摘除并替换 worker。
 
-完整部署边界见[架构说明](docs/architecture.md)、[能力策略](docs/capability-policy.md)
+完整部署边界见[架构说明](docs/architecture.md)、
+[平台支持总览](docs/platform-support.md)、[能力策略](docs/capability-policy.md)
 和[Linux 严格沙箱](docs/linux-sandbox.md)。

@@ -158,7 +158,7 @@ for (const [documentName, content, requiredFragments] of [
     architecture,
     [
       "平台支持分为“原生开发”和“生产隔离”两个独立承诺",
-      "Windows 原生开发目标尚未交付",
+      "Windows 原生开发链路自 v0.1.2 起交付",
       "Host 决定所需能力并在 READY 时验证实际 feature",
       "Runtime 实现进程创建、IPC、终止/回收和 OS sandbox",
     ],
@@ -203,9 +203,9 @@ for (const [documentName, content, requiredFragments] of [
     "docs/testing.md",
     testingGuide,
     [
-      "Windows native-dev 轨道不在 M1 门内",
-      "Windows 交叉编译、Wine、WSL2 或 Linux 容器不能替代",
-      "这不阻塞 M1",
+      "Windows native-dev 使用 `windows-latest` hosted runner",
+      "Windows 交叉编译、Wine、WSL2 或 Linux 容器不能替代 hosted Windows 原生运行证据",
+      "五类 job 都产出 hosted evidence",
     ],
   ],
 ]) {

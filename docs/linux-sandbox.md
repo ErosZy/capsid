@@ -1,5 +1,7 @@
 # Linux 严格沙箱
 
+> 三平台能力总览与选型建议见[平台支持总览](platform-support.md)。
+
 Linux sandbox 只由宿主通过 C ABI 配置，不会暴露为 JavaScript global、
 module 或 permission prompt。
 

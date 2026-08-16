@@ -162,24 +162,26 @@ metrics-off 通过不够——证据路径同样必须无竞态。`host_single_w
   cgroup 和 required READY feature bits；
 - macOS native-dev 运行平台中立 Host 单元测试和真实 single-worker loopback
   集成；strict sandbox 请求必须负控失败；
-- Windows native-dev 轨道不在 M1 门内；获得真实 Windows 机器或 hosted runner 后，
-  才新增 Windows x64/MSVC job，并在 Windows 宿主真实启动 Host 与 worker，覆盖
-  source/trusted-bytecode identity、`capsid:env`、request、streaming、cancel、timeout、
-  crash/reap 和 loopback-only 负控；
+- Windows native-dev 使用 `windows-latest` hosted runner：MSVC + Ninja 构建
+  Runtime、worker、字节码编译器与 Host，运行平台中立矩阵，并在 Windows 宿主
+  真实启动 Host 与 worker，覆盖 source/trusted-bytecode identity、`capsid:env`、
+  request、streaming、cancel、timeout、crash/reap 和 loopback-only 负控；
 - Windows 交叉编译、Wine、WSL2 或 Linux 容器不能替代 hosted Windows 原生运行证据；
 - Windows/macOS native-dev 通过不得写成生产 sandbox 通过；反之，Linux
   生产门也不能替代 Windows 开发可用性。
 
-Windows 轨道启动时的第一个门必须先保存 RED 证据：当前 POSIX-only Runtime 在 MSVC
-构建或 native single-worker 集成处失败；实现不得通过跳过 worker 测试、禁用
-trusted bytecode 或把 listener 替换成非原生 Linux VM 来转绿。
+Windows 平台只支持 single-worker 与单 shard static-pool；依赖
+`SO_REUSEPORT` 的多 shard 场景、managed Host、`capsid:fs` 与 strict sandbox
+在 Windows 上不注册或不实现，见[平台支持总览](platform-support.md)。实现不得
+通过跳过 worker 测试、禁用 trusted bytecode 或把 listener 替换成非原生 Linux
+VM 来转绿。
 
 ## 环境型 sandbox 证据
 
 普通宿主缺少 cgroup delegation 或 namespace 权限时，相应测试返回 CTest
 skip code 77。这只表示环境不具备前置条件，不能写成通过。
 
-`.github/workflows/testing-validity.yml` 包含四类独立 job：
+`.github/workflows/testing-validity.yml` 包含五类独立 job：
 
 - Ubuntu Release/LTO、固定 WPT、benchmark smoke 和 privileged delegated
   sandbox，并生成 txiki.js 升级报告；
@@ -188,11 +190,13 @@ skip code 77。这只表示环境不具备前置条件，不能写成通过。
   ASan 非严格同功能门禁重复覆盖的 strict-sandbox 网络/TLS 退出项，因为
   seccomp 会在 instrumented runtime teardown 阶段终止进程；
 - Clang/libFuzzer 的四个 bounded corpus gate；
-- macOS 14 的 POSIX host-library 与非 worker 单元矩阵。
+- macOS 14 的 POSIX host-library 与非 worker 单元矩阵；
+- `windows-latest` 的 MSVC host-library，构建 Runtime/worker/Host 并运行
+  平台中立测试，Linux-only 测试按“不注册即跳过”或 `SKIP_RETURN_CODE 77`
+  原则缺席。
 
-上述是当前 workflow 事实；它尚未包含 Windows job，因此当前 commit 不声称
-Windows 原生开发已交付。这不阻塞 M1，但未来的 Windows native-dev 里程碑在
-加入上述 hosted Windows 门之前不得标记完成。
+上述五类 job 都产出 hosted evidence，由最终 `hosted-evidence-index` 统一
+门禁；任一 job 失败都会让整个 run 失败。
 
 JUnit、build metadata 和升级报告作为 workflow artifact 保存，不在仓库提交生成报告的
 副本。最终

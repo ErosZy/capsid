@@ -1,10 +1,11 @@
 # Capsid Runtime
 
 [![Testing validity](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml/badge.svg)](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml)
+[![Release](https://img.shields.io/github/v/release/ErosZy/capsid?label=release)](https://github.com/ErosZy/capsid/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 JavaScript
-运行时。宿主通过 `libcapsid_runtime` 把 HTTP 请求转换为 Fetch 请求；每个
+Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的**进程隔离 JavaScript
+运行时**。宿主通过 `libcapsid_runtime` 把 HTTP 请求转换为 Fetch 请求；每个
 `capsid-worker` 只加载一个自包含 ESM 应用，并以流式事件返回响应。
 
 它不是 Node/Deno 的替代品，也不是直接运行 `.js` 的命令行服务器。Runtime
@@ -13,10 +14,48 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 Ja
 
 > **项目状态：** 当前版本为 `0.1.x`。Runtime ABI 为 v7，第一方 Host 仍是
 > 非生产部署接口。Linux strict sandbox 是 v1 的生产隔离目标；未启用严格沙箱
-> 时，只能运行受信任代码。自 v0.1.2 起提供 Windows x86_64 构建（MSVC，静态
-> CRT），Runtime/worker/字节码编译器与 single-worker/static-pool Host 可用，
-> strict sandbox 与 managed Host 仍为 Linux 专属，详见
-> [Windows 构建与平台能力](docs/windows.md)。
+> 时，只能运行受信任代码。
+
+---
+
+## 目录
+
+- [平台支持](#平台支持)
+- [为什么是 Capsid](#为什么是-capsid)
+- [快速开始](#快速开始)
+- [集成模型](#集成模型)
+- [权限与安全边界](#权限与安全边界)
+- [性能概览](#性能概览)
+- [文档导航](#文档导航)
+- [开发与验证](#开发与验证)
+- [贡献、安全与许可证](#贡献安全与许可证)
+
+---
+
+## 平台支持
+
+平台支持分为**原生开发**与**生产隔离**两个独立承诺：能在某平台构建和运行，
+不等于该平台具备 Linux strict sandbox 同等的生产隔离。三平台差异是本项目
+最重要的部署决策因素，请在选型时先阅读[平台支持总览](docs/platform-support.md)。
+
+| 平台 | 原生构建与开发 | 生产隔离 | 关键差异与限制 |
+| --- | --- | --- | --- |
+| **Linux**（x86-64 / AArch64） | ✅ 完整 | ✅ strict sandbox（v1 生产目标） | 唯一具备 seccomp、Landlock、namespace、cgroup 完整隔离的平台；详见 [Linux 严格沙箱](docs/linux-sandbox.md) |
+| **macOS** | ✅ 完整 | ❌ 无等价隔离，生产请用 Linux 容器/VM | Runtime、worker、字节码编译器与 single-worker/static-pool Host 可用；`capsid:fs` 不可用；`strict_sandbox` 与 managed Host 无法提供有效隔离 |
+| **Windows**（x86-64，MSVC） | ✅ 自 v0.1.2 起 | ❌ 无等价隔离，生产请用 Linux 容器/WSL2 | Runtime、worker、字节码编译器与 single-worker/**单 shard** static-pool Host 可用；多 shard 池（SO_REUSEPORT）、managed Host、`capsid:fs`、strict sandbox 不可用；详见 [Windows 构建与平台能力](docs/windows.md) |
+
+统一结论：
+
+- **开发、联调、benchmark**：三平台均可；
+- **运行不可信代码的生产隔离**：只承诺 Linux；
+- **macOS/Windows 上的生产一致性**：在 Linux 容器或 VM 中运行。
+
+完整的能力矩阵、构建前置条件和测试覆盖差异见
+[平台支持总览](docs/platform-support.md)、
+[Windows 构建与平台能力](docs/windows.md) 与
+[Linux 严格沙箱](docs/linux-sandbox.md)。
+
+---
 
 ## 为什么是 Capsid
 
@@ -57,6 +96,8 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的进程隔离 Ja
 Capsid 实现固定的 Minimum Common Web API 子集
 `CAPSID-MIN-2025-subset-v0`，不宣称完整 ECMA-429 或全部 WPT conformance。
 
+---
+
 ## 快速开始
 
 ### 1. 编写 Fetch 应用
@@ -75,7 +116,11 @@ export default {
 
 ### 2. 构建 Runtime 与第一方 Host
 
-需要 CMake、C/C++ 工具链、Node.js/npm、OpenSSL，以及构建 Host 所需的 Boost。
+前置依赖：CMake 3.18+、C/C++ 工具链、Node.js/npm、OpenSSL；构建 Host 还需要
+Boost。各平台差异见[平台支持总览](docs/platform-support.md)。
+
+<details>
+<summary><b>Linux / macOS</b></summary>
 
 ```sh
 git submodule update --init --recursive
@@ -89,6 +134,33 @@ cmake -S . -B build-release \
   -DCAPSID_USE_MIMALLOC=OFF
 cmake --build build-release --parallel
 ```
+
+</details>
+
+<details>
+<summary><b>Windows（PowerShell + MSVC + vcpkg）</b></summary>
+
+```powershell
+git submodule update --init --recursive
+npm ci --ignore-scripts --prefix vendor/txiki.js
+
+vcpkg install openssl boost-system boost-asio boost-beast --triplet x64-windows-static
+
+cmake -S . -B build-release -G Ninja `
+  -DCMAKE_C_COMPILER=cl `
+  -DCMAKE_CXX_COMPILER=cl `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DCAPSID_BUILD_HOST=ON `
+  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+  -DVCPKG_TARGET_TRIPLET=x64-windows-static
+
+cmake --build build-release --parallel
+```
+
+完整前置条件、不可用配置与 LTO/静态 CRT 说明见
+[Windows 构建与平台能力](docs/windows.md)。
+
+</details>
 
 ### 3. 打包并运行
 
@@ -120,12 +192,15 @@ curl http://127.0.0.1:8080/@capsid/orders/
 # {"message":"hello from Capsid","path":"/"}
 ```
 
-`capsid-host` 还提供固定 worker 池的 `static-pool` 模式，以及由 `host.json`、
-Admin API 和 durable active state 驱动的 `managed` 模式。生产集成应先阅读
-[宿主嵌入规范](docs/host-integration.md)与[配置参考](docs/host-config.md)。
+`capsid-host` 还提供固定 worker 池的 `static-pool` 模式（Windows 只支持单 shard），
+以及由 `host.json`、Admin API 和 durable active state 驱动的 `managed` 模式
+（仅 Linux）。本地 `./capsid.json` 可直接授权 single-worker / static-pool 的
+模块、env、fs、fetch、storage 与 stdio，详见 [capsid.json 教程](docs/capsid-json.md)。
 
-Windows（MSVC）构建步骤、能力矩阵与平台限制见
-[Windows 构建与平台能力](docs/windows.md)。
+生产集成应先阅读[宿主嵌入规范](docs/host-integration.md)与
+[配置参考](docs/host-config.md)。
+
+---
 
 ## 集成模型
 
@@ -144,7 +219,8 @@ capsid_worker *worker = NULL;
 capsid_result result = capsid_worker_spawn(&config, &worker);
 ```
 
-`capsid_worker_fd()` 返回非阻塞 Unix socket，可接入 epoll、kqueue 或现有
+`capsid_worker_fd()` 在 POSIX 上返回非阻塞 Unix socket，在 Windows 上返回
+CRT fd（底层为 loopback TCP socket），可接入 epoll、kqueue、IOCP 或现有
 reactor。`CAPSID_WOULD_BLOCK` 表示正常背压；事件 payload 只保证有效到下一次
 `capsid_worker_next_event()`，异步使用前必须复制。完整的 READY、request credit、
 response credit、streaming、取消与回收契约见[宿主嵌入规范](docs/host-integration.md)。
@@ -162,6 +238,8 @@ cmake --install build-release --prefix "$PWD/dist"
 add_subdirectory(path/to/capsid EXCLUDE_FROM_ALL)
 target_link_libraries(my_gateway PRIVATE capsid::runtime)
 ```
+
+---
 
 ## 权限与安全边界
 
@@ -190,8 +268,12 @@ redirect 都会重新检查。权威能力清单见
 
 Linux 生产环境必须显式启用 strict sandbox，并根据部署要求验证实际结果：
 `CAPSID_EVENT_READY.flags` 必须包含部署要求的 sandbox feature。cgroup、network
-namespace/firewall、网关侧请求限制与日志持久化仍由宿主负责。详见
-[Linux 严格沙箱](docs/linux-sandbox.md)与[安全策略](SECURITY.md)。
+namespace/firewall、网关侧请求限制与日志持久化仍由宿主负责。macOS/Windows
+不提供 strict sandbox，只能运行受信任代码。详见
+[Linux 严格沙箱](docs/linux-sandbox.md)、[平台支持总览](docs/platform-support.md)
+与[安全策略](SECURITY.md)。
+
+---
 
 ## 性能概览
 
@@ -211,20 +293,24 @@ Capsid 在该矩阵的常规 JSON 负载中领先；大字节流并非全部领�
 宿主校验的产物，不能加载不可信输入。完整的 12 组吞吐结果、PSS/RSS 口径、原始
 样本位置和证据门槛见[性能：证据规则与当前形态](docs/performance-benchmarks.md)。
 
-## 文档
+---
+
+## 文档导航
 
 | 目标 | 文档 |
 | --- | --- |
-| 了解系统边界 | [架构与产品边界](docs/architecture.md) |
+| 了解系统边界与进程模型 | [架构与产品边界](docs/architecture.md) |
+| 三平台差异与选型 | [平台支持总览](docs/platform-support.md) · [Windows](docs/windows.md) · [Linux 沙箱](docs/linux-sandbox.md) |
 | 嵌入 C/C++ 宿主 | [宿主嵌入与集成规范](docs/host-integration.md) |
 | 部署第一方 Host | [host.json / capsid.json 参考](docs/host-config.md) |
 | 配置应用权限 | [capsid.json 教程](docs/capsid-json.md) · [模块与权限参考](docs/module-permissions.md) |
 | 验证安全隔离 | [能力策略](docs/capability-policy.md) · [Linux 严格沙箱](docs/linux-sandbox.md) |
-| 在 Windows 上构建 | [Windows 构建与平台能力](docs/windows.md) |
 | 了解兼容性 | [标准与合规](docs/conformance.md) · [框架兼容性](docs/framework-compatibility/README.md) |
 | 复现测试与性能 | [测试门禁](docs/testing.md) · [性能证据](docs/performance-benchmarks.md) |
 
 完整导航及事实来源优先级见[文档中心](docs/README.md)。
+
+---
 
 ## 开发与验证
 
@@ -250,12 +336,20 @@ ctest --test-dir build-release --output-on-failure \
   -E '^wpt_conformance_not_configured$'
 ```
 
+Windows 构建请使用 MSVC + vcpkg 命令（见[快速开始](#快速开始)），并以
+`ctest --test-dir build-release --output-on-failure -E '^(wpt_conformance_not_configured|worker_package_.*)$'`
+运行平台中立矩阵。
+
 未配置固定 WPT checkout 时，CTest 会登记失败哨兵，避免合规测试静默空跑。
 sanitizer、fuzz、WPT 与 delegated sandbox 的完整命令见[测试门禁](docs/testing.md)。
 
 提交代码或文档前，请阅读[贡献指南](CONTRIBUTING.md)。性能数字只在满足证据规则
 时进入项目文档，最新结果与原始样本位置见[性能证据](docs/performance-benchmarks.md)。
 
-## License
+---
 
-[MIT](LICENSE) © Capsid contributors
+## 贡献、安全与许可证
+
+- **贡献**：见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- **安全报告**：见 [SECURITY.md](SECURITY.md)；安全漏洞请勿公开披露。
+- **许可证**：[MIT](LICENSE) © Capsid contributors
