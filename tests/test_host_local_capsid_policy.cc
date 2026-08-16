@@ -129,7 +129,7 @@ std::string get_body(std::uint16_t port, const std::string& path) {
     }
     close(fd);
     require(response.find(" 200 ") != std::string::npos,
-            "local-policy worker did not answer 200");
+            "local-policy worker did not answer 200: " + response);
     const std::string::size_type body_begin = response.find("\r\n\r\n");
     if (body_begin == std::string::npos) {
         return "";
@@ -162,22 +162,39 @@ capsid::host::SingleWorkerServerOptions make_options(const char* worker_path,
     return options;
 }
 
-// The worker branches on the request path so one inline bundle covers every
-// scenario: /env echoes the granted variable (or the no-var sentinel), and
+// The data plane routes requests under the /@capsid/{app} prefix; the
+// worker branches on the path suffix so one inline bundle covers every
+// scenario: /env echoes the granted variable (or the no-var sentinel),
 // /fetch proxies the loopback target granted by capsid.json. The loopback
 // port is only known at runtime; the fetch scenario splices it into the
 // bundle text before spawn, every other scenario leaves the marker out.
-const std::string kWorkerSource =
+// The env snapshot is only readable through the capsid:env module; a plain
+// process.env does not exist in the restricted core. Reading an ungranted
+// variable throws "environment access denied" instead of yielding
+// undefined, so the denial scenario surfaces the throw.
+const std::string kEnvWorkerSource =
+    "import { env } from 'capsid:env';"
     "export default {"
     "  async fetch(request) {"
     "    const url = new URL(request.url);"
-    "    if (url.pathname === '/fetch') {"
+    "    if (url.pathname.endsWith('/fetch')) {"
     "      const response = await fetch('http://127.0.0.1:__CAPSID_LOOPBACK_PORT__/data');"
     "      return new Response(await response.text());"
     "    }"
-    "    return new Response(process.env.CAPSID_TEST_VAR ?? 'no-var');"
+    "    if (url.pathname.endsWith('/env')) {"
+    "      let value = null;"
+    "      try { value = env.get('CAPSID_TEST_VAR'); }"
+    "      catch (error) { value = 'denied'; }"
+    "      return new Response(value ?? 'no-var');"
+    "    }"
+    "    return new Response('unexpected-path');"
     "  }"
     "};";
+
+// A worker with no module imports: the only one that can run under the
+// absent-default deny-all baseline (any import would be unauthorized).
+const std::string kPlainWorkerSource =
+    "export default { fetch: () => new Response('plain-ok') };";
 
 // Binds a loopback listener on a kernel-assigned port, then answers the
 // first connection with a fixed body. One-shot: the accept happens on the
@@ -244,10 +261,11 @@ LoopbackFixture start_loopback_fixture(const std::string& body) {
 
 // Success scenario: writes the local document (when non-empty), starts the
 // server with it, issues one request and expects the body fragment.
-// loopback_port != 0 splices the /fetch target into the bundle.
+// loopback_port != 0 splices the /fetch target into the env worker source.
 void run_success_scenario(const char* worker_path,
                           const std::string& name,
                           const std::string& capsid_json,
+                          const std::string& worker_source,
                           std::uint16_t loopback_port,
                           const std::string& request_path,
                           const std::string& expected_body) {
@@ -255,7 +273,7 @@ void run_success_scenario(const char* worker_path,
     if (!capsid_json.empty()) {
         write_json_file(json_path, capsid_json);
     }
-    std::string source = kWorkerSource;
+    std::string source = worker_source;
     if (loopback_port != 0) {
         const std::string marker = "__CAPSID_LOOPBACK_PORT__";
         const std::string::size_type marker_at = source.find(marker);
@@ -335,26 +353,32 @@ int main(int argc, char** argv) {
 
     // 1. An env grant in the local document reaches the worker: the module
     //    and the exact env name are both authorized through the permissive
-    //    host mirror, and the literal value arrives in process.env.
+    //    host mirror, and the literal value arrives through capsid:env.
     run_success_scenario(
         argv[1], "env-grant",
         "{\"apiVersion\":\"capsid/app-v1\","
         "\"permissions\":{\"modules\":[\"capsid:env\"],"
         "\"env\":{\"CAPSID_TEST_VAR\":{\"value\":\"granted-value\"}}},"
         + pool + "}",
-        0, "/env", "granted-value");
+        kEnvWorkerSource, 0, "/@capsid/orders/env", "granted-value");
 
-    // 2. A document with no grants keeps the deny-all defaults.
+    // 2. A document that grants no env entries keeps the deny-all default:
+    //    the module is usable, but reading the variable is denied (the
+    //    runtime throws "environment access denied").
     run_success_scenario(
-        argv[1], "no-grants",
-        "{\"apiVersion\":\"capsid/app-v1\",\"permissions\":{},"
+        argv[1], "env-denied",
+        "{\"apiVersion\":\"capsid/app-v1\","
+        "\"permissions\":{\"modules\":[\"capsid:env\"]},"
         + pool + "}",
-        0, "/env", "no-var");
+        kEnvWorkerSource, 0, "/@capsid/orders/env", "denied");
 
     // 3. An absent default file (no capsid.json next to the server) is the
-    //    pre-v0.1.3 no-policy case: startup succeeds, deny-all stays.
-    run_success_scenario(argv[1], "absent-default-noop", "", 0, "/env",
-                         "no-var");
+    //    pre-v0.1.3 no-policy case: startup succeeds and the server serves
+    //    (a plain worker without module imports runs; any import would be
+    //    unauthorized under the deny-all baseline).
+    run_success_scenario(argv[1], "absent-default-noop", "",
+                         kPlainWorkerSource, 0, "/@capsid/orders/env",
+                         "plain-ok");
 
     // 4. A fetch egress grant is honored end-to-end against a loopback
     //    listener (permissive host mirror -> egress descriptors -> worker).
@@ -362,11 +386,13 @@ int main(int argc, char** argv) {
         LoopbackFixture fixture = start_loopback_fixture("fetch-ok");
         const std::string capsid_json =
             "{\"apiVersion\":\"capsid/app-v1\","
-            "\"permissions\":{\"fetch\":{\"allow\":[\"127.0.0.1:" +
+            "\"permissions\":{\"modules\":[\"capsid:env\"],"
+            "\"fetch\":{\"allow\":[\"127.0.0.1:" +
             std::to_string(fixture.port) + "\"]}},"
             + pool + "}";
         run_success_scenario(argv[1], "fetch-egress-grant", capsid_json,
-                             fixture.port, "/fetch", "fetch-ok");
+                             kEnvWorkerSource, fixture.port,
+                             "/@capsid/orders/fetch", "fetch-ok");
         fixture.thread.join();
     }
 
