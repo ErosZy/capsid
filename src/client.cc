@@ -2050,11 +2050,7 @@ capsid_result capsid_worker_set_cpu_affinity(
         return CAPSID_INVALID_ARGUMENT;
     }
 #endif
-#if !defined(__linux__)
-    (void)cpu;
-    errno = ENOTSUP;
-    return CAPSID_SYSTEM_ERROR;
-#else
+#if defined(__linux__)
     if (cpu >= CPU_SETSIZE) {
         return CAPSID_INVALID_ARGUMENT;
     }
@@ -2072,6 +2068,27 @@ capsid_result capsid_worker_set_cpu_affinity(
                &affinity) == 0
         ? CAPSID_OK
         : CAPSID_SYSTEM_ERROR;
+#elif defined(_WIN32)
+    // SetProcessAffinityMask restricts the whole worker process to the
+    // given CPU, mirroring sched_setaffinity(pid) on Linux: the child's
+    // threads all inherit the process mask. The cpu must fall inside the
+    // caller's own mask (the worker inherits it at spawn), validated
+    // through the same topology surface as the Linux branch.
+    const std::vector<uint32_t> cpus =
+        capsid::topology::available_cpus();
+    if (std::find(cpus.begin(), cpus.end(), cpu) == cpus.end()) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (!SetProcessAffinityMask(
+            worker->process, static_cast<DWORD_PTR>(1) << cpu)) {
+        errno = GetLastError() == ERROR_INVALID_PARAMETER ? EINVAL : EIO;
+        return CAPSID_SYSTEM_ERROR;
+    }
+    return CAPSID_OK;
+#else
+    (void)cpu;
+    errno = ENOTSUP;
+    return CAPSID_SYSTEM_ERROR;
 #endif
         },
         "capsid_worker_set_cpu_affinity: out of memory",
