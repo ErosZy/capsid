@@ -1494,8 +1494,6 @@ std::string host_policy_identity(const HostPolicy& host) {
     return sha256_hex(out.str());
 }
 
-namespace {
-
 // The source bundle file name from the committed capsid.json ("entry").
 // The source artifact's frozen sourceName is derived from this trusted
 // document (never from the mutable artifact record), so recovery can
