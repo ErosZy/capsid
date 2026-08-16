@@ -124,10 +124,11 @@ const size_t kStorageEntryLimit = 256u;
 const size_t kStorageKeyLimit = 256u;
 const size_t kStorageValueLimit = 16u * 1024u;
 const size_t kStdioMessageLimit = 16u * 1024u;
-#if defined(__linux__)
-// Consumed only by the capsid:fs permission module, which is gated to
-// Linux (openat2 path semantics); other platforms compile without the
-// module and must not carry unused constants under -Werror.
+#if !defined(_WIN32)
+// Consumed by the capsid:fs permission module. Linux uses openat2 path
+// semantics; macOS uses an equivalent no-symlink dirfd walk. Windows does
+// not compile the module and must not carry unused constants under
+// -Werror.
 const size_t kFsFileLimit = 1024u * 1024u;
 const size_t kFsDirectoryEntryLimit = 1024u;
 #endif
@@ -3192,6 +3193,57 @@ private:
             path.c_str(),
             &how,
             sizeof(how)));
+#elif defined(__APPLE__)
+        // macOS has no openat2: reproduce the same no-symlink component
+        // semantics with a dirfd walk. Every intermediate component is
+        // opened O_NOFOLLOW|O_DIRECTORY and the final component is opened
+        // O_NOFOLLOW with the caller's flags, so a symlink anywhere in the
+        // path fails with ELOOP.
+        if (path.empty() || path[0] != '/') {
+            errno = EINVAL;
+            return -1;
+        }
+        if (path == "/") {
+            return open(
+                "/", flags | O_CLOEXEC | O_NONBLOCK);
+        }
+        int dir_fd = open("/", O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+        if (dir_fd < 0) {
+            return -1;
+        }
+        std::size_t begin = 1;
+        while (begin < path.size()) {
+            const std::size_t end = path.find('/', begin);
+            const std::string component = path.substr(
+                begin, end == std::string::npos ? std::string::npos
+                                                : end - begin);
+            const bool last = end == std::string::npos;
+            if (component.empty() || component == "." ||
+                component == "..") {
+                close(dir_fd);
+                errno = EINVAL;
+                return -1;
+            }
+            const int next = openat(
+                dir_fd,
+                component.c_str(),
+                (last ? flags : O_RDONLY | O_DIRECTORY) |
+                    O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+            const int saved = errno;
+            close(dir_fd);
+            if (next < 0) {
+                errno = saved;
+                return -1;
+            }
+            if (last) {
+                return next;
+            }
+            dir_fd = next;
+            begin = end + 1;
+        }
+        close(dir_fd);
+        errno = EINVAL;
+        return -1;
 #else
         (void)path;
         (void)flags;
@@ -3295,9 +3347,9 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
-#if defined(_WIN32) || defined(__APPLE__)
-        // The filesystem permission module requires openat2 path semantics
-        // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
+#if defined(_WIN32)
+        // The filesystem permission module is not implemented on Windows;
+        // see docs/windows.md.
         (void)ctx;
         (void)argc;
         (void)argv;
@@ -3373,7 +3425,7 @@ private:
         close(descriptor);
         return JS_NewStringLen(
             ctx, contents.data(), contents.size());
-#endif  // !defined(_WIN32) && !defined(__APPLE__)
+#endif  // !defined(_WIN32)
     }
 
     static JSValue js_fs_stat(
@@ -3381,9 +3433,9 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
-#if defined(_WIN32) || defined(__APPLE__)
-        // The filesystem permission module requires openat2 path semantics
-        // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
+#if defined(_WIN32)
+        // The filesystem permission module is not implemented on Windows;
+        // see docs/windows.md.
         (void)ctx;
         (void)argc;
         (void)argv;
@@ -3438,7 +3490,7 @@ private:
             return JS_EXCEPTION;
         }
         return result;
-#endif  // !defined(_WIN32) && !defined(__APPLE__)
+#endif  // !defined(_WIN32)
     }
 
     static JSValue js_fs_list(
@@ -3446,9 +3498,9 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
-#if defined(_WIN32) || defined(__APPLE__)
-        // The filesystem permission module requires openat2 path semantics
-        // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
+#if defined(_WIN32)
+        // The filesystem permission module is not implemented on Windows;
+        // see docs/windows.md.
         (void)ctx;
         (void)argc;
         (void)argv;
@@ -3534,7 +3586,7 @@ private:
             return JS_EXCEPTION;
         }
         return result;
-#endif  // !defined(_WIN32) && !defined(__APPLE__)
+#endif  // !defined(_WIN32)
     }
 
     static int fs_module_init(

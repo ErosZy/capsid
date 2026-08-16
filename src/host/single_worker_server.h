@@ -1,6 +1,8 @@
 #ifndef CAPSID_HOST_SINGLE_WORKER_SERVER_H
 #define CAPSID_HOST_SINGLE_WORKER_SERVER_H
 
+#include <boost/asio/ip/tcp.hpp>
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -40,6 +42,12 @@ struct SingleWorkerServerOptions {
     bool write_ready_record = true;
     bool install_process_signals = true;
     bool so_reuseport = false;
+    // External-accept mode (Windows multi-shard static-pool): the shard
+    // spawns its worker and runs its session reactor, but does NOT bind or
+    // accept a listener. The pool owns the single shared acceptor and hands
+    // accepted sockets in through adopt_socket(). Mutually exclusive with
+    // defer_accept and so_reuseport.
+    bool external_accept = false;
     // Pool barrier mode: the listener is bound and the worker is READY,
     // but the server does NOT accept connections until activate_accept()
     // is called. The pool starts every shard "prepared but not accepting"
@@ -139,6 +147,12 @@ public:
     // startup failure; false otherwise. Lets a pool report its live
     // capacity (N → N−1 on a worker fault) without caching.
     bool worker_available() const;
+
+    // External-accept mode only: hands an already-accepted, owned Asio
+    // socket to this shard's io thread. Returns false when the shard is not
+    // running or cannot take the connection; on false the socket is closed
+    // by the caller's move (or by its destructor).
+    bool adopt_socket(boost::asio::ip::tcp::socket socket);
 
     // M2 §7.5 bounded drain. Once the new pool has been published, the old
     // pool begins draining: the listener stops accepting new connections

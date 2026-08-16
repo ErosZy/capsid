@@ -48,25 +48,27 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的**进程隔离 
 ### macOS
 
 - **原生开发**：完整 ✅ —— Runtime、worker、字节码编译器与
-  single-worker/static-pool Host 可用（统一契约为单 shard；多 shard 是
-  macOS 平台扩展）
+  single-worker/static-pool Host 可用（single 与 multi shard 行为与 Linux
+  一致，multi shard 使用 SO_REUSEPORT）
 - **生产隔离**：无 ❌ —— 没有等价隔离，生产请使用 Linux 容器或 VM
-- `capsid:fs` 不可用；`strict_sandbox` 与 managed Host 无法提供有效隔离
+- `capsid:fs` 可用（与 Linux 相同的 no-symlink 读取语义）；`strict_sandbox`
+  与 managed Host 无法提供有效隔离
 
 ### Windows（x86-64，MSVC）
 
 - **原生开发**：自 v0.1.2 起 ✅ —— Runtime、worker、字节码编译器与
-  single-worker/**单 shard** static-pool Host 可用（与 Linux/macOS 对齐的
-  统一契约）
+  single-worker/static-pool Host 可用；static-pool 支持 single 与 multi
+  shard（multi shard 由池级共享 acceptor 分发，与 Linux/macOS 对外行为一致）
 - **生产隔离**：无 ❌ —— 生产请使用 Linux 容器或 WSL2
-- 多 shard 池（依赖 SO_REUSEPORT）、managed Host、`capsid:fs` 与
-  strict sandbox 不可用
+- managed Host、`capsid:fs` 与 strict sandbox 不可用
 - 详见 [Windows 构建与平台能力](docs/windows.md)
 
 **统一结论：**
 
-- **single-worker 与 static-pool 以单 shard 为三平台统一行为**：Linux、macOS、
-  Windows 均支持；多 shard static-pool 仅 Linux/macOS，Windows 会拒绝启动；
+- **single-worker 与 static-pool（single/multi shard）是三平台统一行为**：
+  Linux、macOS 使用内核 SO_REUSEPORT 共享端口，Windows 使用池级共享
+  acceptor 轮询分发，对客户端和测试都是同一公开端口、同一 READY/请求/
+  drain 契约；
 - 开发、联调、benchmark：三平台均可；
 - 运行不可信代码的生产隔离：只承诺 Linux；
 - macOS/Windows 上的生产一致性：在 Linux 容器或 VM 中运行。
@@ -211,8 +213,8 @@ curl http://127.0.0.1:8080/@capsid/orders/
 # {"message":"hello from Capsid","path":"/"}
 ```
 
-`capsid-host` 还提供固定 worker 池的 `static-pool` 模式（Windows 只支持单 shard），
-以及由 `host.json`、Admin API 和 durable active state 驱动的 `managed` 模式
+`capsid-host` 还提供固定 worker 池的 `static-pool` 模式（三平台均支持
+single/multi shard；Windows 通过池级共享 acceptor 实现），以及由 `host.json`、Admin API 和 durable active state 驱动的 `managed` 模式
 （仅 Linux）。本地 `./capsid.json` 可直接授权 single-worker / static-pool 的
 模块、env、fs、fetch、storage 与 stdio，详见 [capsid.json 教程](docs/capsid-json.md)。
 

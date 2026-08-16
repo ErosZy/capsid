@@ -100,14 +100,14 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 | Runtime C ABI（spawn/request/credit/streaming） | ✅ | ✅ | ✅ |
 | `capsid-worker`（txiki.js + 受限核心） | ✅ | ✅ | ✅ |
 | `capsid-bytecode-compile`（M1D 可信字节码） | ✅ | ✅ | ✅ |
-| Host `--mode single-worker` / `static-pool` | ✅ | ✅ | ✅（仅单 shard，见下） |
+| Host `--mode single-worker` / `static-pool` | ✅ | ✅ | ✅（multi shard 经池级 acceptor） |
 | Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌（运行时失败） | ❌（构建排除） |
 | 出站网络策略（egress host/address 规则、保护段） | ✅ | ✅ | ✅（JS 层） |
 | 能力策略（模块/权限/环境快照） | ✅ | ✅ | ✅ |
-| fs 权限模块（capsid:fs read/stat/list） | ✅ | ❌（函数调用拒绝） | ❌（函数调用拒绝） |
+| fs 权限模块（capsid:fs read/stat/list） | ✅ | ✅（no-symlink dirfd walk） | ❌（函数调用拒绝） |
 | RLIMIT_AS / RLIMIT_NOFILE / RLIMIT_CORE | ✅ | 部分（RLIMIT_AS 编译期拒绝） | 部分（见下） |
 | strict sandbox（seccomp/Landlock/namespace/cgroup） | ✅ | ❌ | ❌（见下） |
-| 多 shard 共享端口（SO_REUSEPORT） | ✅ | ✅ | ❌ |
+| 多 shard 共享端口（SO_REUSEPORT） | ✅ | ✅ | ❌（改用池级 acceptor 分发） |
 | worker CPU affinity（`capsid_worker_set_cpu_affinity`） | ✅ | ❌ | ✅（当前处理器组内） |
 
 ### worker 沙箱语义（Windows）
@@ -137,19 +137,17 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 
 ### Host（Windows）
 
-- **single-worker / static-pool** 完整可用：单 shard 池（`--workers 1`）
-  在 Windows 上正常启动，因为单 shard 不需要共享端口选项；`--workers ≥ 2`
-  的多 shard 池见下一条。进程停止信号：Windows 没有 `sigwait`，
-  `static-pool` 用控制台控制处理器（CTRL_C/CTRL_BREAK/关闭）触发同一停止
-  路径；`single-worker` 使用 Boost.Asio `signal_set`（Windows 下同样可用）。
-- **多 shard 静态池不可用**：多 shard 共享端口依赖 `SO_REUSEPORT`。
-  Windows 不提供该选项（Linux/macOS 均可用），多 shard 启动会被拒绝。
-  多 shard 场景测试（`host_static_pool_server_shared_port_lifecycle`、
+- **single-worker / static-pool** 完整可用：single 与 multi shard 都与
+  Linux/macOS 共享同一对外契约。Windows 没有 `SO_REUSEPORT`，multi shard
+  由池级共享 acceptor 绑定公开端口并轮询分发到各 shard，因此客户端看到
+  同一个端口、同一 READY 与 drain 契约。进程停止信号：Windows 没有
+  `sigwait`，`static-pool` 用控制台控制处理器（CTRL_C/CTRL_BREAK/关闭）
+  触发同一停止路径；`single-worker` 使用 Boost.Asio `signal_set`（Windows
+  下同样可用）。
+- **多 shard 场景测试**（`host_static_pool_server_shared_port_lifecycle`、
   `host_admission_pool_forwards_options`、`host_concurrent_pool_wait`）在
-  Windows 上不注册；单 shard 场景（含
-  `drain-inflight-completes` / `drain-deadline-forces` /
-  `drain-idle-exits`）在 Windows 上注册并运行。m2 组中另有两个因 POSIX
-  依赖而不注册的场景，见下文“Windows 上的测试覆盖差异”。
+  Windows 上注册并运行；单 shard drain 场景同样注册。m2 组中只有两个因
+  POSIX 依赖而不注册的场景，见下文“Windows 上的测试覆盖差异”。
 - **managed 模式不可用**：coordinator 的状态机依赖 dirfd 相对路径
   （openat/mkdirat/fstatat）、uid 属主校验与 UDS Admin 平面；这些语义
   无法在 Windows 上等价实现，构建直接排除（`--mode managed` 启动时报错
@@ -210,12 +208,11 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   spawn 路径的注入 sweep（覆盖同一 guard 机制）仍然运行。
 - **WPT 一致性套件**：WPT 工具链仅 Linux；`wpt_conformance_not_configured`
   的“响亮失败”门禁在 Windows 上不注册。
-- **多 shard 池契约**：见上文 SO_REUSEPORT 限制（三个多 shard 场景
-  不注册）。
 - **m2 组的 POSIX 依赖场景**：`host_static_pool_activation_barrier` 用
   POSIX shell 脚本（mkdir/sleep/exec 语义）包装 worker，
   `host_static_pool_worker_exit_isolation` 需要 `/proc` 退出证据，
-  两者在 Windows 上不注册；m2 组其余测试正常运行。
+  两者在 Windows 上不注册；多 shard 与单 shard static-pool 场景均已
+  在 Windows 上注册并运行。
 - **generation pool 的 kill-injection 场景**：`/proc/<pid>/status`
   不可用时无法验证“杀掉的 worker 被替换”路径；create/drain 与启动
   失败场景照常运行后，测试整体以 SKIP_RETURN_CODE 77 如实报告跳过

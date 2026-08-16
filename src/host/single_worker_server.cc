@@ -398,6 +398,7 @@ public:
     // M2 item 7: the process-wide structured log (null in unit fixtures).
     StructuredLog* log() const { return options_.log; }
     bool activate_accept(std::string* error);
+    bool adopt_socket(tcp::socket socket);
     bool worker_available() const {
         return worker_available_.load(std::memory_order_relaxed);
     }
@@ -591,6 +592,11 @@ private:
     // control thread races the reactor.
     std::optional<asio::executor_work_guard<asio::io_context::executor_type>>
         accept_guard_;
+    // External-accept mode: no listener work exists, so this guard pins the
+    // io_context alive until shutdown/drain completes. Owned by the io
+    // thread, like accept_guard_.
+    std::optional<asio::executor_work_guard<asio::io_context::executor_type>>
+        external_guard_;
     std::atomic<bool> accept_activated_ = false;
     // Activation acknowledgement: the io thread sets accept_armed_ after
     // do_accept ran (or was rejected); activate_accept() waits for it so
@@ -1009,29 +1015,31 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         return false;
     }
     worker_available_ = true;
-    if (!bind_listener()) {
-        // bind_listener may have partially succeeded (open, set_option,
-        // bind, listen or local_endpoint): the acceptor is closed and
-        // reset here so a failed start never leaves the port occupied.
-        worker_available_ = false;
-        close_listener();
-        executor_->stop_and_join();
-        if (error != nullptr) {
-            *error = "listener bind failed";
+    if (!options_.external_accept) {
+        if (!bind_listener()) {
+            // bind_listener may have partially succeeded (open, set_option,
+            // bind, listen or local_endpoint): the acceptor is closed and
+            // reset here so a failed start never leaves the port occupied.
+            worker_available_ = false;
+            close_listener();
+            executor_->stop_and_join();
+            if (error != nullptr) {
+                *error = "listener bind failed";
+            }
+            return false;
         }
-        return false;
-    }
-    if (!write_ready_line()) {
-        // The listener was fully bound when the READY record failed: the
-        // port must be released BEFORE start() returns, so a caller that
-        // keeps the object alive (StaticPoolServer retry) can rebind.
-        worker_available_ = false;
-        close_listener();
-        executor_->stop_and_join();
-        if (error != nullptr) {
-            *error = "failed to write the READY record";
+        if (!write_ready_line()) {
+            // The listener was fully bound when the READY record failed: the
+            // port must be released BEFORE start() returns, so a caller that
+            // keeps the object alive (StaticPoolServer retry) can rebind.
+            worker_available_ = false;
+            close_listener();
+            executor_->stop_and_join();
+            if (error != nullptr) {
+                *error = "failed to write the READY record";
+            }
+            return false;
         }
-        return false;
     }
 
     // ---- 2. signals + accept loop, then the event-loop thread. The
@@ -1052,7 +1060,12 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
             });
     }
 
-    if (options_.defer_accept) {
+    if (options_.external_accept) {
+        // The pool owns the only listener. Keep the io_context alive so
+        // adopt_socket() sessions and timers have somewhere to run; the
+        // guard is released by shutdown/drain.
+        external_guard_.emplace(asio::make_work_guard(ioc_));
+    } else if (options_.defer_accept) {
         // Pool barrier: the shard is fully prepared (worker READY,
         // listener bound) but must not accept a single connection until
         // the pool activates it. The work guard keeps the event loop
@@ -1099,6 +1112,12 @@ bool Impl::activate_accept(std::string* error) {
         }
         return false;
     }
+    if (options_.external_accept) {
+        if (error != nullptr) {
+            *error = "external-accept shards do not own an accept loop";
+        }
+        return false;
+    }
     // A dead worker or an already-stopping server rejects the activation
     // synchronously: no post, no wait, no hang.
     if (!worker_available_.load(std::memory_order_relaxed) ||
@@ -1130,6 +1149,28 @@ bool Impl::activate_accept(std::string* error) {
         }
         return false;
     }
+    return true;
+}
+
+bool Impl::adopt_socket(tcp::socket socket) {
+    if (shutting_down_ || !worker_available_.load(std::memory_order_relaxed) ||
+        !io_running_.load(std::memory_order_relaxed) || !options_.external_accept) {
+        return false;
+    }
+    auto transport = std::make_shared<tcp::socket>(std::move(socket));
+    io_post([weak = weak_from_this(), transport] {
+        const std::shared_ptr<Impl> alive = weak.lock();
+        if (!alive || alive->shutting_down_ ||
+            !alive->worker_available_.load(std::memory_order_relaxed)) {
+            boost::system::error_code ignored;
+            transport->close(ignored);
+            return;
+        }
+        auto session = std::make_shared<Session>(
+            alive, std::move(*transport));
+        alive->sessions_[alive->next_session_id_++] = session;
+        session->start();
+    });
     return true;
 }
 
@@ -1278,6 +1319,9 @@ void Impl::on_signal(int) {
     if (accept_guard_) {
         accept_guard_->reset();
     }
+    if (external_guard_) {
+        external_guard_->reset();
+    }
 }
 
 void Impl::begin_drain(std::uint64_t deadline_ms) {
@@ -1305,6 +1349,9 @@ void Impl::start_drain_on_io(std::uint64_t deadline_ms) {
     }
     if (accept_guard_) {
         accept_guard_->reset();
+    }
+    if (external_guard_) {
+        external_guard_->reset();
     }
     if (deadline_ms != 0) {
         drain_deadline_ = SteadyClock::now() +
@@ -1381,6 +1428,9 @@ void Impl::complete_drain() {
     }
     if (accept_guard_) {
         accept_guard_->reset();
+    }
+    if (external_guard_) {
+        external_guard_->reset();
     }
     // The deadline timer must not pin the io loop after the drain finished:
     // destroy it here (safe from within its own handler) or run() would
@@ -1842,6 +1892,9 @@ void Impl::handle_worker_event(WorkerEvent event) {
         }
         if (accept_guard_) {
             accept_guard_->reset();
+        }
+        if (external_guard_) {
+            external_guard_->reset();
         }
         const std::vector<std::uint64_t> request_ids = [this] {
             std::vector<std::uint64_t> ids;
@@ -2929,6 +2982,10 @@ std::uint16_t SingleWorkerServer::bound_port() const {
 
 bool SingleWorkerServer::activate_accept(std::string* error) {
     return impl_->activate_accept(error);
+}
+
+bool SingleWorkerServer::adopt_socket(boost::asio::ip::tcp::socket socket) {
+    return impl_->adopt_socket(std::move(socket));
 }
 
 bool SingleWorkerServer::worker_available() const {

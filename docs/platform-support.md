@@ -12,10 +12,12 @@ Capsid 对 Linux、macOS 与 Windows 的承诺分为两个独立层次：
 
 ## 统一能力契约（三平台交集）
 
-**single-worker 与 static-pool 按三平台统一行为承诺**：`static-pool` 的统一契约
-固定为**单 shard**。只有 Linux、macOS、Windows 三者行为完全一致的能力才出现在
-下面的 ✅ 清单里；任何平台缺失、语义不一致或只能部分实现的能力，一律移出统一
-契约，作为平台差异单独说明。
+**single-worker 与 static-pool 按三平台统一行为承诺**：`static-pool` 的
+single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为一致
+（同一公开端口、同一 READY/drain/请求契约）。Linux/macOS 通过内核
+`SO_REUSEPORT` 共享端口；Windows 由池级共享 acceptor 轮询分发。只有三平台
+行为一致的能力才进入 ✅ 清单，任何平台缺失、语义不一致或只能部分实现的能力
+单独列为差异。
 
 统一承诺：
 
@@ -23,17 +25,17 @@ Capsid 对 Linux、macOS 与 Windows 的承诺分为两个独立层次：
 - `capsid-worker`（txiki.js + 受限核心）✅
 - `capsid-bytecode-compile`（可信字节码）✅
 - Host `--mode single-worker` ✅
-- Host `--mode static-pool`（单 shard）✅
+- Host `--mode static-pool`（single / multi shard）✅
 - 出站网络策略（egress host/address 规则）✅
 - 能力策略（模块/权限/环境快照）✅
 
 **不属于三平台统一契约**（因此按不支持处理，除非显式使用单平台能力）：
 
-- Host `--mode static-pool` 多 shard：仅 Linux/macOS；Windows 启动时拒绝
 - Host `--mode managed`（coordinator/Admin/多 App）：仅 Linux
-- `capsid:fs`（read/stat/list）：仅 Linux
+- `capsid:fs`（read/stat/list）：Linux/macOS；Windows 不可用
 - strict sandbox（seccomp/Landlock/namespace/cgroup）：仅 Linux
-- 多 shard 共享端口（`SO_REUSEPORT`）：仅 Linux/macOS
+- 多 shard 共享端口（`SO_REUSEPORT`）：仅 Linux/macOS 的内部实现；
+  Windows 使用池级共享 acceptor 实现同样的对外行为
 - worker CPU affinity：Linux 完整；Windows 仅当前处理器组；macOS 无
 - `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE`：各平台语义不一致，无统一承诺
 
@@ -54,11 +56,11 @@ Capsid 对 Linux、macOS 与 Windows 的承诺分为两个独立层次：
 ### macOS
 
 - 使用系统 Clang 原生构建，Release 包为 `capsid-<版本>-darwin-arm64.tar.gz`；
-- single-worker 与单 shard static-pool 属三平台统一契约；macOS 额外支持多
-  shard static-pool，但这不是统一承诺；
+- single-worker 与 static-pool（single / multi shard）属三平台统一契约；
+  multi shard 通过 `SO_REUSEPORT` 实现；
+- `capsid:fs` 可用：与 Linux 相同的 no-symlink 读取语义，通过逐组件
+  `openat(O_NOFOLLOW)` 实现；
 - 没有 `sched_setaffinity` 等价 API，CPU affinity 测试按 CTest 77 跳过；
-- `capsid:fs` 依赖 Linux-only 的 `openat2` 语义，模块调用返回
-  “filesystem module is unavailable on this platform”；
 - 请求 strict sandbox 会在 worker 启动握手期失败；managed Host 虽可构建，
   但其每次 spawn 都要求 strict，因此不可用于生产。
 
@@ -66,8 +68,8 @@ Capsid 对 Linux、macOS 与 Windows 的承诺分为两个独立层次：
 
 - 使用 MSVC + Ninja + vcpkg（静态 CRT），Release 包为
   `capsid-<版本>-windows-x86_64.zip`；
-- single-worker 与单 shard static-pool 属三平台统一契约；多 shard 池在启动
-  时被拒绝；
+- single-worker 与 static-pool（single / multi shard）属三平台统一契约；
+  没有 `SO_REUSEPORT`，multi shard 由池级共享 acceptor 轮询分发；
 - `capsid:fs`、strict sandbox、managed Host 不可用；
 - CPU affinity 通过 `SetProcessAffinityMask` 实现，但只覆盖当前处理器组；
 - Worker 内存上限通过 Job Object 的 `JOB_OBJECT_LIMIT_PROCESS_MEMORY` 约束

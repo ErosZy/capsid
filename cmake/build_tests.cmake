@@ -1138,10 +1138,9 @@ if(BUILD_TESTING)
                     endif()
                 endif()
             endif()
-            # Multi-shard scenarios require SO_REUSEPORT, which Windows
-            # does not provide; the single-shard scenarios (including drain)
-            # run everywhere (see docs/windows.md).
-            if(NOT WIN32)
+            # Multi-shard scenarios run on every platform: Linux/macOS use
+            # SO_REUSEPORT, Windows uses the pool's single shared acceptor
+            # with round-robin dispatch (see docs/platform-support.md).
             add_test(
                 NAME host_static_pool_server_shared_port_lifecycle
                 COMMAND test-host-static-pool-server lifecycle
@@ -1150,7 +1149,6 @@ if(BUILD_TESTING)
                 host_static_pool_server_shared_port_lifecycle PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
-            endif()
             add_test(
                 NAME host_static_pool_server_drain_inflight_completes
                 COMMAND test-host-static-pool-server drain-inflight-completes
@@ -1245,9 +1243,8 @@ if(BUILD_TESTING)
                 host_admission_worker_death_returns_503 PROPERTIES
                 TIMEOUT 30 LABELS "host;integration;m2")
             endif()
-            # pool-forwards runs a multi-shard pool (SO_REUSEPORT is
-            # unavailable on Windows; see docs/windows.md).
-            if(NOT WIN32)
+            # pool-forwards runs a multi-shard pool: SO_REUSEPORT on
+            # Linux/macOS, pool-owned shared acceptor on Windows.
             add_test(
                 NAME host_admission_pool_forwards_options
                 COMMAND test-host-admission pool-forwards-admission
@@ -1256,7 +1253,6 @@ if(BUILD_TESTING)
                 host_admission_pool_forwards_options PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
-            endif()
             set_tests_properties(
                 host_admission_inflight_full_rejects
                 host_admission_queue_full_rejects
@@ -1519,9 +1515,8 @@ if(BUILD_TESTING)
                 host_concurrent_shard_wait PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
-            # The pool variant needs a multi-shard pool (SO_REUSEPORT is
-            # unavailable on Windows; see docs/windows.md).
-            if(NOT WIN32)
+            # The pool variant needs a multi-shard pool: SO_REUSEPORT on
+            # Linux/macOS, pool-owned shared acceptor on Windows.
             add_test(
                 NAME host_concurrent_pool_wait
                 COMMAND test-host-concurrent-wait pool
@@ -1530,7 +1525,6 @@ if(BUILD_TESTING)
                 host_concurrent_pool_wait PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
-            endif()
 
             # Metrics-on variant: the same integration run with
             # CAPSID_HOST_IPC_METRICS=1, which arms the per-pump metrics
