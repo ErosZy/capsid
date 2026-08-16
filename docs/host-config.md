@@ -1,46 +1,48 @@
-# host.json 与 capsid.json 配置参考
+# host.json and capsid.json Configuration Reference
 
-managed 模式（`capsid-host --mode managed`）用两个 JSON 文件描述整机和每个
-应用版本。两个文件都 fail closed：重复 key、未知字段、非法枚举和越界值都会
-让启动或部署失败，不会取默认值悄悄放行。本文以当前 `src/host/config.cc`、
-`host_config_model.cc` 和 `managed_host.cc` 的实现为准。
+Managed mode (`capsid-host --mode managed`) uses two JSON files to describe the whole
+machine and each application version. Both files fail closed: duplicate keys, unknown
+fields, invalid enums, and out-of-range values cause startup or deployment to fail
+instead of silently passing through with defaults. This document follows the current
+implementation in `src/host/config.cc`, `host_config_model.cc`, and `managed_host.cc`.
 
-## 两层配置的职责
+## Responsibilities of the two configuration layers
 
-| 文件 | 位置 | 职责 |
+| File | Location | Responsibility |
 | --- | --- | --- |
-| `host.json` | `--host-config` 传入 | 整机：应用根、状态根、secret 根、listener、全局权限上限、容量、恢复策略 |
-| `capsid.json` | `<applicationsRoot>/<app>/<version>/` | 单个 app 版本：入口、权限申请、worker 资源、请求窗口、池大小 |
+| `host.json` | passed via `--host-config` | Whole machine: application root, state root, secret root, listeners, global permission caps, capacity, recovery policy |
+| `capsid.json` | `<applicationsRoot>/<app>/<version>/` | Single app version: entry point, permission requests, worker resources, request windows, pool size |
 
-Host 的 `permissions` 与 App 的 `permissions` 是**交集**，App 申请不能扩大
-Host 上限。`maximums` 封顶 App 的申请（0 = 不限）；`defaults` 只作整机声明，
-不注入生效配置——capsid.json 不写的字段用 worker 自身默认。
+The Host's `permissions` and the App's `permissions` are an **intersection**; an App
+request cannot expand the Host cap. `maximums` caps App requests (0 = unlimited);
+`defaults` are only a machine-level declaration and are not injected into effective
+config—fields not written in capsid.json use the worker's own defaults.
 
-## 目录布局
+## Directory layout
 
 ```text
 <applicationsRoot>/              # host.json: applicationsRoot
-  orders/                        # app id（小写字母/数字开头，[a-z0-9._-]，≤63）
-    v1/                          # 版本 id（每版本一个目录）
-      capsid.json                # app-v1 配置（必需）
-      bundle.mjs                 # 自包含 ESM bundle（必需）
-      bundle.qjsb                # 可信字节码：三者全有或全无
-      bytecode.json              #   （bytecode.json = 摘要/来源信息）
+  orders/                        # app id (starts with lowercase letter/digit, [a-z0-9._-], ≤63)
+    v1/                          # version id (one directory per version)
+      capsid.json                # app-v1 config (required)
+      bundle.mjs                 # self-contained ESM bundle (required)
+      bundle.qjsb                # trusted bytecode: all three or none
+      bytecode.json              #   (bytecode.json = digest/source metadata)
       bytecode.sig               #
-<stateRoot>/                     # host.json: stateRoot（Host 拥有，禁止人工编辑）
+<stateRoot>/                     # host.json: stateRoot (owned by the Host; do not edit by hand)
   apps/
     orders/
-      active.json                # 当前 active generation（原子落盘）
-      generations/<generation>/  # 部署时快照的配置与 artifact 记录
-<secretRootTemplate 替换 {application}>   # 例如 secrets/orders/
-  API_TOKEN                      # 每个 secret key id 一个普通文件，内容即值
+      active.json                # current active generation (atomically written)
+      generations/<generation>/  # config and artifact records snapshotted at deploy time
+<secretRootTemplate with {application} replaced>   # e.g. secrets/orders/
+  API_TOKEN                      # one plain file per secret key id; file content is the value
 ```
 
 ## host.json
 
-必需字段：`apiVersion`、`applicationsRoot`、`stateRoot`、
-`secretRootTemplate`（必须包含 `{application}` 占位符）、`admin.unix`。
-其他字段全部可选。
+Required fields: `apiVersion`, `applicationsRoot`, `stateRoot`,
+`secretRootTemplate` (must contain the `{application}` placeholder), `admin.unix`.
+All other fields are optional.
 
 ```json
 {
@@ -143,65 +145,73 @@ Host 上限。`maximums` 封顶 App 的申请（0 = 不限）；`defaults` 只�
 }
 ```
 
-### 字段说明与硬性校验
+### Field notes and hard validation
 
-- `apiVersion` 必须精确等于 `capsid/host-v1`；
-- `admin.mode` 只接受字符串 `"0600"`；Admin socket 只接受与 Host 同 euid
-  （`SO_PEERCRED`/`getpeereid`）的 peer，其他进程立即 403；
-- `isolation.mode` 只接受 `"strict"`；`required` 是额外 sandbox feature
-  数组（如 `"cgroup-v2"`），`cgroupRoot` 是委派的 cgroup 父目录；
-- `listeners`：`tcp` 为 `IP:port`；`publicScheme`/`publicAuthority` 是 worker
-  可观察 URL 的组成；`trusted` 缺省 false，控制代理头信任边界；
-- `permissions`：Host 全局 allowlist。`environmentNames` 支持
-  `NAME*` 后缀通配（与运行时 `valid_env_pattern` 同文法）；`fetchTargets`
-  语法是 `host` 或 `host:p1,p2`（逗号分隔端口列表）；`fsReadRoots` 是只读根；
-- `trustedBytecodeKeys`：release id → Ed25519 公钥文件路径的自由映射；
-- `defaults`/`maximums` 的 `worker`/`request` 子字段与 capsid.json 同语法
-  （见 [capsid.json 怎么写](capsid-json.md)）；`fileDescriptors` 必须 ≥1；
-- `capacity.workersTotal` 是整机 worker 数唯一上限（`activationSurgeWorkers`
-  ≥0，缺省 0 表示拒绝零停机替换）；`workerMemoryCommitTotal` 是所有 worker
-  内存承诺总量；
-- `recovery` 缺省值：crashBudget 5 次/60s、backoff 初始 100ms 上限 10s、
-  jitter 10%、stableReset 60s、并发替换 1。`jitter` 语法是 `"10%"`（百分比）
-  或裸整数（basis points）。
-- 大小统一用 `KiB`/`MiB`/`GiB`/`KB`/`MB`/`GB` 后缀；时长用 `ms`/`s`/`m`。
+- `apiVersion` must be exactly `capsid/host-v1`;
+- `admin.mode` accepts only the string `"0600"`; the Admin socket accepts only peers
+  with the same euid as the Host (`SO_PEERCRED`/`getpeereid`), and all other processes
+  immediately get 403;
+- `isolation.mode` accepts only `"strict"`; `required` is an array of extra sandbox
+  features (such as `"cgroup-v2"`), and `cgroupRoot` is the delegated cgroup parent
+  directory;
+- `listeners`: `tcp` is `IP:port`; `publicScheme`/`publicAuthority` are the components
+  of the worker-observable URL; `trusted` defaults to false and controls the trust
+  boundary for proxy headers;
+- `permissions`: the Host-wide allowlist. `environmentNames` supports `NAME*` suffix
+  wildcards (same grammar as the runtime `valid_env_pattern`); `fetchTargets` syntax is
+  `host` or `host:p1,p2` (comma-separated port list); `fsReadRoots` are read-only roots;
+- `trustedBytecodeKeys`: free mapping from release id to Ed25519 public key file path;
+- `defaults`/`maximums` `worker`/`request` subfields use the same syntax as capsid.json
+  (see [How to write capsid.json](capsid-json.md)); `fileDescriptors` must be ≥1;
+- `capacity.workersTotal` is the only whole-machine cap on worker count
+  (`activationSurgeWorkers` ≥0, default 0 means zero-downtime replacement is refused);
+  `workerMemoryCommitTotal` is the total memory commitment across all workers;
+- `recovery` defaults: crashBudget 5 per 60s, backoff initial 100ms maximum 10s,
+  jitter 10%, stableReset 60s, concurrent replacements 1. `jitter` syntax is `"10%"`
+  (percentage) or a bare integer (basis points).
+- Sizes uniformly use the `KiB`/`MiB`/`GiB`/`KB`/`MB`/`GB` suffixes; durations use
+  `ms`/`s`/`m`.
 
-## capsid.json（每个 app 版本）
+## capsid.json (each app version)
 
-**怎么一步一步写，看 [capsid.json 怎么写（教程）](capsid-json.md)**——从最小
-可用版（3 个字段）逐节加到完整配置，含每个字段的值域、常见错误表和部署三步。
-这里只留字段速查：
+**For a step-by-step guide, see [How to write capsid.json (tutorial)](capsid-json.md)**—it
+starts from a minimal usable version (3 fields) and adds sections up to a full config,
+including value domains for every field, a common error table, and the three deployment
+steps. This section only keeps a field quick reference:
 
-| 字段 | 必需 | 说明 |
+| Field | Required | Description |
 | --- | --- | --- |
-| `apiVersion` | ✓ | 必须精确 `capsid/app-v1` |
-| `pool.minReady` | ✓ | 固定池大小，必须与 `maxWorkers` 相等 |
-| `pool.maxWorkers` | ✓ | 固定池大小，必须与 `minReady` 相等 |
-| `pool.queueRequests` / `queueHeaderBytes` / `queueTimeout` | | 队列，0 = 关闭排队；受 `maximums.pool` 封顶 |
-| `permissions.modules` | | 导入的 `capsid:*` 模块（`tjs:*` 恒不可开放） |
-| `permissions.env` | | 环境变量，键 → `{value}` 或 `{valueFrom}`（恰好一个） |
-| `permissions.fs.read.allow` / `deny` | | 只读根；`deny` 优先于 `allow` |
-| `permissions.fetch.allow` | | 出站目标 `host` 或 `host:p1,p2`；不写 = 全部拒绝 |
-| `permissions.storage.namespaces` | | 只读存储 namespace（`[A-Za-z0-9._-]` ≤128） |
-| `permissions.stdio` | | 只接受 `stdin`/`stdout`/`stderr` |
-| `worker.jsHeap` / `processAddressSpace` / `memoryMax` / `fileDescriptors` / `pidsMax` | | 不写 = worker 自身默认；受 `maximums.worker` 封顶 |
-| `request.timeout` / `maxInflightPerWorker` / `maxStreamingInflightPerWorker` / `streamIdleTimeoutMs` / `writeTimeoutMs` | | 请求窗口与 SSE 槽位 |
-| `healthCheck.path` / `timeout` | | worker 内部路径（不走 listener 路由）；空 = 不探测 |
+| `apiVersion` | ✓ | Must be exactly `capsid/app-v1` |
+| `pool.minReady` | ✓ | Fixed pool size; must equal `maxWorkers` |
+| `pool.maxWorkers` | ✓ | Fixed pool size; must equal `minReady` |
+| `pool.queueRequests` / `queueHeaderBytes` / `queueTimeout` | | Queue; 0 = queueing disabled; capped by `maximums.pool` |
+| `permissions.modules` | | Imported `capsid:*` modules (`tjs:*` must never be enabled) |
+| `permissions.env` | | Environment variables; key → `{value}` or `{valueFrom}` (exactly one) |
+| `permissions.fs.read.allow` / `deny` | | Read-only roots; `deny` takes precedence over `allow` |
+| `permissions.fetch.allow` | | Egress targets `host` or `host:p1,p2`; omitted = all denied |
+| `permissions.storage.namespaces` | | Read-only storage namespaces (`[A-Za-z0-9._-]` ≤128) |
+| `permissions.stdio` | | Only `stdin`/`stdout`/`stderr` accepted |
+| `worker.jsHeap` / `processAddressSpace` / `memoryMax` / `fileDescriptors` / `pidsMax` | | Omitted = worker's own defaults; capped by `maximums.worker` |
+| `request.timeout` / `maxInflightPerWorker` / `maxStreamingInflightPerWorker` / `streamIdleTimeoutMs` / `writeTimeoutMs` | | Request windows and SSE slots |
+| `healthCheck.path` / `timeout` | | Worker-internal path (does not go through listener routing); empty = no probe |
 
-与 capsid.json 同目录的 artifact 规则：
+Artifact rules for the same directory as capsid.json:
 
-- `bundle.mjs` 必需；`bundle.qjsb` + `bytecode.json` + `bytecode.sig` 是可信
-  字节码三元组，**全有或全无**，缺任一个都拒绝部署；
-- 字节码只有通过 `trustedBytecodeKeys` 中对应 release 的 Ed25519 验签、
-  摘要、精确 source name 与 Runtime compatibility ID 校验后才被接受；
-- 每次部署把配置、bundle 与校验结果快照进
-  `stateRoot/apps/<app>/generations/<generation>/`，generation identity 随
-  任何配置或 artifact 变化。
+- `bundle.mjs` is required; `bundle.qjsb` + `bytecode.json` + `bytecode.sig` are the
+  trusted bytecode triplet, **all or nothing**—if any one is missing, deployment is
+  rejected;
+- Bytecode is accepted only after Ed25519 signature verification with the corresponding
+  release in `trustedBytecodeKeys`, plus digest, exact source name, and Runtime
+  compatibility ID checks;
+- Each deployment snapshots the config, bundle, and verification results into
+  `stateRoot/apps/<app>/generations/<generation>/`; the generation identity changes
+  whenever any config or artifact changes.
 
-## secret 文件
+## Secret files
 
-`secretRootTemplate` 替换 `{application}` 后得到该 app 的 secret 目录；
-`valueFrom` 引用的 key id 就是目录内文件名：
+After substituting `{application}` in `secretRootTemplate`, the result is the secret
+directory for that app; the key id referenced by `valueFrom` is the file name inside
+that directory:
 
 ```sh
 mkdir -p /srv/capsid/secrets/orders
@@ -210,69 +220,76 @@ printf '%s' 'postgres://user:pass@db.example.com/app' \
 chmod 0600 /srv/capsid/secrets/orders/db-url
 ```
 
-- key id 文法 `[A-Za-z0-9._-]`，不含 `..`，有长度上限；
-- secret 文件必须是普通文件（symlink 拒绝），读取前后核验 size/ctime，
-  中途被修改会失败；值进入不可变 `capsid:env` 快照，不进入 worker 进程环境。
+- Key id grammar `[A-Za-z0-9._-]`, no `..`, has a length limit;
+- Secret files must be regular files (symlinks are rejected); size/ctime are verified
+  before and after reading, and modification in between fails; values enter an
+  immutable `capsid:env` snapshot, not the worker process environment.
 
-## 启动与运维
+## Startup and operations
 
 ```sh
 ./build-release/capsid-host --mode managed --host-config /etc/capsid/host.json
 ```
 
-`--host-config` 必须是 Host 属主拥有的普通文件（O_NOFOLLOW、euid 检查、
-≤1 MiB、读取前后 mtime 核验）。
+`--host-config` must be a regular file owned by the Host user (O_NOFOLLOW, euid check,
+≤1 MiB, mtime verified before and after reading).
 
-Admin API 只走 Unix socket（与 Host 同 euid）：
+The Admin API only uses a Unix socket (same euid as the Host):
 
 ```sh
-# 部署（蓝绿：先 staging/预热/健康检查，原子切换，失败保持旧版本）
+# Deploy (blue-green: staging/warm-up/health check first, atomic switch, old version kept on failure)
 curl --unix-socket /run/capsid/admin.sock \
   -X POST http://localhost/v1/deploy \
   -H 'Content-Type: application/json' \
   -d '{"application":"orders","version":"v2"}'
 # → 202 {"operationId":"...","application":"orders","version":"v2","status":"..."}
 
-# 查询操作状态
+# Query operation status
 curl --unix-socket /run/capsid/admin.sock \
   http://localhost/v1/operations/<operationId>
 
-# app 状态
+# App status
 curl --unix-socket /run/capsid/admin.sock http://localhost/v1/apps/orders
 
-# 显式下线（retire 管理动作，tombstone 表达，不以删目录表达）
+# Explicitly retire (management action; expressed as a tombstone, not by deleting the directory)
 curl --unix-socket /run/capsid/admin.sock \
   -X POST http://localhost/v1/apps/orders/retire
 
-# 指标
+# Metrics
 curl --unix-socket /run/capsid/admin.sock http://localhost/metrics
 ```
 
-所有端点响应都是有界的 JSON/文本；未知路径 404，带 body 的非 deploy 请求
-400，方法不符 405，未授权 peer 403。
+All endpoint responses are bounded JSON/text; unknown paths return 404, non-deploy
+requests with a body return 400, wrong methods return 405, and unauthorized peers
+return 403.
 
-## 请求路由
+## Request routing
 
-`routing` 对象当前定义并读取的字段只有 `mode` 和 `suffix`；`mode` 支持三种值：
+The `routing` object currently defines and reads only `mode` and `suffix`; `mode`
+supports three values:
 
-| mode | App 来源 | 约束 |
+| mode | App source | Constraint |
 | --- | --- | --- |
-| `path` | URL 的 `/@capsid/<app>/` 前缀 | 去掉路由前缀后再把路径交给 worker |
-| `subdomain` | Host 中位于 `suffix` 前的单个 DNS label | `suffix` 必须是无端口、以点开头的合法域名，如 `.apps.example.com` |
-| `header` | 唯一的 `Capsid-App` 请求头 | listener 必须显式设置 `trusted: true`；重复或非法 App ID 会被拒绝 |
+| `path` | The `/@capsid/<app>/` prefix in the URL | Strip the routing prefix, then hand the path to the worker |
+| `subdomain` | The single DNS label before `suffix` in the Host | `suffix` must be a valid, portless domain starting with a dot, such as `.apps.example.com` |
+| `header` | The sole `Capsid-App` request header | The listener must explicitly set `trusted: true`; duplicate or invalid App IDs are rejected |
 
-每种模式都要求且只允许一个合法 Host header。`path` 和 `header` 使用 listener
-同级的 `publicScheme`、`publicAuthority` 构造 worker 可观察的绝对 URL；
-`subdomain` 使用 `publicScheme`、提取出的 App 和 `suffix` 构造 URL。`suffix` 仅对
-`subdomain` 有效，header 名固定为 `Capsid-App`，不能用它自定义。HTTP method
-不是 App 路由选择条件。
+Each mode requires exactly one valid Host header. `path` and `header` use the
+listener-level `publicScheme` and `publicAuthority` to construct the worker-observable
+absolute URL; `subdomain` constructs the URL from `publicScheme`, the extracted app,
+and `suffix`. `suffix` is only valid for `subdomain`; the header name is fixed to
+`Capsid-App` and cannot be customized. HTTP method is not an app routing condition.
 
-`trusted: true` 是对 listener 前置安全边界的显式声明，不是 Capsid 自动建立的
-TLS、身份认证或防火墙。启用 header routing 前，部署者必须保证只有受控反向代理
-或可信来源能连接该 listener，并由代理删除或覆盖外部请求携带的 `Capsid-App`。
-典型做法是绑定 loopback/受控内网地址并配合网络 ACL；直接把 listener 暴露公网后
-仅设置 `trusted: true` 并不安全。`trusted: false` 的 header listener 会在 bind 前
-fail closed；path 和 subdomain routing 不需要该声明。
+`trusted: true` is an explicit declaration of a security boundary in front of the
+listener, not TLS, authentication, or a firewall automatically established by Capsid.
+Before enabling header routing, deployers must ensure that only a controlled reverse
+proxy or trusted source can reach the listener, and that the proxy removes or
+overwrites `Capsid-App` carried by external requests. The typical approach is binding
+to loopback/controlled internal network addresses with network ACLs; simply setting
+`trusted: true` after exposing the listener to the public Internet is not safe. A
+header listener with `trusted: false` fails closed before bind; path and subdomain
+routing do not require that declaration.
 
-外部反向代理（nginx/Caddy/Envoy）负责 TLS/H2 终止与对外路径、Host 或 header
-映射。`path` 模式与 CLI 的 `--routing path` 使用同一契约。
+External reverse proxies (nginx/Caddy/Envoy) handle TLS/H2 termination and external
+path, Host, or header mapping. `path` mode uses the same contract as the CLI's
+`--routing path`.

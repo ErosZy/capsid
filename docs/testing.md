@@ -1,43 +1,38 @@
-# 测试与持续门禁
+# Testing and Continuous Gates
 
-项目把自有契约、适配 WPT、进程集成和环境型沙箱验证分开报告。任何一层通过
-都不能替代另一层。
+The project reports its own contracts, adapted WPT, process integration, and environment-based sandbox verification separately. Passing any one layer cannot substitute for another.
 
-## 测试分层
+## Testing Layers
 
-1. C/C++ 单元测试：协议、header、策略、拓扑、审计与结构化解析；
-2. 真实 worker contract：bundle、IPC、流控、取消、超时、sandbox 和 fetch；
-3. 固定 WPT：manifest 选择的每个上游文件都在独立 worker realm 中执行；
-4. 框架差分：Node reference 与真实 worker 逐向量比较，并保留独立绝对断言；
-5. sanitizer/fuzz：项目 target 的 ASan、UBSan、计划中的 Host TSan 和四个
-   libFuzzer harness；
-6. benchmark contract：先验证内容、版本和环境，再允许记录性能样本。
+1. C/C++ unit tests: protocol, header, policy, topology, audit, and structured parsing;
+2. real worker contract: bundle, IPC, flow control, cancellation, timeout, sandbox, and fetch;
+3. pinned WPT: each upstream file selected by the manifest runs in an independent worker realm;
+4. framework differential: Node reference and real worker are compared vector-by-vector, with independent absolute assertions retained;
+5. sanitizer/fuzz: ASan and UBSan project targets, planned Host TSan, and four libFuzzer harnesses;
+6. benchmark contract: verify content, versions, and environment before allowing performance samples to be recorded.
 
-标准来源、WPT 选择和偏差统一见[标准与合规](conformance.md)。
+Standard sources, WPT selection, and deviations are unified in [Standards and Conformance](conformance.md).
 
-## 有效性规则
+## Validity Rules
 
-长期门禁采用 fail-closed：
+Long-running gates are fail-closed:
 
-- 未配置 WPT 时登记 `wpt_conformance_not_configured` 失败哨兵；
-- checkout 必须等于 manifest 固定 commit；
-- manifest 与实际注册路径逐项比对，不只比较数量；
-- WPT realm 必须报告顶层唯一、正整数 `total` 和
-  `ranNothing: false`；
-- expected failure 与 `notExecuted` 只从 manifest 读取，并必须引用已登记偏差；
-- restricted 二进制审计必须先证明符号表、archive 和 LTO marker 可读；
-- Wasm 的 C、JavaScript 和 fixture 资源常量必须一致；
-- overlay key、stamp、manifest 和 configure dependencies 必须来自同一
-  canonical 输入；
-- 三个框架的差分向量必须有独立绝对断言，anchor 数不能为零；
-- 负控必须证明门禁能捕获错误输入，不能只有“正确实现会绿”的正向测试。
+- when WPT is not configured, register the `wpt_conformance_not_configured` failure sentinel;
+- checkout must equal the pinned commit in the manifest;
+- the manifest and the actually registered paths are compared item by item, not just by count;
+- the WPT realm must report a top-level unique positive integer `total` and `ranNothing: false`;
+- expected failures and `notExecuted` are read only from the manifest and must reference a registered deviation;
+- restricted binary audit must first prove that the symbol table, archive, and LTO marker are readable;
+- Wasm C, JavaScript, and fixture resource constants must be consistent;
+- overlay key, stamp, manifest, and configure dependencies must come from the same canonical input;
+- differential vectors from the three frameworks must have independent absolute assertions, and the anchor count cannot be zero;
+- negative controls must prove that gates catch bad input, not only positive tests where a correct implementation turns green.
 
-测试有效性由上述自动化门禁持续证明；一次性审计报告会与当前代码漂移，因此不作为
-产品状态文档保留。
+Test validity is continuously demonstrated by the automated gates above; one-off audit reports drift with current code, so they are not retained as product-state documents.
 
-## 常用命令
+## Common Commands
 
-基础构建：
+Basic build:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_TESTING=ON
@@ -46,7 +41,7 @@ ctest --test-dir build --output-on-failure \
   -E '^wpt_conformance_not_configured$'
 ```
 
-固定 WPT：
+Pinned WPT:
 
 ```sh
 cmake -S . -B build-wpt \
@@ -57,46 +52,24 @@ cmake --build build-wpt
 ctest --test-dir build-wpt --output-on-failure
 ```
 
-WPT 根目录的 `HEAD` 必须等于 `tests/wpt/manifest.json` 中的 commit。
+The `HEAD` of the WPT root must equal the commit in `tests/wpt/manifest.json`.
 
-### Egress 与 TLS 定向回归
+### Egress and TLS Targeted Regression
 
-域名 egress 规则授权该域名实际解析出的地址，包括 private、loopback、
-link-local 和其他 protected range；显式 IP/CIDR deny 仍优先。该授权只属于以
-域名发起的请求，不会把同一地址变成可直接请求的 IP literal。策略单测和真实
-worker 回归分别由 `egress_policy`、
-`worker_fetch_hostname_authorizes_resolved_loopback`、
-`worker_fetch_host_deny_diagnostic`、
-`worker_fetch_protected_deny_diagnostic`、
-`worker_fetch_explicit_deny_diagnostic` 与
-`worker_direct_fetch_http_matrix` 覆盖。最终授权语义和三类诊断文本见
-[宿主能力策略](capability-policy.md)。
+Domain egress rules authorize the addresses actually resolved for that domain, including private, loopback, link-local, and other protected ranges; explicit IP/CIDR deny still takes precedence. That authorization belongs only to requests initiated by domain name and does not turn the same address into a directly requestable IP literal. Policy unit tests and real worker regressions are covered by `egress_policy`, `worker_fetch_hostname_authorizes_resolved_loopback`, `worker_fetch_host_deny_diagnostic`, `worker_fetch_protected_deny_diagnostic`, `worker_fetch_explicit_deny_diagnostic`, and `worker_direct_fetch_http_matrix`. The final authorization semantics and the three diagnostic text types are described in [Host capability policy](capability-policy.md).
 
-固定的 mbedTLS 版本曾在混合 TLS 1.2/1.3 客户端配置下出现签名算法检查不一致：
-`mbedtls_ssl_get_pk_type_and_md_alg_from_sig_alg()` 能解析 TLS signature scheme
-`0x0804`（`rsa_pss_rsae_sha256`），但 TLS 1.2 的旧式 hash/signature byte-pair
-检查把高字节 `0x08` 当作未知 hash 并拒绝 ServerKeyExchange。客户端已经在
-ClientHello 中声明该 scheme，TLS 1.2 服务端选择它也是合法行为，因此这不是服务端
-或应用配置问题。
+The pinned mbedTLS version once exhibited inconsistent signature-algorithm checks under a mixed TLS 1.2/1.3 client configuration: `mbedtls_ssl_get_pk_type_and_md_alg_from_sig_alg()` can parse the TLS signature scheme `0x0804` (`rsa_pss_rsae_sha256`), but the TLS 1.2 legacy hash/signature byte-pair check treats the high byte `0x08` as an unknown hash and rejects ServerKeyExchange. The client has already declared the scheme in ClientHello, and a TLS 1.2 server selecting it is legal behavior, so this is not a server or application configuration problem.
 
-`patches/txiki/0009-lws-vendor.patch` 只在 TLS 1.2 客户端解析
-ServerKeyExchange 的失败分支兼容 `rsa_pss_rsae_sha256/384/512`：每个分支仍受
-对应 hash 与 PKCS#1 v2.1 编译能力约束，后续“服务端选择的 scheme 必须由客户端
-实际 offered”检查保持不变。修复没有放宽通用 TLS 1.2 helper，也没有通过强制
-TLS 1.2-only 来规避协商。
+`patches/txiki/0009-lws-vendor.patch` only makes the TLS 1.2 client's ServerKeyExchange failure branch compatible with `rsa_pss_rsae_sha256/384/512`: each branch remains constrained by the corresponding hash and PKCS#1 v2.1 compilation capabilities, and the later "server-selected scheme must have actually been offered by the client" check is unchanged. The fix does not relax generic TLS 1.2 helpers, nor does it avoid negotiation by forcing TLS 1.2-only.
 
-`worker_direct_fetch_https_tls12_rsa_pss` 启动本地 OpenSSL `s_server`，强制
-`-tls1_2 -sigalgs rsa_pss_rsae_sha256`，然后让真实 worker 完成受信任 HTTPS
-请求。Linux 另外注册 `worker_strict_sandbox_https_tls12_rsa_pss`，用相同握手
-回归覆盖 `--strict` 沙箱并要求 worker 干净退出；它不在 macOS 注册，也与其他
-strict-sandbox 门一样从 ASan/TSan 矩阵排除。定向复现命令：
+`worker_direct_fetch_https_tls12_rsa_pss` starts a local OpenSSL `s_server`, forces `-tls1_2 -sigalgs rsa_pss_rsae_sha256`, and then lets a real worker complete a trusted HTTPS request. On Linux it additionally registers `worker_strict_sandbox_https_tls12_rsa_pss`, which uses the same handshake regression to cover the `--strict` sandbox and requires the worker to exit cleanly; it is not registered on macOS, and like other strict-sandbox gates it is excluded from the ASan/TSan matrix. Targeted reproduction command:
 
 ```sh
 ctest --test-dir build --output-on-failure \
   -R '^(egress_policy|worker_fetch_.*diagnostic|worker_fetch_hostname_authorizes_resolved_loopback|worker_direct_fetch_http_matrix|worker_direct_fetch_https_tls12_rsa_pss|worker_strict_sandbox_https_tls12_rsa_pss)$'
 ```
 
-ASan 示例：
+ASan example:
 
 ```sh
 cmake -S . -B build-asan -G Ninja \
@@ -108,117 +81,59 @@ ctest --test-dir build-asan --output-on-failure \
   -E '^(worker_strict_sandbox_direct_fetch|worker_strict_sandbox_https_ca|worker_strict_sandbox_https_tls12_rsa_pss)$'
 ```
 
-UBSan 将开关替换为 `CAPSID_ENABLE_UBSAN=ON`。fuzz 构建使用 Clang、
-`CAPSID_BUILD_WORKER=OFF` 和 `CAPSID_BUILD_FUZZERS=ON`。
+UBSan replaces the switch with `CAPSID_ENABLE_UBSAN=ON`. Fuzz builds use Clang, `CAPSID_BUILD_WORKER=OFF`, and `CAPSID_BUILD_FUZZERS=ON`.
 
-### TSan（M1C 门）
+### TSan (M1C gate)
 
-`CAPSID_ENABLE_TSAN` 已配置：独立 Linux **GCC** Debug 构建，不与
-ASan/UBSan 共用（CMake 配置期拒绝组合）。M1C 验收前必须通过；M2 多 worker
-开始前是强制门。
+`CAPSID_ENABLE_TSAN` is configured: a dedicated Linux **GCC** Debug build that is not shared with ASan/UBSan (CMake configuration rejects the combination). It must pass before M1C acceptance; it is a mandatory gate before M2 multi-worker work begins.
 
-TSan 使用独立 Linux/GCC Debug 构建，不与 ASan、UBSan、LTO、fuzz 或 benchmark
-混跑。**本环境的受支持 TSan 编译器是 GCC**：Alpine/musl 的 clang 不发布 TSan
-运行时（`libclang_rt.tsan_cxx.a` 不存在），配置期即拒绝并要求改用 GCC
-（`-DCMAKE_CXX_COMPILER=g++`）。第一批至少覆盖 HTTP 事件循环与 worker 线程之间
-的 command/event handoff、并发 keep-alive、disconnect/cancel、timeout 和
-shutdown/reap。任何第一方代码报告均失败；第三方 suppression 必须限定到具体外部
-符号、写明原因，不能用宽泛规则隐藏 Host、Runtime 或 IPC 代码。TSan 结果只证明
-竞态检测，不作为 QPS、延迟或 CPU 结论。
+TSan uses a dedicated Linux/GCC Debug build. Do not mix with ASan, UBSan, LTO, fuzz, or benchmark runs. **The supported TSan compiler in this environment is GCC**: Alpine/musl clang does not ship a TSan runtime (`libclang_rt.tsan_cxx.a` does not exist), so configuration rejects it and requires switching to GCC (`-DCMAKE_CXX_COMPILER=g++`). The first batch must cover at least command/event handoff between the HTTP event loop and worker threads, concurrent keep-alive, disconnect/cancel, timeout, and shutdown/reap. Any report from first-party code fails; third-party suppressions must be limited to specific external symbols, explain why, and cannot use broad rules to hide Host, Runtime, or IPC code. TSan results only prove race detection and are not QPS, latency, or CPU conclusions.
 
-**已知覆盖缺口（编译诊断降级，不是 race suppression）**：GCC 15.x 的 libstdc++
-在 `-fsanitize=thread` 下对 `std::atomic_thread_fence` 报
-`-Werror=tsan`（Boost.Asio 的 fenced block 使用该原语）。构建只把该警告类降级为
-非致命（`-Wno-error=tsan`，经 `capsid_sanitizers` INTERFACE 继承），TSan 插桩本身
-保持开启——已用注入 race 的探针验证仍被检出。代价是 **TSan 不插桩
-`std::atomic_thread_fence` 本身**，fence 附近的竞态可能漏检；这属于记录在案的诊断
-降级，不影响其他全部同步原语的检测。
+**Known coverage gap (compiler-diagnostic degradation, not race suppression)**: GCC 15.x's libstdc++ reports `-Werror=tsan` for `std::atomic_thread_fence` under `-fsanitize=thread` (Boost.Asio's fenced block uses that primitive). The build only downgrades that warning class to non-fatal (`-Wno-error=tsan`, inherited through the `capsid_sanitizers` INTERFACE); TSan instrumentation itself stays on—a probe with an injected race is still detected. The cost is that **TSan does not instrument `std::atomic_thread_fence` itself**, so races near fences may be missed; this is a documented diagnostic degradation and does not affect detection for all other synchronization primitives.
 
-TSan 运行环境有硬性要求：Clang TSan 初始化必须调用
-`personality(ADDR_NO_RANDOMIZE)` 关闭 ASLR，因此默认 Docker/containerd
-seccomp profile 的容器（包括本地 bench/build 容器）会在
-`tsan_platform_linux.cpp:282` 直接 CHECK 失败——这不是代码缺陷，是环境不满足
-前置条件。TSan 门必须在真实 VM（GitHub hosted runner）或
-`--security-opt seccomp=unconfined` 的容器中运行。另外 TSan worker 的 shadow
-内存映射要求保留大段虚拟地址空间，sanitizer 构建（`CAPSID_ASAN_BUILD` /
-`CAPSID_TSAN_BUILD`）会关闭生产 RLIMIT_AS，仍保留 QuickJS heap 上限。
+TSan has hard environment requirements: Clang TSan initialization must call `personality(ADDR_NO_RANDOMIZE)` to disable ASLR, so containers under the default Docker/containerd seccomp profile (including local bench/build containers) fail directly with a CHECK at `tsan_platform_linux.cpp:282`—this is not a code defect but an unmet environment prerequisite. The TSan gate must run on a real VM (GitHub hosted runner) or in a container with `--security-opt seccomp=unconfined`. In addition, TSan worker shadow memory mapping requires large contiguous virtual address space; sanitizer builds (`CAPSID_ASAN_BUILD` / `CAPSID_TSAN_BUILD`) disable the production RLIMIT_AS while keeping the QuickJS heap cap.
 
-CI 的 `sanitizers` matrix 新增独立 `tsan` entry：Clang 编译、`CAPSID_BUILD_HOST=ON`，
-并在 job 内从 pinned 源码（SHA-256 校验）构建 OpenSSL 3.5 到 `/opt/openssl35`
-（ubuntu-24.04 自带 3.0，不满足 Host 的 3.5 契约）。asan/ubsan entry 维持原配置。
+The CI `sanitizers` matrix adds a dedicated `tsan` entry: Clang compilation, `CAPSID_BUILD_HOST=ON`, and inside the job builds OpenSSL 3.5 from pinned source (SHA-256 verified) into `/opt/openssl35` (ubuntu-24.04 ships 3.0, which does not satisfy Host's 3.5 contract). The asan/ubsan entries keep their original configuration.
 
-**指标开启路径是 TSan 门的另一半**：M1C 验收 A/B 证据在
-`CAPSID_HOST_IPC_METRICS=1` 下生成，而 metrics 由 worker 线程写、IO 线程读并
-整体清零（`write_metrics_line` 的 `metrics_ = Metrics{}`），无锁跨线程访问是
-真实竞态（冻结 RED：`host_single_worker_integration_metrics`）。TSan 只有
-metrics-off 通过不够——证据路径同样必须无竞态。`host_single_worker_integration_metrics`
-（ctest entry，`CAPSID_HOST_IPC_METRICS=1` 环境）与普通集成测试并列为 M1C 门。
+**The metrics-enabled path is the other half of the TSan gate**: M1C acceptance A/B evidence is generated with `CAPSID_HOST_IPC_METRICS=1`, and metrics are written by worker threads, read by the IO thread, and reset as a whole (`write_metrics_line` does `metrics_ = Metrics{}`); the lock-free cross-thread access is a real race (frozen RED: `host_single_worker_integration_metrics`). TSan passing with metrics off is not enough—the evidence path must also be race-free. `host_single_worker_integration_metrics` (ctest entry, `CAPSID_HOST_IPC_METRICS=1` environment) is an M1C gate alongside the ordinary integration tests.
 
-## 平台契约门
+## Platform Contract Gates
 
-平台门分别证明“原生开发”和“生产隔离”，不能互相代替：
+Platform gates separately prove "native development" and "production isolation"; they cannot replace each other:
 
-- Linux Release 是 v1 生产门，必须在 delegated 环境验证 strict sandbox、
-  cgroup 和 required READY feature bits；
-- macOS native-dev 运行平台中立 Host 单元测试和真实 single-worker loopback
-  集成；strict sandbox 请求必须负控失败；
-- Windows native-dev 使用 `windows-latest` hosted runner：MSVC + Ninja 构建
-  Runtime、worker、字节码编译器与 Host，运行平台中立矩阵，并在 Windows 宿主
-  真实启动 Host 与 worker，覆盖 source/trusted-bytecode identity、`capsid:env`、
-  request、streaming、cancel、timeout、crash/reap 和 loopback-only 负控；
-- Windows 交叉编译、Wine、WSL2 或 Linux 容器不能替代 hosted Windows 原生运行证据；
-- Windows/macOS native-dev 通过不得写成生产 sandbox 通过；反之，Linux
-  生产门也不能替代 Windows 开发可用性。
+- Linux Release is the v1 production gate and must verify strict sandbox, cgroup, and required READY feature bits in a delegated environment;
+- macOS native-dev runs platform-neutral Host unit tests and real single-worker loopback integration; strict sandbox requests must fail as negative controls;
+- Windows native-dev uses the `windows-latest` hosted runner: MSVC + Ninja builds Runtime, worker, bytecode compiler, and Host, runs the platform-neutral matrix, and actually starts Host and worker on the Windows host, covering source/trusted-bytecode identity, `capsid:env`, request, streaming, cancel, timeout, crash/reap, and loopback-only negative controls;
+- Windows cross-compilation, Wine, WSL2, or a Linux container cannot substitute for hosted native Windows execution evidence;
+- Windows/macOS native-dev passes must not be written as production sandbox passes; conversely, the Linux production gate cannot replace Windows development usability.
 
-Windows 平台只支持 single-worker 与单 shard static-pool；依赖
-`SO_REUSEPORT` 的多 shard 场景、managed Host、`capsid:fs` 与 strict sandbox
-在 Windows 上不注册或不实现，见[平台支持总览](platform-support.md)。实现不得
-通过跳过 worker 测试、禁用 trusted bytecode 或把 listener 替换成非原生 Linux
-VM 来转绿。
+Windows supports single-worker and multi-shard static-pool: multi-shard scenarios run through a pool-level shared acceptor instead of `SO_REUSEPORT`. The managed Host remains unavailable, `capsid:fs` is degraded but usable, and strict sandbox is not implemented on Windows; see [Platform support overview](platform-support.md). Implementations must not turn green by skipping worker tests, disabling trusted bytecode, or replacing the listener with a non-native Linux VM.
 
-## 环境型 sandbox 证据
+## Environment-Based Sandbox Evidence
 
-普通宿主缺少 cgroup delegation 或 namespace 权限时，相应测试返回 CTest
-skip code 77。这只表示环境不具备前置条件，不能写成通过。
+When a normal host lacks cgroup delegation or namespace permissions, the corresponding test returns CTest skip code 77. That only means the environment lacks the prerequisite; it cannot be recorded as a pass.
 
-`.github/workflows/testing-validity.yml` 包含五类独立 job：
+`.github/workflows/testing-validity.yml` contains five independent job classes:
 
-- Ubuntu Release/LTO、固定 WPT、benchmark smoke 和 privileged delegated
-  sandbox，并生成 txiki.js 升级报告；
-- Ubuntu ASan、UBSan 与 TSan 普通矩阵；TSan entry 使用 Clang 并构建
-  Host（含本地源码构建的 OpenSSL 3.5）；ASan 仅排除两个已由 Release 严格门禁和
-  ASan 非严格同功能门禁重复覆盖的 strict-sandbox 网络/TLS 退出项，因为
-  seccomp 会在 instrumented runtime teardown 阶段终止进程；
-- Clang/libFuzzer 的四个 bounded corpus gate；
-- macOS 14 的 POSIX host-library 与非 worker 单元矩阵；
-- `windows-latest` 的 MSVC host-library，构建 Runtime/worker/Host 并运行
-  平台中立测试，Linux-only 测试按“不注册即跳过”或 `SKIP_RETURN_CODE 77`
-  原则缺席。
+- Ubuntu Release/LTO, pinned WPT, benchmark smoke, and privileged delegated sandbox, and generates the txiki.js upgrade report;
+- Ubuntu ASan, UBSan, and TSan regular matrix; the TSan entry uses Clang and builds Host (including OpenSSL 3.5 built from local source); ASan excludes only two strict-sandbox network/TLS exit items already covered redundantly by the Release strict gate and the ASan non-strict same-function gate, because seccomp kills the process during instrumented runtime teardown;
+- Clang/libFuzzer's four bounded corpus gates;
+- macOS 14 POSIX host-library and non-worker unit matrix;
+- `windows-latest` MSVC host-library, builds Runtime/worker/Host and runs platform-neutral tests; Linux-only tests are absent under the "not registered means skipped" or `SKIP_RETURN_CODE 77` principle.
 
-上述五类 job 都产出 hosted evidence，由最终 `hosted-evidence-index` 统一
-门禁；任一 job 失败都会让整个 run 失败。
+All five job classes produce hosted evidence, uniformly gated by the final `hosted-evidence-index`; any job failure fails the whole run.
 
-JUnit、build metadata 和升级报告作为 workflow artifact 保存，不在仓库提交生成报告的
-副本。最终
-`hosted-evidence-index` job 下载各 job 证据，写入 run URL、commit SHA、
-各证据文件 SHA-256 和证据树摘要，并要求所有依赖 job 成功。delegated sandbox
-脚本把 77 视为 CI failure；普通 runner 的环境型 skip 不能替代它。
+JUnit, build metadata, and upgrade reports are saved as workflow artifacts; generated report copies are not committed to the repository. The final `hosted-evidence-index` job downloads each job's evidence, writes the run URL, commit SHA, each evidence file's SHA-256, and an evidence tree summary, and requires all dependent jobs to succeed. The delegated sandbox script treats 77 as CI failure; ordinary runner environment skips cannot substitute for it.
 
-所有第三方 action 都固定到审查过的 40 位 commit SHA。仓库内的
-`testing_validity_workflow_audit` 同时锁定 action 清单、四类 job、安全门和
-CTest JUnit 相对路径；`--test-dir` 已经确定输出根目录，禁止再次把 build
-目录写进 `--output-junit`，以免报告与 artifact 读取到不存在的双层路径。
+All third-party actions are pinned to reviewed 40-character commit SHAs. The in-repo `testing_validity_workflow_audit` also locks the action list, four job classes, security gates, and CTest JUnit relative paths; `--test-dir` already determines the output root, and writing the build directory again into `--output-junit` is forbidden so reports and artifacts do not read a nonexistent two-level path.
 
-## 当前证据如何取得
+## How Current Evidence Is Obtained
 
-测试数量和结果以当前 build tree 为准：
+Test counts and results are based on the current build tree:
 
 ```sh
 ctest --test-dir build --show-only=json-v1
 ctest --test-dir build --output-on-failure
 ```
 
-固定 WPT 文件集合由 `tests/wpt/manifest.json` 决定；delegated sandbox 正向测试必须在
-具备权限的独立环境中通过，不能用普通宿主的 skip 代替。CI 会为每个 commit 生成
-txiki.js 升级报告和 hosted evidence index；这些带 commit 与摘要的 artifact 才是该次
-运行的证据，文档不复制某一天的计数。
+The pinned WPT file set is determined by `tests/wpt/manifest.json`; delegated sandbox positive tests must pass in a separate privileged environment and cannot be replaced by a normal host skip. CI generates a txiki.js upgrade report and hosted evidence index for each commit; those commit-bound artifacts with digests are the evidence for that run, and this document does not copy one day's counts.

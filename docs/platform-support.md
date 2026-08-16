@@ -1,111 +1,82 @@
-# 平台支持总览
+﻿# Platform Support Overview
 
-Capsid 对 Linux、macOS 与 Windows 的承诺分为两个独立层次：
+Capsid's commitments for Linux, macOS, and Windows are split into two independent levels:
 
-- **原生开发（native dev）**：Runtime、worker、字节码编译器与第一方 Host 能在
-  该平台原生构建、启动并通过平台中立测试；
-- **生产隔离（production isolation）**：能否在该平台运行不可信代码。当前只有
-  Linux strict sandbox 满足这一承诺。
+- **Native development (native dev)**: the runtime, worker, bytecode compiler, and first-party Host can build, start, and pass platform-neutral tests natively on that platform;
+- **Production isolation**: whether untrusted code can be run on that platform. Currently only the Linux strict sandbox fulfills this commitment.
 
-“能构建”不等于“能生产隔离”。macOS 与 Windows 的原生构建用于开发、联调、CI
-与 benchmark；涉及不可信代码的生产部署应使用 Linux 容器或 VM。
+Being able to build does not mean being able to isolate in production. Native builds on macOS and Windows are for development, integration debugging, CI, and benchmarks; production deployments involving untrusted code should use Linux containers or VMs.
 
-## 统一能力契约（三平台交集）
+## Unified Capability Contract (Three-Platform Intersection)
 
-**single-worker 与 static-pool 按三平台统一行为承诺**：`static-pool` 的
-single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为一致
-（同一公开端口、同一 READY/drain/请求契约）。Linux/macOS 通过内核
-`SO_REUSEPORT` 共享端口；Windows 由池级共享 acceptor 轮询分发。只有三平台
-行为一致的能力才进入 ✅ 清单，任何平台缺失、语义不一致或只能部分实现的能力
-单独列为差异。
+**single-worker and static-pool are committed to uniform behavior across the three platforms**: `static-pool`'s single and multi shard modes are available on Linux, macOS, and Windows with identical external behavior (same public port, same READY/drain/request contract). Linux/macOS share the port through kernel `SO_REUSEPORT`; Windows uses a pool-level shared acceptor that polls and dispatches. Only capabilities whose behavior is consistent across all three platforms enter the ✅ list; any capability that is missing, semantically inconsistent, or only partially implemented on any platform is listed separately as a difference.
 
-统一承诺：
+Unified commitments:
 
-- Runtime C ABI（spawn/request/credit/streaming）✅
-- `capsid-worker`（txiki.js + 受限核心）✅
-- `capsid-bytecode-compile`（可信字节码）✅
+- Runtime C ABI (spawn/request/credit/streaming) ✅
+- `capsid-worker` (txiki.js + restricted core) ✅
+- `capsid-bytecode-compile` (trusted bytecode) ✅
 - Host `--mode single-worker` ✅
-- Host `--mode static-pool`（single / multi shard）✅
-- 出站网络策略（egress host/address 规则）✅
-- 能力策略（模块/权限/环境快照）✅
+- Host `--mode static-pool` (single / multi shard) ✅
+- Egress network policy (egress host/address rules) ✅
+- Capability policy (modules/permissions/environment snapshot) ✅
 
-**不属于三平台统一契约**（因此按不支持处理，除非显式使用单平台能力）：
+**Not part of the three-platform unified contract** (therefore treated as unsupported unless a single-platform capability is explicitly used):
 
-- Host `--mode managed`（coordinator/Admin/多 App）：仅 Linux；macOS/Windows
-  在 CLI 直接提示后退出
-- `capsid:fs`（read/stat/list）：Linux 完整支持；macOS/Windows 有损支持
-  但可用，且一律拒绝 symlink/reparse 路径（macOS：`openat(O_NOFOLLOW)`
-  dirfd walk；Windows：drive-letter 绝对路径，reparse point 拒绝）
-- strict sandbox（seccomp/Landlock/namespace/cgroup）：仅 Linux
-- 多 shard 共享端口（`SO_REUSEPORT`）：仅 Linux/macOS 的内部实现；
-  Windows 使用池级共享 acceptor 实现同样的对外行为
-- worker CPU affinity：Linux 完整；Windows 仅当前处理器组；macOS 无
-- `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE`：各平台语义不一致，无统一承诺
+- Host `--mode managed` (coordinator/Admin/multi-App): Linux only; macOS/Windows exit after a direct CLI message
+- `capsid:fs` (read/stat/list): fully supported on Linux; degraded but usable on macOS/Windows, and always rejects symlink/reparse paths (macOS: `openat(O_NOFOLLOW)` dirfd walk; Windows: drive-letter absolute paths, reparse points rejected)
+- strict sandbox (seccomp/Landlock/namespace/cgroup): Linux only
+- Multi-shard shared port (`SO_REUSEPORT`): internal implementation only on Linux/macOS; Windows uses a pool-level shared acceptor to achieve the same external behavior
+- Worker CPU affinity: full on Linux; current processor group only on Windows; none on macOS
+- `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE`: semantics differ by platform, so there is no unified commitment
 
-部署若需要跨三平台一致行为，请只依赖 ✅ 清单；使用差异清单中的能力前必须先做
-平台分支或把部署锁定到明确支持的平台。
+For consistent cross-platform behavior, rely only on the ✅ list; before using any capability from the differences list, branch by platform or pin the deployment to an explicitly supported platform.
 
-## 平台构建
+## Platform Builds
 
 ### Linux
 
-- 推荐 x86-64 或 AArch64；Release 使用 musl 全静态包
-  `capsid-<版本>-linux-musl.tar.gz`；
-- `CAPSID_ENABLE_LTO`、`CAPSID_ENABLE_ASAN/UBSAN/TSAN`、fuzz 与
-  `CAPSID_GENERATE_LINK_MAP` 可用；
-- strict sandbox 要求内核提供 seccomp 与 Landlock；cgroup/namespace 能力由宿主
-  委派。详细契约见 [Linux 严格沙箱](linux-sandbox.md)。
+- x86-64 or AArch64 recommended; Release uses the musl fully static package `capsid-<version>-linux-musl.tar.gz`;
+- `CAPSID_ENABLE_LTO`, `CAPSID_ENABLE_ASAN/UBSAN/TSAN`, fuzz, and `CAPSID_GENERATE_LINK_MAP` are available;
+- strict sandbox requires the kernel to provide seccomp and Landlock; cgroup/namespace capabilities are delegated by the host. See [Linux strict sandbox](linux-sandbox.md) for the detailed contract.
 
 ### macOS
 
-- 使用系统 Clang 原生构建，Release 包为 `capsid-<版本>-darwin-arm64.tar.gz`；
-- single-worker 与 static-pool（single / multi shard）属三平台统一契约；
-  multi shard 通过 `SO_REUSEPORT` 实现；
-- `capsid:fs` 有损但可用：readText/stat/list 与 Linux 行为一致，底层为
-  逐组件 `openat(O_NOFOLLOW)` dirfd walk，symlink 一律拒绝；
-- 没有 `sched_setaffinity` 等价 API，CPU affinity 测试按 CTest 77 跳过；
-- 请求 strict sandbox 会在 worker 启动握手期失败；`--mode managed` 在 CLI
-  直接失败并提示“managed coordinator requires Linux strict sandbox”，与
-  Windows 行为一致。
+- Built natively with the system Clang; the Release package is `capsid-<version>-darwin-arm64.tar.gz`;
+- single-worker and static-pool (single / multi shard) are part of the three-platform unified contract; multi shard uses `SO_REUSEPORT`;
+- `capsid:fs` is degraded but usable: readText/stat/list behave consistently with Linux, implemented as a component-by-component `openat(O_NOFOLLOW)` dirfd walk; symlinks are always rejected;
+- There is no API equivalent to `sched_setaffinity`; CPU affinity tests are skipped with CTest 77;
+- Requesting strict sandbox fails during the worker startup handshake; `--mode managed` fails directly at the CLI with the message "managed coordinator requires Linux strict sandbox", matching Windows behavior.
 
 ### Windows
 
-- 使用 MSVC + Ninja + vcpkg（静态 CRT），Release 包为
-  `capsid-<版本>-windows-x86_64.zip`；
-- single-worker 与 static-pool（single / multi shard）属三平台统一契约；
-  没有 `SO_REUSEPORT`，multi shard 由池级共享 acceptor 轮询分发；
-- `capsid:fs` 有损但可用：readText/stat/list 与 Linux 行为一致，路径仅
-  接受 `C:/...`（也接受 `C:\...`）drive-letter 绝对路径，逐组件打开并拒绝
-  reparse point（symlink/junction）；UNC 路径不支持；
-- strict sandbox 与 managed Host 不可用；`--mode managed` 在 CLI 直接失败
-  并提示，与 macOS 行为一致；
-- CPU affinity 通过 `SetProcessAffinityMask` 实现，但只覆盖当前处理器组；
-- Worker 内存上限通过 Job Object 的 `JOB_OBJECT_LIMIT_PROCESS_MEMORY` 约束
-  **已提交内存**，与 Linux `RLIMIT_AS`（虚拟地址空间）语义不同。
-  完整前置条件与差异见 [Windows 构建与平台能力](windows.md)。
+- Built with MSVC + Ninja + vcpkg (static CRT); the Release package is `capsid-<version>-windows-x86_64.zip`;
+- single-worker and static-pool (single / multi shard) are part of the three-platform unified contract; there is no `SO_REUSEPORT`, and multi shard is dispatched by a pool-level shared acceptor;
+- `capsid:fs` is degraded but usable: readText/stat/list behave consistently with Linux; paths accept only `C:/...` (also `C:\...`) drive-letter absolute paths, opened component by component, and reparse points (symlink/junction) are rejected; UNC paths are not supported;
+- strict sandbox and managed Host are unavailable; `--mode managed` fails directly at the CLI with a message, matching macOS behavior;
+- CPU affinity is implemented via `SetProcessAffinityMask`, but only covers the current processor group;
+- The worker memory limit constrains **committed memory** via Job Object's `JOB_OBJECT_LIMIT_PROCESS_MEMORY`, which is semantically different from Linux `RLIMIT_AS` (virtual address space). See [Windows build and platform capabilities](windows.md) for full prerequisites and differences.
 
-## CI 覆盖
+## CI Coverage
 
-`.github/workflows/testing-validity.yml` 提供五类 hosted 证据：
+`.github/workflows/testing-validity.yml` provides five categories of hosted evidence:
 
-- Ubuntu 24.04 Release/LTO + 固定 WPT + delegated sandbox；
-- Ubuntu ASan、UBSan、TSan；
-- Clang/libFuzzer 四个 corpus gate；
-- macOS 14 posix-host-library；
-- `windows-latest` MSVC host-library（平台中立矩阵 + JUnit 证据）。
+- Ubuntu 24.04 Release/LTO + pinned WPT + delegated sandbox;
+- Ubuntu ASan, UBSan, TSan;
+- Four Clang/libFuzzer corpus gates;
+- macOS 14 posix-host-library;
+- `windows-latest` MSVC host-library (platform-neutral matrix + JUnit evidence).
 
-各平台不支持的场景遵循“不注册即跳过”或 CTest `SKIP_RETURN_CODE 77` 原则，
-不得以静默绿代替缺失覆盖。详细清单见 [测试与持续门禁](testing.md)。
+Unsupported scenarios on each platform follow the "skip unless registered" principle or CTest `SKIP_RETURN_CODE 77`; silent green must not substitute for missing coverage. See [testing and continuous gate](testing.md) for the detailed list.
 
-## 选型建议
+## Selection Recommendations
 
-| 场景 | 推荐平台 |
+| Scenario | Recommended platform |
 | --- | --- |
-| 本地开发、AI 代码生成联调 | Linux、macOS 或 Windows 任意 |
-| benchmark 复现 | Linux（发布包与性能基线一致） |
-| 运行不可信代码 | **仅 Linux**，启用 strict sandbox 并验证 READY feature bits |
-| 需要 Windows 原生宿主 | Windows single-worker / 单 shard static-pool，仅运行受信任代码 |
-| 需要 managed 多 App / Admin / 蓝绿部署 | Linux |
+| Local development and AI code-generation integration | Linux, macOS, or Windows, any |
+| Benchmark reproduction | Linux (release package matches the performance baseline) |
+| Running untrusted code | **Linux only**, with strict sandbox enabled and READY feature bits verified |
+| Need a Windows native host | Windows single-worker / single shard static-pool, trusted code only |
+| Need managed multi-App / Admin / blue-green deployment | Linux |
 
-事实冲突时以公共头文件、`docs/capability-manifest.json`、构建配置与 CI workflow
-为准，Markdown 仅为导航与解释。
+When facts conflict, public headers, `docs/capability-manifest.json`, build configuration, and CI workflows take precedence; Markdown is only for navigation and explanation.

@@ -1,15 +1,12 @@
-# Hono 兼容性
+# Hono compatibility
 
-## 状态
+## Status
 
-Capsid Runtime 将固定的 **Hono 4.12.32** 作为普通 bundle 验证。精确版本和
-完整性由 `examples/hono-reference/package.json` 与 lockfile 固定；该结论
-不会自动覆盖其他 4.x 或未来版本。
+Capsid Runtime validates pinned **Hono 4.12.32** as an ordinary bundle. The exact version and integrity are pinned by `examples/hono-reference/package.json` and the lockfile; this conclusion does not automatically cover other 4.x or future versions.
 
-三个入口 bundle 都必须是单文件 ESM、零 external import，并通过构建审计。
-运行时不增加 Hono global、platform adapter 或框架专用分支。
+All three entry bundles must be single-file ESM with zero external imports and must pass the build audit. The runtime adds no Hono global, platform adapter, or framework-specific branch.
 
-## 构建与验证
+## Build and verification
 
 ```sh
 npm ci --ignore-scripts --prefix vendor/txiki.js
@@ -20,48 +17,41 @@ cmake --build build --target test-hono-worker-driver test-module-denial
 ctest --test-dir build -L hono --output-on-failure
 ```
 
-差分套件包含 68 个确定性向量，其中 11 个有独立绝对断言。reference 侧调用
-未修改 Hono，runtime 侧通过真实 `capsid-worker`、FetchRPC 和同一应用逻辑。
+The differential suite contains 68 deterministic vectors, 11 of which have independent absolute assertions. The reference side calls unmodified Hono, while the runtime side runs through a real `capsid-worker`, FetchRPC, and the same application logic.
 
-## 已验证
+## Verified
 
-- `app.fetch()`、默认 `{ fetch }` 和 named `fetch` 入口；
-- method/path routing、params/query、404/405、base path；
-- middleware 顺序、context、header/cookie、异常处理；
-- JSON/text/HTML/binary/streaming response；
-- request body、FormData、AbortSignal；
-- 并发隔离、handler/body/response-stream cancel；
-- 异步 timeout、同步 CPU timeout 和 worker 复用；
-- 由正常 egress policy 控制的 txiki.js direct `fetch()`；
-- Node/Deno/Bun/txiki/platform global 继续缺席。
+- `app.fetch()`, default `{ fetch }`, and named `fetch` entries;
+- method/path routing, params/query, 404/405, base path;
+- middleware order, context, header/cookie, exception handling;
+- JSON/text/HTML/binary/streaming responses;
+- request body, FormData, AbortSignal;
+- concurrency isolation, handler/body/response-stream cancellation;
+- async timeout, sync CPU timeout, and worker reuse;
+- txiki.js direct `fetch()` controlled by the normal egress policy;
+- Node/Deno/Bun/txiki/platform globals remain absent.
 
-response 比较 status、规范化 header 和精确 body bytes；只归一化动态 `Date`
-等明确定义的非语义字段。stream transport chunk 边界不属于 Web Streams
-语义，因此比较总长度和内容，不比较底层 chunk 次数。
+Responses compare status, normalized headers, and exact body bytes; only well-defined non-semantic fields such as dynamic `Date` are normalized. Stream transport chunk boundaries are not part of Web Streams semantics, so the total length and content are compared rather than the underlying chunk counts.
 
-## 支持边界
+## Support boundaries
 
-应用可以把上述 Web-standard Hono Core 路径打包成一个 ESM，并导出 Capsid
-Runtime 的正常 fetch contract。宿主仍负责 HTTP/TLS、worker 池、timeout、
-网络和 sandbox 策略。
+Applications can bundle the Web-standard Hono Core paths above into an ESM and export Capsid Runtime's normal fetch contract. The host remains responsible for HTTP/TLS, worker pool, timeout, network, and sandbox policy.
 
-明确排除：
+Explicit exclusions:
 
-- `@hono/node-server`、Node built-in 与 Node/Bun/Deno/Cloudflare adapter；
-- HTTP/WebSocket server 和 upgrade API；
-- 依赖文件系统的 static-file adapter；
-- Cloudflare binding、`ExecutionContext`、cache、Durable Object；
-- context storage/`AsyncLocalStorage`；
-- external、remote 和 `file:` module loading。
+- `@hono/node-server`, Node built-ins, and Node/Bun/Deno/Cloudflare adapters;
+- HTTP/WebSocket server and upgrade APIs;
+- static-file adapter that depends on the filesystem;
+- Cloudflare bindings, `ExecutionContext`, cache, Durable Object;
+- context storage/`AsyncLocalStorage`;
+- external, remote, and `file:` module loading.
 
-对应 negative tests 使用 `hono-excluded` 标签。产品能力变化不会自动扩大
-这里的固定版本兼容声明。
+Corresponding negative tests use the `hono-excluded` label. Product capability changes do not automatically expand this pinned-version compatibility statement.
 
-## 升级流程
+## Upgrade process
 
-1. 更新精确依赖并重建 lockfile；
-2. 不修改 `node_modules` 或 Hono 源码；
-3. 重建并审计全部 bundle；
-4. 运行 differential、lifecycle、excluded-import、global-surface 和
-   sanitizer 矩阵；
-5. 将 normalization 或 exclusion 变化作为兼容策略变更审查。
+1. Update the exact dependency and rebuild the lockfile;
+2. Do not modify `node_modules` or Hono source;
+3. Rebuild and audit all bundles;
+4. Run the differential, lifecycle, excluded-import, global-surface, and sanitizer matrices;
+5. Review normalization or exclusion changes as compatibility policy changes.

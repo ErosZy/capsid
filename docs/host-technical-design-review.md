@@ -1,100 +1,83 @@
-# Capsid Host v1 详细设计
+# Capsid Host v1 Detailed Design
 
-> 状态：v1 权威设计；M1 数据面与安全部署闭环已交付（以当前源码和测试为准），
-> static-pool/managed 属可运行的 benchmark/integration 模式，非生产部署接口。
-> Runtime 权威接口：[runtime.h](../include/capsid/runtime.h)；集成约束见
-> [第三方宿主集成规范](host-integration.md)。
+> Status: authoritative v1 design; the M1 data plane and secure deployment loop are delivered (as evidenced by the current source and tests).
+> static-pool/managed are runnable benchmark/integration modes, not production deployment interfaces.
+> Runtime authoritative interface: [runtime.h](../include/capsid/runtime.h); integration constraints are documented in [Third-party host integration guide](host-integration.md).
 
-## 1. 文档定位和冻结结论
+## 1. Document Scope and Frozen Conclusions
 
-本文是第一方 Host 的唯一权威设计。旧的规划、评审过程和每日状态页已经删除；某项能力
-是否完成，以当前源码和测试为准，不能从本设计的存在推断实现已经交付。
+This document is the sole authoritative design for the first-party Host. Old planning documents, review processes, and daily status pages have been deleted; whether a capability is complete is determined by the current source and tests, and cannot be inferred from the existence of this design.
 
-冻结的核心决定：
+Frozen core decisions:
 
-- Host 是独立的一方宿主进程，Runtime 继续只负责单 worker 和 FetchRPC；
-- 一份 Host 上限与一份 App 申请做交集，App 不能扩大权限；
-- 每个 worker 一生只属于一个不可变 App Version；
-- 新版本预热成功后再切换，任何失败保持旧版本；
-- worker 固定归属一个事件循环 owner，完整执行 credit、cancel 和 drain；
-- v1 使用 HTTP/1.1，TLS/HTTP/2 先交给成熟反向代理；
-- 不因为猜测性能而引入 io_uring、共享内存 IPC 或自定义 HTTP parser。
+- Host is an independent first-party host process; Runtime continues to own only the single worker and FetchRPC;
+- One Host ceiling intersected with one App request; the App cannot expand permissions;
+- Each worker belongs to exactly one immutable App Version for its entire lifetime;
+- A new version is switched to only after prewarming succeeds; any failure keeps the old version;
+- Each worker is permanently owned by one event-loop owner, which fully executes credit, cancel, and drain;
+- v1 uses HTTP/1.1; TLS/HTTP/2 are left to mature reverse proxies;
+- No io_uring, shared-memory IPC, or custom HTTP parser is introduced based on speculative performance.
 
-v1 同时冻结以下约束：
+v1 also freezes the following constraints:
 
-1. v1 同时支持源码和可信字节码；`bundle.qjsb` 只有通过签名 provenance、摘要、精确
-   source name 和 Runtime compatibility ID 校验后，才能进入 trusted bytecode API；
-2. `env.valueFrom` 读取的 secret value 作为不可变 `capsid:env` 快照进入 worker；这是
-   v1 的明确安全契约，而不是实现泄漏；
-3. `host.json` 包含 listener、管理 socket、全局容量和队列硬边界；
-4. 权限交集不是简单字符串集合交集，需要类型化、规范化的 Policy Compiler；
-5. 部署 API 在第一阶段就承诺蓝绿语义，因此 staging、预热、原子切换和 drain 也
-   必须在第一阶段形成垂直闭环；
-6. `active.json` 需要明确原子落盘与恢复语义，但 v1 **不需要数据库**；
-7. compatibility identity 与 attestation verifier 由 M0 核心提供；结构化启动错误和
-   非阻塞 worker 回收必须在数据面接入前完成，回收不能阻塞 reactor；
-8. Host 使用单一 HTTP framing authority，并固定 hop-by-hop header、流式 body、
-   慢客户端和自动重试规则；
-9. active generation 使用 worker crash replacement、指数退避、跨 App 公平和 crash
-   budget，超限后 fail closed；
-10. 显式下线使用 retire 管理动作和 crash-safe tombstone，不以删除目录表达；
-11. worker 可观察的绝对 URL、path rewrite 和 Forwarded/X-Forwarded 信任边界必须由
-    8.2 的单一规范化契约冻结，listener 不得自行派生另一套规则；
-12. 部署后使用最小持续健康探针，SSE 长连接有独立容量保护；
-13. 公网 C++ Host 与全局 Admin socket 的残余权限边界明确写入 threat model。
-14. Linux 是 v1 生产目标，macOS/Windows 原生开发是独立产品契约；
-    Host 只决定和验证隔离能力，Runtime 负责平台 process/transport/sandbox，
-    不支持的生产隔离必须 fail closed。
+1. v1 supports both source and trusted bytecode; `bundle.qjsb` may enter the trusted bytecode API only after passing signature provenance, digest, exact source name, and Runtime compatibility ID checks;
+2. The secret value read by `env.valueFrom` enters the worker as an immutable `capsid:env` snapshot; this is an explicit v1 security contract, not an implementation leak;
+3. `host.json` contains the listener, admin socket, global capacity, and queue hard limits;
+4. Permission intersection is not simple string-set intersection; it requires a typed, normalized Policy Compiler;
+5. The deployment API promises blue-green semantics from the first phase, so staging, prewarming, atomic switchover, and drain must form a vertical loop in that first phase;
+6. `active.json` needs explicit atomic write and recovery semantics, but v1 **does not need a database**;
+7. compatibility identity and the attestation verifier are provided by the M0 core; structured startup errors and non-blocking worker reclamation must be complete before the data plane is wired in, and reclamation must not block the reactor;
+8. Host uses a single HTTP framing authority and fixes hop-by-hop headers, streaming bodies, slow clients, and automatic retry rules;
+9. active generation uses worker crash replacement, exponential backoff, cross-App fairness, and a crash budget; exceeding the budget fails closed;
+10. Explicit decommissioning is expressed through a retire management action and crash-safe tombstone, not by deleting a directory;
+11. The worker-observable absolute URL, path rewrite, and `Forwarded`/`X-Forwarded` trust boundary must be frozen by the single normalization contract in 8.2; listeners must not derive another rule set;
+12. After deployment, use minimal continuous health probes; SSE long connections have separate capacity protection;
+13. The residual permission boundary between the public C++ Host and the global Admin socket is explicitly written into the threat model.
+14. Linux is the v1 production target; native macOS/Windows development is a separate product contract; Host only decides and verifies isolation capabilities, Runtime is responsible for platform process/transport/sandbox, and unsupported production isolation must fail closed.
 
-v1 技术栈：
+v1 technology stack:
 
-| 领域 | 选择 | 原因 |
+| Area | Choice | Reason |
 | --- | --- | --- |
-| Host 语言 | C++20，仅 Host target 使用 | 直接调用现有 C ABI；复用 CMake 与 C++ 工程经验 |
-| 事件循环与 HTTP/1 | Boost.Asio + Boost.Beast | 覆盖 epoll/kqueue/IOCP；平台 adapter 接管 worker event source；提供增量 HTTP/1 parser/serializer |
-| 配置 JSON | Jansson | API 小；能显式 `JSON_REJECT_DUPLICATES`，适合安全配置 |
-| 摘要与验签 | OpenSSL `EVP` SHA-256 / Ed25519 | 不自写哈希或签名实现；后续如需 TLS 仍可复用 |
-| 持久状态 | 普通文件 + `fsync` + 原子 `rename` | 单进程、单写者足够；不引入 SQLite |
-| 指标 | 内建固定指标 + `/metrics` 文本端点 | v1 不引入完整 telemetry SDK；避免高基数与 exporter 故障 |
-| TLS/H2 | 外部 nginx/Caddy/Envoy | 先收敛发布、调度和隔离，不同时维护边缘协议栈 |
+| Host language | C++20, used only by Host targets | Directly calls the existing C ABI; reuses CMake and C++ project experience |
+| Event loop and HTTP/1 | Boost.Asio + Boost.Beast | Covers epoll/kqueue/IOCP; the platform adapter owns the worker event source; provides incremental HTTP/1 parser/serializer |
+| Config JSON | Jansson | Small API; can explicitly use `JSON_REJECT_DUPLICATES`, suitable for security-sensitive config |
+| Digest and signature verification | OpenSSL `EVP` SHA-256 / Ed25519 | Does not hand-write hash or signature implementations; can be reused later if TLS is needed |
+| Persistent state | Plain files + `fsync` + atomic `rename` | Single process, single writer is sufficient; no SQLite |
+| Metrics | Built-in fixed metrics + `/metrics` text endpoint | v1 does not introduce a full telemetry SDK; avoids high cardinality and exporter failures |
+| TLS/H2 | External nginx/Caddy/Envoy | Converge publishing, scheduling, and isolation first without maintaining an edge protocol stack |
 
-没有选择的方案：
+Options not selected:
 
-| 方案 | v1 不选的原因 |
+| Option | Why v1 did not select it |
 | --- | --- |
-| raw epoll + 自写 HTTP 状态机 | 重复实现 parser、timer、半包和生命周期；安全收益为零 |
-| Rust/Tokio/Hyper | 内存安全优势真实存在，但当前仓库没有 Rust 基础，会增加第二套构建、FFI 和 CI；若团队主要能力在 Rust，可重新评估 |
-| 继续 Go/cgo | 保留为 A/B 基线；第一方 Host 直接拥有 worker fd 和 ABI，是否更快仍由数据证明 |
-| SQLite/其他数据库 | v1 单进程单写者，只需要一个活动版本指针，没有数据库查询或事务需求 |
-| Boost.JSON 作为安全配置 parser | 重复 key 采用 last-wins，不能直接满足 fail-closed 配置要求 |
+| raw epoll + hand-written HTTP state machine | Duplicates parser, timer, partial-packet, and lifecycle work; zero security benefit |
+| Rust/Tokio/Hyper | The memory-safety advantage is real, but the current repository has no Rust foundation; it would add a second build system, FFI, and CI. If the team's core competence shifts to Rust, it can be reevaluated |
+| Continue Go/cgo | Kept as the A/B baseline; whether the first-party Host is faster because it directly owns worker fds and the ABI is still to be proven by data |
+| SQLite/other database | v1 is single-process single-writer; it needs only one active-version pointer, with no database queries or transaction requirements |
+| Boost.JSON as the security-sensitive config parser | Duplicate keys use last-wins, which cannot directly satisfy fail-closed configuration requirements |
 
-当前仍有效的集成约束：`capsid_worker_destroy()` 是同步的有界回收路径，最坏会
-等待数百毫秒，因此不能在数据面 reactor 回调里执行；宿主应先在 owner shard 摘除
-并关闭 worker，再把唯一 handle 移交给有界 reaper executor。
+The integration constraint that remains in effect: `capsid_worker_destroy()` is a synchronous bounded reclamation path that can wait hundreds of milliseconds in the worst case, so it cannot run in a data-plane reactor callback. The host should first remove the worker from its owner shard and shut it down, then hand the sole handle to a bounded reaper executor.
 
-## 3. 关键契约补充
+## 3. Key Contract Additions
 
-### 3.1 产品边界
+### 3.1 Product Boundary
 
-“Runtime 管单 worker，Host 管 HTTP、路由、池、发布和过载”的边界是正确的。
-`capsid-host` 是独立 executable，Host 内部组件使用 `capsid_host_core`，但 v1
-不承诺第二套公共稳定 ABI。
+The boundary "Runtime owns the single worker; Host owns HTTP, routing, pools, publishing, and overload" is correct. `capsid-host` is a standalone executable, and Host internal components use `capsid_host_core`, but v1 does not promise a second public stable ABI.
 
-### 3.2 `host.json` / `capsid.json` 两层模型
+### 3.2 Two-Layer `host.json` / `capsid.json` Model
 
-两层而不是 realm/tenant/policy directory 多层模型，有利于 v1 收敛。但“交集”必须
-定义为类型化偏序：
+A two-layer model rather than a multi-layer realm/tenant/policy-directory model helps v1 converge. However, "intersection" must be defined as a typed partial order:
 
-- module：精确名称集合包含；
-- env：精确键或 Host 允许的尾部通配规则；
-- fs：按规范化 path component 判断祖先关系，不能做字符串前缀；
-- fetch：按 hostname/IP/CIDR、端口范围和 deny 优先级编译；
-- storage/stdio：精确资源集合；
-- 数值限制：App 值小于等于 Host 最大值；
-- sandbox feature：只允许 Host 决定，App 没有覆盖字段。
+- module: exact name-set containment;
+- env: exact keys or a single trailing wildcard rule allowed by Host;
+- fs: ancestry is determined by normalized path components, not string prefix matching;
+- fetch: compiled by hostname/IP/CIDR, port range, and deny priority;
+- storage/stdio: exact resource sets;
+- numeric limits: App values are less than or equal to Host maximums;
+- sandbox feature: only Host decides; App has no override fields.
 
-Policy Compiler 必须输出规范化 `effective.json`、Runtime descriptor 和稳定 rule ID
-反查表。部署失败应返回 JSON pointer，例如：
+The Policy Compiler must output a normalized `effective.json`, a Runtime descriptor, and a stable rule ID lookup table. Deployment failures should return a JSON pointer, for example:
 
 ```json
 {
@@ -105,69 +88,45 @@ Policy Compiler 必须输出规范化 `effective.json`、Runtime descriptor 和�
 }
 ```
 
-### 3.3 Fetch scheme
+### 3.3 Fetch Scheme
 
-早期配置样例的 Host 上限写成 `*.internal.example.com:443`，App 申请却写成
-`https://orders-api.internal.example.com:443`。当前 Runtime egress 判定只接收
-host/IP/CIDR 和 port，不能区分 `http` 与 `https`。
+In an early config sample, the Host ceiling was written as `*.internal.example.com:443` while the App request was written as `https://orders-api.internal.example.com:443`. The current Runtime egress check only accepts host/IP/CIDR and port; it cannot distinguish `http` from `https`.
 
-v1 配置语法统一为 `host:port`，明确它不保证 URI scheme。若以后需要
-HTTPS-only，必须先扩展 worker/ABI，使 policy 判定包含 scheme；配置不能先表达 Runtime
-无法执行的安全承诺。
+The v1 config syntax is uniformly `host:port` and explicitly does not promise a URI scheme. If HTTPS-only is needed later, the worker/ABI must first be extended so policy evaluation includes the scheme; config cannot express a security promise that Runtime cannot enforce.
 
-### 3.4 Secret 语义
+### 3.4 Secret Semantics
 
-v1 明确接受 `API_TOKEN` 通过 `capsid:env` 进入 worker：Host 把 token value 放入 HELLO
-的 environment snapshot，应用只通过获准的 `capsid:env` key 读取。边界固定为：
+v1 explicitly accepts `API_TOKEN` entering a worker through `capsid:env`: Host puts the token value into the HELLO environment snapshot, and the app reads it only through approved `capsid:env` keys. The boundary is fixed as:
 
-- 不把 secret 文件路径传给 worker；
-- 不把 secret 作为进程环境变量；
-- 不写入 `effective.json`、日志、错误或指标；
-- worker 只收到 App 明确申请、Host 明确允许的键值快照；
-- 单值最长 16 KiB、最多 256 项、全部 name + value 最多 48 KiB，与现有 Runtime 校验
-  保持一致；值不能包含 NUL；
-- secret 变化不原地修改 READY worker，而是生成新 generation、预热并原子替换；
-- Host 在 spawn 返回后尽快清除临时读取 buffer，但不宣称能够抹除 allocator、IPC 和
-  worker 内已产生的全部副本。
+- Do not pass secret file paths to the worker;
+- Do not expose secrets as process environment variables;
+- Do not write them into `effective.json`, logs, errors, or metrics;
+- The worker receives only the key/value snapshot the App explicitly requested and Host explicitly allowed;
+- Each value is at most 16 KiB, at most 256 entries, and all name + value bytes total at most 48 KiB, consistent with existing Runtime validation; values cannot contain NUL;
+- Secret changes do not mutate READY workers in place; instead, create a new generation, prewarm it, and atomically replace;
+- Host clears the temporary read buffer as soon as possible after spawn returns, but does not claim it can erase every copy already created in allocators, IPC, or the worker.
 
-M0.3 冻结的纯 Policy Compiler 边界不接收路径或 ambient environment，只接收 App env
-申请、Host environment allowlist，以及后续 safe-read provider 产生的
-`(keyId, value, opaqueRevision)`。App env name 使用 Runtime 的 ASCII 标识符语法，Host
-allowlist 额外允许单个末尾 `*`；`value`/`valueFrom` 必须且只能出现一个。secret key ID
-最长 128 bytes，只允许 ASCII 字母、数字、`_`、`-`、`.`，不能包含 `..`；opaque revision
-最长 256 bytes，只允许 ASCII 字母、数字和 `.`、`_`、`:`、`@`、`+`、`-`。provider
-输出必须与申请的 distinct key 集合精确相等，缺失、重复或多余 material 都 fail closed。
-所有配置字符串都拒绝 NUL；object member name 含 NUL 时沿用 Jansson 上游的严格解析
-行为，作为 `kInvalidJson` 定位到文档根，不为获得更细路径而放宽 vendored parser。
+The pure Policy Compiler boundary frozen by M0.3 does not receive paths or ambient environment. It receives only App env requests, the Host environment allowlist, and `(keyId, value, opaqueRevision)` tuples produced by a later safe-read provider. App env names use Runtime's ASCII identifier syntax; the Host allowlist additionally permits one trailing `*`. Exactly one of `value`/`valueFrom` must appear. Secret key IDs are at most 128 bytes and allow only ASCII letters, digits, `_`, `-`, and `.`, with no `..`; opaque revisions are at most 256 bytes and allow only ASCII letters, digits, `.`, `_`, `:`, `@`, `+`, and `-`. Provider output must exactly equal the requested distinct key set; missing, duplicate, or extra material all fail closed. All config strings reject NUL. When an object member name contains NUL, Host follows Jansson's upstream strict parsing behavior and reports `kInvalidJson` at the document root rather than relaxing the vendored parser to obtain a finer path.
 
-这是有意选择的能力模型：获得该 key 权限的应用代码可以读到值。v1 不再同时承诺
-“通过 `capsid:env` 使用 secret”和“secret 内容不进入 worker”这两个互斥目标。
+This is a deliberate capability model: application code granted that key permission can read the value. v1 no longer promises both "use secrets through `capsid:env`" and "secret content never enters the worker," which were mutually exclusive goals.
 
-### 3.5 可信字节码信任链
+### 3.5 Trusted Bytecode Trust Chain
 
-公开头文件明确说明，攻击者控制、损坏或不兼容的 QuickJS bytecode 可能造成内存
-破坏。compatibility ID 只解决“格式是否匹配”，不能把不可信 bytes 变可信。
+The public header explicitly states that attacker-controlled, corrupted, or incompatible QuickJS bytecode can cause memory corruption. A compatibility ID only addresses whether the format matches; it cannot make untrusted bytes trusted.
 
-因此 v1 同时保留源码和字节码，但字节码必须满足完整的 provenance 契约：
+Therefore v1 keeps both source and bytecode, but bytecode must satisfy the full provenance contract:
 
-- `bundle.mjs` 始终是必需的语义源和兼容回退；
-- `bundle.qjsb`、`bytecode.json` 和 `bytecode.sig` 必须成组出现；
-- `capsid-bytecode-compile` 必须来自目标 Host 同一发布物、链接同一 QuickJS 配置；工具
-  从源码直接生成 bytecode 和待签名 attestation，不提供“为任意现有 qjsb 补签”模式；
-- 构建流水线使用离线 Ed25519 私钥签名，Host 只配置 key ID 到公钥的信任根；
-- attestation 固定包含 schema、App、Version、精确 `sourceName`、源码 SHA-256、字节码
-  SHA-256、Runtime/QuickJS compatibility ID 和 key ID；
-- 签名覆盖带 domain separator、固定字段顺序和长度前缀的二进制消息，不依赖 JSON
-  object key 顺序或临时 canonicalization 规则；
-- Host 安全复制三个文件后，先拒绝重复/未知字段，再验证 key、签名、两个摘要、App、
-  Version 和 `sourceName`；任何 provenance 或摘要失败都使部署失败；
-- 签名有效但 compatibility ID 与当前 worker 不匹配时，明确记录原因并回退到同
-  Version 的 `bundle.mjs`；匹配时才调用
-  `capsid_worker_load_trusted_bytecode_named()`；
-- key 撤销影响后续部署和重启恢复；已 READY worker 不原地改变，按 generation
-  替换规则处理。
+- `bundle.mjs` is always the required semantic source and compatibility fallback;
+- `bundle.qjsb`, `bytecode.json`, and `bytecode.sig` must appear as a group;
+- `capsid-bytecode-compile` must come from the same release as the target Host and link the same QuickJS configuration; the tool generates bytecode and the attestation to be signed directly from source, and does not offer a "re-sign any existing qjsb" mode;
+- The build pipeline signs with an offline Ed25519 private key; Host configures only key ID to public key trust roots;
+- The attestation always includes schema, App, Version, exact `sourceName`, source SHA-256, bytecode SHA-256, Runtime/QuickJS compatibility ID, and key ID;
+- The signature covers a binary message with a domain separator, fixed field order, and length prefixes; it does not depend on JSON object key order or ad hoc canonicalization rules;
+- After Host securely copies the three files, it first rejects duplicate/unknown fields, then verifies the key, signature, both digests, App, Version, and `sourceName`; any provenance or digest failure makes deployment fail;
+- If the signature is valid but the compatibility ID does not match the current worker, record the reason explicitly and fall back to the same Version's `bundle.mjs`; call `capsid_worker_load_trusted_bytecode_named()` only when it matches;
+- Key revocation affects future deployments and restart recovery; READY workers are not mutated in place and follow generation replacement rules.
 
-`bytecode.json` 的 v1 形状固定为：
+The v1 shape of `bytecode.json` is fixed as:
 
 ```json
 {
@@ -182,109 +141,83 @@ allowlist 额外允许单个末尾 `*`；`value`/`valueFrom` 必须且只能出�
 }
 ```
 
-`bytecode.sig` 是恰好 64 bytes 的原始 Ed25519 signature。被签消息是
-`"capsid-bytecode-attestation-v1\0"`，随后按上述顺序串联每个字段的 32-bit big-endian
-长度和 UTF-8 bytes。普通 claim 各自不得超过 1024 UTF-8 bytes；schema 必须精确为
-`capsid-bytecode-v1`，三个 SHA-256 字段必须精确为 `sha256:` 加 64 位小写十六进制。
-这些结构/语法检查先于验签；验签后才比较部署期 expected claims、实际源码/字节码摘要和
-当前 compatibility ID。未知 JSON key 的诊断路径必须做 RFC 6901 转义。Host 重建消息后
-使用 OpenSSL EVP 验签。
+`bytecode.sig` is exactly 64 bytes of raw Ed25519 signature. The signed message starts with `"capsid-bytecode-attestation-v1\0"`, followed by each field's 32-bit big-endian length and UTF-8 bytes in the order listed above. Ordinary claims must each be at most 1024 UTF-8 bytes; `schema` must be exactly `capsid-bytecode-v1`, and the three SHA-256 fields must be exactly `sha256:` followed by 64 lowercase hex digits. These structural/syntax checks run before signature verification; after verification, Host compares deployment-time expected claims, actual source/bytecode digests, and the current compatibility ID. The diagnostic path for unknown JSON keys must apply RFC 6901 escaping. Host rebuilds the message and verifies the signature with OpenSSL EVP.
 
-M0.2 的选择器输入中，源码始终存在；`bundle.qjsb`、`bytecode.json`、`bytecode.sig`
-使用 all-or-none optional 表达，三者全无选择源码，部分存在直接拒绝。完整且 provenance
-有效、identity 相同才选择 trusted bytecode；只有签名、claims 和两个摘要均有效而
-identity 不同，才返回带 `/compatibilityId` 原因的源码回退。任何未签名的 identity 篡改
-必须是签名失败，不能伪装成兼容回退。验证结果同时保留安全的 key ID 与原始 attestation
-SHA-256，供 generation identity 使用。
+In the M0.2 selector input, source is always present; `bundle.qjsb`, `bytecode.json`, and `bytecode.sig` are expressed as all-or-none optional files. When all three are absent, select source; if only some are present, reject immediately. Select trusted bytecode only when all three are complete, provenance is valid, and identity matches. Only when the signature, claims, and both digests are valid but identity differs, return the source fallback with a `/compatibilityId` reason. Any unsigned identity tampering must surface as a signature failure, not masquerade as a compatibility fallback. The verification result also keeps the safe key ID and the original attestation SHA-256 for generation identity.
 
-选择结果只有四种：
+The selector has exactly four outcomes:
 
-| 版本目录状态 | 结果 |
+| Version directory state | Result |
 | --- | --- |
-| 三个 bytecode 文件都不存在 | 加载源码 |
-| 三者齐全、provenance 有效、identity 匹配 | 加载可信字节码 |
-| 三者齐全、provenance 有效、仅 identity 失配 | 记录原因并加载源码 |
-| 文件不齐或任一 provenance 校验失败 | 部署失败，旧版本保持 active |
+| None of the three bytecode files exist | Load source |
+| All three are present, provenance is valid, identity matches | Load trusted bytecode |
+| All three are present, provenance is valid, only identity mismatches | Record the reason and load source |
+| Files are incomplete or any provenance check fails | Deployment fails; the old version remains active |
 
-当前仓库已有 trusted bytecode Runtime API、worker 加载路径、正式 compiler target、
-compatibility identity 和 attestation verifier。后续 Host 数据面只能把完整通过本节
-信任链的产物交给 trusted API。
+The current repository already has the trusted bytecode Runtime API, the worker loading path, the official compiler target, compatibility identity, and the attestation verifier. The Host data plane may hand only artifacts that fully pass this section's trust chain to the trusted API.
 
-### 3.6 部署垂直闭环
+### 3.6 Deployment Vertical Loop
 
-`/v1/deploy` 的最小垂直闭环固定为：
+The minimal vertical loop for `/v1/deploy` is fixed as:
 
 ```text
-安全读取 → 校验/编译 → 内部快照 → spawn/load/READY
-       → 可选健康检查 → 原子 active 切换 → 旧池 drain
+secure read → validate/compile → internal snapshot → spawn/load/READY
+       → optional health check → atomic active switchover → old pool drain
 ```
 
-可以推迟 autoscaling、完整 reload、TLS/H2 和多种 transport，但不能推迟原子切换和
-失败保持旧版本。
+Autoscaling, full reload, TLS/H2, and multiple transports may be deferred, but atomic switchover and keeping the old version on failure cannot be deferred.
 
-### 3.7 listener 配置
+### 3.7 Listener Configuration
 
-当前 `host.json` 示例没有 listener，但后文同时支持 subdomain、path 和 trusted
-header，无法决定绑定地址、路由模式和信任边界。每个 listener 必须只配置一种主要
-路由模式，避免隐含优先级。
+The current `host.json` sample has no listener, but later sections support subdomain, path, and trusted header routing at the same time, which cannot determine the bind address, routing mode, or trust boundary. Each listener must configure exactly one primary routing mode to avoid implicit priority.
 
-Header routing 仅允许 Unix socket，或具备 mTLS/source allowlist 的独立内部 TCP
-listener。公网 listener 必须删除客户端提供的同名控制 header。
+Header routing is allowed only on a Unix socket or a separate internal TCP listener with mTLS/source allowlist. Public listeners must delete same-named control headers supplied by clients.
 
-### 3.8 整机资源上限
+### 3.8 Whole-Machine Resource Limits
 
-`memoryMax`、`cpuQuota` 是每 worker 限制；`maxWorkers` 会放大为 App 和整机资源。
-Host 还需要：
+`memoryMax` and `cpuQuota` are per-worker limits; `maxWorkers` multiplies into App and whole-machine resource usage. Host also needs:
 
-- 全局 worker 数和启动并发；
-- 全局可承诺内存；
-- 单 App READY/starting/draining worker 总数；
-- 蓝绿期间双份 pool 的临时容量；
-- App/全局 queued request 与 queued header bytes；
-- 每 listener connection、header、body 和 timeout 限制。
+- Global worker count and startup concurrency;
+- Global committed memory;
+- Total READY/starting/draining workers per App;
+- Temporary capacity for two pools during blue-green;
+- App/global queued requests and queued header bytes;
+- Per-listener connection, header, body, and timeout limits.
 
-启动 worker 前必须先获得 memory/startup permit；失败就拒绝预热，不能先过量 spawn
-再等待 cgroup OOM。
+A memory/startup permit must be acquired before spawning a worker; if the permit fails, refuse to prewarm. Do not over-spawn first and then wait for a cgroup OOM.
 
-### 3.9 默认值必须用证据校准
+### 3.9 Defaults Must Be Calibrated by Evidence
 
-示例中的 `maxInflight=32`、`maxWorkers=16` 等只能作为讨论值，不能直接冻结为
-`host-v1` 默认。现有性能文档也强调不同 workload 的最优 worker/inflight 不同。
+Values such as `maxInflight=32` and `maxWorkers=16` in the sample are discussion values only and cannot be frozen directly as `host-v1` defaults. The existing performance documentation also emphasizes that the optimal worker/inflight values differ by workload.
 
-v1 alpha 阶段应先要求显式 pool size，完成固定 workload 的容量扫描后再冻结默认值。
-Runtime 自身 ABI 默认值是底层兜底，不应自动成为 Host 产品默认值。
+During the v1 alpha phase, require an explicit pool size first, run capacity scans on fixed workloads, and only then freeze defaults. Runtime's own ABI defaults are a bottom-line fallback and should not automatically become Host product defaults.
 
-### 3.10 无配置启动
+### 3.10 No-Config Startup
 
-“没有 `host.json` 也能运行”不能等同于“自动开放一个公网 listener”。推荐默认行为：
+"Runs without a `host.json`" must not mean "automatically opens a public listener." The recommended default behavior is:
 
-- strict sandbox 和 deny-all capability/egress；
-- 不绑定任何 TCP data listener；
-- 只创建 mode `0600` 的本机 Unix admin socket；
-- state/app root 不存在或 ownership 不安全时明确失败；
-- 目标 Linux 缺少 required isolation feature 时失败，不降级；
-- 运维必须显式配置 listener 后才对外服务。
+- strict sandbox and deny-all capability/egress;
+- no TCP data listener bound;
+- only a local Unix admin socket with mode `0600`;
+- explicit failure when the state/app root is missing or has unsafe ownership;
+- failure without degradation when the target Linux lacks a required isolation feature;
+- operators must explicitly configure a listener before serving external traffic.
 
-这仍允许自包含 App 做零权限部署，同时不会因为缺配置意外暴露网络入口。
+This still allows a self-contained App to deploy with zero permissions while avoiding an accidental network entry point from missing configuration.
 
-### 3.11 `capsid:storage` 不是共享持久存储
+### 3.11 `capsid:storage` Is Not Shared Persistent Storage
 
-当前 `capsid:storage` 只存在于单 worker 内存。App 开启 storage 且 pool 大于一个 worker
-时，Host 校验必须给出明确警告；扩缩容、worker crash 和版本切换都会丢失或分叉状态。
-v1 不提供 affinity 来掩盖这一事实，也不能把 namespace 命名解释为跨 worker 数据库。
+Currently `capsid:storage` exists only in single-worker memory. When an App enables storage and the pool has more than one worker, Host validation must emit an explicit warning; scaling, worker crashes, and version switchovers all lose or fork state. v1 does not provide affinity to hide this fact, and namespace naming must not be interpreted as a cross-worker database.
 
-### 3.12 Host 配置 reload 后置
+### 3.12 Host Config Reload Deferred
 
-安全 ceiling 收紧时，旧 READY worker 仍持有旧快照；“逐 App 平滑 reload”会产生新旧
-安全策略并存窗口。v1 不做 in-process security reload，只提供 config validate/plan，
-变更通过受控 Host 重启或外部双实例切换完成。以后若实现 reload，必须明确收紧时是
-立即 cancel 旧请求，还是允许一个有界 drain 窗口，不能隐式选择。
+When the security ceiling tightens, old READY workers still hold the old snapshot; "per-App smooth reload" would create a window where old and new security policies coexist. v1 does not perform in-process security reload; it only provides config validate/plan, and changes are applied through a controlled Host restart or an external dual-instance switchover. If reload is implemented later, it must explicitly decide whether tightening immediately cancels old requests or allows a bounded drain window; it cannot choose implicitly.
 
-## 4. 目标架构
+## 4. Target Architecture
 
 ```text
-                    本机 Admin endpoint
-                   (v1 生产为 Unix socket)
+                    Local Admin endpoint
+                   (Unix socket in v1 production)
                                 │
                          Admin HTTP/1 API
                                 │
@@ -308,60 +241,47 @@ v1 不提供 affinity 来掩盖这一事实，也不能把 namespace 命名解�
               delegated cgroup / Host network environment
 ```
 
-### 4.1 进程和线程
+### 4.1 Processes and Threads
 
-`capsid-host` 使用：
+`capsid-host` uses:
 
-- 1 个 control thread：配置、部署/恢复状态机、`active.json` 和 registry 发布；
-- `N` 个 reactor thread：每个线程一个 `boost::asio::io_context`；
-- 小型有界 bootstrap executor：执行安全文件复制、spawn、load 和等待 READY；
-- 小型有界 reaper executor：执行可能等待 child 的 destroy/wait；
-- 1 个有界日志输出线程；队列满时按事件类别计数并执行明确丢弃策略。
+- 1 control thread: configuration, deployment/recovery state machine, `active.json`, and registry publication;
+- `N` reactor threads: one `boost::asio::io_context` per thread;
+- A small bounded bootstrap executor: secure file copy, spawn, load, and wait for READY;
+- A small bounded reaper executor: destroy/wait operations that may wait on a child;
+- 1 bounded log output thread; when the queue is full, count by event category and apply an explicit drop policy.
 
-`N` 初始取 `capsid_recommended_worker_count()` 与 Host 配置上限的较小值，但最终默认
-必须经第一方 Host A/B 校准。
+`N` initially is the smaller of `capsid_recommended_worker_count()` and the Host configured ceiling, but the final default must be calibrated by first-party Host A/B testing.
 
-### 4.2 ownership 规则
+### 4.2 Ownership Rules
 
-每个 worker 的唯一 ownership 变化如下：
+Each worker's exclusive ownership transitions as follows:
 
 ```text
 bootstrap executor
-    → READY 后一次性 post 到目标 shard
-    → shard 独占所有 Runtime API 调用
-    → 摘除、停止读写并清空 view
-    → reaper executor 独占 destroy
+    → post once to the target shard after READY
+    → shard exclusively owns all Runtime API calls
+    → remove, stop reads/writes, and clear the view
+    → reaper executor exclusively owns destroy
 ```
 
-任何时刻只有一个线程调用同一个 `capsid_worker`。payload、header 和 audit view 在
-下一次 `capsid_worker_next_event()` 前复制到 Host 自有的有界对象。
+At any moment exactly one thread calls a given `capsid_worker`. Payload, header, and audit views are copied into Host-owned bounded objects before the next `capsid_worker_next_event()`.
 
-### 4.3 为什么选 Asio/Beast，而不是 raw epoll
+### 4.3 Why Asio/Beast Instead of Raw epoll
 
-Asio 在 Linux 使用 epoll，并能用 `posix::stream_descriptor` 管理现有
-`capsid_worker_fd()`；macOS 使用 kqueue，Windows 后端可使用 IOCP。Beast 提供
-跨平台的增量 HTTP/1 解析和序列化。Host 仍然保持 owner shard 模型，
-但无需自己重写 fd/HANDLE 注册、timer、HTTP framing 和半包状态机。
+Asio uses epoll on Linux and can manage the existing `capsid_worker_fd()` through `posix::stream_descriptor`; it uses kqueue on macOS, and the Windows backend can use IOCP. Beast provides cross-platform incremental HTTP/1 parsing and serialization. Host retains the owner-shard model without reimplementing fd/HANDLE registration, timers, HTTP framing, or partial-packet state machines.
 
-为防止当前 ABI 把 Host 锁死在 POSIX，只有 `WorkerEventSource` 平台 adapter
-可以直接调用 `capsid_worker_fd()`。Pool、routing、request、credit 和 lifecycle
-只观察“可读/可写/已关闭”语义，不包含 `_WIN32` 或 POSIX 分支。Windows
-实现时，Runtime 内部把进程创建、worker transport 和 sandbox 拆成平台后端；
-新的 waitable/event-source C ABI 只能加法扩展 ABI v7，其具体类型、ownership 和
-wakeup 语义先由 Windows RED 测试冻结。
+To prevent the current ABI from locking Host into POSIX, only the `WorkerEventSource` platform adapter is allowed to call `capsid_worker_fd()` directly. Pool, routing, request, credit, and lifecycle code observes only "readable/writable/closed" semantics and contains no `_WIN32` or POSIX branches. On Windows, Runtime internally splits process creation, worker transport, and sandbox into platform backends; any new waitable/event-source C ABI must extend ABI v7 additively, and its concrete types, ownership, and wakeup semantics are first frozen by Windows RED tests.
 
-Beast 不是完整 Web server：Host 仍需实现路由、header 策略、body credit、超时和
-错误映射。这恰好是 Capsid 产品逻辑，而不是重复实现通用协议 parser。
+Beast is not a full web server: Host still implements routing, header policy, body credit, timeouts, and error mapping. That is precisely Capsid product logic rather than a reimplementation of a general protocol parser.
 
-Runtime target 继续保持 C++11；只给 `capsid-host` 和 `capsid_host_core` 设置
-`CXX_STANDARD 20`，不借 Host 项目升级破坏现有 ABI 或兼容测试。
+The Runtime target remains C++11; only `capsid-host` and `capsid_host_core` set `CXX_STANDARD 20`. Host upgrades must not break the existing ABI or compatibility tests.
 
-## 5. 配置方案
+## 5. Configuration Scheme
 
-### 5.1 修订后的 `host.json` 轮廓
+### 5.1 Revised `host.json` Outline
 
-以下字段是结构建议；普通容量值仍需 profile 校准。`recovery` 和 streaming 数值是 v1
-候选值，必须通过 fake-clock、crash-loop、SSE soak 和故障注入验证后才能冻结：
+The fields below are structural suggestions; ordinary capacity values still need profile calibration. `recovery` and streaming values are v1 candidates and must be validated with fake-clock, crash-loop, SSE soak, and fault-injection tests before being frozen:
 
 ```json
 {
@@ -451,16 +371,16 @@ Runtime target 继续保持 C++11；只给 `capsid-host` 和 `capsid_host_core` 
 }
 ```
 
-相比现有样例，主要变化是：
+Compared with the existing sample, the main changes are:
 
-- 显式定义 admin 与 listener；
-- 把 per-worker、per-request、pool 和 host capacity 分开；
-- listener 自己拥有连接、header 和 timeout 上限；
-- Host 级全局预算不能由 App 覆盖。
+- admin and listeners are explicitly defined;
+- per-worker, per-request, pool, and host capacity are separated;
+- each listener owns its connection, header, and timeout limits;
+- Host-level global budgets cannot be overridden by an App.
 
-### 5.2 App 配置
+### 5.2 App Configuration
 
-App 侧也建议分清边界：
+The App side is also advised to keep boundaries clear:
 
 ```json
 {
@@ -493,42 +413,33 @@ App 侧也建议分清边界：
 }
 ```
 
-静态池阶段要求 `minReady == maxWorkers`。等有界扩缩容实现并通过压力测试后，再允许
-两者不同，避免 v1 配置暴露尚不存在的语义。
+The static-pool phase requires `minReady == maxWorkers`. Only after bounded autoscaling is implemented and passes stress tests may the two differ, so v1 config does not expose semantics that do not exist yet.
 
-### 5.3 解析和校验
+### 5.3 Parsing and Validation
 
-配置处理固定顺序：
+The fixed configuration processing order:
 
-1. 限制文件大小和 JSON nesting；
-2. 使用标准 JSON 模式，拒绝 comment、trailing comma、NaN/Infinity；
-3. 拒绝任何重复 key；
-4. 拒绝未知字段；
-5. 检查类型、单位、范围和跨字段关系；
-6. 展开 `{application}` 模板；
-7. 规范化路径、host、CIDR、port 和资源单位；
-8. 编译有效策略并生成稳定摘要；
-9. 只把规范化结果交给后续阶段。
+1. Limit file size and JSON nesting;
+2. Use standard JSON mode; reject comments, trailing commas, and NaN/Infinity;
+3. Reject any duplicate key;
+4. Reject unknown fields;
+5. Check types, units, ranges, and cross-field relationships;
+6. Expand `{application}` templates;
+7. Normalize paths, hosts, CIDRs, ports, and resource units;
+8. Compile the effective policy and generate a stable digest;
+9. Pass only normalized results to later stages.
 
-v1 对 `host.json` 和 `capsid.json` 使用同一组解析资源上限：原始输入最多 1 MiB（含），
-且必须在创建 JSON DOM 前检查；JSON value nesting 最多 64 层，根 value 计作第 1 层。
-任一上限超出都返回稳定的 `kResourceLimit` 和根 JSON Pointer `""`，不再进入未知字段或
-值校验。nesting 由 Jansson parser 自身的深度限制执行，不能在其前面再写一个按括号计数
-的简化 JSON 扫描器；字符串中的 `{`、`[` 和转义内容不得影响深度判断。
+v1 uses the same parsing resource limits for `host.json` and `capsid.json`: raw input is at most 1 MiB (inclusive) and must be checked before creating the JSON DOM; JSON value nesting is at most 64 levels, with the root value counted as level 1. Exceeding either limit returns the stable `kResourceLimit` and root JSON Pointer `""`, without proceeding to unknown-field or value validation. Nesting is enforced by Jansson's own parser depth limit; do not add a simpler bracket-counting JSON scanner in front of it. `{`, `[`, and escaped content inside strings must not affect depth determination.
 
-M0.1 一次完成 5.1/5.2 所示 Host/App 结构、权限容器、数组和动态 key map 的递归类型检查；
-单位语法与规范化、Host/App 上限交集、listener 路由条件、secret 的 `value`/`valueFrom`
-互斥和 attestation 语义分别由后续对应契约处理，不再拆成逐字段的 M0.1 子里程碑。
+M0.1 completes recursive type checking for the Host/App structures shown in 5.1/5.2, permission containers, arrays, and dynamic key maps in one pass. Unit syntax and normalization, Host/App ceiling intersection, listener routing conditions, `value`/`valueFrom` exclusivity for secrets, and attestation semantics are handled by their respective later contracts; they are no longer split into per-field M0.1 sub-milestones.
 
-选择 Jansson 的唯一关键理由，是它能用公开 flag 直接拒绝重复 key。Boost.JSON 的 DOM
-parser 对重复 key 保留最后一个值，不适合作为安全配置的唯一 parser。配置不在热路径，
-解析性能不是选型指标。
+The single critical reason for choosing Jansson is that it can reject duplicate keys directly through a public flag. Boost.JSON's DOM parser keeps the last value for duplicate keys and is unsuitable as the sole security-sensitive config parser. Configuration is not on the hot path, so parse performance is not a selection criterion.
 
-## 6. 版本快照与持久状态
+## 6. Version Snapshot and Persistent State
 
-### 6.1 为什么 `active.json` 足够
+### 6.1 Why `active.json` Is Enough
 
-`active.json` 不是用户配置，它是 Host 内部单写的 App 服务状态记录。active 形态例如：
+`active.json` is not user configuration; it is Host's internal single-writer record of App serving state. An active form looks like:
 
 ```json
 {
@@ -540,7 +451,7 @@ parser 对重复 key 保留最后一个值，不适合作为安全配置的唯�
 }
 ```
 
-显式下线使用 retired tombstone，而不是删除文件：
+Explicit decommissioning uses a retired tombstone instead of deleting the file:
 
 ```json
 {
@@ -552,8 +463,7 @@ parser 对重复 key 保留最后一个值，不适合作为安全配置的唯�
 }
 ```
 
-crash budget 超限时保存 `state: "quarantined"`，并保留对应 Version/generation 和稳定
-reason code。三种状态共享同一个原子替换协议，不增加第二份状态文件。
+When the crash budget is exceeded, save `state: "quarantined"` and keep the corresponding Version/generation and stable reason code. All three states share the same atomic replacement protocol; no second state file is added.
 
 ```json
 {
@@ -566,29 +476,21 @@ reason code。三种状态共享同一个原子替换协议，不增加第二份
 }
 ```
 
-M0.4 把该内部文件冻结为最大 16 KiB 的严格 JSON object：拒绝重复/未知字段、NUL、错误
-类型和尾随输入；`schema` 必须精确为 `capsid-active-v1`，`app` 必须与正在恢复的 App
-精确相等，App/Version ID 与本设计 5.2 的 ASCII 规范一致，generation 必须是
-`sha256:` 加 64
-位小写十六进制。active 只允许并要求 `version/generation`；retired 只允许并要求
-`previousVersion/previousGeneration`；quarantined 只允许并要求
-`version/generation/reason`，v1 reason 固定为 `CRASH_BUDGET_EXCEEDED`。规范化输出是无换行
-单行 JSON，字段顺序固定为 `schema/app/state` 再接状态专属字段。
+M0.4 freezes this internal file as a strict JSON object of at most 16 KiB: duplicate/unknown fields, NUL, wrong types, and trailing input are rejected; `schema` must be exactly `capsid-active-v1`; `app` must exactly match the App being recovered; App/Version IDs follow the ASCII rules in 5.2; generation must be `sha256:` followed by 64 lowercase hex digits. active allows and requires only `version/generation`; retired allows and requires only `previousVersion/previousGeneration`; quarantined allows and requires only `version/generation/reason`, with the v1 reason fixed to `CRASH_BUDGET_EXCEEDED`. The normalized output is single-line JSON without newlines, with field order fixed as `schema/app/state` followed by state-specific fields.
 
-v1 的约束是：
+The v1 constraints are:
 
-- 一个 Host 进程；
-- 一个 control plane writer；
-- 每个 App 同时最多一个 deploy/retire 状态变更操作；
-- request 热路径只读内存 Registry，不读取状态文件；
-- 没有跨 App 原子事务或复杂历史查询。
+- one Host process;
+- one control-plane writer;
+- at most one deploy/retire state-change operation per App at a time;
+- the request hot path only reads the in-memory Registry and never reads state files;
+- no cross-App atomic transactions or complex history queries.
 
-在这些条件下，数据库不会增强线上请求正确性，只会增加依赖、schema migration、备份
-和损坏恢复面。普通文件已经足够。
+Under these conditions, a database would not improve online request correctness; it would only add dependencies, schema migration, backup, and corruption-recovery surface area. Plain files are sufficient.
 
-### 6.2 状态目录
+### 6.2 State Directory
 
-建议使用：
+The recommended layout is:
 
 ```text
 /var/lib/capsid/
@@ -613,156 +515,108 @@ v1 的约束是：
     └── <operation-id>/
 ```
 
-`versions/<version>.json` 记录外部 Version ID 到 generation digest 的不可变映射。同一
-App/Version 再次部署：
+`versions/<version>.json` records the immutable mapping from the external Version ID to a generation digest. When the same App/Version is deployed again:
 
-- 内容和有效配置摘要相同：Version 映射幂等并复用既有 generation；deploy 是否可以短路
-  仍按 7.3 的服务状态判断——已 active 才直接返回，retired/quarantined 必须重新预热；
-- 摘要不同：返回 `VERSION_IMMUTABILITY_CONFLICT`，不能覆盖旧映射。
+- If the content and effective-config digest are the same: the Version mapping is idempotent and reuses the existing generation. Whether a deploy can short-circuit still depends on the serving state per 7.3; only an already-active state returns directly, while retired/quarantined must prewarm again;
+- If the digest differs: return `VERSION_IMMUTABILITY_CONFLICT`; the old mapping must not be overwritten.
 
-### 6.3 generation identity
+### 6.3 Generation Identity
 
-不能只用 bundle bytes 作为 generation identity。相同源码在权限、资源、Host 配置或
-secret revision 改变后必须生成不同 worker pool。
+Bundle bytes alone cannot be the generation identity. The same source must produce a different worker pool when permissions, resources, Host configuration, or the secret revision changes.
 
 ```text
 generationDigest = SHA-256(binaryRecord)
 ```
 
-`binaryRecord` 固定从包含末尾 NUL 的 `"capsid-generation-v1\0"` 开始，随后按上述顺序
-编码十个字段；每个字段都是 32-bit big-endian byte length 加原始 UTF-8 bytes。
-`selectedArtifactKind` 只允许稳定 ASCII 值 `source` 或 `trusted-bytecode`，无 attestation
-时第三个字段编码为空字符串。最终公开形式是 `sha256:` 加 64 位小写十六进制。长度前缀
-消除拼接歧义，任何字段（包括 secret revision 和实际选择的 artifact）变化都生成不同
-generation。
+`binaryRecord` always starts with `"capsid-generation-v1\0"` (including the trailing NUL), followed by ten fields encoded in the order above; each field is a 32-bit big-endian byte length plus raw UTF-8 bytes. `selectedArtifactKind` allows only the stable ASCII values `source` or `trusted-bytecode`; when there is no attestation, the third field is encoded as an empty string. The final public form is `sha256:` followed by 64 lowercase hex digits. Length prefixes remove concatenation ambiguity; any change to a field, including secret revision and the actually selected artifact, produces a different generation.
 
-即使本次因 compatibility mismatch 回退源码，也要记录已验证 attestation、回退原因和
-实际 selected artifact。重启不得在不改变 generation identity 的情况下从源码静默切到
-另一份字节码，或反向切换。
+Even when this deployment falls back to source because of a compatibility mismatch, record the verified attestation, fallback reason, and actual selected artifact. A restart must not silently switch from source to another bytecode, or back, without changing the generation identity.
 
-secret revision 不保存明文或 secret value 的裸摘要。secret provider 应返回不含秘密的
-opaque revision；最简单的文件 backend 可使用已打开文件的 device、inode、size 和
-`ctime` 组成 revision，并在读取前后复核。即使相同内容重写后生成新 generation 也可
-接受，比再引入一套 Host 密钥管理更简单。
+The secret revision does not store plaintext or a bare digest of the secret value. Secret providers should return an opaque revision that contains no secret; the simplest file backend can compose a revision from the opened file's device, inode, size, and `ctime`, and re-check them before and after reading. If rewriting identical content creates a new generation, that is acceptable and simpler than introducing a separate Host key-management system.
 
-多个 secret 的聚合 revision 固定为 `sha256:` 加以下 binary record 的 SHA-256：包含末尾
-NUL 的 `"capsid-secret-revision-v1\0"`，先编码 App ID，再按 environment name 排序，
-对每个 secret env 依次编码 env name、key ID、provider opaque revision；每项同样使用
-32-bit big-endian length prefix。literal env 不进入 secret revision，因为其值已由
-normalized App config digest 覆盖。请求 JSON 顺序不得改变聚合 revision。
+The aggregate revision for multiple secrets is fixed as `sha256:` followed by the SHA-256 of this binary record: start with `"capsid-secret-revision-v1\0"` (including the trailing NUL), encode the App ID first, then sort by environment name, and for each secret env encode env name, key ID, and provider opaque revision in order; each item again uses a 32-bit big-endian length prefix. Literal envs do not enter the secret revision because their values are already covered by the normalized App config digest. Request JSON ordering must not change the aggregate revision.
 
-### 6.4 安全复制
+### 6.4 Secure Copy
 
-从 `applicationsRoot` 读取版本时：
+When reading a version from `applicationsRoot`:
 
-1. 先验证 App/Version ID 的字符集和长度；
-2. 从预打开的 root dirfd 使用 `openat2`，带
-   `RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS`；
-3. 只接受 regular file，拒绝 symlink、device、FIFO、socket 和越界路径；
-4. 对配置、源码和总版本大小设置硬上限；
-5. 从已经打开的 fd 读取并计算 SHA-256；
-6. 比较复制前后的 `fstat` 身份、size、mtime/ctime，变化即失败；
-7. 写入 `stateRoot/staging/<operation-id>`，逐文件 `fdatasync`；
-8. 写入最后的 `COMPLETE` marker 并同步目录；
-9. 原子 rename 到 generation 目录并 `fsync` 父目录。
+1. First validate the App/Version ID character set and length;
+2. From the pre-opened root dirfd, use `openat2` with `RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS`;
+3. Accept only regular files; reject symlinks, devices, FIFOs, sockets, and out-of-root paths;
+4. Set hard limits on config, source, and total version size;
+5. Read from the already-open fd and compute SHA-256;
+6. Compare `fstat` identity, size, and mtime/ctime before and after copying; any change fails;
+7. Write into `stateRoot/staging/<operation-id>`, calling `fdatasync` per file;
+8. Write the final `COMPLETE` marker and sync the directory;
+9. Atomically rename into the generation directory and `fsync` the parent directory.
 
-请求处理阶段只访问内存中的 bundle/metadata 或 Host 内部 generation，绝不重新读取上传
-目录。
+The request-processing phase only accesses in-memory bundle/metadata or Host-internal generations; it never re-reads the upload directory.
 
-### 6.5 `active.json` 原子状态切换
+### 6.5 Atomic `active.json` State Switchover
 
-切换必须在同一文件系统、同一目录完成：
+The switchover must happen on the same filesystem and in the same directory:
 
-1. 获取 per-App deploy mutex；
-2. 确认 generation 已有 `COMPLETE` 且新 pool 全部 READY；
-3. 以 `O_CREAT|O_EXCL` 创建 `active.json.tmp.<operation-id>`；
-4. 写入规范化、完整的 JSON；
-5. `fdatasync` 临时文件；
-6. `renameat` 覆盖 `active.json`；
-7. `fsync` App 状态目录；
-8. 发布新的内存 Registry snapshot；
-9. 返回部署成功，并开始旧 pool drain。
+1. Acquire the per-App deploy mutex;
+2. Confirm the generation has `COMPLETE` and all workers in the new pool are READY;
+3. Create `active.json.tmp.<operation-id>` with `O_CREAT|O_EXCL`;
+4. Write the normalized, complete JSON;
+5. `fdatasync` the temporary file;
+6. `renameat` over `active.json`;
+7. `fsync` the App state directory;
+8. Publish the new in-memory Registry snapshot;
+9. Return deployment success and begin draining the old pool.
 
-retire 和 quarantine 复用步骤 3–8：先在内存中阻止新路由，再写入对应 tombstone/state。
-它们不需要新 generation READY，但同样必须 `fdatasync`、原子 rename 和 `fsync` 父目录。
-两者的写失败语义不同：retire 在 rename 前失败时恢复原 Registry，让旧版本继续服务；
-quarantine 写失败时仍保持内存 fail closed、停止 replacement，并持续重试落盘及发出不可
-丢弃告警，绝不能为了报告写失败而恢复 crash-loop 流量。存储恢复前不得主动重启 Host；
-若进程仍因节点故障消失，旧 active 状态可能在下次启动再次触发 replacement，因此磁盘
-不可写属于需要运维介入的 durability incident，而不是可静默降级的正常路径。
+Retire and quarantine reuse steps 3–8: first block new routing in memory, then write the corresponding tombstone/state. They do not require a new generation to be READY, but they must still `fdatasync`, atomically rename, and `fsync` the parent directory. Their write-failure semantics differ: if retire fails before rename, restore the original Registry and let the old version continue serving; if quarantine fails to write, stay fail closed in memory, stop replacement, keep retrying the write, and emit a non-discardable alert. Never resume crash-loop traffic just to report the write failure. Do not proactively restart Host until storage recovers; if the process still disappears due to node failure, the old active state may trigger replacement again on the next start. Therefore an unwritable disk is a durability incident requiring operator intervention, not a normal path that can silently degrade.
 
-顺序必须是“持久指针成功后，再发布内存指针”。若进程在两者之间崩溃，重启会从新的
-`active.json` 恢复；若在 rename 前崩溃，旧版本仍 active。临时文件在启动恢复时清理。
+The order must be "publish the in-memory pointer only after the durable pointer succeeds." If the process crashes between the two, restart recovers from the new `active.json`; if it crashes before rename, the old version remains active. Temporary files are cleaned during startup recovery.
 
-rename 成功但父目录 `fsync` 失败不能伪装成普通的“未提交”错误：此时内存 Registry 不
-发布新状态，操作进入 `DURABILITY_UNCERTAIN` 并阻止同 App 后续状态写，直到控制面完成
-对账或进程按 durability incident 退出。节点若在对账前崩溃，文件系统可能恢复旧或新的
-完整原子目录项；两者都允许，但恢复仍必须验证 active 所指 generation 的 COMPLETE，
-绝不能把临时文件或半 generation 激活。只有父目录同步完成后才能返回提交成功。
+A successful rename followed by a failed parent-directory `fsync` must not masquerade as an ordinary "not committed" error. In that case Host does not publish the new state in memory, the operation enters `DURABILITY_UNCERTAIN`, and subsequent state writes for the same App are blocked until the control plane reconciles or the process exits as a durability incident. If the node crashes before reconciliation, the filesystem may restore either the old or the new complete atomic directory entry; both are allowed, but recovery must still verify that the generation referenced by active has `COMPLETE`. Temporary files or half generations must never be activated. Commit success may be returned only after the parent directory sync completes.
 
-启动恢复只信任完整的 `active.json`：`active` 必须引用存在且完整的 generation；
-`retired` 不恢复 pool；`quarantined` 不自动重启 worker。无效状态让该 App fail closed
-并报告明确错误，不能扫描目录后擅自选择“最新版本”。
-缺少 `active.json` 表示该 App 没有服务状态，不扫描 generations；retired/quarantined
-恢复也不要求旧 generation 仍保留。启动时清理 `active.json.tmp.*` 是 best effort：失败
-产生运维告警但不改变从有效 `active.json` 得出的状态。
+Startup recovery trusts only a complete `active.json`: `active` must reference an existing, complete generation; `retired` does not restore a pool; `quarantined` does not automatically restart workers. An invalid state fails the App closed and reports a clear error; Host must not scan directories and arbitrarily choose "the latest version." A missing `active.json` means the App has no serving state and generations are not scanned; retired/quarantined recovery also does not require the old generation to be retained. Cleaning `active.json.tmp.*` at startup is best effort: failure produces an ops alert but does not change the state derived from a valid `active.json`.
 
-### 6.6 Secret snapshot 读取
+### 6.6 Secret Snapshot Read
 
-`value` 与 `valueFrom` 互斥。前者是普通配置值；后者只接受一个受限 secret key ID，
-不能含 `/`、`..` 或空 component。文件 backend 的固定流程是：
+`value` and `valueFrom` are mutually exclusive. The former is an ordinary config value; the latter accepts only one restricted secret key ID, which cannot contain `/`, `..`, or an empty component. The file backend's fixed flow is:
 
-1. Host 启动时安全打开 `secretRootTemplate` 的静态根，验证目录类型、owner 和 mode；
-2. 使用已经校验的 App ID 打开 App 子目录，再用 `openat2` 的 `RESOLVE_BENEATH`、
-   `RESOLVE_NO_SYMLINKS` 和 `RESOLVE_NO_MAGICLINKS` 打开 key；
-3. 使用 `O_RDONLY|O_CLOEXEC|O_NONBLOCK`，随后只接受 regular file，拒绝 group/world
-   writable、symlink、FIFO、device 和 socket；
-4. 读取最多 16 KiB + 1 byte，超限即失败；拒绝 NUL 和非法 UTF-8，不自动 trim 换行；
-   二进制 secret 必须由发布方先编码成文本；
-5. 读取前后比较 fd 的 device、inode、size、mtime/ctime；变化即重试一次，仍变化则部署
-   失败；
-6. 只有同时通过 Host environment allowlist、App env 申请和 `capsid:env` module gate 的
-   key 才生成 `capsid_env_entry`；总项数和总 bytes 再按 Runtime 上限复核；
-7. Runtime 完成 descriptor 深复制后，Host 立即清除该 bootstrap task 的临时 value
-   buffer；持久 metadata 只记录 opaque revision，不记录 value 或其裸摘要。
+1. At Host startup, securely open the static root of `secretRootTemplate`, verifying directory type, owner, and mode;
+2. Open the App subdirectory using the already-validated App ID, then open the key with `openat2` and `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, and `RESOLVE_NO_MAGICLINKS`;
+3. Use `O_RDONLY|O_CLOEXEC|O_NONBLOCK`; accept only regular files and reject group/world writable files, symlinks, FIFOs, devices, and sockets;
+4. Read at most 16 KiB + 1 byte; exceeding that fails. Reject NUL and invalid UTF-8; do not auto-trim newlines. Binary secrets must be encoded as text by the publisher first;
+5. Compare the fd's device, inode, size, and mtime/ctime before and after reading; if changed, retry once, and if still changed, deployment fails;
+6. Only keys that pass the Host environment allowlist, the App env request, and the `capsid:env` module gate produce a `capsid_env_entry`; total entry count and total bytes are re-checked against Runtime limits;
+7. After Runtime deep-copies the descriptor, Host immediately clears that bootstrap task's temporary value buffer; persistent metadata records only the opaque revision, never the value or its bare digest.
 
-纯编译阶段输出按 env name 排序的 owning snapshot 和临时 `capsid_env_entry[]` view。
-`effective.json` 的环境片段固定为单行 canonical JSON，只记录 name/source；secret 项再
-记录 key ID 与 opaque revision。例如：
+The pure compilation phase outputs an owning snapshot sorted by env name and a temporary `capsid_env_entry[]` view. The environment fragment of `effective.json` is fixed as single-line canonical JSON recording only name/source; secret entries additionally record key ID and opaque revision. For example:
 
 ```json
 {"environment":[{"name":"API_TOKEN","source":"secret","keyId":"orders-api-token","revision":"file-v1:11:22:41:1700000000"},{"name":"APP_MODE","source":"literal"}]}
 ```
 
-literal 与 secret value 都不进入该 JSON、revision、错误 path/message、管理响应、日志或
-指标。编译失败必须原子返回空 snapshot，不能保留此前已处理的部分 entry。
+Neither literal nor secret values enter that JSON, revisions, error paths/messages, admin responses, logs, or metrics. A compilation failure must atomically return an empty snapshot; it cannot keep partially processed entries.
 
-文件 mode 不等于完整 secret 管理系统；挂载、备份、节点 swap/core dump 和 secret root
-的生命周期仍由部署环境负责。Host 的责任是最小读取、最小传递和不把明文扩散到控制面。
+File mode is not a complete secret-management system; mounts, backups, node swap/core dumps, and the secret root lifecycle remain the deployment environment's responsibility. Host's responsibility is minimal reading, minimal forwarding, and not leaking plaintext into the control plane.
 
-## 7. 部署、下线 API 和状态机
+## 7. Deployment, Retire API, and State Machine
 
-### 7.1 管理面
+### 7.1 Admin Surface
 
-默认管理入口是独立 Unix socket：
+The default admin entry point is a dedicated Unix socket:
 
 ```text
 /run/capsid/admin.sock
 ```
 
-要求：
+Requirements:
 
-- mode 默认 `0600`，可选固定管理 group；
-- 使用 `SO_PEERCRED` 校验本机 UID/GID；
-- 不与公网 data listener 复用；
-- request body、header 和处理时间有小而固定的上限；
-- 不把 secret、bundle bytes 或完整环境写入响应或日志。
+- mode defaults to `0600`, with an optional fixed admin group;
+- validate the local UID/GID with `SO_PEERCRED`;
+- do not share the socket with a public data listener;
+- request body, headers, and processing time have small fixed limits;
+- never write secrets, bundle bytes, or the full environment into responses or logs.
 
-Admin socket 是刻意的全局 trust boundary：通过 `SO_PEERCRED` 获准的 UID 或管理 group
-可以部署、回滚和下线该 Host 中的所有 App。v1 不声称提供 per-App 管理授权；互不信任
-的运维主体必须使用不同 Host 实例和管理 socket。
+The Admin socket is a deliberate global trust boundary: a UID or admin group approved through `SO_PEERCRED` can deploy, roll back, and retire all Apps on this Host. v1 does not claim per-App administrative authorization; mutually untrusted operator parties must use separate Host instances and admin sockets.
 
-唯一能激活某个 Version 的操作仍是：
+The only operation that can activate a Version remains:
 
 ```http
 POST /v1/deploy
@@ -771,7 +625,7 @@ Content-Type: application/json
 {"app":"orders","version":"2026-07-31-002"}
 ```
 
-部署通常超过普通 HTTP handler 延迟，建议返回 `202 Accepted` 和 operation ID：
+Deployment usually exceeds ordinary HTTP handler latency, so return `202 Accepted` with an operation ID:
 
 ```json
 {
@@ -782,10 +636,9 @@ Content-Type: application/json
 }
 ```
 
-显式下线使用 `POST /v1/apps/{app}/retire`，但它不能选择另一个 Version。只读的
-`GET /v1/operations/{id}`、`GET /v1/apps/{app}` 和健康/指标端点也不能改变版本。
+Explicit decommissioning uses `POST /v1/apps/{app}/retire`, but it cannot choose another Version. Read-only `GET /v1/operations/{id}`, `GET /v1/apps/{app}`, and health/metrics endpoints cannot change versions.
 
-### 7.2 状态机
+### 7.2 State Machine
 
 ```text
 RECEIVED
@@ -797,327 +650,244 @@ RECEIVED
   → ACTIVATING
   → ACTIVE
 
-任意切换前状态 → FAILED（旧版本不变）
-旧 active pool → DRAINING → RETIRED
+Any pre-transition state → FAILED (old version unchanged)
+Old active pool → DRAINING → RETIRED
 
 ACTIVE → RETIRING → RETIRED
 ACTIVE → DEGRADED → QUARANTINED
 QUARANTINED → RETIRING → RETIRED
-QUARANTINED/RETIRED → 显式 deploy → WARMING → ACTIVE
+QUARANTINED/RETIRED → explicit deploy → WARMING → ACTIVE
 ```
 
-operation 记录可以是内存对象和有界 JSONL 运维日志，不需要为了查询它引入数据库。
-Host 重启后只需准确恢复 active generation；中断的 deploy 可报告 `ABORTED_BY_RESTART`
-并由调用方幂等重试。
+Operation records may be in-memory objects plus a bounded JSONL ops log; no database is needed to query them. After a Host restart, only the active generation must be recovered accurately; an interrupted deploy can report `ABORTED_BY_RESTART` and the caller can retry idempotently.
 
-M0.6 把 durable state 与内存 phase 明确分开。`active.json` 仍只有 M0.4 冻结的
-`active|retired|quarantined`，不会把 `RETIRING`、`QUARANTINING` 或
-`DURABILITY_UNCERTAIN` 当成新磁盘 schema。内存 phase 冻结为：
+M0.6 clearly separates durable state from in-memory phase. `active.json` still has only the M0.4-frozen `active|retired|quarantined` states; `RETIRING`, `QUARANTINING`, or `DURABILITY_UNCERTAIN` are not new on-disk schemas. The in-memory phases are frozen as:
 
 ```text
 ABSENT | ACTIVE | RETIRING | RETIRED | QUARANTINING | QUARANTINED
        | DURABILITY_UNCERTAIN | FAILED_CLOSED
 ```
 
-路由派生必须 fail closed：只有结构完整的 `ACTIVE` 可以服务并允许 automatic
-replacement；`ABSENT`、`RETIRED`，以及已经提交 retired tombstone 但仍在 drain 的
-`RETIRING` 返回 404；其他 phase 一律 503。开始 retire 后、tombstone 提交前也先返回
-503，不继续接收新流量；提交成功后即使旧 pool 尚在 drain 也改为 404。未知 phase、phase
-与 document 类型不匹配或恢复 action/document 不匹配都进入 `FAILED_CLOSED`，绝不能因
-默认 `else` 分支变成 active。
+Route derivation must fail closed: only structurally complete `ACTIVE` may serve traffic and allow automatic replacement; `ABSENT`, `RETIRED`, and `RETIRING` (which has already committed the retired tombstone but is still draining) return 404; every other phase returns 503. After retire begins and before the tombstone is committed, return 503 and stop accepting new traffic; after the commit succeeds, even while the old pool is still draining, return 404. Unknown phases, phase/document type mismatches, or recovery action/document mismatches enter `FAILED_CLOSED`; a default `else` branch must never make the app active.
 
-M0.4 的 persist 结果进入内存状态机时固定按下表解释：
+When M0.4 persist results enter the in-memory state machine, they are interpreted by the fixed table below:
 
-| 操作 | persist 结果 | 内存结果 | 路由/后续动作 |
+| Operation | Persist result | In-memory result | Routing/follow-up action |
 | --- | --- | --- | --- |
-| retire | rename 前失败 | 恢复来源 `ACTIVE` 或 `QUARANTINED` | active 来源恢复服务；quarantined 仍 503；操作失败 |
-| retire | rename + directory sync 成功 | 保留 `RETIRING`，document 换成 retired | 立即 404 并开始 drain；drain 完成后 `RETIRED` |
-| quarantine | rename 前失败 | 保持 `QUARANTINING` | 503、禁止 replacement，并重试同一 quarantined document 的落盘 |
-| quarantine | rename + directory sync 成功 | `QUARANTINED` | 503、禁止 replacement，并开始有界 drain |
-| 任一操作 | rename 成功但 durability uncertain | `DURABILITY_UNCERTAIN` | 503、阻止后续状态写，等待对账/进程级处置 |
-| 任一操作 | persist result 内部自相矛盾 | `DURABILITY_UNCERTAIN` | 按实现/适配器缺陷 fail closed，不猜测提交状态 |
+| retire | Failed before rename | Restore source `ACTIVE` or `QUARANTINED` | Active source resumes serving; quarantined remains 503; operation fails |
+| retire | Rename + directory sync succeeded | Keep `RETIRING`, document becomes retired | Immediately 404 and begin drain; `RETIRED` after drain completes |
+| quarantine | Failed before rename | Keep `QUARANTINING` | 503, forbid replacement, and keep retrying the same quarantined document write |
+| quarantine | Rename + directory sync succeeded | `QUARANTINED` | 503, forbid replacement, and begin bounded drain |
+| Any operation | Rename succeeded but durability uncertain | `DURABILITY_UNCERTAIN` | 503, block subsequent state writes, await reconciliation/process-level handling |
+| Any operation | Persist result internally contradictory | `DURABILITY_UNCERTAIN` | Fail closed as an implementation/adapter defect; do not guess commit state |
 
-重启恢复计划只允许 M0.4 的 `kActivate` 启动 pool，而且必须等恢复 pool READY/healthy 后
-才发布 active route；`kNone`、`kKeepRetired`、`kKeepQuarantined` 和任何恢复错误都不
-spawn worker。这样 retired/quarantined 的安全性不依赖易失的 operation 状态。
+Restart recovery allows only M0.4's `kActivate` to start a pool, and the active route may be published only after the recovered pool is READY/healthy; `kNone`, `kKeepRetired`, `kKeepQuarantined`, and any recovery error spawn no workers. This keeps retired/quarantined safety independent of volatile operation state.
 
-### 7.3 并发和幂等
+### 7.3 Concurrency and Idempotency
 
-- 同一 App 的 deploy/retire 串行；
-- 不同 App 可以并发，但共享全局 startup/memory permit；
-- 相同 App/Version/generation 已 active：直接返回 active；
-- 相同 generation 已 quarantined：显式 deploy 重新走预热并在成功后重置 instability
-  budget，不按 active 幂等短路；
-- App 已 retired：显式 deploy 正常创建/恢复 pool 并原子写回 active；
-- 相同 Version 已映射到不同 generation：`409`；
-- warming 中的完全相同请求加入同一个 singleflight；
-- 新请求不会为每个调用分别 spawn 一套 pool。
+- deploy/retire for the same App are serialized;
+- different Apps may run concurrently, but share the global startup/memory permit;
+- same App/Version/generation already active: return active directly;
+- same generation already quarantined: an explicit deploy goes through prewarming again and resets the instability budget only after success; it does not short-circuit as active;
+- App already retired: an explicit deploy creates/recovers the pool normally and atomically writes active back;
+- same Version already mapped to a different generation: `409`;
+- identical in-flight warming requests join the same singleflight;
+- new requests never spawn a separate pool per call.
 
-显式 deploy 的纯决策表也在 M0.6 冻结：active 的同一 Version/generation 才能直接返回
-already-active；同一 Version 指向不同 generation 始终是 immutability conflict；absent、
-retired 和 quarantined（包括显式重部署完全相同的 quarantined generation）都必须走
-`WARMING → active.json commit → ACTIVE`。quarantine budget 只能在新的 active pointer
-已经提交并发布后重置，不能在收到 deploy 或开始 warming 时提前清除。`RETIRING`、
-`QUARANTINING` 返回 busy；`DURABILITY_UNCERTAIN` 阻止 deploy。
+The pure decision table for explicit deploy is also frozen in M0.6: only the same Version/generation that is already active may return already-active directly; the same Version pointing at a different generation is always an immutability conflict; absent, retired, and quarantined (including an explicit redeploy of the exact same quarantined generation) must go through `WARMING → active.json commit → ACTIVE`. The quarantine budget can be reset only after the new active pointer has been committed and published; it cannot be cleared early on receiving a deploy or when warming starts. `RETIRING` and `QUARANTINING` return busy; `DURABILITY_UNCERTAIN` blocks deploy.
 
-### 7.4 健康检查
+### 7.4 Health Checks
 
-若配置 health check：
+If a health check is configured:
 
-- 对每个新 worker 至少执行一次，而不是只检查 pool 中任意一个；
-- 只允许 `GET`、无 body、固定小 response body 上限；
-- 期望 `200..299`，完整消费或丢弃 body 并正确归还 credit；
-- 使用独立 timeout 和 request ID；
-- 任意 `minReady` worker 失败都不切换；
-- health check 执行真实应用代码，文档要提醒不要产生业务副作用。
+- Run it at least once against every new worker, not just any worker in the pool;
+- Allow only `GET`, no body, and a small fixed response-body limit;
+- Expect `200..299`; fully consume or discard the body and correctly return credit;
+- Use an independent timeout and request ID;
+- Do not switch if any `minReady` worker fails;
+- The health check executes real application code; documentation must warn against business side effects.
 
-激活后继续复用同一探针做低成本主动健康感知：
+After activation, reuse the same probe for low-cost active health awareness:
 
-- 按 pool round-robin 并加 jitter，使每个有空闲 inflight 槽位的 worker 约每 30 秒被检查
-  一次；同一 App 最多一个健康检查并发；
-- busy 或 streaming 已满的 worker 本轮跳过，不让健康检查抢占业务 slot，并记录 skip；
-  skip 不算健康成功，也不重置连续失败计数；其 inflight 仍由 request deadline、stream
-  idle timeout、同步 CPU timeout、IPC/protocol failure 和进程 EXIT 等被动信号兜底，
-  任一被动失败按本节规则立即摘除；
-- 连续 2 次 timeout、非 `2xx`、协议错误或异常退出后，worker 进入 `UNHEALTHY`，先从
-  scheduler 摘除，再交给 reaper；
-- 同步 CPU timeout、IPC/protocol failure 和意外 EXIT 不等待第二次探针，立即摘除；
-- 健康摘除和 crash 都进入同一个 generation instability budget，防止“探针失败 → 无限
-  recycle”绕过 crash budget；
-- 未配置 `healthCheck` 的 App 只有 Runtime/IPC/timeout 等被动健康信号，不伪造业务探针。
+- Round-robin across the pool with jitter so each worker with a free inflight slot is checked about every 30 seconds; at most one health check is concurrent per App;
+- Workers that are busy or have full streaming are skipped this round; health checks must not preempt business slots, and the skip is recorded. A skip is neither a health success nor a reset of the consecutive-failure counter; that worker's inflight remains covered by passive signals such as request deadline, stream idle timeout, synchronous CPU timeout, IPC/protocol failure, and process EXIT, and any passive failure removes it immediately per this section;
+- After 2 consecutive timeouts, non-`2xx` responses, protocol errors, or abnormal exits, the worker enters `UNHEALTHY`, is removed from the scheduler first, then handed to the reaper;
+- Synchronous CPU timeout, IPC/protocol failure, and unexpected EXIT remove the worker immediately without waiting for a second probe;
+- Both health removals and crashes enter the same generation instability budget, preventing "probe failure → unbounded recycle" from bypassing the crash budget;
+- Apps without a configured `healthCheck` rely only on passive health signals such as Runtime/IPC/timeout and do not fake business probes.
 
-### 7.5 drain
+### 7.5 Drain
 
-激活新 generation 后：
+After activating a new generation:
 
-1. Registry 不再把新请求发给旧 pool；
-2. 旧 pool 保持处理 inflight；
-3. inflight 清零则 `shutdown`、继续 flush/read 到 EXIT；
-4. drain deadline 到期，cancel 所有 request；
-5. 短暂 cancel grace 后 terminate；
-6. handle 移交 reaper executor 执行 destroy；
-7. 记录总 drain 时间和被强制取消数。
+1. Registry stops sending new requests to the old pool;
+2. The old pool continues processing inflight requests;
+3. When inflight reaches zero, issue `shutdown` and continue flush/read until EXIT;
+4. When the drain deadline expires, cancel all requests;
+5. After a short cancel grace period, terminate;
+6. Hand the handle to the reaper executor for destroy;
+7. Record total drain time and the number of forced cancellations.
 
-### 7.6 显式下线
+### 7.6 Explicit Retire
 
 ```http
 POST /v1/apps/orders/retire
 ```
 
-该操作无策略 body，返回 `202 Accepted` 和 operation ID；重复 retire 是幂等成功。固定
-顺序为：
+This operation has no policy body, returns `202 Accepted` with an operation ID, and repeated retires are idempotent success. The fixed order is:
 
-1. 获取 per-App operation mutex，把内存状态置为 `RETIRING`，立即停止接收新请求；
-2. 用 6.5 的协议把 `active.json` 原子替换为 `state: "retired"` tombstone；rename 前
-   失败就恢复旧 Registry，旧版本继续服务；
-3. 发布无 active pool 的 Registry snapshot；普通数据请求统一返回 `404`，管理 API 仍
-   显示 retired 和 previous generation；
-4. 按 7.5 drain 全部 pool；操作在所有 worker 退出后变为 `RETIRED`；
-5. generation 和 Version 映射按 retention/GC 规则保留，retire 本身不删除可回滚产物；
-6. 后续显式 deploy 任一已有或新 Version 都可以重新激活 App。
+1. Acquire the per-App operation mutex, set the in-memory state to `RETIRING`, and immediately stop accepting new requests;
+2. Atomically replace `active.json` with the `state: "retired"` tombstone using the 6.5 protocol; if it fails before rename, restore the old Registry and let the old version continue serving;
+3. Publish a Registry snapshot with no active pool; ordinary data requests uniformly return `404`, while the admin API still shows retired and the previous generation;
+4. Drain all pools per 7.5; the operation becomes `RETIRED` after all workers exit;
+5. Generation and Version mappings are retained according to retention/GC rules; retire itself does not delete rollback artifacts;
+6. A later explicit deploy of any existing or new Version can reactivate the App.
 
-Host crash 在 tombstone rename 前恢复旧 active，在 rename 后恢复 retired；不会根据上传
-目录是否存在推断下线，也不会出现删除 `active.json` 后擅自选择最新 Version 的行为。
+A Host crash before the tombstone rename recovers the old active state; after rename it recovers retired. Host never infers retirement from whether an upload directory exists, and never deletes `active.json` and then arbitrarily selects the latest Version.
 
-## 8. 路由和 HTTP 边界
+## 8. Routing and HTTP Boundary
 
-### 8.1 一个 listener 一种路由模式
+### 8.1 One Listener, One Routing Mode
 
-支持：
+Supported modes:
 
-- `subdomain`：精确 DNS label 后缀；
-- `path`：固定 `/@capsid/{app}/` 前缀；
-- `header`：只用于受信内部 listener。
+- `subdomain`: exact DNS label suffix;
+- `path`: fixed `/@capsid/{app}/` prefix;
+- `header`: trusted internal listeners only.
 
-规则：
+Rules:
 
-- App ID 只使用本设计 5.2 的 ASCII 规范；
-- Host header 去掉合法端口后按 label 边界匹配，不能做裸字符串 suffix；
-- path 模式在原始 path segment 上识别 App，拒绝 encoded slash、backslash、dot segment
-  和非法 percent encoding；
-- request 参数只能查询 Registry，永远不拼磁盘路径；
-- 不能通过 URL/header 选择 Version、generation 或 worker；
-- 控制 header 在构造 FetchRPC headers 前删除。
+- App IDs use only the ASCII rules in section 5.2;
+- The `Host` header is matched on label boundaries after removing a legal port; bare string suffix matching is not allowed;
+- path mode identifies the App on the original path segments; encoded slash, backslash, dot segments, and invalid percent encoding are rejected;
+- request parameters only query the Registry; they are never concatenated into disk paths;
+- Version, generation, or worker cannot be selected through URL/header;
+- control headers are removed before constructing FetchRPC headers.
 
-v1 的 `header` 模式固定使用单个 `Capsid-App` header。它只允许在已经由 Unix socket、
-mTLS 或 source allowlist 证明为受信的内部 listener 上启用；“配置成 header mode”本身
-不构成信任证明。缺少、重复或不符合 App ID 文法的 `Capsid-App` 都 fail closed。其他
-路由模式即使收到该 header 也只删除、不使用。
+v1's `header` mode is fixed to a single `Capsid-App` header. It may be enabled only on internal listeners already proven trusted by a Unix socket, mTLS, or source allowlist; "configured as header mode" is not itself proof of trust. A missing, duplicate, or App-ID-invalid `Capsid-App` fails closed. Other routing modes only delete this header if received; they never use it.
 
-### 8.2 Worker 可观察的 URL 与代理头
+### 8.2 Worker-Observable URL and Proxy Headers
 
-`Request.url` 是公共 App 契约，v1 固定由 Host 构造，绝不根据转发头猜测：
+`Request.url` is the public App contract; v1 fixes it to be constructed by Host and never guessed from forwarded headers:
 
 ```text
 request.url = publicScheme + "://" + validatedAuthority + rewrittenTarget
 ```
 
-- 每个 TCP data listener 必须显式配置 `publicScheme: "http"|"https"`；这表示用户看到
-  的外部 scheme，不要求 Host 自己终止 TLS；
-- subdomain 路由的 authority 是按 suffix 规则验证后的请求 `Host`；path/header 路由
-  必须配置固定 `publicAuthority`，不能让任意 Host 改变应用可见 origin；
-- 只接受 HTTP origin-form request-target；absolute-form、authority-form 和 `*` 在 v1
-  数据 listener 上拒绝；
-- `Host` 只参与 authority 校验和 URL 构造，不作为普通 Fetch header 交给 worker；
-- query bytes 原样保留，不 decode 后重编码；非法 percent encoding 在路由前拒绝。
+- Every TCP data listener must explicitly configure `publicScheme: "http"|"https"`; this denotes the external scheme users see and does not require Host to terminate TLS itself;
+- For subdomain routing, authority is the request `Host` after suffix-rule validation; path/header routing must configure a fixed `publicAuthority` so an arbitrary Host cannot change the app-visible origin;
+- Only HTTP origin-form request-targets are accepted; absolute-form, authority-form, and `*` are rejected on v1 data listeners;
+- `Host` participates only in authority validation and URL construction; it is not passed to the worker as an ordinary Fetch header;
+- Query bytes are preserved verbatim, not decoded and re-encoded; invalid percent encoding is rejected before routing.
 
-authority 的 v1 文法刻意保持窄而可审计：只接受 ASCII DNS/IPv4 风格 host，加可选的
-非空十进制端口 `1..65535`；host 转成小写，端口转成无前导零的十进制形式。DNS label
-最多 63 bytes，完整 host 最多 253 bytes。禁止 userinfo、空 label、尾点、label 首尾
-连字符、bracketed IPv6 literal 和超长 authority。subdomain
-的 `suffix` 必须以 `.` 开头、不得带端口，并且请求 Host 必须恰好是“一个 App DNS
-label + suffix”；suffix 自身、额外前置 label 和裸字符串后缀匹配都拒绝。App ID 中合法
-但不是 DNS label 的名字（例如含 `_`）使用 path/header 模式。path/header 模式仍要求
-请求中恰好一个语法合法的 Host，但 worker origin 只使用规范化后的固定
-`publicAuthority`，请求 Host 无权改变它。v1 若需要 IPv6 public origin，先由外部代理
-暴露 DNS authority，不在实现中临时放宽文法。
+The v1 authority grammar is deliberately narrow and auditable: accept only ASCII DNS/IPv4-style hosts with an optional non-empty decimal port `1..65535`; lowercase the host and render the port as decimal without leading zeros. DNS labels are at most 63 bytes and the full host at most 253 bytes. Userinfo, empty labels, trailing dots, leading/trailing label hyphens, bracketed IPv6 literals, and overlong authorities are forbidden. The subdomain `suffix` must start with `.`, must not include a port, and the request `Host` must be exactly "one App DNS label + suffix". The suffix alone, extra leading labels, and bare string suffix matches are all rejected. App IDs that are legal but not DNS labels (for example, containing `_`) use path/header mode. path/header mode still requires exactly one syntactically valid `Host`, but the worker origin uses only the normalized fixed `publicAuthority`; the request `Host` cannot change it. If v1 needs an IPv6 public origin, an external proxy should expose a DNS authority first; do not temporarily relax the grammar in the implementation.
 
-request-target 的 v1 文法同样固定：只能以 `/` 开头的 ASCII origin-form，最大 16 KiB，
-禁止 raw control、space、backslash、fragment 和非 ASCII byte；每个 `%` 必须跟两个 hex
-digit。path 部分拒绝 percent-encoded `/`、`\\`，也拒绝解码后恰为 `.` 或 `..` 的 segment；
-query 中的 `%2F` 等合法 escape 可以保留。path 模式只从原始
-`/@capsid/{app}` segment 取 App，不对 App decode；`/@capsid/{app}`、尾随 `/` 都重写为
-`/`，query 原字节附回。规范化器不做 Unicode、dot-segment 或 percent canonicalization，
-所以不会出现不同输入静默折叠成同一路由键。
+The v1 request-target grammar is also fixed: ASCII origin-form starting with `/`, at most 16 KiB, with raw control, space, backslash, fragment, and non-ASCII bytes forbidden; every `%` must be followed by two hex digits. The path part rejects percent-encoded `/` and `\\`, and also rejects segments that decode to exactly `.` or `..`; legal escapes such as `%2F` in the query may be preserved. path mode extracts the App only from the raw `/@capsid/{app}` segment and does not decode the App; `/@capsid/{app}` and trailing `/` are rewritten to `/`, with original query bytes reattached. The normalizer does not perform Unicode, dot-segment, or percent canonicalization, so distinct inputs cannot silently collapse into the same routing key.
 
-路由重写表：
+Routing rewrite table:
 
-| 模式 | 客户端 target | worker `Request.url` 的 path/query |
+| Mode | Client target | worker `Request.url` path/query |
 | --- | --- | --- |
 | subdomain | `/api/orders?x=1` | `/api/orders?x=1` |
 | path | `/@capsid/orders` | `/` |
 | path | `/@capsid/orders/api?x=1` | `/api?x=1` |
 | header | `/api/orders?x=1` | `/api/orders?x=1` |
 
-v1 对所有 data listener 使用同一 fail-closed 代理头规则：进入 Host 后总是删除
-`Forwarded`、所有 `X-Forwarded-*` 和 `X-Real-IP`，既不用于路由/URL，也不交给 worker。
-因此公网客户端不能伪造 scheme、authority 或 client IP；v1 也不向 App 暴露真实 client
-IP。外部 TLS proxy 必须覆盖合法 `Host`，Host 的 `publicScheme` 配成 `https`。未来若确有
-需求，再单独设计带 peer CIDR/mTLS 证明的 trusted-forwarding 契约，不在 v1 暗示信任。
+v1 applies one fail-closed proxy-header rule to all data listeners: after entering Host, always delete `Forwarded`, all `X-Forwarded-*`, and `X-Real-IP`; they are neither used for routing/URL nor passed to the worker. Public clients therefore cannot forge scheme, authority, or client IP; v1 also does not expose the real client IP to Apps. An external TLS proxy must set a legal `Host`, and Host's `publicScheme` is configured as `https`. If a real need appears later, design a separate trusted-forwarding contract with peer CIDR/mTLS proof; v1 does not imply that trust.
 
-进入 worker 前还要完成一个原子的 owning snapshot：header name 按 ASCII token 校验并
-转成小写，value 只接受 HTAB 与可见 ASCII，保留输入顺序和值的原字节；最多 128 个
-字段，原始 name/value 字节和最多 64 KiB。除 `Host`、`Capsid-App` 和上述 proxy header
-外，还删除标准 hop-by-hop 字段，以及所有 `Connection` header 中逗号分隔、ASCII
-case-insensitive 指名的字段；空或非法 Connection token 直接拒绝。`X-Forwardedness`
-不是 `X-Forwarded-*`，不应误删。成功结果不引用 Beast buffer，失败结果不发布部分 App、
-URL 或 header。
+Before entering the worker, Host also builds an atomic owning snapshot: header names are validated as ASCII tokens and lowercased; values accept only HTAB and visible ASCII; input order and original value bytes are preserved. At most 128 fields, with raw name/value bytes totaling at most 64 KiB. In addition to `Host`, `Capsid-App`, and the proxy headers above, standard hop-by-hop fields are removed, as are all fields named by comma-separated, ASCII case-insensitive tokens in any `Connection` header; empty or invalid `Connection` tokens are rejected outright. `X-Forwardedness` is not `X-Forwarded-*` and should not be deleted by mistake. Successful results do not reference Beast buffers; failed results do not publish partial App, URL, or header data.
 
-### 8.3 HTTP/1 安全规则
+### 8.3 HTTP/1 Security Rules
 
-Host 需要在进入应用前统一处理：
+Host must handle the following uniformly before entering the app:
 
-- 拒绝冲突或重复的 `Content-Length`；
-- 拒绝 `Transfer-Encoding` 与 `Content-Length` 冲突；
-- 只接受 Beast 明确认可的 HTTP/1 framing；
-- 删除 connection-nominated header 及所有 hop-by-hop header；
-- 按 8.2 删除所有代理转发头；
-- 禁止把 `Connection`、`Keep-Alive`、`Proxy-Connection`、`TE`、`Trailer`、
-  `Transfer-Encoding`、`Upgrade` 原样交给 worker；
-- 校验 header name/value、总字节和字段数；
-- v1 禁止 WebSocket upgrade 和 CONNECT；
-- v1 每连接只允许一个应用 request 正在处理，暂不实现 HTTP pipelining 并发；
-- header、body idle、queue、Host request 和 response idle timeout 分开计时。
+- Reject conflicting or duplicate `Content-Length`;
+- Reject `Transfer-Encoding` conflicting with `Content-Length`;
+- Accept only HTTP/1 framing explicitly recognized by Beast;
+- Delete connection-nominated headers and all hop-by-hop headers;
+- Delete all proxy forwarding headers per 8.2;
+- Forbid passing `Connection`, `Keep-Alive`, `Proxy-Connection`, `TE`, `Trailer`, `Transfer-Encoding`, and `Upgrade` through to the worker unchanged;
+- Validate header name/value, total bytes, and field count;
+- v1 forbids WebSocket upgrade and CONNECT;
+- v1 allows only one application request in flight per connection; HTTP pipelining concurrency is not implemented yet;
+- header, body-idle, queue, Host request, and response-idle timeouts are timed separately.
 
-8.2 的纯规范化器接收 Beast 已经解析出的 target/header view，只负责语义验证、路由、URL
-构造和清洗；它不得重新解释 `Content-Length`/`Transfer-Encoding` 或判断 message framing。
-framing 冲突、重复 Content-Length 和 chunked 合法性始终只由同一个 Beast parser 权威
-决定。`Transfer-Encoding` 之后仍作为 hop-by-hop 字段从 worker header snapshot 删除，
-这不等于第二次 framing 判定。
+The pure normalizer from 8.2 receives the target/header view already parsed by Beast. It is responsible only for semantic validation, routing, URL construction, and scrubbing; it must not reinterpret `Content-Length`/`Transfer-Encoding` or decide message framing. Framing conflicts, duplicate `Content-Length`, and chunked validity are always decided authoritatively by the same Beast parser. `Transfer-Encoding` is still removed from the worker header snapshot as a hop-by-hop field; that is not a second framing decision.
 
-Host 不能假设 Runtime 的 response header decoder 已执行 HTTP 语义过滤；当前 decoder
-主要验证 FetchRPC 二进制结构。因此 response 也必须经过 hop-by-hop、长度和非法值检查。
+Host cannot assume Runtime's response header decoder has applied HTTP semantic filtering; the current decoder mainly validates the FetchRPC binary structure. Responses must therefore also pass hop-by-hop, length, and illegal-value checks.
 
 ### 8.4 `Expect: 100-continue`
 
-只有完成路由、admission、worker 分配并成功 begin request 后，才向客户端发送
-`100 Continue`。被拒绝的请求不读取完整 body。
+Send `100 Continue` to the client only after routing, admission, worker assignment, and a successful begin request. Rejected requests do not read the full body.
 
-没有 `Expect` 的客户端可能提前发送 body；Beast 在读 header 时读过界进入 buffer 的
-body bytes 必须计入 queued bytes，且 buffer 本身有硬上限。
+Clients without `Expect` may send the body early; body bytes that Beast read past the header boundary into a buffer must count toward queued bytes, and the buffer itself has a hard limit.
 
-## 9. Request/response credit 映射
+## 9. Request/Response Credit Mapping
 
-### 9.1 请求方向
+### 9.1 Request Direction
 
 ```text
 client readable
   → parse header
   → route + admission + choose local worker
   → capsid_worker_begin_request
-  → 等 REQUEST_CREDIT
-  → 每次最多读取 remaining credit 的 body
+  → wait for REQUEST_CREDIT
+  → read at most the remaining credit body each time
   → capsid_worker_write_request
-  → body 完成后 capsid_worker_end_request
+  → capsid_worker_end_request after body completes
 ```
 
-没有 request credit 时不继续 application-level socket read。若 Runtime global write queue
-使 `write_request` 返回 `WOULD_BLOCK`，保留当前有界 chunk，监听 worker fd writable，
-flush 后再继续。
+Do not continue application-level socket reads without request credit. If Runtime's global write queue makes `write_request` return `WOULD_BLOCK`, keep the current bounded chunk, listen for worker fd writable, and continue after flushing.
 
-### 9.2 响应方向
+### 9.2 Response Direction
 
 ```text
 CAPSID_EVENT_RESPONSE_BODY
-  → 在 next_event 前复制 payload
-  → async_write 到 client
-  → write completion 成功
-  → grant_response_credit(实际写出字节)
+  → copy payload before next_event
+  → async_write to client
+  → write completion succeeds
+  → grant_response_credit(actual bytes written)
 ```
 
-不能在 socket write 提交时提前归还 credit。客户端慢、断开或 write timeout 时立即
-cancel request；迟到事件按现有 ABI 要求继续排空但不转发。
+Credit must not be returned early when the socket write is submitted. If the client is slow, disconnects, or hits a write timeout, cancel the request immediately; late events continue to be drained per the existing ABI but are not forwarded.
 
-每个 request 的 Host 缓冲上限应不大于授予的 Runtime response window，并同时计入
-App 与 Host 的未确认字节预算。
+Each request's Host buffering limit should be no larger than the Runtime response window granted, and should count against both the App and Host unacknowledged byte budgets.
 
-### 9.3 SSE 和 streaming
+### 9.3 SSE and Streaming
 
-- 收到 response head 后先检查 `Content-Type`；`text/event-stream` 必须先取得该 worker 的
-  streaming permit，再向客户端发出 head；
-- v1 默认 `maxStreamingInflightPerWorker=2`，App 只能申请更低值；该值必须小于
-  `maxInflightPerWorker` 以至少保留一个普通请求槽位，只有
-  `maxInflightPerWorker == 1` 时允许两者都为 1 并明确失去并发保留；
-- permit 已满且尚未向客户端发出 head 时，Host cancel worker request 并合成 `503`，
-  不能先发 `200 text/event-stream` 再断开；
-- body frame 逐段写，不聚合到 response end；
-- `text/event-stream` 禁止整体压缩和代理 buffering；
-- 成功写下游后才归还 credit；
-- 默认 stream idle timeout 为 60 秒；应用必须用注释/heartbeat 保持活跃，超时即 cancel；
-- v1 不设强制最大持续时间：streaming permit 已形成确定容量边界，部署者可另行设置
-  `maxStreamDuration`；
-- 客户端断开立即 cancel。
+- After receiving the response head, check `Content-Type` first; `text/event-stream` must acquire that worker's streaming permit before emitting the head to the client;
+- v1 defaults to `maxStreamingInflightPerWorker=2`; Apps may request only lower values. The value must be less than `maxInflightPerWorker` to keep at least one ordinary request slot; only when `maxInflightPerWorker == 1` may both be 1, explicitly giving up concurrency reservation;
+- If the permit is full and the head has not yet been sent to the client, Host cancels the worker request and synthesizes `503`; it must not send `200 text/event-stream` first and then disconnect;
+- Write body frames incrementally; do not buffer until response end;
+- `text/event-stream` forbids whole-response compression and proxy buffering;
+- Return credit only after the downstream write succeeds;
+- The default stream idle timeout is 60 seconds; apps must keep the stream alive with comments/heartbeats, and timeout cancels;
+- v1 imposes no mandatory maximum duration: the streaming permit already forms a deterministic capacity boundary, and deployers may set `maxStreamDuration` separately;
+- Client disconnect cancels immediately.
 
-streaming permit 同时计入 App 和 Host connection/inflight 预算，worker 退出、cancel 或
-response end 时必须恰好归还一次。普通 chunked/大响应仍受 credit、idle timeout 和普通
-inflight 约束，不因为没有 `Content-Length` 就自动占用 SSE permit。
+The streaming permit counts against both App and Host connection/inflight budgets and must be returned exactly once when the worker exits, cancels, or the response ends. Ordinary chunked/large responses still obey credit, idle timeout, and ordinary inflight constraints; they do not automatically consume an SSE permit just because there is no `Content-Length`.
 
-### 9.4 request ID
+### 9.4 Request ID
 
-每个 shard 使用单调递增的 64-bit 非零 ID，按 worker 跟踪未完成集合。发生 wrap 时只有
-不在该 worker 活跃集合中的 ID 才可使用；实现上可在接近上限时轮换 worker，避免复杂
-复用逻辑。
+Each shard uses monotonically increasing 64-bit non-zero IDs and tracks the outstanding set per worker. On wrap, only IDs not in that worker's active set may be reused; in practice, rotate workers when approaching the ceiling to avoid complex reuse logic.
 
-## 10. Worker pool 和调度
+## 10. Worker Pool and Scheduling
 
-### 10.1 shard-local pool
+### 10.1 Shard-Local Pool
 
-连接和 worker 都固定在 shard。新 pool 创建时按 shard 分配 worker，调度优先只选本
-shard worker，从而避免 request body 和 response body 跨线程搬运。
+Connections and workers are pinned to a shard. When a new pool is created, workers are allocated per shard, and scheduling prefers only local shard workers so request and response bodies are not moved across threads.
 
-当某 shard 暂时无 worker capacity：
+When a shard temporarily has no worker capacity:
 
-- 请求进入该 App 在本 shard 的有界队列；
-- 不把同一 worker 临时转交另一 shard；
-- 后续若需要跨 shard request handoff，必须以 profiling 为依据并单独设计。
+- Requests enter that App's bounded queue on that shard;
+- A worker is not temporarily transferred to another shard;
+- A future cross-shard request handoff, if needed, must be justified by profiling and designed separately.
 
-listener 可使用 `SO_REUSEPORT` 让各 shard 自己 accept；不支持时由 acceptor 做一次性
-connection handoff。
+A listener may use `SO_REUSEPORT` so each shard accepts its own connections; where unsupported, the acceptor performs a one-time connection handoff.
 
-### 10.2 选择 worker
+### 10.2 Choosing a Worker
 
-静态 pool v1 使用简单的 Power of Two Choices：随机选两个本 shard READY worker，
-比较：
+The static pool in v1 uses simple Power of Two Choices: pick two random READY workers on the local shard and compare:
 
 ```text
 inflight
@@ -1125,145 +895,115 @@ inflight
 + unhealthy penalty
 ```
 
-pool 很小时直接取最小值也可以。不要只按 round-robin，因为一个 SSE 或慢客户端会让
-worker 长期负载不对称。
+When the pool is small, taking the minimum is also fine. Do not use round-robin alone, because a single SSE or slow client can keep a worker asymmetrically loaded for a long time.
 
-### 10.3 admission control
+### 10.3 Admission Control
 
-固定顺序：
+Fixed order:
 
-1. listener connection/header gate；
-2. Host 全局 inflight/queue gate；
-3. App inflight/queue gate；
-4. 本 shard pool capacity；
-5. worker `max_inflight_requests` 硬边界。
+1. listener connection/header gate;
+2. Host global inflight/queue gate;
+3. App inflight/queue gate;
+4. local shard pool capacity;
+5. worker `max_inflight_requests` hard boundary.
 
-错误映射：
+Error mapping:
 
-| 场景 | HTTP |
+| Scenario | HTTP |
 | --- | --- |
-| App 不存在 | 404 |
-| App 已 retired | 404 |
-| active generation 已 quarantined | 503 |
-| App 自己的 queue/quota 满 | 429 |
-| Host 全局过载、pool 无 READY worker | 503 |
-| queue 或 Host deadline 到期 | 504 |
-| 应用正常返回 5xx | 原样应用响应 |
-| worker/IPC 在 response head 前失败 | 503 或受限重试 |
+| App does not exist | 404 |
+| App is retired | 404 |
+| active generation is quarantined | 503 |
+| App's own queue/quota is full | 429 |
+| Host globally overloaded, pool has no READY worker | 503 |
+| Queue or Host deadline expires | 504 |
+| App normally returns 5xx | Pass through the app response unchanged |
+| worker/IPC fails before response head | 503 or limited retry |
 
-### 10.4 自动重试
+### 10.4 Automatic Retry
 
-v1 只允许一次重试，并同时满足：
+v1 allows exactly one retry and only when all of the following hold:
 
-- 尚未向客户端发送 response head；
-- 故障来自 worker crash/IPC/protocol，不是应用 HTTP 5xx；
-- 方法为 GET 或 HEAD；
-- 请求没有 body；
-- Host deadline 仍有足够预算；
-- 新 worker 属于同一 active generation。
+- no response head has been sent to the client;
+- the failure comes from worker crash/IPC/protocol, not an application HTTP 5xx;
+- the method is GET or HEAD;
+- the request has no body;
+- the Host deadline still has sufficient budget;
+- the new worker belongs to the same active generation.
 
-PUT/DELETE 虽有协议幂等含义，但已流式发送的 body 未被 Host 保存，不能自动重放。
-POST 即使带 Idempotency-Key，v1 也不自动重试，除非以后增加明确的 App opt-in 契约。
+PUT/DELETE have protocol-level idempotency connotations, but the already-streamed body was not saved by Host, so it cannot be replayed automatically. POST is not automatically retried even with an Idempotency-Key, unless a clear App opt-in contract is added later.
 
-### 10.5 worker 崩溃替换与 generation quarantine
+### 10.5 Worker Crash Replacement and Generation Quarantine
 
-active worker 出现意外 EXIT、cgroup OOM、同步 CPU timeout、IPC/protocol failure，或被
-7.4 的持续健康检查摘除时，固定执行：
+When an active worker has an unexpected EXIT, cgroup OOM, synchronous CPU timeout, IPC/protocol failure, or is removed by the 7.4 continuous health check, the fixed procedure is:
 
-1. owner shard 立即从调度集合移除 worker，并把 handle 交给 reaper executor；
-2. 先把本次事件计入 generation 的滚动 instability budget，再决定任何 retry 或
-   replacement：60 秒内最多 5 次；意外退出、主动健康连续失败导致的 recycle，以及
-   replacement spawn/load/READY 失败都计数，正常 drain、Host shutdown 和运维 retire
-   不计数；
-3. 若本次计数使 budget 超限，立即跳到下述 `QUARANTINING` 流程，不执行后续 retry 或
-   replacement；只有 generation 仍为 active 时，失败 inflight 才可按 10.4 决定是否重试；
-4. pool 低于目标 READY 数时创建 replacement singleflight；每个 App 同时最多一个替换
-   spawn，且必须重新取得全局 startup/memory permit；
-5. active replacement 使用指数退避：250 ms 起步、每次翻倍、最大 30 秒，并加 ±20%
-   jitter；成功 worker 连续稳定 60 秒后重置该 App/generation 的 backoff；
-6. 全局 startup permit 使用按 App 公平的队列，replacement 与 deploy 分 lane 计数；一个
-   crash-loop App 不能持续排在其他 App deploy 前面。
+1. The owner shard immediately removes the worker from the scheduling set and hands the handle to the reaper executor;
+2. Count the event into the generation's rolling instability budget before deciding any retry or replacement: at most 5 events in 60 seconds. Unexpected exits, recycles caused by consecutive active-health failures, and replacement spawn/load/READY failures all count; normal drain, Host shutdown, and operator retire do not count;
+3. If this count exceeds the budget, jump directly to the `QUARANTINING` flow below and do not perform further retry or replacement; failed inflight requests may be retried per 10.4 only if the generation is still active;
+4. When the pool is below the target READY count, create a replacement singleflight; each App has at most one replacement spawn at a time, and it must re-acquire the global startup/memory permit;
+5. Active replacement uses exponential backoff: start at 250 ms, double each time, maximum 30 seconds, plus ±20% jitter; reset the App/generation backoff after a replacement worker stays READY and stable for 60 seconds;
+6. The global startup permit uses a per-App fair queue, with replacement and deploy counted in separate lanes; a crash-looping App cannot keep jumping ahead of other Apps' deploys.
 
-M0.7–M0.9 的纯控制器进一步冻结以下边界，避免实现时再选择语义：
+The pure controller in M0.7–M0.9 further freezes these boundaries so implementation does not re-decide semantics:
 
-- fake clock 使用单调毫秒；时间倒退 fail closed。滚动窗口是
-  `(now - window, now]`，年龄恰好等于 window 的事件已经过期；`maxEvents: 5` 表示第
-  6 个仍在窗口内的计数事件触发 quarantine；
-- backoff attempt 只在实际安排新 replacement 时递增；已有 per-App replacement
-  singleflight、无需补 worker 或 generation 已非 active 时不递增；`maximum` 先约束指数
-  base，再施加有界 signed jitter，因此 `30s + 20%` 的最终上界是 36s；
-- replacement worker 连续 READY 达稳定期只重置 backoff attempt，不清空滚动 crash
-  budget；
-- instability controller 的单个结果先计数并决定 `BEGIN_QUARANTINE`，再交给 request retry
-  决策；quarantine 结果类型本身禁止 retry 与 replacement，不能依赖调用方记住额外顺序；
-- startup permit 在 App 之间避免连续授予同一 App（只要另一个 App 正在等待），选中 App
-  内保持 FIFO；deploy/replacement 共用 permit 但分别计数，不设置隐含 lane 优先级；相同
-  App/generation 的 replacement 排队请求加入 singleflight，不新增队列项。
+- fake clock uses monotonic milliseconds; clock rollback fails closed. The rolling window is `(now - window, now]`; events exactly window age have expired. `maxEvents: 5` means the 6th counted event still inside the window triggers quarantine;
+- a backoff attempt increments only when a new replacement is actually scheduled; it does not increment when a per-App replacement singleflight already exists, no worker needs to be added, or the generation is no longer active. `maximum` constrains the exponential base first, then applies bounded signed jitter, so `30s + 20%` has a final upper bound of 36s;
+- a replacement worker staying READY through the stability period resets only the backoff attempt; it does not clear the rolling crash budget;
+- the instability controller counts a single result and decides `BEGIN_QUARANTINE` before handing the result to request-retry decisions; the quarantine result type itself forbids retry and replacement, and callers must not need to remember an extra order;
+- the startup permit avoids granting the same App consecutively whenever another App is waiting, and keeps FIFO within the selected App; deploy/replacement share the permit but are counted separately, with no implicit lane priority; queued replacement requests for the same App/generation join a singleflight and do not add queue items.
 
-budget 超限时：
+When the budget is exceeded:
 
-- 内存 Registry 先进入 `QUARANTINING` 并停止新流量；从该状态生效起明确禁用 10.4
-  自动重试，尚未取得 response head 的 inflight 一律 cancel 并合成 `503`，不能重新指派
-  给残余 READY/draining worker，也不能为它启动 replacement；已经发出 response head 的
-  inflight 只能有界 drain，超时后 cancel/断开；
-- control plane 用 6.5 的原子协议把 `active.json` 写成 `state: "quarantined"`，包含
-  Version、generation 和稳定 reason code `CRASH_BUDGET_EXCEEDED`；
-- 停止全部自动 replacement，数据请求返回 `503`，并产生不可丢弃的高优先级事件；
-- Host 重启只恢复 quarantine，不因计数器丢失而重新进入 crash loop；
-- 运维可显式 deploy 旧 Version，或显式重新 deploy 同一不可变 Version 来清除 quarantine
-  并开始全新预算；该动作经过完整预热，不是隐式 resume。
+- The in-memory Registry first enters `QUARANTINING` and stops new traffic. From the moment that state takes effect, 10.4 automatic retry is explicitly disabled: inflight requests without a response head are all canceled and synthesized as `503`; they cannot be reassigned to remaining READY/draining workers, and no replacement may be started for them. Inflight requests that already emitted a response head may only drain in a bounded way, then cancel/disconnect on timeout;
+- The control plane writes `active.json` as `state: "quarantined"` using the 6.5 atomic protocol, including Version, generation, and the stable reason code `CRASH_BUDGET_EXCEEDED`;
+- All automatic replacement stops, data requests return `503`, and a non-discardable high-priority event is emitted;
+- Host restart recovers only quarantine and does not re-enter a crash loop because counters were lost;
+- Operators can explicitly deploy an old Version, or explicitly redeploy the same immutable Version, to clear quarantine and start a fresh budget. That action goes through full prewarming; it is not an implicit resume.
 
-v1 不默认自动回滚。旧 generation 在 drain 完成后可能已经销毁，应用也可能对外部系统
-产生与旧代码不兼容的状态；未经 App opt-in 自动切回不是普遍安全操作。以后若增加
-activation-guard rollback，必须单独定义旧池保留窗口、双池容量和外部状态兼容契约。
+v1 does not default to automatic rollback. The old generation may already be destroyed after drain, and the app may have produced state incompatible with old code; switching back without App opt-in is not generally safe. If activation-guard rollback is added later, it must separately define the old-pool retention window, dual-pool capacity, and external-state compatibility contract.
 
-## 11. 权限编译与隔离
+## 11. Permission Compilation and Isolation
 
-### 11.1 编译产物
+### 11.1 Compilation Outputs
 
-Policy Compiler 对每个 generation 生成：
+The Policy Compiler generates per generation:
 
-- `allowed_modules`；
-- `capsid_permission_rule[]`；
-- `capsid_env_entry[]`；
-- direct `capsid_egress_policy`；
-- capability `net_policy`；
-- `capsid_resource_limits`；
-- sandbox required feature bits；
-- Landlock 所需只读 path rules；
-- 稳定 rule ID 到 JSON pointer 的映射；
-- 不含 secret 明文的 `effective.json`。
+- `allowed_modules`;
+- `capsid_permission_rule[]`;
+- `capsid_env_entry[]`;
+- direct `capsid_egress_policy`;
+- capability `net_policy`;
+- `capsid_resource_limits`;
+- sandbox required feature bits;
+- Landlock read-only path rules;
+- a stable rule ID to JSON pointer mapping;
+- `effective.json` without secret plaintext.
 
-rule ID 推荐对规范化 rule 按 `(stage, capability, resource, action)` 排序后从 1 连续编号，
-比截断 hash 更容易保证无碰撞和可复现。
+Rule IDs are recommended to be sequential from 1 after sorting normalized rules by `(stage, capability, resource, action)`, which is easier to make collision-free and reproducible than a truncated hash.
 
-### 11.2 文件路径
+### 11.2 File Paths
 
-- Host root 和 App path 都先按绝对 path component 规范化；
-- `/a/b` 是 `/a/b/c` 的祖先，但不是 `/a/bad` 的前缀；
-- `.`、`..`、空 component、NUL 和非绝对路径被拒绝；
-- deny 优先，App allow 必须完全落在 Host allow root 内；
-- Runtime operation rule、Landlock 和实际 `openat2` 三层从同一个有效规则生成；
-- 所需 root 不存在或不能安全打开时，部署失败，不静默忽略。
+- Both Host roots and App paths are first normalized as absolute path components;
+- `/a/b` is an ancestor of `/a/b/c`, but not a prefix of `/a/bad`;
+- `.`, `..`, empty components, NUL, and non-absolute paths are rejected;
+- deny takes priority, and App allows must fall entirely inside Host allow roots;
+- the Runtime operation rule, Landlock, and the actual `openat2` layer are all generated from the same effective rule;
+- if a required root does not exist or cannot be opened safely, deployment fails; it is not silently ignored.
 
-### 11.3 网络
+### 11.3 Network
 
-Runtime 检查 hostname、DNS 结果和 redirect。Host 不配置或切换 network namespace，
-worker 自然使用与 Host 相同的网络环境。v1 的职责是：
+Runtime checks hostname, DNS results, and redirects. Host does not configure or switch network namespaces; workers naturally use the same network environment as Host. v1's responsibilities are:
 
-- Runtime policy 执行精确 hostname/IP/CIDR + port；
-- Runtime 默认拒绝 loopback、link-local、metadata 和 RFC private ranges，除非 Host
-  policy 用精确 CIDR 显式开放；
-- Host/App schema 不暴露 network namespace、veth、route 或 firewall 配置；
-- 如果运维把整个 Host 放进 systemd、容器或 Kubernetes 提供的额外网络边界，worker
-  自然随 Host 使用该边界；这是可选部署措施，不是 Capsid 前置要求。
+- Runtime policy enforces exact hostname/IP/CIDR + port;
+- Runtime denies loopback, link-local, metadata, and RFC private ranges by default unless Host policy explicitly opens them with exact CIDRs;
+- the Host/App schema does not expose network namespace, veth, route, or firewall configuration;
+- if operators place the entire Host inside an additional network boundary provided by systemd, a container, or Kubernetes, workers naturally use that boundary with Host; this is an optional deployment measure, not a Capsid prerequisite.
 
-现有 Runtime 的预打开 netns fd 能力继续保留给其他 embedding host，但第一方 Host
-不使用它，也不提供对应控制面字段。
+The existing Runtime capability of a pre-opened netns fd remains available to other embedding hosts, but the first-party Host does not use it and does not expose a corresponding control-plane field.
 
-### 11.4 cgroup 层级和容量
+### 11.4 cgroup Hierarchy and Capacity
 
-建议层级：
+Recommended hierarchy:
 
 ```text
 capsid-host/
@@ -1271,82 +1011,67 @@ capsid-host/
     └── workers/<worker-id>/
 ```
 
-- App/generation parent 控制聚合 CPU、memory 和 PID；
-- worker leaf 使用当前 Runtime `sandbox_cgroup_path` 和 resource limits；
-- Host 创建和删除目录，Runtime 只负责写 leaf limit、回读并 attach child；
-- parent controller 和 `cgroup.subtree_control` 由部署环境预先委派；
-- worker spawn 前先取得 Host memory/startup permit；
-- 蓝绿预热要同时计入旧、新 pool，容量不足则部署失败，旧版本不受影响。
+- the App/generation parent controls aggregate CPU, memory, and PID;
+- worker leaves use the current Runtime `sandbox_cgroup_path` and resource limits;
+- Host creates and removes directories; Runtime only writes leaf limits, reads them back, and attaches children;
+- the parent controller and `cgroup.subtree_control` are pre-delegated by the deployment environment;
+- a Host memory/startup permit is acquired before spawning a worker;
+- blue-green prewarming must count both old and new pools; insufficient capacity fails the deployment without affecting the old version.
 
-v1 的 memory permit 按每 worker `memoryMax` 全额记账。这会比实测约 6 MiB 的 READY PSS
-保守很多，但它保证承诺总量不会依赖历史平均值，也不会因 workload 改变突然超卖。
-M4 可评估“硬上限承诺 + measured working-set/PSS 软预算”的两级 admission：必须保留
-cgroup `memoryMax` 和 Host hard ceiling，使用按 workload/profile 更新的高分位 working
-set、增长余量和 OOM 负控；不能直接用一次 benchmark 的平均 PSS 替代硬记账。
+The v1 memory permit accounts the full per-worker `memoryMax`. This is much more conservative than the measured ~6 MiB READY PSS, but it guarantees that the committed total does not depend on historical averages and cannot suddenly oversell when workloads change. M4 can evaluate two-level admission of "hard-ceiling commitment + measured working-set/PSS soft budget": it must keep cgroup `memoryMax` and the Host hard ceiling, use a high-percentile working set updated by workload/profile, growth headroom, and OOM negative controls. It cannot directly replace hard accounting with one benchmark's average PSS.
 
-### 11.5 外部隔离边界
+### 11.5 External Isolation Boundary
 
-Host 主进程使用专用非 root 用户，通过 systemd `Delegate=yes` 或等价容器配置获得受限
-cgroup subtree。Host 只在已委派且验证过的 root 下创建 App/generation/worker 子目录。
+The Host main process runs as a dedicated non-root user and obtains a restricted cgroup subtree through systemd `Delegate=yes` or equivalent container configuration. Host creates App/generation/worker subdirectories only under the delegated and verified root.
 
-第一方 Host **不实现、也不规划** privileged supervisor：仓库中没有 root helper target、
-supervisor socket、netns 创建协议或 nftables 管理逻辑。目标环境若要求独立 netns、veth
-或防火墙，必须在启动 Host 前由 systemd、容器 runtime、Kubernetes CNI 或运维系统
-完成；无法提供该边界时就更换部署形态，而不是让 Host 临时提权。
+The first-party Host **does not implement and does not plan** a privileged supervisor: the repository has no root helper target, supervisor socket, netns creation protocol, or nftables management logic. If the target environment requires independent netns, veth, or firewalling, systemd, the container runtime, Kubernetes CNI, or an ops system must provide it before Host starts. If that boundary cannot be provided, change the deployment shape instead of letting Host temporarily elevate privileges.
 
-## 12. 可观测性
+## 12. Observability
 
-### 12.1 指标
+### 12.1 Metrics
 
-v1 内建固定、低基数指标，使用 `app`、`generation`、`listener`、`result` 等受控 label；
-禁止 request ID、URL、Version 自由文本、hostname 或错误消息成为 label。
+v1 has built-in fixed, low-cardinality metrics using controlled labels such as `app`, `generation`, `listener`, and `result`; request IDs, URLs, free-form Version text, hostnames, or error messages must not become labels.
 
-至少包括：
+At minimum:
 
-- worker：starting/ready/busy/unhealthy/draining/crash/replacement；
-- recovery：instability budget、backoff、replacement permit、quarantine 和 retire；
-- request：inflight/queued/rejected/cancel/timeout/retry；
-- latency：queue、startup、worker、time-to-head、total；
-- stream：request/response credit、未确认 bytes、SSE permit、slow-client cancel；
-- deploy：validate/stage/spawn/load/health/activate/drain 时间和结果；
-- isolation：required/applied feature、delegated cgroup failure、外部网络边界校验结果；
-- log/audit queue drop；
-- process 与 child RSS/PSS/cgroup memory/CPU。
+- worker: starting/ready/busy/unhealthy/draining/crash/replacement;
+- recovery: instability budget, backoff, replacement permit, quarantine, and retire;
+- request: inflight/queued/rejected/cancel/timeout/retry;
+- latency: queue, startup, worker, time-to-head, total;
+- stream: request/response credit, unacknowledged bytes, SSE permit, slow-client cancel;
+- deploy: validate/stage/spawn/load/health/activate/drain times and results;
+- isolation: required/applied features, delegated cgroup failure, external network boundary validation results;
+- log/audit queue drop;
+- process and child RSS/PSS/cgroup memory/CPU.
 
-Prometheus 文本端点默认只绑定管理 Unix socket或 loopback。OpenTelemetry C++ 的 signals
-虽然已稳定，但 v1 没必要为了一个本地 Host 引入完整 SDK/exporter；需要 OTLP 时可让
-sidecar scrape，或以后增加可选 adapter。
+The Prometheus text endpoint by default binds only to the admin Unix socket or loopback. Although OpenTelemetry C++ signals are stable, v1 does not need a full SDK/exporter for a local Host; when OTLP is needed, a sidecar can scrape, or an optional adapter can be added later.
 
-### 12.2 结构化日志
+### 12.2 Structured Logs
 
-所有日志使用一行一个 JSON object，固定字段：
+All logs use one JSON object per line with fixed fields:
 
 ```text
 timestamp, level, event, app, version, generation,
 worker_id, request_id, operation_id, stage, result, duration_ms
 ```
 
-禁止记录：
+Forbidden to record:
 
-- secret value；
-- Authorization/Cookie 等敏感 header；
-- 原始 request/response body；
-- 未清洗的应用错误作为结构字段；
-- 高基数路径进入指标。
+- secret values;
+- sensitive headers such as Authorization/Cookie;
+- raw request/response bodies;
+- unsanitized application errors as structured fields;
+- high-cardinality paths into metrics.
 
-Runtime 的 LOG 和 AUDIT 必须持续排空。日志 sink 变慢不能阻塞 reactor：使用有界队列，
-应用日志可丢弃并计数；部署、安全和进程生命周期事件进入独立高优先级 lane。若未来
-要求完整合规审计，需要单独设计本地持久 spool，不能假装普通 stderr 提供 exactly-once。
+Runtime LOG and AUDIT must continue to drain. A slow log sink must not block the reactor: use a bounded queue, where app logs may be dropped and counted; deployment, security, and process-lifecycle events enter a separate high-priority lane. If full compliance auditing is required later, a local durable spool must be designed separately; ordinary stderr must not be presented as exactly-once.
 
-`CRASH_BUDGET_EXCEEDED`、active state 进入 quarantine/retired、retire drain 超时和管理
-授权失败属于不可丢弃的 control-plane 事件；日志不得包含未清洗 URL、forwarded header
-或 health response body。
+`CRASH_BUDGET_EXCEEDED`, active state entering quarantine/retired, retire drain timeout, and admin authorization failures are non-discardable control-plane events; logs must not contain unsanitized URLs, forwarded headers, or health response bodies.
 
-## 13. Runtime 集成要求
+## 13. Runtime Integration Requirements
 
-### 13.1 已实现：结构化 build/compatibility identity
+### 13.1 Implemented: Structured Build/Compatibility Identity
 
-可信字节码使用只读 build info，至少包含：
+Trusted bytecode uses read-only build info that includes at least:
 
 ```text
 Capsid runtime version
@@ -1360,383 +1085,261 @@ bytecode format identity
 capability manifest hash
 ```
 
-library 侧 `capsid_runtime_build_info()`、compiler identity target 与 attestation verifier
-已经由 M0.2 冻结。实际 worker HELLO/READY 还必须返回同一 identity；Host 必须比较
-library、compiler attestation 和 worker 三者，不能只信链接到 Host 的 library。
+The library-side `capsid_runtime_build_info()`, compiler identity target, and attestation verifier are already frozen by M0.2. The actual worker HELLO/READY must return the same identity; Host must compare the library, compiler attestation, and worker, and must not trust only the library linked into Host.
 
-v1 build info 是 ABI v7 的追加接口，不改动已有结构体布局。它固定公开 runtime/ABI/
-FetchRPC 版本、QuickJS commit、txiki overlay key/manifest、bytecode 相关编译 flags、目标
-architecture、endianness、pointer width、bytecode format identity、capability manifest
-hash 和最终 compatibility ID。最终 ID 是 `sha256:` 加小写十六进制；hash 输入为公共头
-文件注释中固定字段顺序的 `key=value\n` UTF-8 record，包含末尾换行，不使用 JSON
-canonicalization 或 locale formatting。
+v1 build info is an additive ABI v7 interface that does not change existing struct layouts. It always exposes runtime/ABI/FetchRPC versions, QuickJS commit, txiki overlay key/manifest, bytecode-relevant compile flags, target architecture, endianness, pointer width, bytecode format identity, capability manifest hash, and the final compatibility ID. The final ID is `sha256:` followed by lowercase hex; the hash input is a `key=value\n` UTF-8 record with fixed field order documented in the public header comments, including the trailing newline, and does not use JSON canonicalization or locale formatting.
 
-其中 `quickjsCommit` 必须是 `vendor/txiki.js/deps/quickjs` 的锁定 gitlink commit，不是
-外层 `vendor/txiki.js` commit；外层 vendor、全部 submodule、补丁和 overlay 内容由
-`txikiOverlayKey`/`txikiOverlayManifest` 覆盖。配置 worker 构建时必须把锁定 QuickJS
-gitlink 与实际 checkout 再比较，避免字段名与真实输入不一致。
+`quickjsCommit` must be the locked gitlink commit of `vendor/txiki.js/deps/quickjs`, not the outer `vendor/txiki.js` commit; the outer vendor, all submodules, patches, and overlay content are covered by `txikiOverlayKey`/`txikiOverlayManifest`. When configuring a worker build, compare the locked QuickJS gitlink against the actual checkout to avoid mismatches between field names and real inputs.
 
-实际 worker 的 READY payload 必须携带同一 ASCII compatibility ID；正式
-`capsid-bytecode-compile --print-compatibility-id` 只输出该 ID 和换行。三者任一不同即禁止
-trusted bytecode。真实 source → bytecode → worker round-trip 仍由 M1 的集成测试完成。
+The actual worker's READY payload must carry the same ASCII compatibility ID; the official `capsid-bytecode-compile --print-compatibility-id` outputs only that ID and a newline. If any of the three differs, trusted bytecode is forbidden. The real source → bytecode → worker round-trip is still covered by M1 integration tests.
 
-### 13.2 P1：结构化错误
+### 13.2 P1: Structured Errors
 
-当前 spawn 只能返回 `INVALID_ARGUMENT`、`SYSTEM_ERROR` 等粗粒度结果。第一方 Host 需要
-区分：
+Current spawn can only return coarse results such as `INVALID_ARGUMENT` and `SYSTEM_ERROR`. The first-party Host needs to distinguish:
 
-- config validation；
-- socketpair/posix_spawn；
-- cgroup 写入、回读和 attach；
-- child exec；
-- HELLO/sandbox；
-- bundle parse/evaluate；
-- required feature mismatch。
+- config validation;
+- socketpair/posix_spawn;
+- cgroup write, read-back, and attach;
+- child exec;
+- HELLO/sandbox;
+- bundle parse/evaluate;
+- required feature mismatch.
 
-建议新增 size-negotiated `capsid_error_info` 和 `capsid_worker_spawn_ex()`，包含稳定 code、
-stage、可选 `errno` 和安全消息。不要依赖 thread-local “last error”，它在多 shard/多
-bootstrap thread 下难以正确使用。
+Add size-negotiated `capsid_error_info` and `capsid_worker_spawn_ex()` with a stable code, stage, optional `errno`, and safe message. Do not rely on thread-local "last error"; it is hard to use correctly across multiple shard/bootstrap threads.
 
-### 13.3 P1：非阻塞生命周期
+### 13.3 P1: Non-Blocking Lifecycle
 
-短期用 ownership handoff 到 reaper executor。长期考虑把：
+Short term: use ownership handoff to the reaper executor. Long term, consider splitting:
 
 ```text
 request_shutdown → poll EXIT → send_signal → reap → free handle
 ```
 
-拆成不会等待的 API，使 Host 能完全在事件循环中表达生命周期。ABI 设计前应先用第一方
-Host 实现验证确有必要，避免先扩 ABI 后发现 executor 已足够。
+into APIs that never wait, so Host can express the full lifecycle inside the event loop. Before designing the ABI, validate the need with the first-party Host implementation first; do not extend the ABI and then discover the executor was already sufficient.
 
-## 14. 构建与依赖治理
+## 14. Build and Dependency Governance
 
-现有 CMake option：
+Existing CMake option:
 
 ```text
 CAPSID_BUILD_HOST=ON|OFF
 ```
 
-当前与计划 targets：
+Current and planned targets:
 
 ```text
 capsid_host_core      C++20 internal library
 capsid-host-tests     unit/integration targets
-capsid-host           executable（后续数据面切片）
+capsid-host           executable (future data-plane slices)
 ```
 
-依赖原则：
+Dependency principles:
 
-- Runtime 和 public header 不依赖 Boost/Jansson/OpenSSL；
-- Host dependencies 只链接 Host targets；
-- 固定经过审查的 source release 和 SHA-256，构建时不隐式抓取浮动 branch；
-- 生产镜像锁 OS、compiler、Boost、Jansson 和 OpenSSL patch version；
-- 生成 SPDX SBOM，保存 license 与 source provenance；
-- 开启现有 `-Wall -Wextra -Wpedantic -Werror`、LTO、ASan、UBSan；
-- Host 并发核心增加 TSan job；
-- TLS 即使由外部代理终止，OpenSSL 也只用于 SHA-256 与 Ed25519 验签，保持小的 EVP
-  API 面。
+- Runtime and public headers do not depend on Boost/Jansson/OpenSSL;
+- Host dependencies link only Host targets;
+- pin reviewed source releases and SHA-256; do not implicitly fetch floating branches at build time;
+- production images lock OS, compiler, Boost, Jansson, and OpenSSL patch versions;
+- generate an SPDX SBOM that preserves license and source provenance;
+- enable existing `-Wall -Wextra -Wpedantic -Werror`, LTO, ASan, and UBSan;
+- add a TSan job for Host concurrency core;
+- even when TLS is terminated by an external proxy, OpenSSL is used only for SHA-256 and Ed25519 verification, keeping a small EVP API surface.
 
-版本不应写死在架构契约中。最终 manifest 固定实际审查过的 patch release；文档只记录
-选择条件，不把某次开发环境的依赖版本变成永久契约。
+Versions should not be hard-coded into architecture contracts. The final manifest pins the reviewed patch release actually used; the documentation records selection criteria only and does not turn a development-environment dependency version into a permanent contract.
 
-### 14.1 公网 C++ Host 的残余风险
+### 14.1 Residual Risk of the Public C++ Host
 
-第一方 Host 使用 C++20 解析攻击者可控 HTTP，是本方案最大的单进程内存安全残余风险。
-Beast 减少自写 parser 面，但不能把该风险归零。若 data listener 被远程利用，攻击者将
-获得 Host 服务账号可读的 App/state/secret 面、内存 Registry 和进程内全局部署权限；
-没有 privileged supervisor 意味着这不直接等于 root，但已经等于该 Host 安全边界失守。
+The first-party Host parses attacker-controlled HTTP in C++20, which is the largest single-process memory-safety residual risk in this design. Beast reduces the hand-written parser surface but does not reduce this risk to zero. If a data listener is remotely exploited, the attacker gains the App/state/secret surface readable by the Host service account, the in-memory Registry, and in-process global deployment authority. The absence of a privileged supervisor means this is not directly root, but it is already a breach of that Host's security boundary.
 
-v1 固定以下缓解，不把它们描述成形式证明：
+v1 fixes the following mitigations without describing them as formal proofs:
 
-- Beast 是唯一 HTTP framing authority；Host 只在解析结果上做语义 gate，不再实现第二
-  套 Content-Length/chunked parser，避免两个 parser 对边界产生分歧；
-- 配置规范化、path/authority、CIDR、attestation 签名消息和 header 清洗写成无副作用
-  纯函数，配 table/property test 与独立 fuzz target；
-- HTTP parser/serializer、URL 重写和生命周期状态机持续跑 ASan/UBSan，owner-shard 与
-  handoff 跑 TSan，smuggling corpus 和随机分片进入 release gate；
-- Host 使用专用非 root 账号、最小文件权限和独立管理 socket；不同信任域使用不同 Host
-  进程，限制一次利用的横向范围。
+- Beast is the only HTTP framing authority; Host applies semantic gates only on parsed results and does not implement a second Content-Length/chunked parser, avoiding parser disagreements on boundaries;
+- config normalization, path/authority, CIDR, attestation signed-message, and header scrubbing are written as side-effect-free pure functions with table/property tests and dedicated fuzz targets;
+- the HTTP parser/serializer, URL rewriting, and lifecycle state machines continuously run ASan/UBSan; owner-shard and handoff paths run TSan; smuggling corpora and random fragmentation enter the release gate;
+- Host runs as a dedicated non-root account with minimal file permissions and a separate admin socket; different trust domains use different Host processes to limit the lateral blast radius of one exploit.
 
-如果持续 fuzz 仍暴露不可接受的 parser/lifetime 缺陷，保留把公网 HTTP frontend 拆成
-更低权限 transport 进程的选项，通过有界、版本化 IPC 连接 control/worker Host。仅把
-配置 parser 移进 helper 不能隔离公网 HTTP exploit，不作为该风险的主要缓解。
+If continuous fuzzing still exposes unacceptable parser/lifetime defects, keep the option to split the public HTTP frontend into a lower-privilege transport process connected to the control/worker Host through bounded, versioned IPC. Moving only the config parser into a helper cannot isolate a public HTTP exploit and is not the primary mitigation for this risk.
 
-## 15. 测试与验收
+## 15. Testing and Acceptance
 
-### 15.1 TDD 是全局交付规则
+### 15.1 TDD Is the Global Delivery Rule
 
-Host、Runtime 前置改动、编译工具和运维脚本全部遵循同一循环：
+Host, Runtime prerequisite changes, compiler tools, and ops scripts all follow the same loop:
 
-1. 先提交一个因缺少目标行为而失败的自动化测试；安全 gate 先写拒绝用例，再写允许
-   用例；
-2. 只实现让当前切片转绿的最小生产代码，不先铺未被测试驱动的通用框架；
-3. 在测试保持全绿时重构，并把新发现的边界条件变成回归测试；
-4. 一个切片同时包含测试、实现、必要文档和可观察错误，不接受“功能先合入、以后补
-   测试”；
-5. 单元测试使用 fake clock、fake filesystem/adapter 和确定性 scheduler；真实 Linux
-   kernel、真实 worker 与 crash 测试另设 integration suite，不能用 mock 结果替代；
-6. coverage 只是提示，合入门以契约、负控、状态机不变量和故障注入是否被执行为准。
+1. First commit an automated test that fails because the target behavior is missing; for security gates, write the rejection cases first, then the allowed cases;
+2. Implement only the minimal production code that makes the current slice green; do not pre-build generic frameworks not driven by tests;
+3. Refactor while tests remain green, and turn newly discovered edge cases into regression tests;
+4. A slice includes tests, implementation, necessary documentation, and observable errors at the same time; "merge the feature first, add tests later" is not accepted;
+5. Unit tests use fake clock, fake filesystem/adapter, and deterministic scheduler; real Linux kernel, real worker, and crash tests are in a separate integration suite and cannot be replaced by mocks;
+6. coverage is only a hint; the merge gate is whether contracts, negative controls, state-machine invariants, and fault injection have been executed.
 
-每个 PR/commit 描述都要写出 `RED` 测试名、它最初如何失败，以及 `GREEN` 后证明了
-什么。修 bug 时，复现测试必须先在未修代码上失败。
+Every PR/commit description must name the `RED` test, how it initially failed, and what `GREEN` proved. When fixing a bug, the reproduction test must first fail on the unfixed code.
 
-### 15.2 单元和属性测试
+### 15.2 Unit and Property Tests
 
-- JSON 重复 key、未知字段、深度、超限和单位解析；
-- App 申请不可能扩大 Host 权限的单调性 property；
-- path ancestor、deny、wildcard hostname、CIDR 和 port 交集；
-- generation digest 和 rule ID 可复现；
-- subdomain/path/header 路由正负控；
-- 三种路由模式的 URL rewrite golden，以及所有 Forwarded/X-Forwarded 头剥离 property；
-- pool 选择、queue、permit 和错误映射；
-- fake clock 下的 crash rolling window、指数退避/jitter 边界、per-App replacement
-  singleflight 和 startup fairness；
-- SSE permit 获取/归还恰好一次，stream cap 始终为普通请求保留槽位；
-- deploy/worker 状态机所有非法转移；
-- active/retired/quarantined 三种状态的原子恢复。
+- JSON duplicate keys, unknown fields, depth, over-limit, and unit parsing;
+- monotonicity property that an App request can never expand Host permissions;
+- path ancestor, deny, wildcard hostname, CIDR, and port intersection;
+- generation digest and rule ID reproducibility;
+- subdomain/path/header routing positive and negative controls;
+- URL rewrite golden tests for all three routing modes, plus property tests that all Forwarded/X-Forwarded headers are stripped;
+- pool selection, queue, permit, and error mapping;
+- crash rolling window under fake clock, exponential backoff/jitter bounds, per-App replacement singleflight, and startup fairness;
+- SSE permit acquire/release exactly once, with the stream cap always preserving ordinary request slots;
+- all illegal deploy/worker state-machine transitions;
+- atomic recovery of active/retired/quarantined states.
 
-### 15.3 HTTP 和流控集成
+### 15.3 HTTP and Flow-Control Integration
 
-- chunked、Content-Length、TE/CL 冲突和 smuggling corpus；
-- header 数量/字节、慢头、慢 body 和 early body；
-- 客户端伪造 `Forwarded`/`X-Forwarded-*` 不影响 URL 或 worker headers，proxy 后的
-  `publicScheme=https` 生成稳定绝对 URL；
-- Admin socket 非授权 peer 被所有端点拒绝；获准 UID/group 对所有 App 具有相同全局
-  deploy/retire 权限，不误测成 per-App ACL；
-- `Expect: 100-continue` 的接受与拒绝；
-- 大 request body 在 credit=0 时不继续读取；
-- response credit 只在 client write completion 后归还；
-- 慢客户端、SSE、stream permit 满时在 head 前返回 503、断开、cancel 和迟到事件；
-- 多 request ID 交错；
-- worker crash 在 response head 前后不同语义；
-- active health 连续失败摘除、replacement backoff、budget quarantine，以及 crash-loop
-  App 不阻塞另一 App deploy；
-- 达到 crash budget 的那个事件先切入 `QUARANTINING`，不重试到残余 READY worker，也不
-  启动 replacement；
-- worker 持续 busy 时主动探针可 skip，但 request/stream deadline 或 IPC/EXIT 被动失败仍
-  会摘除并计入 budget；
-- shutdown/drain/terminate 不阻塞 reactor。
+- chunked, Content-Length, TE/CL conflicts, and smuggling corpora;
+- header count/bytes, slow headers, slow bodies, and early bodies;
+- client-forged `Forwarded`/`X-Forwarded-*` does not affect URL or worker headers; `publicScheme=https` behind a proxy produces a stable absolute URL;
+- unauthorized peers are rejected by every Admin socket endpoint; an approved UID/group has the same global deploy/retire authority over all Apps and is not mistakenly tested as a per-App ACL;
+- `Expect: 100-continue` accept and reject paths;
+- a large request body is not read further when credit=0;
+- response credit is returned only after client write completion;
+- slow clients, SSE, full stream permit returning 503 before head, disconnect, cancel, and late events;
+- multiple request ID interleaving;
+- different worker-crash semantics before and after response head;
+- consecutive active-health failures remove the worker, replacement backoff, budget quarantine, and a crash-looping App does not block another App's deploy;
+- the event that reaches the crash budget first transitions to `QUARANTINING`, does not retry to a remaining READY worker, and does not start replacement;
+- a continuously busy worker can skip active probes, but passive request/stream deadline or IPC/EXIT failures still remove it and count against the budget;
+- shutdown/drain/terminate do not block the reactor.
 
-### 15.4 部署故障注入
+### 15.4 Deployment Fault Injection
 
-在每个步骤后强制 kill Host 并重启：
+Force-kill Host and restart after every step:
 
-- source copy 中途；
-- generation fsync 前后；
-- COMPLETE 前后；
-- pool READY 前后；
-- active temp write、fsync、rename 和 parent fsync 前后；
-- Registry publish 前后；
-- retire tombstone rename 和 Registry remove 前后；
-- quarantined App 执行 retire 的 tombstone rename 和幂等恢复；
-- quarantine state rename 和 replacement 停止前后；
-- 旧 pool drain 中。
+- mid source copy;
+- before/after generation fsync;
+- before/after COMPLETE;
+- before/after pool READY;
+- before/after active temp write, fsync, rename, and parent fsync;
+- before/after Registry publish;
+- before/after retire tombstone rename and Registry removal;
+- retire tombstone rename and idempotent recovery for a quarantined App;
+- before/after quarantine state rename and replacement stop;
+- during old pool drain.
 
-验收不变量：重启后只可能得到旧 active、完整的新 active、retired 或 quarantined，绝不
-能指向半个 generation，也不能复活 retired/quarantined pool。
+Acceptance invariant: after restart, only the old active, a complete new active, retired, or quarantined state is possible. Host must never point at half a generation, and must never revive a retired/quarantined pool.
 
-另测：symlink/magic link/device/FIFO、并发原地修改、digest mismatch、ENOSPC、只读目录、
-相同 Version 不同内容、并发 deploy 和 secret 变化。
+Also test: symlink/magic link/device/FIFO, concurrent in-place modification, digest mismatch, ENOSPC, read-only directory, same Version with different content, concurrent deploy, and secret changes.
 
-### 15.5 可信字节码与 secret
+### 15.5 Trusted Bytecode and Secret
 
-可信字节码按以下顺序驱动实现：
+Trusted bytecode is implemented in the following order:
 
-1. compatibility identity golden 先失败，再实现 library/worker/compiler 三方一致性；
-2. compiler round-trip 先失败，再证明同一源码、同一 `sourceName` 的 bytecode 能被真实
-   worker 加载并与源码行为一致；
-3. attestation verifier table test 逐字段篡改、摘要不符、重复/未知字段、未知/撤销 key、
-   非法签名和错误 App/Version/sourceName；然后才实现 verifier；
-4. 真实部署测试覆盖可信字节码路径、无字节码源码路径、兼容性失配源码回退，以及
-   provenance 失败绝不回退；
-5. fuzz attestation parser 和签名消息重建；ASan/UBSan 下把随机 bytes 隔绝在 trusted
-   API 之前。
+1. compatibility identity golden fails first, then library/worker/compiler three-way consistency is implemented;
+2. compiler round-trip fails first, then prove that bytecode from the same source and same `sourceName` can be loaded by a real worker and behaves consistently with source;
+3. attestation verifier table tests for per-field tampering, digest mismatch, duplicate/unknown fields, unknown/revoked keys, invalid signatures, and wrong App/Version/sourceName; only then implement the verifier;
+4. real deployment tests cover the trusted bytecode path, the no-bytecode source path, compatibility-mismatch source fallback, and that provenance failure never falls back;
+5. fuzz the attestation parser and signed-message reconstruction; under ASan/UBSan, isolate random bytes before the trusted API.
 
-secret 按以下顺序驱动实现：
+Secret is implemented in the following order:
 
-1. schema 负控覆盖未知 key、越权 env 名、路径字符、重复 key、超长值、NUL 和总量超限；
-2. safe-read 测试先构造 symlink、FIFO、device、换 inode/size、越界 path 和读取中修改，
-   再实现基于 dirfd/openat2 的读取；
-3. Policy Compiler golden 证明只有 `Host allow ∩ App request` 的键值进入 descriptor，
-   `effective.json` 只有 key 与 opaque revision；
-4. 真实 worker 集成证明授权代码读到精确 value，未授权/重复 key 启动失败，不同 worker
-   和 App 不串值，也不存在 ambient environment fallback；
-5. rotation 测试证明旧 READY worker 保持旧快照，新 generation 预热后原子切换，且捕获
-   的 admin response、日志和 metrics 中均找不到 secret canary。
+1. schema negative controls cover unknown keys, unauthorized env names, path characters, duplicate keys, overlong values, NUL, and total-size overflow;
+2. safe-read tests first construct symlinks, FIFOs, devices, inode/size changes, out-of-root paths, and modification during read; only then implement dirfd/openat2-based reading;
+3. Policy Compiler goldens prove that only `Host allow ∩ App request` key/value pairs enter the descriptor, and `effective.json` contains only keys and opaque revisions;
+4. real worker integration proves authorized code reads the exact value, unauthorized/duplicate keys fail startup, different workers and Apps do not see each other's values, and there is no ambient environment fallback;
+5. rotation tests prove old READY workers keep the old snapshot, the new generation prewarms and switches atomically, and captured admin responses, logs, and metrics contain no secret canary.
 
-### 15.6 隔离测试
+### 15.6 Isolation Tests
 
-- READY flags 必须覆盖 effective required bits；
-- cgroup parent/leaf、limit 写回和 child membership；
-- worker 自然处于与 Host 相同的 network namespace，Host 不打开或传递 netns fd；
-- worker 无 ambient env/fd；
-- App path 权限与 Landlock/openat2 一致；
-- 构建产物和运行文件中不存在 supervisor socket、root helper 或 netns 创建入口；
-- delegated 环境 skip 继续视为非证据。
+- READY flags must cover the effective required bits;
+- cgroup parent/leaf, limit write-back, and child membership;
+- workers naturally share Host's network namespace; Host does not open or pass netns fds;
+- workers have no ambient env/fd;
+- App path permissions are consistent with Landlock/openat2;
+- build artifacts and runtime files contain no supervisor socket, root helper, or netns creation entry points;
+- skipped delegated environments remain non-evidence.
 
-### 15.7 性能验收
+### 15.7 Performance Acceptance
 
-#### 当前证据边界
+#### Current Evidence Boundary
 
-当前 tree 没有 benchmark runner、原始 A/B 或可核验的 gateway/worker 分层 profile，
-因此本设计不保存历史 QPS，也不为 C++ Host 预设提升百分比。M1 必须先恢复 runner，
-重新生成 Go baseline 与双侧 profile；任何容量推演只能放在带输入参数的运行报告里，
-不能成为产品承诺。通用规则见[性能证据规则](performance-benchmarks.md)。
+The current tree has no benchmark runner, raw A/B, or verifiable gateway/worker layered profile, so this design records no historical QPS and sets no percentage improvement target for the C++ Host. M1 must first restore the runner, regenerate the Go baseline and both-side profiles; any capacity reasoning belongs in a run report with input parameters and must not become a product promise. General rules are in [Performance evidence rules](performance-benchmarks.md).
 
-#### 每个性能切片的 profile gate
+#### Profile Gate for Each Performance Slice
 
-每个 Host 数据面里程碑和每个声称改善性能的 PR，都必须同时完成函数级 TDD 与以下
-before/after 证据：
+Every Host data-plane milestone and every PR claiming a performance improvement must complete function-level TDD and the following before/after evidence:
 
-1. 完全相同的 bundle、Runtime/worker build、worker 数、inflight、connection、response
-   size、cgroup CPU/memory、CPU affinity、loadgen、warmup、时长和到达模型；
-2. 至少 3 个 measured run，保留全部原始输出，报告 median、离散度、完成率、QPS、
-   p50/p95/p99 和 loadgen schedule lag；
-3. Gateway 与 workers 使用独立 cgroup 或等价 process grouping，记录各自
-   `usage_usec`、CPU/response、RSS/PSS、context switch 和 page fault，不能只给整机 CPU；
-4. 优化前后各保存一次采样 profile：Go baseline 使用 pprof，C++ Host/worker 使用
-   `perf record`/flamegraph 或目标平台等价工具；同时保存 `perf stat` 的 cycles、instructions、
-   IPC、branches、branch-misses、cache-misses、task-clock 和 migrations；
-5. Host trace 同步记录 queue wait、worker execution、time-to-head、IPC read/write wakeup、
-   bytes/frame、credit stall、跨 shard 投递和 allocator 次数；profile instrumentation 的
-   headline benchmark 与诊断 run 分开，避免探针开销污染主结果；
-6. 报告必须指出优化前的 dominant stack/counter、代码为何针对它，以及优化后该成本
-   是否下降；没有 profile 指向目标路径，不进入实现。
+1. Identical bundle, Runtime/worker build, worker count, inflight, connections, response size, cgroup CPU/memory, CPU affinity, loadgen, warmup, duration, and arrival model;
+2. At least 3 measured runs, keeping all raw output; report median, dispersion, completion rate, QPS, p50/p95/p99, and loadgen schedule lag;
+3. Gateway and workers use separate cgroups or equivalent process grouping; record each side's `usage_usec`, CPU/response, RSS/PSS, context switches, and page faults; machine-wide CPU alone is not enough;
+4. Save one sampled profile before and after the change: Go baseline uses pprof, C++ Host/worker uses `perf record`/flamegraph or the target platform's equivalent; also save `perf stat` cycles, instructions, IPC, branches, branch-misses, cache-misses, task-clock, and migrations;
+5. Host trace records queue wait, worker execution, time-to-head, IPC read/write wakeups, bytes/frame, credit stall, cross-shard delivery, and allocator counts; separate headline benchmarks from diagnostic runs so instrumentation overhead does not pollute the main result;
+6. The report must identify the dominant stack/counter before the change, why the code targeted it, and whether that cost dropped after the change. Do not start implementation without a profile pointing at the target path.
 
-原始命令、环境 manifest、commit、构建 flags、数据和报告必须从当前 tree 可追溯。
-profile 只证明“时间花在哪里”，A/B benchmark 才证明“用户结果是否改善”；两者缺一，
-不能合入性能结论。
+Raw commands, environment manifest, commit, build flags, data, and reports must be traceable from the current tree. A profile only proves where time is spent; an A/B benchmark proves whether user-visible results improved. If either is missing, a performance conclusion cannot be merged.
 
-比较 Go gateway 与第一方 Host 时，必须使用完全相同的 bundle、Runtime build、worker
-数、inflight、connection、response size、cgroup、loadgen、warmup、时长和到达模型。
-结果至少包含 QPS、完成率、p50/p95/p99、CPU/response、Host RSS、worker PSS、queue
-wait、time-to-head、IPC bytes/syscalls 和 cancel/error。
+When comparing the Go gateway with the first-party Host, use the exact same bundle, Runtime build, worker count, inflight, connections, response size, cgroup, loadgen, warmup, duration, and arrival model. Results must include at least QPS, completion rate, p50/p95/p99, CPU/response, Host RSS, worker PSS, queue wait, time-to-head, IPC bytes/syscalls, and cancel/error.
 
-先记录 baseline，再冻结 regression threshold；不能先写“C++ 必然更快”。只有 profile
-持续指向 event loop/HTTP 层，才继续优化该层；io_uring、zero-copy 或共享内存仍需要
-各自独立的 before/after profile。
+Record the baseline first, then freeze the regression threshold; do not start from "C++ must be faster." Optimize the event loop/HTTP layer only while profiles keep pointing there; io_uring, zero-copy, or shared memory each still need their own independent before/after profiles.
 
-#### M1-perf：最小单 worker Host A/B 检查点
+#### M1-perf: Minimal Single-Worker Host A/B Checkpoint
 
-不等完整部署、蓝绿、静态池，也不等 request body、streaming、cancel 和
-timeout 做完。M1 的单 worker path listener、GET/HEAD 无 body、URL/header 清洗、
-response credit、keep-alive 和内容正确性闭环通过后，立即执行第一轮：
+Do not wait for full deployment, blue-green, static pool, request body, streaming, cancel, or timeout work. As soon as M1's single-worker path listener, GET/HEAD without body, URL/header scrubbing, response credit, keep-alive, and content-correctness loop pass, run the first round immediately:
 
 ```text
-同一 loadgen ─┬─ Go capsid-http-gw ─┬─ 同一 capsid-worker
+same loadgen ─┬─ Go capsid-http-gw ─┬─ same capsid-worker
               └─ C++ capsid-host ────┘
 ```
 
-第一轮只测已经实现的公共交集，不用未实现能力污染数据：
+The first round tests only the public intersection already implemented; unimplemented capabilities must not pollute the data:
 
-- 一个预先 READY 的 worker，固定 `workerCount=1`，不测 cold start、deploy 或 autoscaling；
-- 一个 path route，先测 GET/HEAD、无 request body、固定 1 KiB response，再增加一个真实
-  CPU/模板 workload；
-- baseline/candidate 使用完全相同的 bundle digest、Runtime/worker binary、connection、
-  inflight、CPU set、cgroup、warmup、测量时长和到达模型；
-- 至少 3 轮 headline run，另做同条件 diagnostic run；headline 关闭 profile 探针；
-- 同时保存 Host/gateway 与 worker 分组 CPU、CPU/response、QPS、完成率、p50/p95/p99、
-  schedule lag、RSS/PSS、context switch、queue wait、time-to-head 和 IPC bytes/syscalls；
-- Go 保存 pprof，C++ Host 保存 `perf record`/等价 profile；缺任一侧 profile 或原始 A/B
-  输出时，报告只能标记 `INCOMPLETE_EVIDENCE`，不能形成性能结论。
+- one pre-READY worker with fixed `workerCount=1`; no cold start, deploy, or autoscaling;
+- one path route: first GET/HEAD with no request body and a fixed 1 KiB response, then add one real CPU/template workload;
+- baseline/candidate use the exact same bundle digest, Runtime/worker binary, connections, inflight, CPU set, cgroup, warmup, measurement duration, and arrival model;
+- at least 3 headline runs plus same-condition diagnostic runs; headline runs disable profile instrumentation;
+- save Host/gateway and worker grouped CPU, CPU/response, QPS, completion rate, p50/p95/p99, schedule lag, RSS/PSS, context switches, queue wait, time-to-head, and IPC bytes/syscalls;
+- Go saves pprof, C++ Host saves `perf record`/equivalent profile; if either side's profile or raw A/B output is missing, the report may only be marked `INCOMPLETE_EVIDENCE` and cannot form a performance conclusion.
 
-第一个报告用于建立可重复 baseline，不预设胜负阈值。只有至少两次独立重复得到稳定
-离散度后，才为后续 Host PR 冻结 regression threshold。若 C++ Host 变慢，先按 profile
-定位，不通过放宽 workload、减少校验或关闭 credit 来制造胜出。
+The first report establishes a repeatable baseline and does not preset a win/loss threshold. Only after at least two independent repeats show stable dispersion may a regression threshold be frozen for later Host PRs. If the C++ Host is slower, locate the cause with profiles first; do not manufacture a win by loosening the workload, reducing validation, or disabling credit.
 
-完成 request body 双向 credit、streaming、disconnect cancel 和 timeout 后，使用
-同一 runner 增加第二个数据面检查点。两个检查点的 workload 不混合；早期
-GET/HEAD baseline 保留为回归线，不被后续更复杂的场景覆盖。
+After request-body bidirectional credit, streaming, disconnect cancel, and timeout are complete, use the same runner to add the second data-plane checkpoint. The two checkpoints' workloads are not mixed; the early GET/HEAD baseline remains a regression line and is not overwritten by later, more complex scenarios.
 
-当前 tree 没有 `bench/`，因此 M1-perf 的第一条测试固定为
-`host_single_worker_ab_emits_complete_evidence`：先用 fake baseline/candidate/loadgen 验证
-runner 能强制同条件、三轮原始结果和双侧 profile，再接真实进程。恢复 runner 时不得从
-文档中的历史汇总反推或生成原始数据。
+The current tree has no `bench/`, so M1-perf's first test is fixed as `host_single_worker_ab_emits_complete_evidence`: first use fake baseline/candidate/loadgen to verify the runner can enforce identical conditions, three raw rounds, and both-side profiles, then connect real processes. Restoring the runner must not reverse-engineer or generate raw data from historical summaries in this document.
 
-### 15.8 发布门
+### 15.8 Release Gate
 
-- Release/LTO、ASan、UBSan、TSan 和 fuzz 全绿；
-- Host HTTP/部署/故障注入矩阵全绿；
-- crash-loop quarantine、retire tombstone、持续健康和 SSE permit 矩阵全绿；
-- delegated cgroup 与 Runtime egress policy 的正向证据；
-- 配置 schema、示例、Policy Compiler 和 Runtime descriptor golden 一致；
-- SBOM、依赖 hash、worker/library/Host/build identity 固定；
-- A/B 报告含原始数据并可从当前 tree 追溯；
-- 升级旧版本 Host 时，active state 和 App Version 可恢复；
-- 运维文档覆盖 backup、rollback、drain、磁盘满、外部网络边界和 cgroup 委派故障；
-- threat model 明确公网 C++ Host 与全局 Admin socket 的残余权限边界。
+- Release/LTO, ASan, UBSan, TSan, and fuzz are all green;
+- Host HTTP/deployment/fault-injection matrix is green;
+- crash-loop quarantine, retire tombstone, continuous health, and SSE permit matrix is green;
+- positive evidence for delegated cgroup and Runtime egress policy;
+- config schema, examples, Policy Compiler, and Runtime descriptor goldens agree;
+- SBOM, dependency hashes, worker/library/Host/build identities are pinned;
+- A/B reports contain raw data and are traceable from the current tree;
+- upgrading an old Host version can recover active state and App Version;
+- ops docs cover backup, rollback, drain, disk full, external network boundary, and cgroup delegation failure;
+- the threat model explicitly records the residual permission boundary between the public C++ Host and the global Admin socket.
 
-## 16. 实施顺序
+## 16. Implementation Order
 
-以下都是 v1 内部切片，不是把测试、可信字节码或 secret 推迟到 v2。每个切片先落一个
-可观察失败的测试，再写最小实现。
+All of the following are v1 internal slices; they do not defer tests, trusted bytecode, or secrets to v2. Each slice first lands a test that fails observably, then the minimal implementation.
 
-### M0：可执行契约
+### M0: Executable Contracts
 
-1. `host_config_rejects_network_namespace_field` 先失败；修订 Host/App schema，补 listener、
-   capacity、queue 和 trusted bytecode keys，并拒绝 netns 配置字段；
-2. M0.2 合并执行：`runtime_worker_compiler_identity_matches` 与
-   `bytecode_attestation_rejects_one_bit_tamper` 同时先失败；一次增加 library/worker/compiler
-   三方 compatibility identity、attestation 签名消息和 Ed25519 verifier；
-3. `secret_value_never_appears_in_effective_config` 与 rotation/generation golden 同时先失败；
-   一次冻结 env schema、Host/App 权限交集、owning snapshot、Runtime descriptor view、
-   canonical redacted metadata、opaque revision 和 generation digest；safe-read 的真实
-   `openat2`/文件类型/并发修改实现仍由 M1 的文件系统负控驱动；
-4. `active_recovery_never_selects_incomplete_generation` 先失败；冻结 `active.json`、fsync、
-   crash recovery 与 fake filesystem 接口；
-5. `request_url_ignores_all_forwarded_headers` 先失败；冻结 public scheme、authority、URL
-   rewrite 和 proxy header 规则；
-6. `retired_or_quarantined_app_never_reactivates_on_restart` 先失败；冻结 retire 与 crash
-   state machine；
-7. `crash_loop_does_not_starve_other_app_deploy` 先失败；冻结 replacement backoff、budget
-   和 permit fairness；
-8. `quarantining_never_retries_to_a_remaining_worker` 先失败；冻结 budget 判定先于 retry 的
-   顺序；
-9. 建立 Host test target、fake worker、fake clock、sanitizer job 和依赖锁。
+1. `host_config_rejects_network_namespace_field` fails first; revise the Host/App schema, add listener, capacity, queue, and trusted bytecode keys, and reject netns configuration fields;
+2. M0.2 is executed together: `runtime_worker_compiler_identity_matches` and `bytecode_attestation_rejects_one_bit_tamper` fail together first; add library/worker/compiler three-way compatibility identity, attestation signed message, and Ed25519 verifier in one pass;
+3. `secret_value_never_appears_in_effective_config` and rotation/generation goldens fail together first; freeze env schema, Host/App permission intersection, owning snapshot, Runtime descriptor view, canonical redacted metadata, opaque revision, and generation digest in one pass; the real safe-read `openat2`/file-type/concurrent-modification implementation is still driven by M1 filesystem negative controls;
+4. `active_recovery_never_selects_incomplete_generation` fails first; freeze `active.json`, fsync, crash recovery, and fake filesystem interfaces;
+5. `request_url_ignores_all_forwarded_headers` fails first; freeze public scheme, authority, URL rewrite, and proxy header rules;
+6. `retired_or_quarantined_app_never_reactivates_on_restart` fails first; freeze retire and crash state machine;
+7. `crash_loop_does_not_starve_other_app_deploy` fails first; freeze replacement backoff, budget, and permit fairness;
+8. `quarantining_never_retries_to_a_remaining_worker` fails first; freeze the order that budget determination precedes retry;
+9. Establish the Host test target, fake worker, fake clock, sanitizer job, and dependency lock.
 
-完成条件：所有 v1 公共契约都有 golden 和负控，compiler 成为正式 target；生产 Host 代码
-仍可很少，但不能存在未被测试表达的安全分支。
+Completion criteria: every v1 public contract has goldens and negative controls, and the compiler becomes an official target; production Host code may still be small, but there must be no security branch not expressed by a test.
 
-### M1：artifact、secret 与单 worker 闭环
+### M1: Artifacts, Secrets, and Single-Worker Loop
 
-M1 合并成四个逻辑门，但 M1A + M1B 作为同一实施批次交付，避免为 runner
-和单 worker helper 反复往返。顺序强制在完整数据面和部署面前先建立 Linux
-性能 baseline，但不把可信字节码、secret 或 admin 推迟到后续版本。Windows 实现
-不进入 M1 发布门；M1A 仅保留平台 adapter 边界，避免新 Host 代码进一步锁死
-POSIX：
+M1 merges into four logical gates, but M1A + M1B are delivered as one implementation batch to avoid repeated round-trips for the runner and single-worker helper. The order forces a Linux performance baseline before the full data plane and deployment loop, but does not defer trusted bytecode, secrets, or admin to a later version. The Windows implementation is not part of the M1 release gate; M1A only preserves the platform adapter boundary so new Host code does not lock further into POSIX:
 
-1. **M1A：benchmark-minimal 单 worker 数据面。** 一个仅用于 M1/benchmark 的明确
-   single-worker 启动模式直接加载本地 source bundle；实现 Boost.Asio/Beast HTTP/1、
-   keep-alive、单 worker 多 request ID、单一 path listener、M0 URL/header 规范化、
-   GET/HEAD 无 request body 的 begin/end、response head/body/end、response credit、内容
-   correctness gate 和有界 reaper。携带 request body 或其他 method 的请求在进入
-   worker 前返回固定错误，不做隐式 buffering 或部分支持。同时建立 POSIX
-   `WorkerEventSource` adapter，并用 source audit 禁止其他
-   Host 模块直接调用 `capsid_worker_fd()`。该模式不是部署 API，不写
-   `active.json`，也不能被文档描述为生产发布路径。
-2. **M1B：性能证据。** `host_single_worker_ab_emits_complete_evidence` 先失败；一次恢复
-   最小 Go baseline/loadgen、三轮交错 A/B runner、correctness gate、原始 sample、manifest
-   hash 与 Go/C++/worker profile。Runner 可与 M1A 并行实现，但只在 M1A correctness
-   gate 绿后启动真实进程；绿后立即运行 15.7 的首轮 baseline，不等待
-   M1C/M1D。
-3. **M1C：单 worker 数据面完整性。** 在保留首轮 GET/HEAD baseline 的前提下，
-   实现 request body 读取、request/response 双向 credit、streaming、disconnect cancel、
-   Host + Runtime request timeout、慢客户端背压和有界 shutdown。该批次同时新增独立
-   `CAPSID_ENABLE_TSAN` 构建和 Host 并发回归；它不阻塞 M1B 首轮 Release benchmark，
-   但 M1C 不得在 TSan 未通过时验收。完成后使用同一 runner 记录第二个数据面检查点，
-   不覆盖首轮样本。
-4. **M1D：安全部署闭环。** 一次合并 compiler round-trip、artifact safe-read、验签/摘要/
-   sourceName/compatibility 选择、secret symlink/FIFO/NUL/越权负控、Policy Compiler、
-   `capsid_env_entry[]` 快照和 Unix admin deploy；覆盖源码、可信字节码、兼容失配回退
-   源码、secret 进入 worker 四条路径，并移除任何把 single-worker fixture mode 当作部署
-   接口的依赖。验收顺序固定为：基础 compiler/read/provider/policy 契约 → managed 真实
-   worker deploy/retire/recover → Unix Admin API → 跨平台与 sanitizer 门 → 零探针性能回归。
-   Admin API 不得先于 coordinator 的真实 worker 闭环冻结，因为它不负责补全或重新解释
-   部署状态机。任何 deploy 路径只有在可信输入已验证、generation durable commit、真实
-   worker READY 且 canonical `active.json` 成功发布后才能返回 Active；此前失败必须保留旧
-   active generation。
+1. **M1A: the benchmark-minimal single-worker data plane.** An explicit single-worker startup mode used only for M1/benchmark loads a local source bundle directly; implement Boost.Asio/Beast HTTP/1, keep-alive, multiple request IDs on a single worker, one path listener, M0 URL/header normalization, GET/HEAD begin/end without request body, response head/body/end, response credit, a content-correctness gate, and a bounded reaper. Requests carrying a request body or another method return a fixed error before entering the worker; no implicit buffering or partial support. Also establish the POSIX `WorkerEventSource` adapter and use source audit to forbid other Host modules from calling `capsid_worker_fd()` directly. This mode is not a deployment API, does not write `active.json`, and must not be documented as a production release path.
+2. **M1B: Performance evidence.** `host_single_worker_ab_emits_complete_evidence` fails first; restore the minimal Go baseline/loadgen, three-round interleaved A/B runner, correctness gate, raw samples, manifest hash, and Go/C++/worker profiles in one pass. The runner can be implemented in parallel with M1A, but real processes start only after the M1A correctness gate is green. Run the first 15.7 baseline immediately after green, without waiting for M1C/M1D.
+3. **M1C: Single-worker data plane completeness.** While preserving the first GET/HEAD baseline, implement request body reads, bidirectional request/response credit, streaming, disconnect cancel, Host + Runtime request timeout, slow-client backpressure, and bounded shutdown. This batch also adds a separate `CAPSID_ENABLE_TSAN` build and Host concurrency regression; it does not block the M1B first-round Release benchmark, but M1C must not be accepted while TSan is failing. After completion, use the same runner to record the second data-plane checkpoint without overwriting the first-round samples.
+4. **M1D: Secure deployment loop.** In one pass, merge compiler round-trip, artifact safe-read, signature/digest/`sourceName`/compatibility selection, secret symlink/FIFO/NUL/unauthorized-access negative controls, Policy Compiler, `capsid_env_entry[]` snapshot, and Unix admin deploy; cover the four paths of source, trusted bytecode, compatibility-mismatch source fallback, and secret into worker, and remove any dependency that treats single-worker fixture mode as a deployment interface. The acceptance order is fixed as: basic compiler/read/provider/policy contracts → managed real worker deploy/retire/recover → Unix Admin API → cross-platform and sanitizer gate → zero-probe performance regression. The Admin API must not be frozen before the coordinator's real-worker loop is closed, because it does not complete or reinterpret the deployment state machine. Any deploy path may return Active only after trusted inputs are verified, the generation is durably committed, a real worker is READY, and the canonical `active.json` has been successfully published; failures before that point must keep the old active generation.
 
-M1A 冻结的 executable 测试入口为：
+The executable test entry frozen by M1A is:
 
 ```text
 capsid-host
@@ -1754,126 +1357,82 @@ capsid-host
   --ready-fd <inherited-fd>
 ```
 
-`strict-sandbox off` 只允许显式 test/benchmark/native-dev build，生产 Release
-必须拒绝。Host 只有在
-listener 已绑定且 worker 已验证 READY 后，才向 `ready-fd` 写一行 canonical JSON：
-`{"schema":"capsid-host-ready-v1","app":"...","address":"127.0.0.1","port":N}`。
-stdout 不承担 readiness 协议。进程收到 SIGTERM 后停止 accept、cancel 未完成请求，并把
-阻塞 destroy 交给 reaper 后有界退出。
+`strict-sandbox off` is allowed only for explicit test/benchmark/native-dev builds; production Release builds must reject it. Only after the listener is bound and the worker is verified READY does Host write one line of canonical JSON to `ready-fd`: `{"schema":"capsid-host-ready-v1","app":"...","address":"127.0.0.1","port":N}`. stdout does not carry the readiness protocol. After receiving SIGTERM, the process stops accepting, cancels outstanding requests, and exits in a bounded way after handing blocking destroy to the reaper.
 
-上述 CLI 是 M1A 的 POSIX 首条路径。Host 业务层不得因此直接调用
-POSIX signal 或 fd API；未来 Windows 实现的 out-of-band readiness 与
-shutdown/terminate/reap 语义，在具备真实 Windows 机器/hosted runner 后由 RED
-测试冻结，不在 M1 中无证据预设 HANDLE/named-pipe/event ownership。
+The CLI above is M1A's first POSIX path. Host business layers must not directly call POSIX signal or fd APIs as a result. Future Windows out-of-band readiness and shutdown/terminate/reap semantics will be frozen by RED tests once real Windows machines/hosted runners are available; M1 does not preset HANDLE/named-pipe/event ownership without evidence.
 
-M1C 在同一 CLI 上增加 `--request-timeout-ms <positive-integer>` 并开放已冻结的
-request-body/streaming 语义。M1A 不接受该选项，避免未实现契约出现在早期
-benchmark executable 表面上。
+M1C adds `--request-timeout-ms <positive-integer>` to the same CLI and opens the already-frozen request-body/streaming semantics. M1A does not accept this option, so unimplemented contracts do not appear on the early benchmark executable's surface.
 
-完成条件：单 worker 端到端测试证明 bytecode 与 secret 的 v1 契约；任一签名/摘要错误
-fail closed，secret canary 不出现在 Host 输出；M1-perf 证据可从当前 commit
-重放，首轮数据只建立 baseline，不宣传未被 profile + A/B 同时支持的性能提升；
-TSan 可以晚于该首轮 baseline，但必须早于 M1C 验收和 M2 多 worker 实施。
+Completion criteria: single-worker end-to-end tests prove the v1 contracts for bytecode and secret; any signature/digest error fails closed, and secret canaries do not appear in Host output; M1-perf evidence is replayable from the current commit; the first-round data establishes only a baseline and does not advertise improvements not supported by both profile and A/B. TSan may come after that first baseline, but must precede M1C acceptance and the M2 multi-worker implementation.
 
-### M2：静态池和可靠部署闭环
+### M2: Static Pool and Reliable Deployment Loop
 
-前置门：独立 TSan 构建已经覆盖 M1 的 HTTP 事件循环、worker 线程、command/event
-handoff、disconnect/cancel、timeout 和有界 shutdown；任何第一方代码 data race 都是
-阻断错误。TSan 不与 ASan/UBSan 共用构建，不用于性能测量，第三方 suppression 必须精确、
-有注释且不能覆盖第一方符号。
+Prerequisite gate: a separate TSan build already covers M1's HTTP event loop, worker threads, command/event handoff, disconnect/cancel, timeout, and bounded shutdown; any data race in first-party code is a blocking defect. TSan does not share a build with ASan/UBSan and is not used for performance measurement; third-party suppressions must be precise, commented, and must not cover first-party symbols.
 
-1. 从 pool/queue 状态机失败测试开始，实现固定 `minReady == maxWorkers`、shard owner、
-   admission、慢客户端和 SSE permit；
-2. 从每个持久化边界的 crash test 开始，实现 stage → prewarm → health → active rename
-   → drain；
-3. 从 rotation test 开始，实现 secret revision 变化生成新 pool；
-4. 从 bytecode key rotation/restart test 开始，实现 provenance 随 generation 固化；
-5. 从 crash-loop/fake-clock 测试开始，实现 replacement、backoff、instability budget、
-   quarantine 和跨 App startup fairness；
-6. 从 active health 与 retire crash matrix 开始，实现持续探针、retired tombstone 和有界
-   drain；
-7. 增加结构化日志、固定指标和明确回退原因。
+1. Start from pool/queue state-machine failing tests; implement fixed `minReady == maxWorkers`, shard owner, admission, slow clients, and SSE permit;
+2. Start from crash tests at every persistence boundary; implement stage → prewarm → health → active rename → drain;
+3. Start from rotation tests; implement secret revision changes producing a new pool;
+4. Start from bytecode key rotation/restart tests; implement provenance frozen with the generation;
+5. Start from crash-loop/fake-clock tests; implement replacement, backoff, instability budget, quarantine, and cross-App startup fairness;
+6. Start from active health and retire crash matrix; implement continuous probes, retired tombstone, and bounded drain;
+7. Add structured logs, fixed metrics, and explicit fallback reasons.
 
-完成条件：失败永远保留旧版本，重启只恢复完整 generation，请求全程有界；字节码和
-secret 在蓝绿、回滚和重启中保持相同语义；crash-loop 不能垄断 permit，retired/
-quarantined App 不能因重启复活。
+Completion criteria: failure always keeps the old version, restart recovers only complete generations, and requests are bounded end to end; bytecode and secret keep the same semantics across blue-green, rollback, and restart; crash loops cannot monopolize permits, and retired/quarantined Apps cannot be revived by restart.
 
-### M3：生产 v1 发布门
+### M3: Production v1 Release Gate
 
-1. subdomain 与 trusted-header listener；
-2. delegated cgroup hierarchy；验证 Host 不包含 netns 配置、supervisor 或网络管理代码；
-3. Host/global/App 完整 admission control；
-4. 幂等操作查询、显式 rollback、generation retention/GC；
-5. 结构化 Runtime 错误；
-6. 全量安全、fuzz、sanitizer、soak、性能 A/B 和 crash matrix；
-7. systemd unit、外部网络边界、Admin trust boundary、权限、key/secret rotation、retire、
-   quarantine、升级和运维文档。
+1. subdomain and trusted-header listeners;
+2. delegated cgroup hierarchy; verify Host contains no netns configuration, supervisor, or network-management code;
+3. full Host/global/App admission control;
+4. idempotent operation queries, explicit rollback, generation retention/GC;
+5. structured Runtime errors;
+6. full security, fuzz, sanitizer, soak, performance A/B, and crash matrix;
+7. systemd unit, external network boundary, Admin trust boundary, permissions, key/secret rotation, retire, quarantine, upgrade, and ops documentation.
 
-完成条件：在目标 Linux 环境完成 strict isolation、可信字节码与 secret 的正向和负向
-证明，并通过生产流量/发布故障门。至此才称为 v1。
+Completion criteria: strict isolation, trusted bytecode, and secret positive/negative proofs are completed on the target Linux environment, and the production traffic/release failure gates pass. Only then is the design called v1.
 
-### M4：数据驱动的后续能力
+### M4: Data-Driven Follow-Up Capabilities
 
-- `minReady < maxWorkers` 的有界扩缩容；
-- endpoint/application circuit breaker、显式 opt-in activation-guard rollback；
-- 基于 profile/PSS 高分位且保留 hard ceiling 的两级 memory admission；
-- 安全 ceiling reload；
-- 可选 OTLP adapter；
-- HTTP/2、内置 TLS 或第三方 transport adapter；
-- 只有 profile 证明后才考虑 io_uring/zero-copy；
-- 在可用的真实 Windows 机器或 hosted runner 上启动 Windows native-dev 独立轨道：
-  MSVC/CMake、process/transport/reap、加法 event-source ABI、loopback-only Host、本地
-  Admin identity/ACL，以及 source/bytecode/env/request/stream/cancel/crash 真实集成；
-- Windows 原生生产隔离：先冻结独立 threat model 和 semantic feature bits，再评估
-  Job Object、Restricted Token、AppContainer 与部署网络边界；不复用 Linux
-  seccomp/Landlock bit 表达不同保证。
+- bounded autoscaling with `minReady < maxWorkers`;
+- endpoint/application circuit breaker and explicit opt-in activation-guard rollback;
+- two-level memory admission based on profile/PSS high percentiles while preserving the hard ceiling;
+- security ceiling reload;
+- optional OTLP adapter;
+- HTTP/2, built-in TLS, or third-party transport adapter;
+- io_uring/zero-copy only after profiles justify it;
+- start a Windows native-dev track on available real Windows machines or hosted runners: MSVC/CMake, process/transport/reap, additive event-source ABI, loopback-only Host, local Admin identity/ACL, and real integration for source/bytecode/env/request/stream/cancel/crash;
+- Windows native production isolation: first freeze a separate threat model and semantic feature bits, then evaluate Job Object, Restricted Token, AppContainer, and deployment network boundaries; do not reuse the Linux seccomp/Landlock bits, because seccomp/Landlock bits express different guarantees and Windows-native feature bits must be defined from Windows mechanisms first.
 
-## 17. 已确认的决定
+## 17. Confirmed Decisions
 
-1. **源码 + 可信字节码都进 v1**：字节码必须通过签名 provenance、摘要、sourceName
-   和 compatibility identity 校验；源码始终保留用于兼容回退；
-2. **secret 通过 `capsid:env` 进入 worker**：按权限交集生成不可变快照，轮换生成新
-   generation，任何 Host 输出不含明文；
-3. **C++20 + Asio/Beast**：保留 C++ owner-shard，但不手写 epoll/HTTP parser；
-4. **保持简单**：`active.json` 是单写原子状态文件，active 形态仍只是 generation 指针，
-   retire/quarantine 使用同文件 tombstone，不引入 SQLite；静态池先行，autoscaling 后置；
-5. **不做 Host netns supervisor**：Host/App 没有 netns 配置；worker 自然使用 Host 的
-   网络环境，额外网络隔离完全属于可选的部署环境措施；
-6. **crash-loop fail closed**：v1 自动替换、退避并执行 generation budget；超限后持久化
-   quarantine 和 503，不默认自动回滚；
-7. **显式 retire**：`POST /v1/apps/{app}/retire` 原子写 tombstone、停止路由并 drain，
-   不以目录删除表达下线；
-8. **URL 不猜代理语义**：listener 显式 public scheme/authority，v1 删除且不信任全部
-   Forwarded/X-Forwarded header；
-9. **最小持续健康与 streaming 隔离**：配置健康路径时周期抽样，失败纳入 instability
-   budget；SSE 使用独立 per-worker permit，保留普通请求槽位；
-10. **Windows 原生开发保留但延后**：没有真实 Windows 机器/hosted runner 时不实现、
-    不以交叉编译或 WSL2 伪造通过；M1 只建立 Host `WorkerEventSource` adapter 边界，
-    防止 POSIX 依赖扩散到数据面。
+1. **Both source and trusted bytecode enter v1**: bytecode must pass signature provenance, digest, `sourceName`, and compatibility identity checks; source is always retained for compatibility fallback;
+2. **Secrets enter workers through `capsid:env`**: an immutable snapshot is generated by permission intersection; rotation produces a new generation, and no Host output contains plaintext;
+3. **C++20 + Asio/Beast**: retain the C++ owner-shard model but do not hand-write epoll/HTTP parsers;
+4. **Keep it simple**: `active.json` is a single-writer atomic state file; active remains a generation pointer, retire/quarantine use tombstones in the same file, SQLite is not introduced; static pool comes first, autoscaling later;
+5. **No Host netns supervisor**: Host/App have no netns configuration; workers naturally use Host's network environment, and additional network isolation is entirely an optional deployment-environment measure;
+6. **Crash loops fail closed**: v1 automatically replaces with backoff and enforces the generation budget; after the budget is exceeded, persist quarantine and 503, and do not automatically roll back by default;
+7. **Explicit retire**: `POST /v1/apps/{app}/retire` atomically writes a tombstone, stops routing, and drains; decommissioning is not expressed by deleting a directory;
+8. **URL does not guess proxy semantics**: listeners explicitly declare public scheme/authority, and v1 deletes and does not trust all Forwarded/X-Forwarded headers;
+9. **Minimal continuous health and streaming isolation**: when a health path is configured, sample periodically and count failures into the instability budget; SSE uses a separate per-worker permit that preserves ordinary request slots;
+10. **Windows native development is retained but deferred**: not implemented on Windows machines/hosted runners until real hardware is available, and cross-compilation or WSL2 must not fake a pass. M1 only establishes the Host `WorkerEventSource` adapter boundary to prevent POSIX dependencies from spreading into the data plane.
 
-## 18. 外部选型依据
+## 18. External Selection References
 
-- [Boost.Beast HTTP 文档](https://www.boost.org/doc/libs/latest/libs/beast/doc/html/beast/using_http.html)：
-  HTTP/1 增量解析、序列化和 buffer-oriented 接口；
-- [Boost.Asio POSIX stream descriptor](https://www.boost.org/doc/libs/latest/doc/html/boost_asio/overview/posix/stream_descriptor.html)：
-  接管现有 POSIX fd，并执行异步 read/write/wait；
-- [Jansson 解码 API](https://jansson.readthedocs.io/en/latest/apiref.html)：
-  `JSON_REJECT_DUPLICATES` 可直接拒绝安全配置中的重复 key；
-- [OpenSSL release strategy](https://www.openssl-library.org/policies/releasestrat/)：
-  选择仍在上游支持期内并锁定 patch release 的系列；
-- [systemd cgroup delegation](https://systemd.io/CGROUP_DELEGATION/)：
-  非 root service 管理受委派 cgroup subtree 的边界。
+- [Boost.Beast HTTP documentation](https://www.boost.org/doc/libs/latest/libs/beast/doc/html/beast/using_http.html):
+  incremental HTTP/1 parsing, serialization, and buffer-oriented interfaces;
+- [Boost.Asio POSIX stream descriptor](https://www.boost.org/doc/libs/latest/doc/html/boost_asio/overview/posix/stream_descriptor.html):
+  take over an existing POSIX fd and perform async read/write/wait;
+- [Jansson decoding API](https://jansson.readthedocs.io/en/latest/apiref.html):
+  `JSON_REJECT_DUPLICATES` can directly reject duplicate keys in security-sensitive config;
+- [OpenSSL release strategy](https://www.openssl-library.org/policies/releasestrat/):
+  select a series still under upstream support and pin a patch release;
+- [systemd cgroup delegation](https://systemd.io/CGROUP_DELEGATION/):
+  boundary for a non-root service managing a delegated cgroup subtree.
 
-## 19. 最终建议
+## 19. Final Recommendation
 
-v1 按一个可证明的垂直闭环交付：
+Deliver v1 as one provable vertical loop:
 
-> 源码目录安全快照，类型化权限编译，固定池预热，原子 App 状态切换，旧池有界排空，
-> crash-loop 退避并持久 quarantine，显式 retire，稳定的 worker URL 与代理头契约，持续
-> 健康和 SSE 独立容量保护；可信字节码经完整信任链进入 worker，secret 经最小权限
-> `capsid:env` 快照进入 worker，请求和响应始终受 credit、queue、deadline 与 Linux
-> isolation 共同约束。
+> securely snapshot the source directory, compile typed permissions, prewarm a fixed pool, atomically switch App state, drain the old pool in a bounded way, back off and persistently quarantine crash loops, retire explicitly, fix the stable worker URL and proxy-header contract, provide continuous health and separate SSE capacity protection; trusted bytecode enters the worker through the full trust chain, secrets enter the worker through the least-privilege `capsid:env` snapshot, and requests and responses are always bounded by credit, queues, deadlines, and Linux isolation.
 
-按 M0 到 M3 的 TDD 切片逐步把这个闭环做小、做严；v1 完成后，再用真实 profile 决定
-扩缩容、HTTP/2 和更复杂控制面。这样保持产品简洁性，也与 Runtime 的真实能力边界
-一致。
+Follow the M0-to-M3 TDD slices to make this loop small and rigorous; after v1 is complete, use real profiles to decide autoscaling, HTTP/2, and the more complex control plane. This keeps the product simple and consistent with Runtime's actual capability boundary.

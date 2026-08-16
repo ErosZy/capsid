@@ -1,36 +1,34 @@
-# 文档中心
+# Documentation
 
-Capsid 文档按“选型 → 集成 → 配置 → 验证”组织。首次接触从
-[项目首页](../README.md)开始；贡献见 [CONTRIBUTING.md](../CONTRIBUTING.md)；
-安全问题见 [SECURITY.md](../SECURITY.md)。
+Capsid documentation is organized around selection → integration → configuration → validation. If you are new, start with the [project homepage](../README.md); see [CONTRIBUTING.md](../CONTRIBUTING.md) for contributions and [SECURITY.md](../SECURITY.md) for security issues.
 
-## 按任务查找
+## Find by Task
 
-**选型与架构**
+**Selection and Architecture**
 
-- 产品边界：[architecture.md](architecture.md)
-- 平台差异与选型：[platform-support.md](platform-support.md)；
-  Linux 隔离：[linux-sandbox.md](linux-sandbox.md)；
-  Windows 构建：[windows.md](windows.md)
+- Product boundary: [architecture.md](architecture.md)
+- Platform differences and selection: [platform-support.md](platform-support.md);
+  Linux isolation: [linux-sandbox.md](linux-sandbox.md);
+  Windows build: [windows.md](windows.md)
 
-**宿主集成与部署**
+**Host Integration and Deployment**
 
-- 嵌入 C/C++ 宿主：[host-integration.md](host-integration.md)
-- 第一方 Host 配置：[host-config.md](host-config.md) ·
+- Embedding a C/C++ host: [host-integration.md](host-integration.md)
+- First-party Host configuration: [host-config.md](host-config.md) ·
   [capsid-json.md](capsid-json.md)
-- 能力策略与模块权限：[capability-policy.md](capability-policy.md) ·
+- Capability policies and module permissions: [capability-policy.md](capability-policy.md) ·
   [module-permissions.md](module-permissions.md)
-- managed Host 设计：[host-technical-design-review.md](host-technical-design-review.md)
+- managed Host design: [host-technical-design-review.md](host-technical-design-review.md)
 
-**兼容性与质量**
+**Compatibility and Quality**
 
-- 标准/框架兼容：[conformance.md](conformance.md) ·
+- Standards/framework compatibility: [conformance.md](conformance.md) ·
   [framework-compatibility/README.md](framework-compatibility/README.md)
-- 测试门禁：[testing.md](testing.md)
-- 性能证据：[performance-benchmarks.md](performance-benchmarks.md)
+- Test gate: [testing.md](testing.md)
+- Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
 
-## 维护规则
+## Maintenance Rules
 
-- 只维护当前 commit 的契约与可复现结论，不保存评审过程/状态快照/生成报告。
-- 事实优先级：公共头文件与构建配置 > 原始测试/benchmark artifact > Markdown。
-- `docs/*.md` 必须能从本页到达；相对链接由 `tests/audit-current-docs.mjs` 校验。
+- Maintain only the contracts and reproducible conclusions of the current commit; do not preserve review processes, status snapshots, or generated reports.
+- Source-of-truth priority: public headers and build configuration > raw test/benchmark artifacts > Markdown.
+- Every `docs/*.md` file must be reachable from this page; relative links are validated by `tests/audit-current-docs.mjs`.

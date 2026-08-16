@@ -1,81 +1,65 @@
-# 性能：证据规则与当前形态
+# Performance: Evidence Rules and Current State
 
-本文是性能主题的唯一维护文档，只保留证据规则与最新（2026-08-14）结论。
-历史优化过程（M1P、E1-E14、Host 优化循环）在 git 历史与
-`bench/results/` 原始 artifact 中，不在此维护。
+This document is the single maintained document for performance topics; it keeps only evidence rules and the latest (2026-08-14) conclusions. Historical optimization process (M1P, E1-E14, Host optimization loop) lives in git history and the raw artifacts in `bench/results/`, and is not maintained here.
 
-## 1. 证据规则
+## 1. Evidence Rules
 
-### 结论门槛
+### Conclusion Threshold
 
-一次可以写入产品文档的性能结论必须同时具备：
+To write a performance conclusion into product documentation, all of the following must be present at once:
 
-- 相同硬件、操作系统、编译类型、Runtime、worker、bundle 和资源限制；
-- 相同 load generator、连接数、inflight、响应内容和校验逻辑；
-- warm-up 与 measured phase 分离，至少三轮交错 A/B 原始样本；
-- QPS、p50/p95/p99、错误、超时、取消、drain、CPU 和内存一起保存；
-- gateway 与 worker 分别采集 profile，能解释时间花在哪一层；
-- 记录 commit、依赖 identity、构建 flags、命令、环境和结果文件 SHA-256；
-- 正控证明返回内容正确，负控证明错误响应不会被记作成功。
+- same hardware, OS, build type, Runtime, worker, bundle, and resource limits;
+- same load generator, connection count, inflight, response content, and validation logic;
+- warm-up and measured phases separated, with at least three interleaved A/B raw samples;
+- QPS, p50/p95/p99, errors, timeouts, cancellation, drain, CPU, and memory saved together;
+- profiles collected separately for gateway and worker to explain which layer time is spent in;
+- record commit, dependency identity, build flags, commands, environment, and result file SHA-256;
+- positive control proves returned content is correct; negative control proves error responses are not counted as success.
 
-缺少原始 A/B 或任一侧 profile 时，可以报告"观察到的样本"，不能写
-"优化有效"、"提升 N%"或据此调整默认容量。
+When raw A/B samples or either side's profile are missing, you may report "observed samples", but must not write "optimization works", "improved N%", or adjust default capacity based on it.
 
-### 不可混用的测量
+### Measurements That Must Not Be Mixed
 
-以下数据回答不同问题，报告必须分开：完整 HTTP stack 总成本；Host A/B；
-单 worker 执行与内存；冷启动（进程创建、握手、校验、加载、READY 和首
-响应）；密度/稳定性。完整容器 RSS/PSS 不能与单 worker PSS 直接比较；
-源码与可信字节码冷启动也不能替代预热后的请求吞吐测试。
+The following data answer different questions, and reports must keep them separate: full HTTP stack total cost; Host A/B; single-worker execution and memory; cold start (process creation, handshake, validation, loading, READY, and first response); density/stability. Full-container RSS/PSS cannot be compared directly with single-worker PSS; source and trusted-bytecode cold start also cannot substitute for warm request throughput testing.
 
-### 结果保存格式
+### Result Storage Format
 
-每次运行至少保存 manifest（commit、身份、环境、命令和文件摘要）、原始
-样本（不只聚合值）、correctness 结果、两侧 profile 和只从上述文件生成
-的 report。自动审计应拒绝孤立报告、缺 profile 的"提升"结论、未绑定
-commit 的结果，以及只提交汇总数字而没有原始样本的变更。
+Each run must save at least the manifest (commit, identity, environment, commands, and file digests), raw samples (not just aggregates), correctness results, both-side profiles, and a report generated only from those files. Automated audit should reject orphaned reports, "improvement" conclusions missing profiles, results not bound to a commit, and changes that submit only summary numbers without raw samples.
 
-### 当前优化原则
+### Current Optimization Principles
 
-- 先用 profile 找热点，再写优化和对应 RED benchmark；
-- 不为了推测收益引入 io_uring、共享内存 IPC、自定义 HTTP parser 或复杂调度；
-- 正确性、隔离和 fail-closed 契约不能为了 QPS 绕过；
-- 默认 worker/inflight/queue 数值只有在代表性 workload 扫描后才能冻结；
-- 每次性能改动都跑正确性、sanitizer、故障注入和同条件回归。
+- find hotspots with profiles first, then write the optimization and matching RED benchmark;
+- do not introduce io_uring, shared-memory IPC, a custom HTTP parser, or complex scheduling for speculative gains;
+- correctness, isolation, and fail-closed contracts cannot be bypassed for QPS;
+- default worker/inflight/queue numbers can only be frozen after a representative workload scan;
+- every performance change runs correctness, sanitizer, fault-injection, and same-condition regression.
 
-早期 M1 基线只用于冻结最小公共数据面的量级：首轮不等待 request
-body、streaming、cancel 或 timeout 实现，也不能外推为完整数据面的结论。
-这些契约完成后必须用同一 runner 记录新的检查点，并保留而不是覆盖首轮样本。
+The early M1 baseline is only used to freeze the magnitude of the minimal common data plane: the first round does not wait for request body, streaming, cancel, or timeout to be implemented, and cannot be extrapolated into conclusions about the full data plane. Once those contracts land, they must be benchmarked on the same runner, and the new checkpoint must be recorded while keeping rather than overwriting the first-round samples.
 
-## 2. 测试环境（2026-08-14）
+## 2. Test Environment (2026-08-14)
 
-所有最新结论共用以下环境：
+All latest conclusions share the following environment:
 
-| 项 | 值 |
+| Item | Value |
 |---|---|
-| CPU | AMD Ryzen 3 3300X（4C/8T） |
-| OS | Alpine Linux v3.24（WSL2，内核 6.6.87.2-microsoft-standard-WSL2） |
-| 内存 | 8 GB |
-| 进程协议 | SUT taskset 0-3 / loadgen 4-7；双进程模型 |
-| 负载协议 | conns=64，12 workloads × 3 轮（warmup 3s + measured 8s），correctness 逐轮校验 |
+| CPU | AMD Ryzen 3 3300X (4C/8T) |
+| OS | Alpine Linux v3.24 (WSL2, kernel 6.6.87.2-microsoft-standard-WSL2) |
+| Memory | 8 GB |
+| Process protocol | SUT taskset 0-3 / loadgen 4-7; two-process model |
+| Load protocol | conns=64, 12 workloads × 3 rounds (warmup 3s + measured 8s), correctness checked each round |
 
-被测栈（版本均记录在各自 manifest）：
+The stack under test (versions recorded in each manifest):
 
-| 栈 | 组件与版本 |
+| Stack | Component and version |
 |---|---|
-| capsid + hono | capsid commit 9bde135（build-m1d）+ hono bundle（sha256 见 manifest）；static-pool 2 workers |
-| PHP 8 + Slim | PHP 8.5.8 + Slim 4.15.2 + nginx 1.26.3 + php-fpm（pm.max_children=2） |
-| Python 3 + Flask | Python 3.14.5 + Flask 3.1.3 + Gunicorn 26.0.0（2 workers） |
-| 冷启动附加 | Node v24.18.0、Deno 2.9.3 |
+| capsid + hono | capsid commit 9bde135 (build-m1d) + hono bundle (sha256 in manifest); static-pool 2 workers |
+| PHP 8 + Slim | PHP 8.5.8 + Slim 4.15.2 + nginx 1.26.3 + php-fpm (pm.max_children=2) |
+| Python 3 + Flask | Python 3.14.5 + Flask 3.1.3 + Gunicorn 26.0.0 (2 workers) |
+| Cold-start extras | Node v24.18.0, Deno 2.9.3 |
 
-## 3. 三栈全矩阵（4C，2026-08-14，c64，64K 窗口）
+## 3. Three-Stack Full Matrix (4C, 2026-08-14, c64, 64K window)
 
-payload 逐字节对齐、0 errors/0 timeouts、**33/36 格结论级（CV ≤ 7%）**；
-php bytes16k、capsid stream32k、python stream32k 三格 CV 超标，按观察
-样本记录（表内不标注，原始样本可查）。实现语言与服务器模型不同，
-**不是胜负榜**，只用于确认量级。capsid 侧使用产品默认
-`--initial-stream-window 65536`。原始样本：
-`bench/results/three-stack-20260814T172510/`。
+Payloads are byte-aligned, 0 errors/0 timeouts, **33/36 cells at conclusion level (CV ≤ 7%)**; the php bytes16k, capsid stream32k, and python stream32k cells exceed CV and are recorded as observed samples (not marked in the table; raw samples available). Implementation language and server model differ—**not a leaderboard**, only for confirming magnitude. The capsid side uses the product default `--initial-stream-window 65536`. Raw samples: `bench/results/three-stack-20260814T172510/`.
 
 | workload | capsid + hono | PHP 8 + Slim | Python 3 + Flask |
 |---|---:|---:|---:|
@@ -92,70 +76,39 @@ php bytes16k、capsid stream32k、python stream32k 三格 CV 超标，按观察
 | stream 16k | **3501** | 1652 | 3377 |
 | stream 32k | 2886 | 1592 | **3756** |
 
-**形态**：常规 JSON 全胜，小载荷优势最大（json 1k 为 Python 3 栈的
-1.47×、PHP 8 栈的 3.74×）；大字节流载荷（bytes ≥16k、stream 32k）
-Python 3 栈反超，其中 stream 32k（2886 vs 3756）掉队成因待查。PHP 8
-栈全矩阵垫底（约为 capsid 的 0.26-0.40×），CV 最优。QuickJS 解释器
-（无 JIT）仍是单 worker 延迟主导；JIT 是 vendor 级变更，属独立评估
-项目。
+**Shape**: regular JSON wins all cells, with the largest advantage at small payloads (json 1k is 1.47× the Python 3 stack and 3.74× the PHP 8 stack); for large byte/stream payloads (bytes ≥16k, stream 32k) the Python 3 stack overtakes, and the stream 32k gap (2886 vs 3756) cause is still under investigation. The PHP 8 stack is last across the full matrix (about 0.26-0.40× of capsid) with the best CV. The QuickJS interpreter (no JIT) remains the dominant single-worker latency factor; JIT is a vendor-level change and a separate evaluation project.
 
-## 4. 冷启动对照（4C，2026-08-14，中位数 ms）
+## 4. Cold-Start Comparison (4C, 2026-08-14, median ms)
 
-第 4 类测量（进程创建、握手、校验、加载、READY 和首响应）。fixture 为
-真实形态 JS 源码（三种模板轮转：循环+对象字面量函数、class、
-箭头/map/filter/sort 链），10k/100k/1M 三档（36/355/3547 个顶层单元），
-各端加载同一函数体逐字节对齐，仅入口点不同。capsid 用 C ABI
-spawn→load（源码/可信字节码）→READY→首响应（bodyless IPC 请求）；
-Node/Deno 用进程启动→stdout READY→curl 首请求。每格 1 轮 warmup 丢弃 +
-5 轮取中位数。原始样本：`bench/results/cold-start-20260814T171047/`。
+Measurement class 4 (process creation, handshake, validation, loading, READY, and first response). Fixture is real-shaped JS source (three template rotations: loop + object-literal function, class, arrow/map/filter/sort chain), at 10k/100k/1M sizes (36/355/3547 top-level units); each side loads the same function body byte-aligned, differing only in entry point. capsid uses C ABI spawn→load (source/trusted bytecode)→READY→first response (bodyless IPC request); Node/Deno use process start→stdout READY→curl first request. Each cell drops 1 warmup round and takes the median of 5 rounds. Raw samples: `bench/results/cold-start-20260814T171047/`.
 
-| 尺寸 | capsid 源码 | capsid 可信字节码 | Node 24 源码 | Deno 2.9 源码 |
+| Size | capsid source | capsid trusted bytecode | Node 24 source | Deno 2.9 source |
 |---:|---:|---:|---:|---:|
 | 10k | **9.5** | **8.2** | 110 | 39 |
 | 100k | **19.6** | **10.6** | 110 | 40 |
 | 1M | 141 | **42** | 149 | 53 |
 
-READY 时刻（同样本）：capsid 源码 9.1/19.2/141.0、字节码 7.8/10.1/41.4、
-Node 97/97/137、Deno 31/32/45。
+READY times (same samples): capsid source 9.1/19.2/141.0, bytecode 7.8/10.1/41.4, Node 97/97/137, Deno 31/32/45.
 
-1M 的阶段拆分（median）：capsid 源码 spawn 0.2 + 传输 7.6 + **编译 133**
-= 141；capsid 字节码 spawn 0.2 + 传输 21.3 + **反序列化 20** = 41.4
-（qjsb 2.46MB，QuickJS 字节码不压缩，体积为源码的 2.5×）；Node 97ms
-启动基数 + 40ms 解析；Deno 31ms 启动基数 + 14ms 解析。
+1M phase breakdown (median): capsid source spawn 0.2 + transfer 7.6 + **compile 133** = 141; capsid bytecode spawn 0.2 + transfer 21.3 + **deserialize 20** = 41.4 (qjsb 2.46MB, QuickJS bytecode is uncompressed and 2.5× the source size); Node 97ms startup baseline + 40ms parse; Deno 31ms startup baseline + 14ms parse.
 
-- **真实形态下尺寸显著敏感**：capsid 源码 10k→1M 总耗时 +132ms，编译
-  成本与 AST 节点数成正比（3547 个顶层单元 ≈133ms）。
-- **可信字节码收益随编译成本放大**：1M 真实源码 141 → 41.7ms（−70%，
-  3.4×），字节码路径全面第一（比 Deno 快 21%、比 Node 快 3.6×）；小
-  尺寸收益收敛（10k 只快 1.3ms）。但字节码不免费：体积 2.5× 使传输
-  21.3ms 成为该路径第二大成本，反序列化仍需重建 AST（≈20ms）。
-- **源码路径与 Node 同量级、慢于 Deno**：1M ready capsid 141 ≈ Node
-  137（QuickJS 全量编译 vs V8 解析+懒编译），Deno 45ms 是源码路径
-  最快——V8 解析器的优势在 AST 密集源码上显现。
-- **小尺寸下启动基数主导**：10k 时 capsid 源码 9.1ms ready 仅为 Node
-  的 1/11、Deno 的 1/3；Node/Deno 的 97/31ms 启动基数在小 bundle 下
-  无从摊销。
-- 语义说明：capsid 首响应走进程内 IPC，Node/Deno 走本地 HTTP curl；
-  "就绪后首个请求完成"对齐，请求路径实现不同（ready→total 差：
-  capsid ≈0.4ms、Deno ≈8ms、Node ≈13ms），不构成同构比较。
+- **Size is significantly sensitive in real shapes**: capsid source 10k→1M total +132ms; compile cost is proportional to AST node count (3547 top-level units ≈133ms).
+- **Trusted-bytecode benefit grows with compile cost**: 1M real source 141 → 41.7ms (−70%, 3.4×), bytecode path is first overall (21% faster than Deno, 3.6× faster than Node); at small sizes the benefit converges (10k only 1.3ms faster). But bytecode is not free: 2.5× size makes transfer 21.3ms the second-largest cost on that path, and deserialization still rebuilds the AST (≈20ms).
+- **Source path is same magnitude as Node, slower than Deno**: 1M ready capsid 141 ≈ Node 137 (QuickJS full compile vs V8 parse + lazy compile), Deno 45ms is fastest on the source path—V8 parser advantage shows on AST-dense source.
+- **Startup baseline dominates at small sizes**: at 10k capsid source 9.1ms ready is only 1/11 of Node and 1/3 of Deno; Node/Deno 97/31ms startup baselines cannot be amortized on small bundles.
+- Semantic note: capsid first response goes through in-process IPC, while Node/Deno use local HTTP curl; "first request completes after ready" is aligned, but the request path implementation differs (ready→total delta: capsid ≈0.4ms, Deno ≈8ms, Node ≈13ms), so this is not an isomorphic comparison.
 
-## 5. 资源形态（4C，2026-08-14，进程数/PSS/RSS）
+## 5. Resource Profile (4C, 2026-08-14, process count/PSS/RSS)
 
-三栈常驻（双进程协议，空闲）时由 `bench/sample-sut-memory.sh` 每 15s
-采样进程树 PSS（`smaps_rollup`）与 RSS，8 个空闲 tick 取中位数；负载
-轮（json c64）2 个 tick 仅观察。原始样本：
-`bench/results/sut-memory-20260814T173000/`。
+Three-stack resident (two-process protocol, idle) is sampled by `bench/sample-sut-memory.sh` every 15s for process-tree PSS (`smaps_rollup`) and RSS, median of 8 idle ticks; load rounds (json c64) are observed with 2 ticks only. Raw samples: `bench/results/sut-memory-20260814T173000/`.
 
-| 栈 | 进程数 | 空闲 PSS | 空闲 RSS | json 负载 PSS |
-|---|---|---:|---:|---:|
-| capsid + hono | 3（host + 2 workers） | **12.3 MB** | 21.8 MB | 13.5 MB |
-| PHP 8 + Slim | 12（php-fpm + nginx） | —* | 124.1 MB | —* |
-| Python 3 + Flask | 3（gunicorn + 2 workers） | 62.6 MB | 89.4 MB | 62.6 MB |
+| Stack | Processes | Idle PSS | Idle RSS | json load PSS |
+|---|---:|---:|---:|---:|
+| capsid + hono | 3 (host + 2 workers) | **12.3 MB** | 21.8 MB | 13.5 MB |
+| PHP 8 + Slim | 12 (php-fpm + nginx) | —* | 124.1 MB | —* |
+| Python 3 + Flask | 3 (gunicorn + 2 workers) | 62.6 MB | 89.4 MB | 62.6 MB |
 
-*php 容器进程跨用户，非 root 读不到 `smaps_rollup`，PSS 不可得；其 RSS
-含 nginx master+workers，与其余两栈的"应用进程树"口径不同。
+*The php container processes span users; non-root cannot read `smaps_rollup`, so PSS is unavailable; its RSS includes nginx master+workers, which is a different measurement scope from the "application process tree" of the other two stacks.
 
-- 空闲 PSS capsid 为 Python 3 栈的 **1/5**（12.3 vs 62.6 MB）；RSS 为
-  PHP 8 栈的 1/5.7（21.8 vs 124.1 MB，后者口径偏大见上注）。
-- 负载增量：capsid json c64 时 PSS +1.2 MB（QuickJS 堆随请求涨落），
-  Python/PHP 侧无可见增量（2 tick 观察，样本少）。
+- Idle PSS capsid is **1/5** of the Python 3 stack (12.3 vs 62.6 MB); RSS is 1/5.7 of the PHP 8 stack (21.8 vs 124.1 MB, the latter scope is inflated as noted above).
+- Load delta: capsid PSS +1.2 MB at json c64 (QuickJS heap rises and falls with requests); Python/PHP show no visible delta (2-tick observation, small sample).

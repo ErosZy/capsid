@@ -12,15 +12,15 @@
     "manifest": "25c4a94ab66092ec0a703ebc0a1f752532475cab191aa605f7289083966db37d"
   },
   "conformance_deviations": {
-    "CAPSID-D001": "接受的 profile 排除",
-    "CAPSID-D002": "接受的 profile 排除",
-    "CAPSID-D003": "已关闭实现缺口",
-    "CAPSID-D004": "已关闭实现缺口",
-    "CAPSID-D005": "已关闭实现缺口",
-    "CAPSID-D006": "已关闭实现缺口",
-    "CAPSID-D007": "接受的 profile 排除",
-    "CAPSID-D008": "接受的 profile 排除",
-    "CAPSID-D009": "暂定引擎偏差",
-    "CAPSID-D010": "接受的 WPT 上游分歧"
+    "CAPSID-D001": "Accepted profile exclusion",
+    "CAPSID-D002": "Accepted profile exclusion",
+    "CAPSID-D003": "Closed implementation gap",
+    "CAPSID-D004": "Closed implementation gap",
+    "CAPSID-D005": "Closed implementation gap",
+    "CAPSID-D006": "Closed implementation gap",
+    "CAPSID-D007": "Accepted profile exclusion",
+    "CAPSID-D008": "Accepted profile exclusion",
+    "CAPSID-D009": "Provisional engine deviation",
+    "CAPSID-D010": "Accepted WPT upstream divergence"
   }
 }
