@@ -15,9 +15,10 @@ filesystem, socket, or other native authority.
 Binding v1 makes these decisions:
 
 - One worker process contains a User Runtime and, when needed, one Binding
-  Runtime. They have independent QuickJS heaps, globals, module loaders, module
-  caches, and job queues.
-- The Binding Runtime is created only when the worker declares at least one
+  Runtime per Binding package. Every Binding Runtime has an independent
+  QuickJS heap, global, module loader, module cache, and job queue, isolated
+  from the User Runtime and from every other Binding.
+- Binding Runtimes are created only when the worker declares at least one
   Binding. A zero-Binding worker retains the existing single-runtime path,
   loads no Binding code, allocates no Binding heap, and adds no Binding sandbox
   requirements.
@@ -43,10 +44,14 @@ capsid-worker process
 │   ├── untrusted application JavaScript
 │   ├── capsid:* User facades
 │   └── UserCapabilityPolicy
-├── Binding Runtime                         created only for a non-empty set
-│   ├── Host-trusted Binding index.js files
-│   ├── explicitly authorized capsid:* modules
-│   └── one BindingCapabilityPolicy per Binding ID
+├── Binding Runtimes                         one per Binding ID, non-empty set
+│   ├── Binding A: Host-trusted index.js
+│   │   ├── explicitly authorized capsid:* modules
+│   │   └── BindingCapabilityPolicy[A]
+│   ├── Binding B: Host-trusted index.js
+│   │   ├── explicitly authorized capsid:* modules
+│   │   └── BindingCapabilityPolicy[B]
+│   └── ...
 └── Process Sandbox
     ├── seccomp: User requirements ∪ Binding profiles
     ├── Landlock: User paths ∪ Binding paths
@@ -55,10 +60,10 @@ capsid-worker process
     └── rlimit
 ```
 
-Two runtimes in one process isolate JavaScript objects and capabilities. They
-do not provide native-exploit isolation. A threat model that must survive
-memory corruption in QuickJS, TJS, or Capsid C++ requires a separate Binding
-process; that is outside v1.
+The User Runtime plus one runtime per Binding isolate JavaScript objects and
+capabilities. They do not provide native-exploit isolation. A threat model that
+must survive memory corruption in QuickJS, TJS, or Capsid C++ requires a
+separate Binding process; that is outside v1.
 
 ## 2. Package and configuration contracts
 
@@ -306,7 +311,10 @@ export default function createBinding({ config, secrets, log }) {
 - `config` and `secrets` are deeply frozen null-prototype objects.
 - `log` is frozen and provides
   `debug/info/warn/error(message, fields?)`; Capsid attaches App,
-  Generation, Binding, and request metadata.
+  Generation, Binding, and request metadata. The object belongs to exactly one
+  Binding and carries its Binding ID; a call from any other Binding is rejected.
+  Because Binding globals are not shared, another Binding cannot obtain the
+  object through JavaScript at all.
 - Own enumerable functions in the returned object become public methods. A
   package exports 1–128 methods.
 - Method names are valid JavaScript identifiers no longer than 64 bytes.
@@ -352,6 +360,10 @@ binding-id:u16 | level:u16 | message:u32 | fields-json:u32
   and message/fields payloads over 16 KiB are rejected.
 - Before emission, current Binding secret plaintext is redacted from both the
   message and JSON-escaped fields.
+- The log function authenticates its caller: the Binding ID captured in the
+  function must match the authoritative Binding identity (the dispatch window,
+  or the loading Binding during factory warm-up). A mismatch throws and emits
+  nothing.
 - The Host requires the exact frame flag, no trailing bytes, valid ID/level,
   and duplicate-rejecting JSON. It canonicalizes fields as one JSON object, so
   fields cannot inject a second log line.
@@ -386,7 +398,8 @@ authorize(origin, operation, resource);
 The origin comes from native state attached to the `JSContext` or handle:
 
 - User Runtime code consults only `UserCapabilityPolicy`;
-- Binding Runtime code consults the policy for the current Binding ID;
+- each Binding Runtime has its own `JSContext`; Binding code consults the
+  policy for the Binding ID of that context's current dispatch window;
 - a missing runtime origin or Binding context fails closed;
 - JavaScript arguments cannot set or override origin or Binding ID;
 - native handles record runtime domain, Binding ID, and access mode at creation
@@ -523,7 +536,8 @@ policies remain separate. Startup proceeds in this order:
 4. enter configured namespaces and set rlimits and `no_new_privs`;
 5. install Landlock and the seccomp TSYNC filter;
 6. run side-effect-free negative sandbox probes;
-7. create one or two runtimes based on the Binding count and load code;
+7. create the User Runtime plus one Binding Runtime per Binding (or only the
+   User Runtime for a zero-Binding worker) and load code;
 8. return READY with the sandbox proof.
 
 READY v4 adds:
@@ -545,13 +559,17 @@ zero-Binding worker retains the existing baseline sandbox identity.
 
 ### 5.1 Event loop and async ownership
 
-With Bindings, the TJS overlay supports one Capsid-owned `uv_loop_t`, two
-independent TJS/QuickJS runtimes attached to it, separate Promise-job pumps,
-and runtime teardown that does not close the shared loop. The scheduler pumps
-User and Binding jobs fairly and enters only one runtime at a time.
+With Bindings, the TJS overlay supports one Capsid-owned `uv_loop_t`, one
+independent TJS/QuickJS runtime per Binding attached to that shared loop, plus
+the User runtime. Each runtime has a separate Promise-job pump and runtime
+teardown that does not close the shared loop. The scheduler pumps User and
+Binding jobs fairly and enters only one runtime at a time.
 
 No second thread is created; `clone/clone3` remains denied. Runtime/context
-opaque state replaces process-global runtime assumptions.
+opaque state replaces process-global runtime assumptions. Per-Binding RPC
+state (captured Promise/AbortController intrinsics, method table, factory
+object) lives in a table keyed by Binding ID; no `JSValue` is stored or
+decoded in a runtime that did not create it.
 
 A Binding async context carries:
 
@@ -572,7 +590,7 @@ C++ owns `user_to_binding` and `binding_to_user` queues:
 2. Capsid validates the active request, Binding, method, deadline, and quotas;
 3. input is cloned into a C++ neutral value;
 4. the call is queued and the Promise is returned immediately;
-5. the scheduler invokes the method in the Binding Runtime;
+5. the scheduler invokes the method in that Binding's own Runtime;
 6. `Promise.resolve()` normalizes synchronous and asynchronous returns;
 7. result or error is cloned into the return queue;
 8. the User Runtime resolves or rejects the original Promise.
@@ -604,7 +622,7 @@ Fixed bounds:
 - at most 10,000 aggregate nodes/properties;
 - at most 64 outstanding Binding calls per request;
 - at most 1,024 outstanding Binding calls per worker;
-- default 64 MiB Binding Runtime heap, allocated and charged only for a
+- default 64 MiB heap per Binding Runtime, allocated and charged only for a
   non-empty Binding set.
 
 Cancellation or deadline expiry aborts related calls. Undispatched calls are
@@ -741,10 +759,10 @@ become allowlists.
   Binding.
 - Directory, App configuration, and import use the same Binding ID, with no
   provider alias.
-- Zero-Binding workers allocate no Binding Runtime and add no Binding sandbox
+- Zero-Binding workers allocate no Binding Runtimes and add no Binding sandbox
   cost.
-- User and Binding runtimes share no heap, global, module cache, JavaScript
-  object, or native handle.
+- The User Runtime and each Binding Runtime, and any two Binding Runtimes,
+  share no heap, global, module cache, JavaScript object, or native handle.
 - The manifest is the Host maximum; an App only narrows resources.
 - Packages select built-in profiles rather than syscalls.
 - Process sandbox rules are unioned, while native gates always use runtime

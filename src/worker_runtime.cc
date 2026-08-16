@@ -612,6 +612,36 @@ enum class WorkerPhase {
 };
 
 class WorkerRuntime {
+    // §5.1: one QuickJS runtime/context per Binding, created only when
+    // bindings exist. Each attaches to the User runtime's loop
+    // (shared_loop) and is pumped by it; heaps, globals, module loaders and
+    // job queues stay separate between Bindings and from the User runtime.
+    struct BindingRuntimeMethodTable {
+        BindingRuntimeMethodTable()
+            : policy(NULL),
+              runtime(NULL),
+              ctx(NULL),
+              factory_object(JS_UNDEFINED),
+              promise_ctor(JS_UNDEFINED),
+              promise_resolve(JS_UNDEFINED),
+              promise_then(JS_UNDEFINED),
+              abort_controller_ctor(JS_UNDEFINED),
+              abort(JS_UNDEFINED) {}
+        std::string id;
+        const capsid::BindingPolicy *policy;
+        TJSRuntime *runtime;   // owned; freed before the User runtime
+        JSContext *ctx;        // owned by runtime
+        JSValue factory_object;              // referenced in ctx
+        // Captured before any Binding package evaluates so RPC control flow
+        // stays independent of mutations to this Binding's global object.
+        JSValue promise_ctor;
+        JSValue promise_resolve;
+        JSValue promise_then;
+        JSValue abort_controller_ctor;
+        JSValue abort;
+        std::vector<std::string> method_names;  // Runtime-neutral bytes
+    };
+
     // §7.6: the user_to_binding / binding_to_user call queues. Calls carry
     // an id; the pending table owns the JSValues so the queues stay
     // relocatable.
@@ -687,13 +717,6 @@ public:
           shutting_down_(false),
           bundle_is_trusted_bytecode_(false),
           bundle_name_("capsid:app/main"),
-          binding_runtime_(NULL),
-          binding_ctx_(NULL),
-          binding_promise_ctor_(JS_UNDEFINED),
-          binding_promise_resolve_(JS_UNDEFINED),
-          binding_promise_then_(JS_UNDEFINED),
-          binding_abort_controller_ctor_(JS_UNDEFINED),
-          binding_abort_(JS_UNDEFINED),
           bootstrapping_binding_runtime_(false),
           application_handler_(JS_UNDEFINED),
           application_handler_this_(JS_UNDEFINED),
@@ -739,23 +762,32 @@ public:
             self_finish_binding_call(it->second);
         }
         pending_binding_calls_.clear();
-        if (binding_runtime_) {
-            // §7.5: free the Binding Runtime first so its handles close on
-            // the shared loop while the User runtime still owns the loop.
-            for (size_t index = 0; index < binding_tables_.size(); ++index) {
-                JS_FreeValue(
-                    binding_ctx_,
-                    binding_tables_[index].factory_object);
+        // §7.5: free every Binding Runtime before the User runtime, so its
+        // handles close on the shared loop while the User runtime still
+        // owns the loop. Runtimes are freed in reverse creation order.
+        for (size_t index = binding_tables_.size(); index > 0; --index) {
+            BindingRuntimeMethodTable &table = binding_tables_[index - 1];
+            if (table.ctx != NULL) {
+                JS_FreeValue(table.ctx, table.factory_object);
+                table.factory_object = JS_UNDEFINED;
+                JS_FreeValue(table.ctx, table.promise_ctor);
+                table.promise_ctor = JS_UNDEFINED;
+                JS_FreeValue(table.ctx, table.promise_resolve);
+                table.promise_resolve = JS_UNDEFINED;
+                JS_FreeValue(table.ctx, table.promise_then);
+                table.promise_then = JS_UNDEFINED;
+                JS_FreeValue(table.ctx, table.abort_controller_ctor);
+                table.abort_controller_ctor = JS_UNDEFINED;
+                JS_FreeValue(table.ctx, table.abort);
+                table.abort = JS_UNDEFINED;
             }
-            JS_FreeValue(binding_ctx_, binding_promise_ctor_);
-            JS_FreeValue(binding_ctx_, binding_promise_resolve_);
-            JS_FreeValue(binding_ctx_, binding_promise_then_);
-            JS_FreeValue(binding_ctx_, binding_abort_controller_ctor_);
-            JS_FreeValue(binding_ctx_, binding_abort_);
-            TJS_FreeRuntime(binding_runtime_);
-            binding_runtime_ = NULL;
-            binding_ctx_ = NULL;
+            if (table.runtime != NULL) {
+                TJS_FreeRuntime(table.runtime);
+                table.runtime = NULL;
+                table.ctx = NULL;
+            }
         }
+        binding_tables_.clear();
         if (runtime_) {
             // §7.5: close capsid-owned loop handles before the txiki
             // runtime frees the loop. TJS_Run can return through paths
@@ -1220,28 +1252,56 @@ private:
                    : 0;
     }
 
-    // Installs the binding identity hooks on the Binding Runtime; every
-    // native gate (fs, egress) then observes the originating binding
+    // Installs the binding identity hooks on one Binding Runtime context;
+    // every native gate (fs, egress) then observes the originating binding
     // across async continuations instead of losing it after dispatch.
-    void install_binding_async_hooks() {
+    void install_binding_async_hooks(JSContext *ctx) {
         JSJobContextHooks job_hooks;
         job_hooks.capture = binding_job_capture_hook;
         job_hooks.enter = binding_job_enter_hook;
         job_hooks.leave = binding_job_leave_hook;
         job_hooks.release = binding_job_release_hook;
         JS_SetJobContextHooks(
-            JS_GetRuntime(binding_ctx_), &job_hooks, this);
+            JS_GetRuntime(ctx), &job_hooks, this);
         TJSAsyncContextHooks async_hooks;
         async_hooks.capture = binding_job_capture_hook;
         async_hooks.enter = binding_job_enter_hook;
         async_hooks.leave = binding_job_leave_hook;
         async_hooks.release = binding_job_release_hook;
-        tjs_set_async_context_hooks(binding_ctx_, &async_hooks, this);
+        tjs_set_async_context_hooks(ctx, &async_hooks, this);
         TJSResourceOwnerHooks owner_hooks;
         owner_hooks.capture = binding_job_capture_hook;
         owner_hooks.authorize = binding_resource_authorize_hook;
         owner_hooks.release = binding_job_release_hook;
-        tjs_set_resource_owner_hooks(binding_ctx_, &owner_hooks, this);
+        tjs_set_resource_owner_hooks(ctx, &owner_hooks, this);
+    }
+
+    // Frees one per-Binding runtime and every JSValue it owns. The User
+    // runtime stays alive: Binding handles close on the shared loop while
+    // the loop owner still exists.
+    void release_binding_table(BindingRuntimeMethodTable *table) {
+        if (table == NULL) {
+            return;
+        }
+        if (table->ctx != NULL) {
+            JS_FreeValue(table->ctx, table->factory_object);
+            table->factory_object = JS_UNDEFINED;
+            JS_FreeValue(table->ctx, table->promise_ctor);
+            table->promise_ctor = JS_UNDEFINED;
+            JS_FreeValue(table->ctx, table->promise_resolve);
+            table->promise_resolve = JS_UNDEFINED;
+            JS_FreeValue(table->ctx, table->promise_then);
+            table->promise_then = JS_UNDEFINED;
+            JS_FreeValue(table->ctx, table->abort_controller_ctor);
+            table->abort_controller_ctor = JS_UNDEFINED;
+            JS_FreeValue(table->ctx, table->abort);
+            table->abort = JS_UNDEFINED;
+        }
+        if (table->runtime != NULL) {
+            TJS_FreeRuntime(table->runtime);
+            table->runtime = NULL;
+            table->ctx = NULL;
+        }
     }
 
     void retain_token(RequestToken *token) {
@@ -5029,7 +5089,7 @@ private:
                 ctx, "binding log message or fields exceeds 16384 bytes");
         }
         WorkerRuntime *self = binding_worker_from_context(ctx);
-        if (!self || !self->binding_ctx_) {
+        if (!self) {
             return JS_ThrowInternalError(
                 ctx, "binding log runtime owner is unavailable");
         }
@@ -5041,6 +5101,17 @@ private:
         }
         const std::string binding_id(binding_id_text, binding_id_size);
         JS_FreeCString(ctx, binding_id_text);
+        // The log object belongs to exactly one Binding. A call from another
+        // Binding is rejected. During factory warm-up there is no dispatch
+        // window; the loading identity is the authoritative owner there.
+        const std::string &authoritative_binding =
+            !self->current_binding_id_.empty()
+                ? self->current_binding_id_
+                : self->loading_binding_id_;
+        if (authoritative_binding != binding_id) {
+            return JS_ThrowTypeError(
+                ctx, "binding log object cannot be called from another binding");
+        }
         self->redact_binding_log(binding_id, &message);
         self->redact_binding_log_fields(binding_id, &fields);
         if (message.size() > kStdioMessageLimit ||
@@ -5089,8 +5160,9 @@ private:
         return JS_UNDEFINED;
     }
 
-    JSValue build_binding_log_object(const std::string &binding_id) {
-        JSValue log = JS_NewObjectProto(binding_ctx_, JS_NULL);
+    JSValue build_binding_log_object(JSContext *ctx,
+                                     const std::string &binding_id) {
+        JSValue log = JS_NewObjectProto(ctx, JS_NULL);
         if (JS_IsException(log)) {
             return log;
         }
@@ -5098,36 +5170,35 @@ private:
             "debug", "info", "warn", "error"};
         for (int index = 0; index < 4; ++index) {
             JSValue data[1] = {
-                JS_NewStringLen(binding_ctx_, binding_id.data(),
-                                binding_id.size())};
+                JS_NewStringLen(ctx, binding_id.data(), binding_id.size())};
             if (JS_IsException(data[0])) {
-                JS_FreeValue(binding_ctx_, log);
+                JS_FreeValue(ctx, log);
                 return JS_EXCEPTION;
             }
             JSValue function = JS_NewCFunctionData2(
-                binding_ctx_,
+                ctx,
                 binding_log_fn,
                 names[index],
                 1,
                 index,
                 1,
                 data);
-            JS_FreeValue(binding_ctx_, data[0]);
+            JS_FreeValue(ctx, data[0]);
             if (JS_IsException(function)) {
-                JS_FreeValue(binding_ctx_, log);
+                JS_FreeValue(ctx, log);
                 return JS_EXCEPTION;
             }
             if (JS_SetPropertyStr(
-                binding_ctx_,
+                ctx,
                 log,
                 names[index],
                 function) < 0) {
-                JS_FreeValue(binding_ctx_, log);
+                JS_FreeValue(ctx, log);
                 return JS_EXCEPTION;
             }
         }
-        if (JS_FreezeObject(binding_ctx_, log) < 0) {
-            JS_FreeValue(binding_ctx_, log);
+        if (JS_FreezeObject(ctx, log) < 0) {
+            JS_FreeValue(ctx, log);
             return JS_EXCEPTION;
         }
         return log;
@@ -5263,7 +5334,9 @@ private:
     // worker startup (generation warmup failure, §2.4).
     bool load_binding_package(
         const capsid::WorkerBindingDescriptor &descriptor,
+        BindingRuntimeMethodTable *table,
         std::string *error) {
+        JSContext *ctx = table->ctx;
         const std::string module_name =
             "capsid:binding/" + descriptor.name;
         // Mirror the production bundle sequence: compile only, resolve the
@@ -5275,7 +5348,7 @@ private:
             reinterpret_cast<const char *>(descriptor.source.data()),
             descriptor.source.size());
         JSValue module = JS_Eval(
-            binding_ctx_,
+            ctx,
             source_nul.c_str(),
             source_nul.size(),
             module_name.c_str(),
@@ -5283,116 +5356,116 @@ private:
         if (JS_IsException(module)) {
             *error = "binding '" + descriptor.name +
                      "' module compile failed: " +
-                     js_error_text(binding_ctx_);
-            JS_FreeValue(binding_ctx_, module);
+                     js_error_text(ctx);
+            JS_FreeValue(ctx, module);
             return false;
         }
-        if (JS_ResolveModule(binding_ctx_, module) < 0) {
+        if (JS_ResolveModule(ctx, module) < 0) {
             *error = "binding '" + descriptor.name +
                      "' module resolution failed: " +
-                     js_error_text(binding_ctx_);
-            JS_FreeValue(binding_ctx_, module);
+                     js_error_text(ctx);
+            JS_FreeValue(ctx, module);
             return false;
         }
         JSModuleDef *definition = static_cast<JSModuleDef *>(
             JS_VALUE_GET_PTR(module));
         JSValue evaluation = JS_EvalFunction(
-            binding_ctx_, JS_DupValue(binding_ctx_, module));
+            ctx, JS_DupValue(ctx, module));
         if (JS_IsException(evaluation)) {
-            JS_FreeValue(binding_ctx_, module);
+            JS_FreeValue(ctx, module);
             *error = "binding '" + descriptor.name +
                      "' module evaluation failed: " +
-                     js_error_text(binding_ctx_);
+                     js_error_text(ctx);
             return false;
         }
-        tjs__execute_jobs(binding_ctx_);
-        if (JS_PromiseState(binding_ctx_, evaluation) ==
+        tjs__execute_jobs(ctx);
+        if (JS_PromiseState(ctx, evaluation) ==
             JS_PROMISE_REJECTED) {
-            JSValue reason = JS_PromiseResult(binding_ctx_, evaluation);
+            JSValue reason = JS_PromiseResult(ctx, evaluation);
             *error = "binding '" + descriptor.name +
                      "' module evaluation rejected: " +
-                     to_string(binding_ctx_, reason);
-            JS_FreeValue(binding_ctx_, reason);
-            JS_FreeValue(binding_ctx_, evaluation);
-            JS_FreeValue(binding_ctx_, module);
+                     to_string(ctx, reason);
+            JS_FreeValue(ctx, reason);
+            JS_FreeValue(ctx, evaluation);
+            JS_FreeValue(ctx, module);
             return false;
         }
-        if (JS_PromiseState(binding_ctx_, evaluation) ==
+        if (JS_PromiseState(ctx, evaluation) ==
             JS_PROMISE_PENDING) {
             *error = "binding '" + descriptor.name +
                      "' top-level await must settle without external I/O";
-            JS_FreeValue(binding_ctx_, evaluation);
-            JS_FreeValue(binding_ctx_, module);
+            JS_FreeValue(ctx, evaluation);
+            JS_FreeValue(ctx, module);
             return false;
         }
-        JS_FreeValue(binding_ctx_, evaluation);
+        JS_FreeValue(ctx, evaluation);
         JSValue module_namespace =
-            JS_GetModuleNamespace(binding_ctx_, definition);
-        JS_FreeValue(binding_ctx_, module);
+            JS_GetModuleNamespace(ctx, definition);
+        JS_FreeValue(ctx, module);
         if (JS_IsException(module_namespace)) {
             *error = "binding '" + descriptor.name +
                      "' namespace resolution failed: " +
-                     js_error_text(binding_ctx_);
-            JS_FreeValue(binding_ctx_, module_namespace);
+                     js_error_text(ctx);
+            JS_FreeValue(ctx, module_namespace);
             return false;
         }
         JSValue factory =
-            JS_GetPropertyStr(binding_ctx_, module_namespace, "default");
-        JS_FreeValue(binding_ctx_, module_namespace);
-        if (!JS_IsFunction(binding_ctx_, factory)) {
-            JS_FreeValue(binding_ctx_, factory);
+            JS_GetPropertyStr(ctx, module_namespace, "default");
+        JS_FreeValue(ctx, module_namespace);
+        if (!JS_IsFunction(ctx, factory)) {
+            JS_FreeValue(ctx, factory);
             *error = "binding '" + descriptor.name +
                      "' default export is not a synchronous factory";
             return false;
         }
         JSValue config = JS_ParseJSON(
-            binding_ctx_,
+            ctx,
             descriptor.config_json.data(),
             descriptor.config_json.size(),
             "binding-config");
         if (JS_IsException(config)) {
             *error = "binding '" + descriptor.name +
                      "' config is not valid JSON: " +
-                     js_error_text(binding_ctx_);
-            JS_FreeValue(binding_ctx_, config);
-            JS_FreeValue(binding_ctx_, factory);
+                     js_error_text(ctx);
+            JS_FreeValue(ctx, config);
+            JS_FreeValue(ctx, factory);
             return false;
         }
         if (!JS_IsObject(config) || JS_IsArray(config)) {
             *error = "binding '" + descriptor.name +
                      "' config must be a JSON object";
-            JS_FreeValue(binding_ctx_, config);
-            JS_FreeValue(binding_ctx_, factory);
+            JS_FreeValue(ctx, config);
+            JS_FreeValue(ctx, factory);
             return false;
         }
-        JSValue secrets = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        JSValue secrets = JS_NewObjectProto(ctx, JS_NULL);
         if (JS_IsException(secrets)) {
             *error = "binding '" + descriptor.name +
                      "' secrets object allocation failed";
-            JS_FreeValue(binding_ctx_, secrets);
-            JS_FreeValue(binding_ctx_, config);
-            JS_FreeValue(binding_ctx_, factory);
+            JS_FreeValue(ctx, secrets);
+            JS_FreeValue(ctx, config);
+            JS_FreeValue(ctx, factory);
             return false;
         }
         for (size_t index = 0;
              index < descriptor.secrets.size();
              ++index) {
             JSValue secret_value = JS_NewStringLen(
-                binding_ctx_,
+                ctx,
                 reinterpret_cast<const char *>(
                     descriptor.secrets[index].value.data()),
                 descriptor.secrets[index].value.size());
             if (JS_IsException(secret_value) ||
                 JS_SetPropertyStr(
-                    binding_ctx_, secrets,
+                    ctx, secrets,
                     descriptor.secrets[index].key.c_str(),
                     secret_value) < 0) {
                 *error = "binding '" + descriptor.name +
                          "' secrets object construction failed: " +
-                         js_error_text(binding_ctx_);
-                JS_FreeValue(binding_ctx_, secrets);
-                JS_FreeValue(binding_ctx_, config);
-                JS_FreeValue(binding_ctx_, factory);
+                         js_error_text(ctx);
+                JS_FreeValue(ctx, secrets);
+                JS_FreeValue(ctx, config);
+                JS_FreeValue(ctx, factory);
                 return false;
             }
         }
@@ -5424,28 +5497,28 @@ private:
         // cannot execute while the trust boundary is being prepared.
         std::string preparation_error;
         if (!prepare_binding_init_value(
-                binding_ctx_, config, 1, &preparation_error) ||
+                ctx, config, 1, &preparation_error) ||
             !prepare_binding_init_value(
-                binding_ctx_, secrets, 1, &preparation_error)) {
-            if (JS_HasException(binding_ctx_)) {
-                preparation_error += ": " + js_error_text(binding_ctx_);
+                ctx, secrets, 1, &preparation_error)) {
+            if (JS_HasException(ctx)) {
+                preparation_error += ": " + js_error_text(ctx);
             }
             *error = "binding '" + descriptor.name +
                      "' invalid factory input: " + preparation_error;
-            JS_FreeValue(binding_ctx_, secrets);
-            JS_FreeValue(binding_ctx_, config);
-            JS_FreeValue(binding_ctx_, factory);
+            JS_FreeValue(ctx, secrets);
+            JS_FreeValue(ctx, config);
+            JS_FreeValue(ctx, factory);
             return false;
         }
-        JSValue log = build_binding_log_object(descriptor.name);
+        JSValue log = build_binding_log_object(ctx, descriptor.name);
         if (JS_IsException(log)) {
             *error = "binding '" + descriptor.name +
                      "' log object construction failed: " +
-                     js_error_text(binding_ctx_);
-            JS_FreeValue(binding_ctx_, log);
-            JS_FreeValue(binding_ctx_, secrets);
-            JS_FreeValue(binding_ctx_, config);
-            JS_FreeValue(binding_ctx_, factory);
+                     js_error_text(ctx);
+            JS_FreeValue(ctx, log);
+            JS_FreeValue(ctx, secrets);
+            JS_FreeValue(ctx, config);
+            JS_FreeValue(ctx, factory);
             return false;
         }
         // §2.4: the factory runs outside any binding context — factory
@@ -5456,41 +5529,41 @@ private:
         // §2.4: the factory receives one frozen object argument
         // { config, secrets, log }. Duplicates are transferred into `init`;
         // the local references are released immediately after freezing it.
-        JSValue init = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        JSValue init = JS_NewObjectProto(ctx, JS_NULL);
         if (JS_IsException(init) ||
-            JS_SetPropertyStr(binding_ctx_, init, "config",
-                              JS_DupValue(binding_ctx_, config)) < 0 ||
-            JS_SetPropertyStr(binding_ctx_, init, "secrets",
-                              JS_DupValue(binding_ctx_, secrets)) < 0 ||
-            JS_SetPropertyStr(binding_ctx_, init, "log",
-                              JS_DupValue(binding_ctx_, log)) < 0 ||
-            JS_FreezeObject(binding_ctx_, init) < 0) {
+            JS_SetPropertyStr(ctx, init, "config",
+                              JS_DupValue(ctx, config)) < 0 ||
+            JS_SetPropertyStr(ctx, init, "secrets",
+                              JS_DupValue(ctx, secrets)) < 0 ||
+            JS_SetPropertyStr(ctx, init, "log",
+                              JS_DupValue(ctx, log)) < 0 ||
+            JS_FreezeObject(ctx, init) < 0) {
             *error = "binding '" + descriptor.name +
                      "' init object construction failed: " +
-                     js_error_text(binding_ctx_);
-            JS_FreeValue(binding_ctx_, init);
-            JS_FreeValue(binding_ctx_, log);
-            JS_FreeValue(binding_ctx_, secrets);
-            JS_FreeValue(binding_ctx_, config);
-            JS_FreeValue(binding_ctx_, factory);
+                     js_error_text(ctx);
+            JS_FreeValue(ctx, init);
+            JS_FreeValue(ctx, log);
+            JS_FreeValue(ctx, secrets);
+            JS_FreeValue(ctx, config);
+            JS_FreeValue(ctx, factory);
             return false;
         }
-        JS_FreeValue(binding_ctx_, log);
-        JS_FreeValue(binding_ctx_, secrets);
-        JS_FreeValue(binding_ctx_, config);
+        JS_FreeValue(ctx, log);
+        JS_FreeValue(ctx, secrets);
+        JS_FreeValue(ctx, config);
         JSValue args[1] = { init };
         JSValue result =
-            JS_Call(binding_ctx_, factory, JS_UNDEFINED, 1, args);
-        JS_FreeValue(binding_ctx_, init);
-        JS_FreeValue(binding_ctx_, factory);
+            JS_Call(ctx, factory, JS_UNDEFINED, 1, args);
+        JS_FreeValue(ctx, init);
+        JS_FreeValue(ctx, factory);
         if (JS_IsException(result)) {
             *error = "binding '" + descriptor.name +
-                     "' factory threw: " + js_error_text(binding_ctx_);
-            JS_FreeValue(binding_ctx_, result);
+                     "' factory threw: " + js_error_text(ctx);
+            JS_FreeValue(ctx, result);
             return false;
         }
         if (!JS_IsObject(result)) {
-            JS_FreeValue(binding_ctx_, result);
+            JS_FreeValue(ctx, result);
             *error = "binding '" + descriptor.name +
                      "' factory must return an object";
             return false;
@@ -5499,7 +5572,7 @@ private:
         // traps during discovery. Reject it before making any reflective
         // call, so even a hostile trap is never invoked.
         if (JS_IsProxy(result)) {
-            JS_FreeValue(binding_ctx_, result);
+            JS_FreeValue(ctx, result);
             *error = "binding '" + descriptor.name +
                      "' factory returned a Proxy method table";
             return false;
@@ -5508,10 +5581,10 @@ private:
         JSPropertyEnum *tab = NULL;
         uint32_t count = 0;
         if (JS_GetOwnPropertyNames(
-                binding_ctx_, &tab, &count, result,
+                ctx, &tab, &count, result,
                 JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK |
                     JS_GPN_SET_ENUM) < 0) {
-            JS_FreeValue(binding_ctx_, result);
+            JS_FreeValue(ctx, result);
             *error = "binding '" + descriptor.name +
                      "' method enumeration failed";
             return false;
@@ -5519,32 +5592,32 @@ private:
         std::vector<std::string> method_names;
         for (uint32_t index = 0; index < count; ++index) {
             JSValue atom_value =
-                JS_AtomToValue(binding_ctx_, tab[index].atom);
+                JS_AtomToValue(ctx, tab[index].atom);
             const bool is_symbol = JS_IsSymbol(atom_value);
-            JS_FreeValue(binding_ctx_, atom_value);
+            JS_FreeValue(ctx, atom_value);
             if (is_symbol) {
-                JS_FreePropertyEnum(binding_ctx_, tab, count);
-                JS_FreeValue(binding_ctx_, result);
+                JS_FreePropertyEnum(ctx, tab, count);
+                JS_FreeValue(ctx, result);
                 *error = "binding '" + descriptor.name +
                          "' method table contains a symbol property";
                 return false;
             }
             const char *name =
-                JS_AtomToCString(binding_ctx_, tab[index].atom);
+                JS_AtomToCString(ctx, tab[index].atom);
             if (name == NULL) {
-                JS_FreePropertyEnum(binding_ctx_, tab, count);
-                JS_FreeValue(binding_ctx_, result);
+                JS_FreePropertyEnum(ctx, tab, count);
+                JS_FreeValue(ctx, result);
                 *error = "binding '" + descriptor.name +
                          "' method name is not printable";
                 return false;
             }
             const std::string method_name(name);
-            JS_FreeCString(binding_ctx_, name);
+            JS_FreeCString(ctx, name);
             JSPropertyDescriptor member_descriptor;
-            if (JS_GetOwnProperty(binding_ctx_, &member_descriptor,
+            if (JS_GetOwnProperty(ctx, &member_descriptor,
                                   result, tab[index].atom) != 1) {
-                JS_FreePropertyEnum(binding_ctx_, tab, count);
-                JS_FreeValue(binding_ctx_, result);
+                JS_FreePropertyEnum(ctx, tab, count);
+                JS_FreeValue(ctx, result);
                 *error = "binding '" + descriptor.name +
                          "' method property is unreadable";
                 return false;
@@ -5553,13 +5626,13 @@ private:
                 !JS_IsUndefined(member_descriptor.getter) ||
                 !JS_IsUndefined(member_descriptor.setter);
             const bool is_function =
-                JS_IsFunction(binding_ctx_, member_descriptor.value);
-            JS_FreeValue(binding_ctx_, member_descriptor.getter);
-            JS_FreeValue(binding_ctx_, member_descriptor.setter);
-            JS_FreeValue(binding_ctx_, member_descriptor.value);
+                JS_IsFunction(ctx, member_descriptor.value);
+            JS_FreeValue(ctx, member_descriptor.getter);
+            JS_FreeValue(ctx, member_descriptor.setter);
+            JS_FreeValue(ctx, member_descriptor.value);
             if (is_accessor) {
-                JS_FreePropertyEnum(binding_ctx_, tab, count);
-                JS_FreeValue(binding_ctx_, result);
+                JS_FreePropertyEnum(ctx, tab, count);
+                JS_FreeValue(ctx, result);
                 *error = "binding '" + descriptor.name +
                          "' method table contains an accessor: " +
                          method_name;
@@ -5569,16 +5642,16 @@ private:
                 continue;
             }
             if (!valid_binding_method_name(method_name)) {
-                JS_FreePropertyEnum(binding_ctx_, tab, count);
-                JS_FreeValue(binding_ctx_, result);
+                JS_FreePropertyEnum(ctx, tab, count);
+                JS_FreeValue(ctx, result);
                 *error = "binding '" + descriptor.name +
                          "' exposes an invalid method name: " +
                          method_name;
                 return false;
             }
             if (!is_function) {
-                JS_FreePropertyEnum(binding_ctx_, tab, count);
-                JS_FreeValue(binding_ctx_, result);
+                JS_FreePropertyEnum(ctx, tab, count);
+                JS_FreeValue(ctx, result);
                 *error = "binding '" + descriptor.name +
                          "' method is not a function: " + method_name;
                 return false;
@@ -5589,9 +5662,9 @@ private:
             // an unrelated or invalid atom slot.
             method_names.push_back(method_name);
         }
-        JS_FreePropertyEnum(binding_ctx_, tab, count);
+        JS_FreePropertyEnum(ctx, tab, count);
         if (method_names.empty() || method_names.size() > 128) {
-            JS_FreeValue(binding_ctx_, result);
+            JS_FreeValue(ctx, result);
             *error = "binding '" + descriptor.name +
                      "' must expose between 1 and 128 methods";
             return false;
@@ -5599,20 +5672,18 @@ private:
         // Freeze before any queued Promise job can run. Dispatch resolves
         // methods from this exact object, so a package cannot change the
         // audited surface after factory return.
-        if (JS_FreezeObject(binding_ctx_, result) < 0) {
+        if (JS_FreezeObject(ctx, result) < 0) {
             *error = "binding '" + descriptor.name +
                      "' method table could not be frozen: " +
-                     js_error_text(binding_ctx_);
-            JS_FreeValue(binding_ctx_, result);
+                     js_error_text(ctx);
+            JS_FreeValue(ctx, result);
             return false;
         }
-        BindingRuntimeMethodTable table;
-        table.id = descriptor.name;
-        table.policy = binding_policies_.policy(descriptor.name);
-        table.factory_object = JS_DupValue(binding_ctx_, result);
-        table.method_names = std::move(method_names);
-        JS_FreeValue(binding_ctx_, result);
-        binding_tables_.push_back(std::move(table));
+        table->id = descriptor.name;
+        table->policy = binding_policies_.policy(descriptor.name);
+        table->factory_object = JS_DupValue(ctx, result);
+        table->method_names = std::move(method_names);
+        JS_FreeValue(ctx, result);
         return true;
     }
 
@@ -5621,97 +5692,113 @@ private:
             // §7.2: zero bindings keep the exact single-runtime path.
             return true;
         }
-        TJSRunOptions options;
-        TJS_DefaultOptions(&options);
-        options.mem_limit = 64 * 1024 * 1024;  // Binding Heap, §5.3
-        options.stack_size = config_.js_stack_size;
-        options.skip_run_main = true;
-        // The same bootstrap bytecode installs the profile global
-        // surface; the bootstrapping_binding_runtime_ flag switches the
-        // native layer to the bridge-less Binding shape.
-        options.bootstrap = bootstrap;
-        options.bootstrap_opaque = this;
-        options.shared_loop = TJS_GetLoop(runtime_);
-        bootstrapping_binding_runtime_ = true;
-        binding_runtime_ = TJS_NewRuntimeOptions(&options);
-        bootstrapping_binding_runtime_ = false;
-        if (binding_runtime_ == NULL) {
-            *error = "binding runtime creation failed";
-            return false;
-        }
-        binding_ctx_ = TJS_GetJSContext(binding_runtime_);
-        if (binding_ctx_ == NULL) {
-            *error = "binding runtime has no context";
-            return false;
-        }
-        JS_SetInterruptHandler(
-            JS_GetRuntime(binding_ctx_), binding_interrupt_handler, this);
-        // Capture the bootstrap intrinsics before any Host package evaluates.
-        // A package may mutate its shared Binding global, but RPC plumbing for
-        // every package must continue to use the original Promise and abort
-        // operations rather than attacker-visible property lookups.
-        JSValue global = JS_GetGlobalObject(binding_ctx_);
-        binding_promise_ctor_ =
-            JS_GetPropertyStr(binding_ctx_, global, "Promise");
-        binding_abort_controller_ctor_ =
-            JS_GetPropertyStr(binding_ctx_, global, "AbortController");
-        JS_FreeValue(binding_ctx_, global);
-        if (JS_IsException(binding_promise_ctor_) ||
-            !JS_IsConstructor(binding_ctx_, binding_promise_ctor_) ||
-            JS_IsException(binding_abort_controller_ctor_) ||
-            !JS_IsConstructor(binding_ctx_, binding_abort_controller_ctor_)) {
-            *error = "binding runtime intrinsics are unavailable";
-            return false;
-        }
-        binding_promise_resolve_ = JS_GetPropertyStr(
-            binding_ctx_, binding_promise_ctor_, "resolve");
-        JSValue promise_prototype = JS_GetPropertyStr(
-            binding_ctx_, binding_promise_ctor_, "prototype");
-        if (!JS_IsException(promise_prototype)) {
-            binding_promise_then_ = JS_GetPropertyStr(
-                binding_ctx_, promise_prototype, "then");
-        }
-        JS_FreeValue(binding_ctx_, promise_prototype);
-        JSValue abort_prototype = JS_GetPropertyStr(
-            binding_ctx_, binding_abort_controller_ctor_, "prototype");
-        if (!JS_IsException(abort_prototype)) {
-            binding_abort_ = JS_GetPropertyStr(
-                binding_ctx_, abort_prototype, "abort");
-        }
-        JS_FreeValue(binding_ctx_, abort_prototype);
-        if (!JS_IsFunction(binding_ctx_, binding_promise_resolve_) ||
-            !JS_IsFunction(binding_ctx_, binding_promise_then_) ||
-            !JS_IsFunction(binding_ctx_, binding_abort_)) {
-            *error = "binding runtime control intrinsics are unavailable";
-            return false;
-        }
-        JS_SetModuleLoaderFunc2(
-            JS_GetRuntime(binding_ctx_),
-            binding_normalize_module,
-            binding_module_load,
-            deny_attributes,
-            this);
-        install_binding_async_hooks();
-        // The Binding Runtime's job queue is pumped by the User runtime's
-        // loop; it never calls TJS_Run itself.
-        TJS_StartRuntimeJobs(binding_runtime_);
+        // §5.1: one runtime/context per Binding. Each table owns its
+        // runtime, globals, module cache and job queue; nothing crosses
+        // between Binding packages except the neutral C++ RPC queues.
         for (size_t index = 0; index < bindings_.size(); ++index) {
+            BindingRuntimeMethodTable table;
+            table.id = bindings_[index].name;
+            table.policy =
+                binding_policies_.policy(bindings_[index].name);
+            TJSRunOptions options;
+            TJS_DefaultOptions(&options);
+            options.mem_limit = 64 * 1024 * 1024;  // Binding Heap, §5.3
+            options.stack_size = config_.js_stack_size;
+            options.skip_run_main = true;
+            // The same bootstrap bytecode installs the profile global
+            // surface; the bootstrapping_binding_runtime_ flag switches the
+            // native layer to the bridge-less Binding shape.
+            options.bootstrap = bootstrap;
+            options.bootstrap_opaque = this;
+            options.shared_loop = TJS_GetLoop(runtime_);
+            bootstrapping_binding_runtime_ = true;
+            table.runtime = TJS_NewRuntimeOptions(&options);
+            bootstrapping_binding_runtime_ = false;
+            if (table.runtime == NULL) {
+                *error = "binding runtime creation failed for " + table.id;
+                return false;
+            }
+            table.ctx = TJS_GetJSContext(table.runtime);
+            if (table.ctx == NULL) {
+                release_binding_table(&table);
+                *error = "binding runtime has no context: " + table.id;
+                return false;
+            }
+            JS_SetInterruptHandler(
+                JS_GetRuntime(table.ctx), binding_interrupt_handler, this);
+            // Capture this runtime's intrinsics before any Host package
+            // evaluates. A package may mutate its own global, but RPC
+            // plumbing for this package must continue to use the original
+            // Promise and abort operations rather than attacker-visible
+            // property lookups.
+            JSValue global = JS_GetGlobalObject(table.ctx);
+            table.promise_ctor =
+                JS_GetPropertyStr(table.ctx, global, "Promise");
+            table.abort_controller_ctor =
+                JS_GetPropertyStr(table.ctx, global, "AbortController");
+            JS_FreeValue(table.ctx, global);
+            if (JS_IsException(table.promise_ctor) ||
+                !JS_IsConstructor(table.ctx, table.promise_ctor) ||
+                JS_IsException(table.abort_controller_ctor) ||
+                !JS_IsConstructor(
+                    table.ctx, table.abort_controller_ctor)) {
+                release_binding_table(&table);
+                *error = "binding runtime intrinsics are unavailable: " +
+                         table.id;
+                return false;
+            }
+            table.promise_resolve = JS_GetPropertyStr(
+                table.ctx, table.promise_ctor, "resolve");
+            JSValue promise_prototype = JS_GetPropertyStr(
+                table.ctx, table.promise_ctor, "prototype");
+            if (!JS_IsException(promise_prototype)) {
+                table.promise_then = JS_GetPropertyStr(
+                    table.ctx, promise_prototype, "then");
+            }
+            JS_FreeValue(table.ctx, promise_prototype);
+            JSValue abort_prototype = JS_GetPropertyStr(
+                table.ctx, table.abort_controller_ctor, "prototype");
+            if (!JS_IsException(abort_prototype)) {
+                table.abort = JS_GetPropertyStr(
+                    table.ctx, abort_prototype, "abort");
+            }
+            JS_FreeValue(table.ctx, abort_prototype);
+            if (!JS_IsFunction(table.ctx, table.promise_resolve) ||
+                !JS_IsFunction(table.ctx, table.promise_then) ||
+                !JS_IsFunction(table.ctx, table.abort)) {
+                release_binding_table(&table);
+                *error = "binding runtime control intrinsics are unavailable: " +
+                         table.id;
+                return false;
+            }
+            JS_SetModuleLoaderFunc2(
+                JS_GetRuntime(table.ctx),
+                binding_normalize_module,
+                binding_module_load,
+                deny_attributes,
+                this);
+            install_binding_async_hooks(table.ctx);
+            // Each Binding Runtime's job queue is pumped by the User
+            // runtime's loop; it never calls TJS_Run itself.
+            TJS_StartRuntimeJobs(table.runtime);
+
             // Resolve imports as this package, while module evaluation,
             // factory execution and method-table inspection retain no
             // native capability/owner token.
-            loading_binding_id_ = bindings_[index].name;
+            loading_binding_id_ = table.id;
             current_binding_id_.clear();
             current_binding_request_id_ = 0;
             const bool loaded =
-                load_binding_package(bindings_[index], error);
+                load_binding_package(bindings_[index], &table, error);
             loading_binding_id_.clear();
             current_binding_id_.clear();
             current_binding_request_id_ = 0;
             if (!loaded) {
+                release_binding_table(&table);
                 return false;
             }
-            binding_table_index_[bindings_[index].name] =
-                binding_tables_.size() - 1;
+            binding_table_index_[table.id] = binding_tables_.size();
+            binding_tables_.push_back(std::move(table));
         }
         return true;
     }
@@ -5896,7 +5983,8 @@ private:
         call.deadline_ns = token->deadline_ns;
         call.user_resolve = resolving[0];
         call.user_reject = resolving[1];
-        call.abort_controller = self->new_binding_abort_controller();
+        call.abort_controller =
+            self->new_binding_abort_controller(table);
         const uint64_t call_id = self->allocate_binding_call_id();
         if (call_id == 0) {
             self->self_finish_binding_call(call);
@@ -5910,35 +5998,38 @@ private:
         return promise;
     }
 
-    // Creates an AbortController inside the Binding Runtime; cancel and
-    // deadline abort it, and the call object exposes its signal.
-    JSValue new_binding_abort_controller() {
-        if (!JS_IsConstructor(
-                binding_ctx_, binding_abort_controller_ctor_)) {
+    // Creates an AbortController inside the target Binding Runtime; cancel
+    // and deadline abort it, and the call object exposes its signal.
+    JSValue new_binding_abort_controller(
+        const BindingRuntimeMethodTable &table) {
+        if (table.ctx == NULL ||
+            !JS_IsConstructor(table.ctx, table.abort_controller_ctor)) {
             return JS_UNDEFINED;
         }
         return JS_CallConstructor(
-            binding_ctx_, binding_abort_controller_ctor_, 0, NULL);
+            table.ctx, table.abort_controller_ctor, 0, NULL);
     }
 
-    JSValue binding_abort_signal(JSValueConst controller) {
+    JSValue binding_abort_signal(const BindingRuntimeMethodTable &table,
+                                 JSValueConst controller) {
+        JSContext *ctx = table.ctx;
         // txiki's controller constructor creates `signal` as an own data
         // property. Read the descriptor directly so a package cannot replace
         // a prototype getter and execute code inside the RPC setup path.
-        JSAtom signal_atom = JS_NewAtom(binding_ctx_, "signal");
+        JSAtom signal_atom = JS_NewAtom(ctx, "signal");
         JSPropertyDescriptor descriptor;
         const int present = JS_GetOwnProperty(
-            binding_ctx_, &descriptor, controller, signal_atom);
-        JS_FreeAtom(binding_ctx_, signal_atom);
+            ctx, &descriptor, controller, signal_atom);
+        JS_FreeAtom(ctx, signal_atom);
         if (present <= 0) {
             return JS_EXCEPTION;
         }
         const bool accessor = !JS_IsUndefined(descriptor.getter) ||
                               !JS_IsUndefined(descriptor.setter);
-        JS_FreeValue(binding_ctx_, descriptor.getter);
-        JS_FreeValue(binding_ctx_, descriptor.setter);
+        JS_FreeValue(ctx, descriptor.getter);
+        JS_FreeValue(ctx, descriptor.setter);
         if (accessor) {
-            JS_FreeValue(binding_ctx_, descriptor.value);
+            JS_FreeValue(ctx, descriptor.value);
             return JS_EXCEPTION;
         }
         return descriptor.value;
@@ -6015,33 +6106,38 @@ private:
     // Takes ownership of `error`. Only a live dispatched call may enter the
     // result queue; cancellation erases the table entry, so a late Promise
     // reaction is an idempotent no-op.
-    void settle_binding_call_error(uint64_t call_id, JSValue error) {
+    void settle_binding_call_error(uint64_t call_id,
+                                   const BindingRuntimeMethodTable &table,
+                                   JSValue error) {
+        JSContext *ctx = table.ctx;
         std::map<uint64_t, PendingBindingCall>::iterator found =
             pending_binding_calls_.find(call_id);
         if (found == pending_binding_calls_.end() ||
             found->second.state != BindingCallState::kDispatched) {
-            JS_FreeValue(binding_ctx_, error);
+            JS_FreeValue(ctx, error);
             return;
         }
         PendingBindingCall &call = found->second;
-        JS_FreeValue(binding_ctx_, call.binding_error);
+        JS_FreeValue(ctx, call.binding_error);
         call.binding_error = error;
-        JS_FreeValue(binding_ctx_, call.binding_result);
+        JS_FreeValue(ctx, call.binding_result);
         call.binding_result = JS_UNDEFINED;
         call.state = BindingCallState::kSettled;
         binding_to_user_.push_back(call_id);
     }
 
-    JSValue take_binding_exception(const char *fallback) {
-        JSValue exception = JS_GetException(binding_ctx_);
+    JSValue take_binding_exception(const BindingRuntimeMethodTable &table,
+                                   const char *fallback) {
+        JSContext *ctx = table.ctx;
+        JSValue exception = JS_GetException(ctx);
         if (!JS_IsUndefined(exception) && !JS_IsNull(exception)) {
             return exception;
         }
-        JS_FreeValue(binding_ctx_, exception);
-        JSValue error = JS_NewError(binding_ctx_);
+        JS_FreeValue(ctx, exception);
+        JSValue error = JS_NewError(ctx);
         JS_DefinePropertyValueStr(
-            binding_ctx_, error, "message",
-            JS_NewString(binding_ctx_, fallback), JS_PROP_C_W_E);
+            ctx, error, "message",
+            JS_NewString(ctx, fallback), JS_PROP_C_W_E);
         return error;
     }
 
@@ -6049,7 +6145,7 @@ private:
     // the worker's single thread, between User phases — the same-thread
     // sequential entry the scheduler guarantees).
     void pump_binding_calls() {
-        if (binding_ctx_ == NULL || user_to_binding_.empty()) {
+        if (binding_tables_.empty() || user_to_binding_.empty()) {
             return;
         }
         const uint64_t call_id = user_to_binding_.front();
@@ -6073,83 +6169,80 @@ private:
             call.binding_id, call.request_id);
         const BindingRuntimeMethodTable &table =
             binding_tables_[call.table_index];
+        JSContext *ctx = table.ctx;
         JSValue method =
-            JS_GetPropertyStr(binding_ctx_, table.factory_object,
+            JS_GetPropertyStr(ctx, table.factory_object,
                               call.method.c_str());
         if (JS_IsException(method)) {
-            JS_FreeValue(binding_ctx_, method);
-            settle_binding_call_error(
-                call_id,
-                take_binding_exception("binding method lookup failed"));
+            JS_FreeValue(ctx, method);
+            settle_binding_call_error(call_id, table,
+                take_binding_exception(table, "binding method lookup failed"));
             return;
         }
-        if (!JS_IsFunction(binding_ctx_, method)) {
-            JS_FreeValue(binding_ctx_, method);
-            JSValue error = JS_NewError(binding_ctx_);
+        if (!JS_IsFunction(ctx, method)) {
+            JS_FreeValue(ctx, method);
+            JSValue error = JS_NewError(ctx);
             JS_DefinePropertyValueStr(
-                binding_ctx_, error, "message",
-                JS_NewString(binding_ctx_, "binding method is unavailable"),
+                ctx, error, "message",
+                JS_NewString(ctx, "binding method is unavailable"),
                 JS_PROP_C_W_E);
-            settle_binding_call_error(call_id, error);
+            settle_binding_call_error(call_id, table, error);
             return;
         }
-        JSValue input = capsid::neutral_to_js(binding_ctx_, call.input);
-        JSValue call_object = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        JSValue input = capsid::neutral_to_js(ctx, call.input);
+        JSValue call_object = JS_NewObjectProto(ctx, JS_NULL);
         if (JS_IsException(input) || JS_IsException(call_object)) {
-            JS_FreeValue(binding_ctx_, input);
-            JS_FreeValue(binding_ctx_, call_object);
-            JS_FreeValue(binding_ctx_, method);
-            settle_binding_call_error(
-                call_id,
-                take_binding_exception("binding call setup failed"));
+            JS_FreeValue(ctx, input);
+            JS_FreeValue(ctx, call_object);
+            JS_FreeValue(ctx, method);
+            settle_binding_call_error(call_id, table,
+                take_binding_exception(table, "binding call setup failed"));
             return;
         }
         bool call_object_ok =
             JS_SetPropertyStr(
-                binding_ctx_, call_object, "requestId",
-                JS_NewBigUint64(binding_ctx_, call.request_id)) >= 0 &&
+                ctx, call_object, "requestId",
+                JS_NewBigUint64(ctx, call.request_id)) >= 0 &&
             JS_SetPropertyStr(
-                binding_ctx_, call_object, "deadline",
-                JS_NewBigUint64(binding_ctx_, call.deadline_ns)) >= 0;
+                ctx, call_object, "deadline",
+                JS_NewBigUint64(ctx, call.deadline_ns)) >= 0;
         if (!JS_IsUndefined(call.abort_controller)) {
-            JSValue signal = binding_abort_signal(call.abort_controller);
+            JSValue signal = binding_abort_signal(table, call.abort_controller);
             if (JS_IsException(signal)) {
-                JS_FreeValue(binding_ctx_, signal);
+                JS_FreeValue(ctx, signal);
                 call_object_ok = false;
             } else if (JS_SetPropertyStr(
-                           binding_ctx_, call_object, "signal", signal) < 0) {
+                           ctx, call_object, "signal", signal) < 0) {
                 call_object_ok = false;
             }
         } else {
             call_object_ok =
-                JS_SetPropertyStr(binding_ctx_, call_object, "signal",
+                JS_SetPropertyStr(ctx, call_object, "signal",
                                   JS_UNDEFINED) >= 0 &&
                 call_object_ok;
         }
         call_object_ok = call_object_ok &&
-                         JS_FreezeObject(binding_ctx_, call_object) >= 0;
+                         JS_FreezeObject(ctx, call_object) >= 0;
         if (!call_object_ok) {
-            JS_FreeValue(binding_ctx_, input);
-            JS_FreeValue(binding_ctx_, call_object);
-            JS_FreeValue(binding_ctx_, method);
-            settle_binding_call_error(
-                call_id,
-                take_binding_exception("binding call metadata failed"));
+            JS_FreeValue(ctx, input);
+            JS_FreeValue(ctx, call_object);
+            JS_FreeValue(ctx, method);
+            settle_binding_call_error(call_id, table,
+                take_binding_exception(table, "binding call metadata failed"));
             return;
         }
         JSValue args[2] = { input, call_object };
         JSValue result = JS_Call(
-            binding_ctx_, method, table.factory_object, 2, args);
-        JS_FreeValue(binding_ctx_, input);
-        JS_FreeValue(binding_ctx_, call_object);
-        JS_FreeValue(binding_ctx_, method);
+            ctx, method, table.factory_object, 2, args);
+        JS_FreeValue(ctx, input);
+        JS_FreeValue(ctx, call_object);
+        JS_FreeValue(ctx, method);
         if (JS_IsException(result)) {
             const bool interrupted =
                 binding_interrupted_call_id_ == call_id;
-            JS_FreeValue(binding_ctx_, result);
-            settle_binding_call_error(
-                call_id,
-                take_binding_exception("binding call threw"));
+            JS_FreeValue(ctx, result);
+            settle_binding_call_error(call_id, table,
+                take_binding_exception(table, "binding call threw"));
             if (interrupted) {
                 // A synchronous CPU loop is an uninterruptible-cooperation
                 // violation: the call is settled as an error and the whole
@@ -6160,49 +6253,46 @@ private:
         }
         // §5.2: Promise.resolve() unifies sync and async returns.
         JSValue resolved = JS_Call(
-            binding_ctx_, binding_promise_resolve_,
-            binding_promise_ctor_, 1, &result);
-        JS_FreeValue(binding_ctx_, result);
+            ctx, table.promise_resolve,
+            table.promise_ctor, 1, &result);
+        JS_FreeValue(ctx, result);
         if (JS_IsException(resolved)) {
-            JS_FreeValue(binding_ctx_, resolved);
-            settle_binding_call_error(
-                call_id,
-                take_binding_exception("binding result normalization failed"));
+            JS_FreeValue(ctx, resolved);
+            settle_binding_call_error(call_id, table,
+                take_binding_exception(table, "binding result normalization failed"));
             return;
         }
         JSValue data =
-            capsid::binding_call_id_to_js(binding_ctx_, call_id);
+            capsid::binding_call_id_to_js(ctx, call_id);
         JSValue on_fulfilled = JS_NewCFunctionData2(
-            binding_ctx_, binding_fulfilled, "onFulfilled", 1, 0, 1,
+            ctx, binding_fulfilled, "onFulfilled", 1, 0, 1,
             &data);
         JSValue on_rejected = JS_NewCFunctionData2(
-            binding_ctx_, binding_rejected, "onRejected", 1, 0, 1, &data);
-        JS_FreeValue(binding_ctx_, data);
+            ctx, binding_rejected, "onRejected", 1, 0, 1, &data);
+        JS_FreeValue(ctx, data);
         if (JS_IsException(on_fulfilled) ||
             JS_IsException(on_rejected)) {
-            JS_FreeValue(binding_ctx_, on_fulfilled);
-            JS_FreeValue(binding_ctx_, on_rejected);
-            JS_FreeValue(binding_ctx_, resolved);
-            settle_binding_call_error(
-                call_id,
-                take_binding_exception("binding settlement setup failed"));
+            JS_FreeValue(ctx, on_fulfilled);
+            JS_FreeValue(ctx, on_rejected);
+            JS_FreeValue(ctx, resolved);
+            settle_binding_call_error(call_id, table,
+                take_binding_exception(table, "binding settlement setup failed"));
             return;
         }
         JSValue handlers[2] = { on_fulfilled, on_rejected };
         JSValue then_result = JS_Call(
-            binding_ctx_, binding_promise_then_,
+            ctx, table.promise_then,
             resolved, 2, handlers);
-        JS_FreeValue(binding_ctx_, on_fulfilled);
-        JS_FreeValue(binding_ctx_, on_rejected);
-        JS_FreeValue(binding_ctx_, resolved);
+        JS_FreeValue(ctx, on_fulfilled);
+        JS_FreeValue(ctx, on_rejected);
+        JS_FreeValue(ctx, resolved);
         if (JS_IsException(then_result)) {
-            JS_FreeValue(binding_ctx_, then_result);
-            settle_binding_call_error(
-                call_id,
-                take_binding_exception("binding settlement failed"));
+            JS_FreeValue(ctx, then_result);
+            settle_binding_call_error(call_id, table,
+                take_binding_exception(table, "binding settlement failed"));
             return;
         }
-        JS_FreeValue(binding_ctx_, then_result);
+        JS_FreeValue(ctx, then_result);
         // The .then handlers settle the call on a later job tick.
     }
 
@@ -6221,6 +6311,9 @@ private:
             if (call.state != BindingCallState::kSettled) {
                 continue;
             }
+            const BindingRuntimeMethodTable &table =
+                binding_tables_[call.table_index];
+            JSContext *binding_ctx = table.ctx;
             JSValue handler =
                 JS_IsUndefined(call.binding_error)
                     ? call.user_resolve
@@ -6231,7 +6324,7 @@ private:
                 capsid::NeutralValue neutral;
                 std::string clone_error;
                 if (!capsid::neutral_from_js(
-                        binding_ctx_, call.binding_result, &neutral,
+                        binding_ctx, call.binding_result, &neutral,
                         &clone_error)) {
                     payload = JS_NewError(ctx_);
                     JS_DefinePropertyValueStr(
@@ -6255,14 +6348,14 @@ private:
                 std::string error_text;
                 if (JS_IsException(call.binding_error)) {
                     error_text = "binding call failed";
-                    JS_FreeValue(binding_ctx_, call.binding_error);
+                    JS_FreeValue(binding_ctx, call.binding_error);
                     call.binding_error = JS_UNDEFINED;
                 } else {
                     const char *text =
-                        JS_ToCString(binding_ctx_, call.binding_error);
+                        JS_ToCString(binding_ctx, call.binding_error);
                     error_text = text ? text : "binding call failed";
                     if (text != NULL) {
-                        JS_FreeCString(binding_ctx_, text);
+                        JS_FreeCString(binding_ctx, text);
                     }
                 }
 
@@ -6282,15 +6375,18 @@ private:
 
     // Frees every cross-runtime JSValue a pending call owns.
     void self_finish_binding_call(PendingBindingCall &call) {
-        if (binding_ctx_ != NULL) {
-            if (!JS_IsUndefined(call.abort_controller)) {
-                JS_FreeValue(binding_ctx_, call.abort_controller);
-                call.abort_controller = JS_UNDEFINED;
+        if (call.table_index < binding_tables_.size()) {
+            JSContext *ctx = binding_tables_[call.table_index].ctx;
+            if (ctx != NULL) {
+                if (!JS_IsUndefined(call.abort_controller)) {
+                    JS_FreeValue(ctx, call.abort_controller);
+                    call.abort_controller = JS_UNDEFINED;
+                }
+                JS_FreeValue(ctx, call.binding_result);
+                call.binding_result = JS_UNDEFINED;
+                JS_FreeValue(ctx, call.binding_error);
+                call.binding_error = JS_UNDEFINED;
             }
-            JS_FreeValue(binding_ctx_, call.binding_result);
-            call.binding_result = JS_UNDEFINED;
-            JS_FreeValue(binding_ctx_, call.binding_error);
-            call.binding_error = JS_UNDEFINED;
         }
         JS_FreeValue(ctx_, call.user_resolve);
         call.user_resolve = JS_UNDEFINED;
@@ -6336,22 +6432,26 @@ private:
                 }
             }
             if (call.state == BindingCallState::kDispatched &&
-                binding_ctx_ != NULL &&
+                call.table_index < binding_tables_.size() &&
                 !JS_IsUndefined(call.abort_controller)) {
-                // AbortSignal listeners run synchronously. They are Binding
-                // code and may close owned sockets/files, so restore the same
-                // immutable owner token used by the original dispatch.
-                BindingWindowGuard binding_window(
-                    current_binding_id_, current_binding_request_id_,
-                    call.binding_id, call.request_id);
-                JSValue ignored = JS_Call(
-                    binding_ctx_, binding_abort_,
-                    call.abort_controller, 0, NULL);
-                if (JS_IsException(ignored)) {
-                    JSValue exception = JS_GetException(binding_ctx_);
-                    JS_FreeValue(binding_ctx_, exception);
+                const BindingRuntimeMethodTable &table =
+                    binding_tables_[call.table_index];
+                if (table.ctx != NULL) {
+                    // AbortSignal listeners run synchronously. They are Binding
+                    // code and may close owned sockets/files, so restore the
+                    // same immutable owner token used by the original dispatch.
+                    BindingWindowGuard binding_window(
+                        current_binding_id_, current_binding_request_id_,
+                        call.binding_id, call.request_id);
+                    JSValue ignored = JS_Call(
+                        table.ctx, table.abort,
+                        call.abort_controller, 0, NULL);
+                    if (JS_IsException(ignored)) {
+                        JSValue exception = JS_GetException(table.ctx);
+                        JS_FreeValue(table.ctx, exception);
+                    }
+                    JS_FreeValue(table.ctx, ignored);
                 }
-                JS_FreeValue(binding_ctx_, ignored);
             }
             JSValue error = JS_NewError(ctx_);
             JS_DefinePropertyValueStr(
@@ -7745,26 +7845,6 @@ private:
     // §7.3: per-Binding policies, compiled from the descriptors above and
     // fully separate from the User policy in config_.
     capsid::BindingPolicySet binding_policies_;
-    // §7.5: the single Binding Runtime, created only when bindings exist.
-    // It attaches to the User runtime's loop (shared_loop) and is pumped
-    // by it; heaps, globals, module loaders and job queues stay separate.
-    TJSRuntime *binding_runtime_;
-    JSContext *binding_ctx_;
-    // Captured before any Binding package evaluates. These keep RPC control
-    // flow independent of mutations to the shared Binding global object.
-    JSValue binding_promise_ctor_;
-    JSValue binding_promise_resolve_;
-    JSValue binding_promise_then_;
-    JSValue binding_abort_controller_ctor_;
-    JSValue binding_abort_;
-    struct BindingRuntimeMethodTable {
-        BindingRuntimeMethodTable() : policy(NULL),
-                                      factory_object(JS_UNDEFINED) {}
-        std::string id;
-        const capsid::BindingPolicy *policy;
-        JSValue factory_object;              // referenced
-        std::vector<std::string> method_names;  // Runtime-neutral bytes
-    };
     std::vector<BindingRuntimeMethodTable> binding_tables_;
     // Native capability identity. Non-empty only inside method dispatch or
     // an async continuation captured from that dispatch.
