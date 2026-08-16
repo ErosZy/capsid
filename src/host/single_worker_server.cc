@@ -360,6 +360,7 @@ public:
           options_(std::move(options)),
           signals_(ioc_),
           executor_(std::make_unique<WorkerExecutor>()) {
+        executor_->set_log_identity(options_.application, std::string());
         // Events queued by the executor's worker thread wake this io thread
         // through a weak post: the pending handler must never keep the Impl
         // alive on its own — once the facade stopped and released it, a
@@ -1722,9 +1723,20 @@ void Impl::handle_worker_event(WorkerEvent event) {
         // forwarding — bounded app lane, droppable and counted; the text
         // is the application's own emitted log line (the worker already
         // sanitizes secrets out of LOG frames).
-        emit_log(log(), LogLane::kApp,
-                 {.event = log_events::kAppLog,
-                  .message = event.text});
+        {
+            LogFields fields;
+            fields.level = event.binding_log ? event.log_level : "info";
+            fields.event = log_events::kAppLog;
+            fields.app = event.application_id;
+            fields.generation = event.generation_digest;
+            fields.binding = event.binding_id;
+            if (event.request_id != 0) {
+                fields.request_id = std::to_string(event.request_id);
+            }
+            fields.fields = event.log_fields_json;
+            fields.message = event.text;
+            emit_log(log(), LogLane::kApp, std::move(fields));
+        }
         return;
     case WorkerEvent::Type::kError:
         // A worker error is a process-lifecycle control-plane event.

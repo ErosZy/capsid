@@ -32,6 +32,9 @@ static const uint32_t kFlagRequestEnd = 16u;
 // kMaxFixedBodySize and use one fixed-length HTTP write; larger, credit-bound,
 // or streamed responses keep flags == 0 and the original pipelined sequence.
 static const uint32_t kFlagResponseFixedBody = 1u;
+// LOG flag: payload uses the authenticated Binding-log v1 envelope. User
+// JavaScript cannot choose frame flags, so it cannot forge Binding metadata.
+static const uint32_t kFlagBindingLog = 1u;
 static const uint32_t kErrorFlagTimeout = 1u;
 static const uint32_t kReadySandboxFeatureMask = (1u << 10) - 1u;
 

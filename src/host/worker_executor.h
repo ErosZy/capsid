@@ -46,6 +46,8 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace capsid::host {
@@ -140,7 +142,23 @@ struct WorkerEvent {
     std::vector<std::pair<std::string, std::string>> headers;
     std::vector<std::uint8_t> body;
     std::string text;
+    // Populated only for authenticated kFlagBindingLog envelopes.
+    bool binding_log = false;
+    std::string log_level;
+    std::string binding_id;
+    std::string log_fields_json;
+    // Host-owned identity attached by the executor/pool, never accepted
+    // from worker payload bytes.
+    std::string application_id;
+    std::string generation_digest;
 };
+
+// Strict decoder shared by WorkerExecutor and the managed warmup path.
+// Authenticated Binding envelopes are length-framed and exact; malformed
+// payloads fail closed. Ordinary User-runtime LOG payloads remain opaque.
+bool decode_worker_log_event(const capsid_event& event,
+                             WorkerEvent* output,
+                             std::string* error);
 
 class WorkerExecutor {
 public:
@@ -149,8 +167,34 @@ public:
     // created and return false with *error set: ownership transfers to the
     // executor only on success, and from that moment destroy() runs
     // exclusively on the executor's reaper thread.
-    using WorkerFactory =
-        std::function<bool(capsid_worker** worker, std::string* error)>;
+    struct WorkerFactory {
+        using Callback =
+            std::function<bool(capsid_worker** worker, std::string* error)>;
+
+        WorkerFactory() = default;
+        WorkerFactory(const WorkerFactory&) = default;
+        WorkerFactory(WorkerFactory&&) noexcept = default;
+        WorkerFactory& operator=(const WorkerFactory&) = default;
+        WorkerFactory& operator=(WorkerFactory&&) noexcept = default;
+
+        template <typename F,
+                  typename = std::enable_if_t<!std::is_same_v<
+                      std::decay_t<F>, WorkerFactory>>>
+        WorkerFactory(F&& value)
+            : callback(std::forward<F>(value)) {}
+
+        bool operator()(capsid_worker** worker, std::string* error) const {
+            return callback && callback(worker, error);
+        }
+        explicit operator bool() const {
+            return static_cast<bool>(callback);
+        }
+
+        Callback callback;
+        // Baseline by default. A generation factory with Bindings must set
+        // the exact expected proof before it can be consumed by an executor.
+        capsid::WorkerReadyProof expected_ready;
+    };
     // Invoked (worker thread or owner thread, never under the executor's
     // mutex) whenever new events are queued, so the owner can schedule its
     // drain. Set once before start()/adopt().
@@ -210,6 +254,10 @@ public:
     // ---- event direction (worker thread → owner thread) ----------------
 
     void set_event_notifier(EventNotifier notifier);
+    // Must be called before start()/adopt(). These fields are Host-owned
+    // metadata appended to decoded log events; the worker cannot forge them.
+    void set_log_identity(std::string application_id,
+                          std::string generation_digest);
     // Swaps the event queue out under the mutex. The owner drains all
     // events in one call; the notifier fires on every empty→non-empty
     // transition and for the always-last kExit event.
@@ -304,6 +352,8 @@ private:
     std::atomic<std::uint64_t> inflight_ = 0;
     bool ready_ = false;
     bool ready_match_ = false;
+    std::string ready_error_;
+    capsid::WorkerReadyProof expected_ready_;
     // Binding v1 §4.3: the parsed READY sandbox proof (default-constructed
     // for a baseline payload).
     capsid::WorkerReadyProof ready_proof_;
@@ -311,6 +361,8 @@ private:
     bool exit_event_queued_ = false;
     capsid_worker* worker_ = nullptr;
     WorkerEventSource source_;
+    std::string log_application_id_;
+    std::string log_generation_digest_;
     std::optional<std::chrono::steady_clock::time_point> shutdown_deadline_;
     std::thread worker_thread_;
 };

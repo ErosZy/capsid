@@ -10,6 +10,7 @@
 
 #include "host/request_normalization.h"
 #include "host/response_body_batch.h"
+#include "host/structured_log.h"
 #include "host/worker_executor.h"
 
 #include <boost/asio/ip/tcp.hpp>
@@ -1231,7 +1232,22 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
         return;
     }
     case WorkerEvent::Type::kLog:
-        write_stderr(event.text);
+        if (options_.log != nullptr) {
+            LogFields fields;
+            fields.level = event.binding_log ? event.log_level : "info";
+            fields.event = log_events::kAppLog;
+            fields.app = event.application_id;
+            fields.generation = event.generation_digest;
+            fields.binding = event.binding_id;
+            if (event.request_id != 0) {
+                fields.request_id = std::to_string(event.request_id);
+            }
+            fields.fields = event.log_fields_json;
+            fields.message = event.text;
+            options_.log->log(LogLane::kApp, std::move(fields));
+        } else {
+            write_stderr(event.text);
+        }
         return;
     case WorkerEvent::Type::kError:
         write_stderr(std::string("capsid-host: worker error: ") + event.text +

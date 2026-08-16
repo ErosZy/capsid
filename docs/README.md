@@ -57,6 +57,8 @@
   namespace、出站网络策略与明确限制
 - [Binding v1 技术设计](binding-technical-design.md)：同进程双 Runtime、
   Package/配置契约、异步 RPC、TJS 能力门禁及 Seccomp/Landlock Profile
+- [Binding v1 安全审计修复计划](superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md)：
+  对抗性验收顺序、Red/Green 测试要求及最终证据门禁
 
 ### 正确性与兼容性
 

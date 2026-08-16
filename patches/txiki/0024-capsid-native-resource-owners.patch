@@ -1,0 +1,1019 @@
+diff --git a/src/httpclient.c b/src/httpclient.c
+index c6b07f9..9c566c6 100644
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -52,6 +52,7 @@ typedef struct {
+     JSContext *ctx;
+     JSValue callbacks[HC_CALLBACK_MAX];
+     void *ctx_data; /* captured async context */
++    void *owner; /* immutable Binding resource owner */
+     TJSRuntime *qrt; /* for defensive finalizer release */
+     JSValue this_val;
+     struct lws *wsi;
+@@ -84,6 +85,8 @@ static void tjs_httpclient_finalizer(JSRuntime *rt, JSValue val) {
+             h->qrt->async_ctx_hooks.release(h->ctx_data, h->qrt->async_ctx_opaque);
+             h->ctx_data = NULL;
+         }
++        tjs_release_resource_owner_rt(rt, h->owner);
++        h->owner = NULL;
+         for (int i = 0; i < HC_CALLBACK_MAX; i++) {
+             JS_FreeValueRT(rt, h->callbacks[i]);
+         }
+@@ -120,7 +123,11 @@ static JSClassDef tjs_httpclient_class = {
+ };
+ 
+ static TJSHttpClient *tjs_httpclient_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_httpclient_class_id);
++    TJSHttpClient *h = JS_GetOpaque2(ctx, obj, tjs_httpclient_class_id);
++    if (h && tjs_require_resource_owner(ctx, h->owner) < 0) {
++        return NULL;
++    }
++    return h;
+ }
+ 
+ static void maybe_invoke_callback(TJSHttpClient *h, int callback, int argc, JSValue *argv) {
+@@ -327,8 +334,12 @@ static int tjs_httpclient_egress_allowed(TJSHttpClient *h, const char *host, uin
+     if (!qrt || !qrt->egress.check) {
+         return 0;
+     }
+-    return qrt->egress.check(qrt->egress.opaque, host, port, address, address_len,
+-                             reason, reason_size);
++    void *previous_context = NULL;
++    tjs_enter_ctx(h->ctx, h->owner, &previous_context);
++    int allowed = qrt->egress.check(qrt->egress.opaque, host, port, address, address_len,
++                                    reason, reason_size);
++    tjs_leave_ctx(h->ctx, &previous_context);
++    return allowed;
+ }
+ #endif
+ 
+@@ -686,6 +697,14 @@ static JSValue tjs_httpclient_constructor(JSContext *ctx, JSValue new_target, in
+         JS_FreeValue(ctx, obj);
+         return JS_EXCEPTION;
+     }
++    h->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &h->owner) < 0) {
++        tjs_release_ctx(ctx, h->ctx_data);
++        h->ctx_data = NULL;
++        js_free(ctx, h);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+     h->url = JS_NULL;
+     h->this_val = JS_UNDEFINED;
+     tbuf_init(ctx, &h->req_headers);
+diff --git a/src/mod_fs.c b/src/mod_fs.c
+index 5917a02..810366b 100644
+--- a/src/mod_fs.c
++++ b/src/mod_fs.c
+@@ -34,6 +34,7 @@ typedef struct {
+     JSContext *ctx;
+     uv_file fd;
+     JSValue path;
++    void *owner;
+ } TJSFile;
+ 
+ static void tjs_file_finalizer(JSRuntime *rt, JSValue val) {
+@@ -44,6 +45,7 @@ static void tjs_file_finalizer(JSRuntime *rt, JSValue val) {
+             uv_fs_close(NULL, &req, f->fd, NULL);
+             uv_fs_req_cleanup(&req);
+         }
++        tjs_release_resource_owner_rt(rt, f->owner);
+         JS_FreeValueRT(rt, f->path);
+         js_free_rt(rt, f);
+     }
+@@ -62,6 +64,7 @@ typedef struct {
+     JSValue path;
+     bool done;
+     bool reading;
++    void *owner;
+ } TJSDir;
+ 
+ static void tjs_dir_finalizer(JSRuntime *rt, JSValue val) {
+@@ -72,6 +75,7 @@ static void tjs_dir_finalizer(JSRuntime *rt, JSValue val) {
+             uv_fs_closedir(NULL, &req, d->dir, NULL);
+             uv_fs_req_cleanup(&req);
+         }
++        tjs_release_resource_owner_rt(rt, d->owner);
+         JS_FreeValueRT(rt, d->path);
+         js_free_rt(rt, d);
+     }
+@@ -148,13 +152,31 @@ static JSValue tjs_new_file(JSContext *ctx, uv_file fd, const char *path) {
+     f->path = JS_NewString(ctx, path);
+     f->ctx = ctx;
+     f->fd = fd;
++    f->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &f->owner) < 0) {
++        uv_fs_t req;
++        uv_fs_close(NULL, &req, fd, NULL);
++        uv_fs_req_cleanup(&req);
++        JS_FreeValue(ctx, f->path);
++        js_free(ctx, f);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+ 
+     JS_SetOpaque(obj, f);
+     return obj;
+ }
+ 
+ static TJSFile *tjs_file_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_file_class_id);
++    TJSFile *f = JS_GetOpaque2(ctx, obj, tjs_file_class_id);
++    if (f && tjs_require_resource_owner(ctx, f->owner) < 0) {
++        return NULL;
++    }
++    return f;
++}
++
++static TJSFile *tjs_file_get_unchecked(JSValue obj) {
++    return JS_GetOpaque(obj, tjs_file_class_id);
+ }
+ 
+ static JSValue tjs_new_dir(JSContext *ctx, uv_dir_t *dir, const char *path) {
+@@ -177,13 +199,31 @@ static JSValue tjs_new_dir(JSContext *ctx, uv_dir_t *dir, const char *path) {
+     d->dir = dir;
+     d->done = false;
+     d->reading = false;
++    d->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &d->owner) < 0) {
++        uv_fs_t req;
++        uv_fs_closedir(NULL, &req, dir, NULL);
++        uv_fs_req_cleanup(&req);
++        JS_FreeValue(ctx, d->path);
++        js_free(ctx, d);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+ 
+     JS_SetOpaque(obj, d);
+     return obj;
+ }
+ 
+ static TJSDir *tjs_dir_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_dir_class_id);
++    TJSDir *d = JS_GetOpaque2(ctx, obj, tjs_dir_class_id);
++    if (d && tjs_require_resource_owner(ctx, d->owner) < 0) {
++        return NULL;
++    }
++    return d;
++}
++
++static TJSDir *tjs_dir_get_unchecked(JSValue obj) {
++    return JS_GetOpaque(obj, tjs_dir_class_id);
+ }
+ 
+ static JSValue tjs_new_dirent(JSContext *ctx, uv_dirent_t *dent) {
+@@ -294,6 +334,8 @@ static void uv__fs_req_cb(uv_fs_t *req) {
+     }
+ 
+     JSContext *ctx = fr->ctx;
++    void *previous_context = NULL;
++    tjs_enter_ctx(ctx, fr->result.ctx_data, &previous_context);
+     JSValue arg;
+     TJSFile *f;
+     TJSDir *d;
+@@ -302,7 +344,7 @@ static void uv__fs_req_cb(uv_fs_t *req) {
+     /* Clear the reading flag on every readdir completion (success and error)
+      * so the next dir.next() can proceed. */
+     if (req->fs_type == UV_FS_READDIR) {
+-        d = tjs_dir_get(ctx, fr->obj);
++        d = tjs_dir_get_unchecked(fr->obj);
+         if (d) {
+             d->reading = false;
+         }
+@@ -320,7 +362,7 @@ static void uv__fs_req_cb(uv_fs_t *req) {
+             break;
+         case UV_FS_CLOSE:
+             arg = JS_UNDEFINED;
+-            f = tjs_file_get(ctx, fr->obj);
++            f = tjs_file_get_unchecked(fr->obj);
+             CHECK_NOT_NULL(f);
+             f->fd = -1;
+             JS_FreeValue(ctx, f->path);
+@@ -383,7 +425,7 @@ static void uv__fs_req_cb(uv_fs_t *req) {
+ 
+         case UV_FS_CLOSEDIR:
+             arg = JS_UNDEFINED;
+-            d = tjs_dir_get(ctx, fr->obj);
++            d = tjs_dir_get_unchecked(fr->obj);
+             CHECK_NOT_NULL(d);
+             d->dir = NULL;
+             JS_FreeValue(ctx, d->path);
+@@ -391,7 +433,7 @@ static void uv__fs_req_cb(uv_fs_t *req) {
+             break;
+ 
+         case UV_FS_READDIR:
+-            d = tjs_dir_get(ctx, fr->obj);
++            d = tjs_dir_get_unchecked(fr->obj);
+             d->done = fr->req.result == 0;
+             arg = JS_NewObjectProto(ctx, JS_NULL);
+             JS_DefinePropertyValueStr(ctx, arg, "done", JS_NewBool(ctx, d->done), JS_PROP_C_W_E);
+@@ -407,6 +449,7 @@ static void uv__fs_req_cb(uv_fs_t *req) {
+ 
+ skip:
+     TJS_SettlePromise(ctx, &fr->result, is_reject, arg);
++    tjs_leave_ctx(ctx, &previous_context);
+ 
+     JS_FreeValue(ctx, fr->obj);
+     tjs_buf_ref_release(ctx, &fr->buf_ref);
+diff --git a/src/mod_fswatch.c b/src/mod_fswatch.c
+index 927d7b7..dfe2f75 100644
+--- a/src/mod_fswatch.c
++++ b/src/mod_fswatch.c
+@@ -33,6 +33,7 @@ typedef struct {
+     JSValue this_val;
+     int closed;
+     int finalized;
++    void *owner;
+ } TJSFsWatch;
+ 
+ static JSClassID tjs_fswatch_class_id;
+@@ -41,6 +42,14 @@ static TJSFsWatch *tjs_fswatch_get(JSValue obj) {
+     return JS_GetOpaque(obj, tjs_fswatch_class_id);
+ }
+ 
++static TJSFsWatch *tjs_fswatch_require(JSContext *ctx, JSValue obj) {
++    TJSFsWatch *fw = JS_GetOpaque2(ctx, obj, tjs_fswatch_class_id);
++    if (fw && tjs_require_resource_owner(ctx, fw->owner) < 0) {
++        return NULL;
++    }
++    return fw;
++}
++
+ static void uv__fsevent_close_cb(uv_handle_t *handle) {
+     TJSFsWatch *fw = handle->data;
+     if (fw) {
+@@ -60,6 +69,8 @@ static void maybe_close(TJSFsWatch *fw) {
+ static void tjs_fswatch_finalizer(JSRuntime *rt, JSValue val) {
+     TJSFsWatch *fw = tjs_fswatch_get(val);
+     if (fw) {
++        tjs_release_resource_owner_rt(rt, fw->owner);
++        fw->owner = NULL;
+         JS_FreeValueRT(rt, fw->callback);
+         JS_FreeValueRT(rt, fw->this_val);
+         fw->finalized = 1;
+@@ -85,7 +96,7 @@ static JSClassDef tjs_fswatch_class = {
+ };
+ 
+ static JSValue tjs_fswatch_close(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+-    TJSFsWatch *fw = tjs_fswatch_get(this_val);
++    TJSFsWatch *fw = tjs_fswatch_require(ctx, this_val);
+     if (!fw) {
+         return JS_EXCEPTION;
+     }
+@@ -102,9 +113,9 @@ static JSValue tjs_fswatch_close(JSContext *ctx, JSValue this_val, int argc, JSV
+ }
+ 
+ static JSValue tjs_fswatch_path_get(JSContext *ctx, JSValue this_val) {
+-    TJSFsWatch *fw = tjs_fswatch_get(this_val);
++    TJSFsWatch *fw = tjs_fswatch_require(ctx, this_val);
+     if (!fw) {
+-        return JS_UNDEFINED;
++        return JS_EXCEPTION;
+     }
+ 
+     char buf[1024];
+@@ -165,7 +176,7 @@ static void uv__fs_event_cb(uv_fs_event_t *handle, const char *filename, int eve
+         event,
+     };
+ 
+-    tjs_call_handler(ctx, fw->callback, countof(args), args);
++    tjs_call_handler_ctx(ctx, fw->owner, fw->callback, countof(args), args);
+ 
+     JS_FreeValue(ctx, args[0]);
+     JS_FreeValue(ctx, args[1]);
+@@ -177,6 +188,13 @@ static JSValue tjs_fs_watch(JSContext *ctx, JSValue this_val, int argc, JSValue
+         return JS_EXCEPTION;
+     }
+ 
++#ifdef TJS_RESTRICTED_CORE
++    if (!tjs_check_fs_access(ctx, path, 2)) {
++        JS_FreeCString(ctx, path);
++        return JS_EXCEPTION;
++    }
++#endif
++
+     if (!JS_IsFunction(ctx, argv[1])) {
+         JS_FreeCString(ctx, path);
+         return JS_ThrowTypeError(ctx, "no callback function provided");
+@@ -203,8 +221,20 @@ static JSValue tjs_fs_watch(JSContext *ctx, JSValue this_val, int argc, JSValue
+         return JS_ThrowInternalError(ctx, "couldn't initialize handle");
+     }
+ 
++    fw->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &fw->owner) < 0) {
++        JS_FreeCString(ctx, path);
++        JS_FreeValue(ctx, obj);
++        fw->handle.data = fw;
++        fw->finalized = 1;
++        uv_close((uv_handle_t *) &fw->handle, uv__fsevent_close_cb);
++        return JS_EXCEPTION;
++    }
++
+     r = uv_fs_event_start(&fw->handle, uv__fs_event_cb, path, UV_FS_EVENT_RECURSIVE);
+     if (r != 0) {
++        tjs_release_resource_owner(ctx, fw->owner);
++        fw->owner = NULL;
+         JS_FreeCString(ctx, path);
+         JS_FreeValue(ctx, obj);
+         /* The handle is already in the loop. Close it and let the close callback free fw. */
+diff --git a/src/mod_sqlite3.c b/src/mod_sqlite3.c
+index 89c6443..12ae518 100644
+--- a/src/mod_sqlite3.c
++++ b/src/mod_sqlite3.c
+@@ -32,6 +32,7 @@ static JSClassID tjs_sqlite3_class_id;
+ 
+ typedef struct {
+     sqlite3 *handle;
++    void *owner;
+ } TJSSqlite3Handle;
+ 
+ static void tjs_sqlite3_finalizer(JSRuntime *rt, JSValue val) {
+@@ -42,6 +43,7 @@ static void tjs_sqlite3_finalizer(JSRuntime *rt, JSValue val) {
+     if (h->handle) {
+         sqlite3_close_v2(h->handle);
+     }
++    tjs_release_resource_owner_rt(rt, h->owner);
+     js_free_rt(rt, h);
+ }
+ 
+@@ -66,19 +68,30 @@ static JSValue tjs_new_sqlite3(JSContext *ctx, sqlite3 *handle) {
+     }
+ 
+     h->handle = handle;
++    h->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &h->owner) < 0) {
++        js_free(ctx, h);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+ 
+     JS_SetOpaque(obj, h);
+     return obj;
+ }
+ 
+ static TJSSqlite3Handle *tjs_sqlite3_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_sqlite3_class_id);
++    TJSSqlite3Handle *h = JS_GetOpaque2(ctx, obj, tjs_sqlite3_class_id);
++    if (h && tjs_require_resource_owner(ctx, h->owner) < 0) {
++        return NULL;
++    }
++    return h;
+ }
+ 
+ static JSClassID tjs_sqlite3_stmt_class_id;
+ 
+ typedef struct {
+     sqlite3_stmt *stmt;
++    void *owner;
+ } TJSSqlite3Stmt;
+ 
+ static void tjs_sqlite3_stmt_finalizer(JSRuntime *rt, JSValue val) {
+@@ -90,6 +103,7 @@ static void tjs_sqlite3_stmt_finalizer(JSRuntime *rt, JSValue val) {
+         sqlite3_reset(h->stmt);
+         sqlite3_finalize(h->stmt);
+     }
++    tjs_release_resource_owner_rt(rt, h->owner);
+     js_free_rt(rt, h);
+ }
+ 
+@@ -114,13 +128,23 @@ static JSValue tjs_new_sqlite3_stmt(JSContext *ctx, sqlite3_stmt *stmt) {
+     }
+ 
+     h->stmt = stmt;
++    h->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &h->owner) < 0) {
++        js_free(ctx, h);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+ 
+     JS_SetOpaque(obj, h);
+     return obj;
+ }
+ 
+ static TJSSqlite3Stmt *tjs_sqlite3_stmt_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_sqlite3_stmt_class_id);
++    TJSSqlite3Stmt *h = JS_GetOpaque2(ctx, obj, tjs_sqlite3_stmt_class_id);
++    if (h && tjs_require_resource_owner(ctx, h->owner) < 0) {
++        return NULL;
++    }
++    return h;
+ }
+ 
+ JSValue tjs_throw_sqlite3_errno(JSContext *ctx, int err) {
+diff --git a/src/mod_streams.c b/src/mod_streams.c
+index 32414c7..d26c77e 100644
+--- a/src/mod_streams.c
++++ b/src/mod_streams.c
+@@ -60,6 +60,7 @@ typedef struct {
+     struct {
+         uint8_t *buf;
+     } read;
++    void *owner;
+ } TJSStream;
+ 
+ typedef struct {
+@@ -70,6 +71,14 @@ typedef struct {
+ static TJSStream *tjs_tcp_get(JSContext *ctx, JSValue obj);
+ static TJSStream *tjs_pipe_get(JSContext *ctx, JSValue obj);
+ 
++static TJSStream *tjs_stream_get_any(JSContext *ctx, JSValue obj, JSClassID *class_id) {
++    TJSStream *s = JS_GetAnyOpaque(obj, class_id);
++    if (s && tjs_require_resource_owner(ctx, s->owner) < 0) {
++        return NULL;
++    }
++    return s;
++}
++
+ static void uv__stream_close_cb(uv_handle_t *handle) {
+     TJSStream *s = handle->data;
+     CHECK_NOT_NULL(s);
+@@ -95,7 +104,7 @@ static void maybe_invoke_callback(TJSStream *s, int callback, int argc, JSValue
+         return;
+     }
+ 
+-    tjs_call_handler(ctx, func, argc, argv);
++    tjs_call_handler_ctx(ctx, s->owner, func, argc, argv);
+ 
+     for (int i = 0; i < argc; i++) {
+         JS_FreeValue(ctx, argv[i]);
+@@ -104,7 +113,7 @@ static void maybe_invoke_callback(TJSStream *s, int callback, int argc, JSValue
+ 
+ static JSValue tjs_stream_callback_get(JSContext *ctx, JSValue this_val, int magic) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -113,7 +122,7 @@ static JSValue tjs_stream_callback_get(JSContext *ctx, JSValue this_val, int mag
+ 
+ static JSValue tjs_stream_callback_set(JSContext *ctx, JSValue this_val, JSValue value, int magic) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -126,7 +135,7 @@ static JSValue tjs_stream_callback_set(JSContext *ctx, JSValue this_val, JSValue
+ 
+ static JSValue tjs_stream_close(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -190,7 +199,7 @@ static void uv__stream_read_cb(uv_stream_t *handle, ssize_t nread, const uv_buf_
+ 
+ static JSValue tjs_stream_start_read(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -214,7 +223,7 @@ static JSValue tjs_stream_start_read(JSContext *ctx, JSValue this_val, int argc,
+ 
+ static JSValue tjs_stream_stop_read(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -234,7 +243,7 @@ static JSValue tjs_stream_stop_read(JSContext *ctx, JSValue this_val, int argc,
+ 
+ static JSValue tjs_stream_ref(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -246,7 +255,7 @@ static JSValue tjs_stream_ref(JSContext *ctx, JSValue this_val, int argc, JSValu
+ 
+ static JSValue tjs_stream_unref(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -277,7 +286,7 @@ static void uv__stream_write_cb(uv_write_t *req, int status) {
+ 
+ static JSValue tjs_stream_write(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -346,7 +355,7 @@ static void uv__stream_shutdown_cb(uv_shutdown_t *req, int status) {
+ 
+ static JSValue tjs_stream_shutdown(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -370,7 +379,7 @@ static JSValue tjs_stream_shutdown(JSContext *ctx, JSValue this_val, int argc, J
+ 
+ static JSValue tjs_stream_fileno(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -457,7 +466,7 @@ static void uv__stream_connection_cb(uv_stream_t *handle, int status) {
+ 
+ static JSValue tjs_stream_listen(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -481,7 +490,7 @@ static JSValue tjs_stream_listen(JSContext *ctx, JSValue this_val, int argc, JSV
+ 
+ static JSValue tjs_stream_set_blocking(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     JSClassID class_id;
+-    TJSStream *s = JS_GetAnyOpaque(this_val, &class_id);
++    TJSStream *s = tjs_stream_get_any(ctx, this_val, &class_id);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -508,12 +517,22 @@ static JSValue tjs_init_stream(JSContext *ctx, JSValue obj, TJSStream *s) {
+         s->callbacks[i] = JS_UNDEFINED;
+     }
+ 
++    s->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &s->owner) < 0) {
++        s->finalized = 1;
++        maybe_close(s);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
++
+     JS_SetOpaque(obj, s);
+     return obj;
+ }
+ 
+ static void tjs_stream_finalizer(JSRuntime *rt, TJSStream *s) {
+     if (s) {
++        tjs_release_resource_owner_rt(rt, s->owner);
++        s->owner = NULL;
+         JS_FreeValueRT(rt, s->obj);
+         for (int i = 0; i < STREAM_CB_MAX; i++) {
+             JS_FreeValueRT(rt, s->callbacks[i]);
+@@ -593,7 +612,11 @@ static JSValue tjs_tcp_constructor(JSContext *ctx, JSValue new_target, int argc,
+ }
+ 
+ static TJSStream *tjs_tcp_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_tcp_class_id);
++    TJSStream *s = JS_GetOpaque2(ctx, obj, tjs_tcp_class_id);
++    if (s && tjs_require_resource_owner(ctx, s->owner) < 0) {
++        return NULL;
++    }
++    return s;
+ }
+ 
+ static JSValue tjs_tcp_getsockpeername(JSContext *ctx, JSValue this_val, int argc, JSValue *argv, int magic) {
+diff --git a/src/mod_tls.c b/src/mod_tls.c
+index 88e9500..bdb2a94 100644
+--- a/src/mod_tls.c
++++ b/src/mod_tls.c
+@@ -159,12 +159,21 @@ typedef struct TJSTlsStream {
+ 
+     /* Fixed read buffer — encrypted data is always copied into bio_in */
+     uint8_t read_buf[65536];
++    void *owner;
+ } TJSTlsStream;
+ 
+ static JSClassID tjs_tls_class_id;
+ 
+ static TJSTlsStream *tjs_tls_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_tls_class_id);
++    TJSTlsStream *s = JS_GetOpaque2(ctx, obj, tjs_tls_class_id);
++    if (s && tjs_require_resource_owner(ctx, s->owner) < 0) {
++        return NULL;
++    }
++    return s;
++}
++
++static TJSTlsStream *tjs_tls_get_unchecked(JSValue obj) {
++    return JS_GetOpaque(obj, tjs_tls_class_id);
+ }
+ 
+ /* Forward declarations */
+@@ -314,7 +323,7 @@ static void maybe_invoke_tls_callback(TJSTlsStream *s, int callback, int argc, J
+         }
+         return;
+     }
+-    tjs_call_handler(ctx, func, argc, argv);
++    tjs_call_handler_ctx(ctx, s->owner, func, argc, argv);
+     for (int i = 0; i < argc; i++) {
+         JS_FreeValue(ctx, argv[i]);
+     }
+@@ -410,7 +419,7 @@ static void tjs_tls_complete_accept(TJSTlsStream *client, JSValue error) {
+     JS_FreeValue(ctx, client->obj);
+     client->obj = JS_UNDEFINED;
+ 
+-    TJSTlsStream *server = tjs_tls_get(ctx, server_ref);
++    TJSTlsStream *server = tjs_tls_get_unchecked(server_ref);
+     if (!server) {
+         JS_FreeValue(ctx, server_ref);
+         JS_FreeValue(ctx, self_ref);
+@@ -910,7 +919,7 @@ static JSValue tjs_tls_get_alpn(JSContext *ctx, JSValue this_val, int argc, JSVa
+ }
+ 
+ static JSValue tjs_tls_cb_get(JSContext *ctx, JSValue this_val, int magic) {
+-    TJSTlsStream *s = JS_GetOpaque2(ctx, this_val, tjs_tls_class_id);
++    TJSTlsStream *s = tjs_tls_get(ctx, this_val);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -918,7 +927,7 @@ static JSValue tjs_tls_cb_get(JSContext *ctx, JSValue this_val, int magic) {
+ }
+ 
+ static JSValue tjs_tls_cb_set(JSContext *ctx, JSValue this_val, JSValue value, int magic) {
+-    TJSTlsStream *s = JS_GetOpaque2(ctx, this_val, tjs_tls_class_id);
++    TJSTlsStream *s = tjs_tls_get(ctx, this_val);
+     if (!s) {
+         return JS_EXCEPTION;
+     }
+@@ -935,6 +944,9 @@ static void tjs_tls_finalizer(JSRuntime *rt, JSValue val) {
+         return;
+     }
+ 
++    tjs_release_resource_owner_rt(rt, s->owner);
++    s->owner = NULL;
++
+     for (int i = 0; i < TLS_CB_MAX; i++) {
+         JS_FreeValueRT(rt, s->callbacks[i]);
+     }
+@@ -1158,6 +1170,13 @@ static JSValue tjs_new_tls(JSContext *ctx, int af) {
+         s->callbacks[i] = JS_UNDEFINED;
+     }
+ 
++    s->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &s->owner) < 0) {
++        JS_SetOpaque(obj, s);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
++
+     JS_SetOpaque(obj, s);
+     return obj;
+ }
+diff --git a/src/mod_udp.c b/src/mod_udp.c
+index 5d968b6..261df01 100644
+--- a/src/mod_udp.c
++++ b/src/mod_udp.c
+@@ -45,6 +45,7 @@ typedef struct {
+     struct {
+         uint8_t *buf;
+     } read;
++    void *owner;
+ } TJSUdp;
+ 
+ typedef struct {
+@@ -79,7 +80,7 @@ static void maybe_invoke_callback(TJSUdp *u, int callback, int argc, JSValue *ar
+         return;
+     }
+ 
+-    tjs_call_handler(ctx, func, argc, argv);
++    tjs_call_handler_ctx(ctx, u->owner, func, argc, argv);
+ 
+     for (int i = 0; i < argc; i++) {
+         JS_FreeValue(ctx, argv[i]);
+@@ -89,6 +90,8 @@ static void maybe_invoke_callback(TJSUdp *u, int callback, int argc, JSValue *ar
+ static void tjs_udp_finalizer(JSRuntime *rt, JSValue val) {
+     TJSUdp *u = JS_GetOpaque(val, tjs_udp_class_id);
+     if (u) {
++        tjs_release_resource_owner_rt(rt, u->owner);
++        u->owner = NULL;
+         JS_FreeValueRT(rt, u->obj);
+         for (int i = 0; i < UDP_CB_MAX; i++) {
+             JS_FreeValueRT(rt, u->callbacks[i]);
+@@ -120,7 +123,11 @@ static JSClassDef tjs_udp_class = {
+ };
+ 
+ static TJSUdp *tjs_udp_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_udp_class_id);
++    TJSUdp *u = JS_GetOpaque2(ctx, obj, tjs_udp_class_id);
++    if (u && tjs_require_resource_owner(ctx, u->owner) < 0) {
++        return NULL;
++    }
++    return u;
+ }
+ 
+ static JSValue tjs_udp_callback_get(JSContext *ctx, JSValue this_val, int magic) {
+@@ -394,6 +401,14 @@ static JSValue tjs_new_udp(JSContext *ctx, int af) {
+         u->callbacks[i] = JS_UNDEFINED;
+     }
+ 
++    u->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &u->owner) < 0) {
++        u->finalized = 1;
++        maybe_close(u);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
++
+     JS_SetOpaque(obj, u);
+     return obj;
+ }
+diff --git a/src/private.h b/src/private.h
+index c40c11b..feb48e4 100644
+--- a/src/private.h
++++ b/src/private.h
+@@ -89,6 +89,8 @@ struct TJSRuntime {
+     bool loop_shared;
+     TJSAsyncContextHooks async_ctx_hooks;
+     void *async_ctx_opaque;
++    TJSResourceOwnerHooks resource_owner_hooks;
++    void *resource_owner_opaque;
+ #ifdef TJS_HAVE_WASM
+     struct {
+         bool initialized;
+@@ -122,10 +124,10 @@ struct TJSRuntime {
+                      size_t reason_size);
+         void *opaque;
+     } egress;
+-    /* Capsid Binding v1: per-origin FS gate for raw core.fs and SQLite
+-     * paths; write_access distinguishes mutations from reads. */
++    /* Capsid Binding v1: per-origin FS gate for raw core.fs, FSWatch and
++     * SQLite paths; access_kind is read (0), write (1), or watch (2). */
+     struct {
+-        int (*check)(void *opaque, const char *path, int write_access,
++        int (*check)(void *opaque, const char *path, int access_kind,
+                      char *reason, size_t reason_size);
+         void *opaque;
+     } capsid_fs;
+diff --git a/src/timers.c b/src/timers.c
+index c72f8ab..d5f776a 100644
+--- a/src/timers.c
++++ b/src/timers.c
+@@ -36,6 +36,7 @@ struct TJSTimer {
+     UT_hash_handle hh;
+     int interval;
+     void *ctx_data; /* captured async context */
++    void *owner; /* immutable Binding resource owner */
+     JSValue func;
+     int argc;
+     JSValue argv[];
+@@ -51,6 +52,8 @@ static void destroy_timer(TJSTimer *th) {
+     JSContext *ctx = th->ctx;
+     tjs_release_ctx(ctx, th->ctx_data);
+     th->ctx_data = NULL;
++    tjs_release_resource_owner(ctx, th->owner);
++    th->owner = NULL;
+     TJSRuntime *qrt = JS_GetContextOpaque(ctx);
+     CHECK_NOT_NULL(qrt);
+ 
+@@ -140,10 +143,16 @@ static JSValue tjs_setTimeout(JSContext *ctx, JSValue this_val, int argc, JSValu
+     }
+ 
+     th->ctx = ctx;
++    th->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &th->owner) < 0) {
++        tjs__free(th);
++        return JS_EXCEPTION;
++    }
+     th->ctx_data = NULL;
+     if (tjs_capture_ctx(ctx, &th->ctx_data) < 0) {
+         /* unreachable in the capsid embedder (capture always yields a
+            context); minimal teardown for upstream embedders */
++        tjs_release_resource_owner(ctx, th->owner);
+         tjs__free(th);
+         return JS_ThrowInternalError(ctx, "cannot capture async context");
+     }
+@@ -176,6 +185,9 @@ static JSValue tjs_clearTimeout(JSContext *ctx, JSValue this_val, int argc, JSVa
+     HASH_FIND_INT64(qrt->timers.timers, &timer_id, th);
+ 
+     if (th != NULL) {
++        if (tjs_require_resource_owner(ctx, th->owner) < 0) {
++            return JS_EXCEPTION;
++        }
+         CHECK_EQ(uv_timer_stop(&th->handle), 0);
+         destroy_timer(th);
+     }
+diff --git a/src/utils.c b/src/utils.c
+index b8f7132..383af56 100644
+--- a/src/utils.c
++++ b/src/utils.c
+@@ -275,6 +275,80 @@ void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc
+     tjs_leave_ctx(ctx, &prev);
+ }
+ 
++void tjs_set_resource_owner_hooks(JSContext *ctx, const TJSResourceOwnerHooks *hooks, void *opaque) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    CHECK_NOT_NULL(qrt);
++    if (hooks) {
++        qrt->resource_owner_hooks = *hooks;
++    } else {
++        memset(&qrt->resource_owner_hooks, 0, sizeof(qrt->resource_owner_hooks));
++    }
++    qrt->resource_owner_opaque = opaque;
++}
++
++int tjs_capture_resource_owner(JSContext *ctx, void **out_owner) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    *out_owner = NULL;
++    if (!qrt->resource_owner_hooks.capture) {
++        return 0;
++    }
++    if (qrt->resource_owner_hooks.capture(ctx, qrt->resource_owner_opaque, out_owner) < 0 || !*out_owner) {
++        JS_ThrowTypeError(ctx, "CAPSID_BINDING_OWNER_UNAVAILABLE");
++        return -1;
++    }
++    return 0;
++}
++
++int tjs_require_resource_owner(JSContext *ctx, void *owner) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (!qrt->resource_owner_hooks.authorize) {
++        return 0;
++    }
++    if (!owner || !qrt->resource_owner_hooks.authorize(ctx, owner, qrt->resource_owner_opaque)) {
++        JS_ThrowTypeError(ctx, "CAPSID_BINDING_OWNER_MISMATCH");
++        return -1;
++    }
++    return 0;
++}
++
++void tjs_release_resource_owner(JSContext *ctx, void *owner) {
++    if (!owner) {
++        return;
++    }
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (qrt->resource_owner_hooks.release) {
++        qrt->resource_owner_hooks.release(owner, qrt->resource_owner_opaque);
++    }
++}
++
++void tjs_release_resource_owner_rt(JSRuntime *rt, void *owner) {
++    if (!owner) {
++        return;
++    }
++    TJSRuntime *qrt = JS_GetRuntimeOpaque(rt);
++    if (qrt && qrt->resource_owner_hooks.release) {
++        qrt->resource_owner_hooks.release(owner, qrt->resource_owner_opaque);
++    }
++}
++
++#ifdef TJS_RESTRICTED_CORE
++bool tjs_check_fs_access(JSContext *ctx, const char *path, int access_kind) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (!qrt || !qrt->capsid_fs.check) {
++        JS_ThrowTypeError(ctx, "fs policy is unavailable");
++        return false;
++    }
++    char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++    if (!qrt->capsid_fs.check(qrt->capsid_fs.opaque, path, access_kind,
++                              reason, sizeof(reason))) {
++        JS_ThrowTypeError(ctx, "%s",
++                          reason[0] ? reason : "fs access denied");
++        return false;
++    }
++    return true;
++}
++#endif
++
+ JSValue TJS_InitPromise(JSContext *ctx, TJSPromise *p) {
+     p->ctx_data = NULL;
+     p->p = JS_NewPromiseCapability(ctx, p->rfuncs);
+diff --git a/src/utils.h b/src/utils.h
+index da81906..1b1c6e0 100644
+--- a/src/utils.h
++++ b/src/utils.h
+@@ -165,6 +165,26 @@ void tjs_enter_ctx(JSContext *ctx, void *ctx_data, void **prev);
+ void tjs_leave_ctx(JSContext *ctx, void **prev);
+ void tjs_release_ctx(JSContext *ctx, void *ctx_data);
+ void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv);
++
++/* Immutable native-resource ownership. The Binding Runtime installs these
++   independently from async callback propagation: a File/socket/database/WASM
++   object keeps its creation-time owner until finalization, and every public
++   native operation must authorize that owner before touching the OS handle. */
++typedef struct TJSResourceOwnerHooks {
++    int (*capture)(JSContext *ctx, void *opaque, void **out_owner);
++    int (*authorize)(JSContext *ctx, void *owner, void *opaque);
++    void (*release)(void *owner, void *opaque);
++} TJSResourceOwnerHooks;
++
++void tjs_set_resource_owner_hooks(JSContext *ctx, const TJSResourceOwnerHooks *hooks, void *opaque);
++int tjs_capture_resource_owner(JSContext *ctx, void **out_owner);
++int tjs_require_resource_owner(JSContext *ctx, void *owner);
++void tjs_release_resource_owner(JSContext *ctx, void *owner);
++void tjs_release_resource_owner_rt(JSRuntime *rt, void *owner);
++#ifdef TJS_RESTRICTED_CORE
++/* access_kind: 0 = read, 1 = write, 2 = filesystem watch. */
++bool tjs_check_fs_access(JSContext *ctx, const char *path, int access_kind);
++#endif
+ void tjs_dump_error(JSContext *ctx);
+ void tjs_dump_error1(JSContext *ctx, JSValue exception_val);
+ 
+diff --git a/src/vm.c b/src/vm.c
+index ba27007..a3e40c3 100644
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -248,6 +248,7 @@ static void tjs__bootstrap_core(JSContext *ctx, JSValue ns) {
+     tjs__mod_engine_init(ctx, ns);
+     tjs__mod_error_init(ctx, ns);
+     tjs__mod_hashing_init(ctx, ns);
++    tjs__mod_fswatch_init(ctx, ns);
+     tjs__mod_os_init(ctx, ns);
+     tjs__mod_sys_init(ctx, ns);
+     tjs__mod_text_coding_init(ctx, ns);
+diff --git a/src/wasm.c b/src/wasm.c
+index e2fac0b..d901426 100644
+--- a/src/wasm.c
++++ b/src/wasm.c
+@@ -60,6 +60,7 @@ typedef struct {
+     TJSWasmImportGroup *pending_imports; /* Set by resolveImports, moved to instance by buildInstance */
+     TJSWasmResourceImport *resource_imports;
+     uint32_t resource_import_count;
++    void *owner;
+ } TJSWasmModule;
+ 
+ struct TJSWasmResourceImport {
+@@ -105,6 +106,7 @@ static void tjs_wasm_module_finalizer(JSRuntime *rt, JSValue val) {
+             }
+             js_free_rt(rt, m->wasi.map_dir_list);
+         }
++        tjs_release_resource_owner_rt(rt, m->owner);
+         js_free_rt(rt, m);
+     }
+ }
+@@ -148,6 +150,7 @@ typedef struct {
+     JSValue memory_buffer;
+     void *memory_buffer_data;
+     size_t memory_buffer_size;
++    void *owner;
+ } TJSWasmInstance;
+ 
+ static void tjs_wasm_instance_finalizer(JSRuntime *rt, JSValue val) {
+@@ -186,6 +189,7 @@ static void tjs_wasm_instance_finalizer(JSRuntime *rt, JSValue val) {
+             JS_FreeValueRT(rt, i->externrefs[j]);
+         }
+         js_free_rt(rt, i->externrefs);
++        tjs_release_resource_owner_rt(rt, i->owner);
+         js_free_rt(rt, i);
+     }
+ }
+@@ -236,12 +240,23 @@ static JSValue tjs_new_wasm_module(JSContext *ctx) {
+         return JS_EXCEPTION;
+     }
+ 
++    m->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &m->owner) < 0) {
++        js_free(ctx, m);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
++
+     JS_SetOpaque(obj, m);
+     return obj;
+ }
+ 
+ static TJSWasmModule *tjs_wasm_module_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_wasm_module_class_id);
++    TJSWasmModule *m = JS_GetOpaque2(ctx, obj, tjs_wasm_module_class_id);
++    if (m && tjs_require_resource_owner(ctx, m->owner) < 0) {
++        return NULL;
++    }
++    return m;
+ }
+ 
+ static JSValue tjs_new_wasm_instance(JSContext *ctx) {
+@@ -261,13 +276,23 @@ static JSValue tjs_new_wasm_instance(JSContext *ctx) {
+ 
+     i->memory_buffer = JS_UNDEFINED;
+     i->module_ref = JS_UNDEFINED;
++    i->owner = NULL;
++    if (tjs_capture_resource_owner(ctx, &i->owner) < 0) {
++        js_free(ctx, i);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+ 
+     JS_SetOpaque(obj, i);
+     return obj;
+ }
+ 
+ static TJSWasmInstance *tjs_wasm_instance_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_wasm_instance_class_id);
++    TJSWasmInstance *i = JS_GetOpaque2(ctx, obj, tjs_wasm_instance_class_id);
++    if (i && tjs_require_resource_owner(ctx, i->owner) < 0) {
++        return NULL;
++    }
++    return i;
+ }
+ 
+ JSValue tjs_throw_wasm_error(JSContext *ctx, const char *name, const char *msg) {

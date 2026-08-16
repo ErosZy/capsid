@@ -54,7 +54,7 @@ int capsid_tjs_set_egress_policy(
 
 int capsid_tjs_set_fs_policy(
     TJSRuntime *runtime,
-    int (*check)(void *opaque, const char *path, int write_access,
+    int (*check)(void *opaque, const char *path, int access_kind,
                  char *reason, size_t reason_size),
     void *opaque) {
     if (!runtime || !check || runtime->capsid_fs.check) {
@@ -62,6 +62,19 @@ int capsid_tjs_set_fs_policy(
     }
     runtime->capsid_fs.check = check;
     runtime->capsid_fs.opaque = opaque;
+    return 0;
+}
+
+int capsid_tjs_set_stdio_policy(
+    TJSRuntime *runtime,
+    int (*check)(void *opaque, const char *stream,
+                 char *reason, size_t reason_size),
+    void *opaque) {
+    if (!runtime || !check || runtime->capsid_stdio.check) {
+        return -1;
+    }
+    runtime->capsid_stdio.check = check;
+    runtime->capsid_stdio.opaque = opaque;
     return 0;
 }
 
@@ -85,6 +98,35 @@ int capsid_tjs_install_binding_fs(TJSRuntime *runtime) {
     }
     tjs__mod_fs_init(ctx, fs);
     JS_SetPropertyStr(ctx, TJS_GetInternalCore(runtime), "fs", fs);
+    return 0;
+}
+
+static int capsid_delete_property(JSContext *ctx, JSValue object,
+                                  const char *name) {
+    JSAtom atom = JS_NewAtom(ctx, name);
+    if (atom == JS_ATOM_NULL) {
+        return -1;
+    }
+    const int result = JS_DeleteProperty(ctx, object, atom, 0);
+    JS_FreeAtom(ctx, atom);
+    return result < 0 ? -1 : 0;
+}
+
+int capsid_tjs_harden_binding_core(TJSRuntime *runtime) {
+    if (!runtime) {
+        return -1;
+    }
+    JSContext *ctx = runtime->ctx;
+    JSValue core = TJS_GetInternalCore(runtime);
+    /* Individual network methods are omitted by the restricted native
+     * module registration tables (overlay patch 0023). Do not walk native
+     * prototype chains here: QuickJS native classes do not promise that the
+     * constructor's JavaScript `prototype` is the class prototype, and such
+     * traversal can reach and mutate unrelated built-ins. */
+    if (capsid_delete_property(ctx, core, "Pipe") != 0 ||
+        capsid_delete_property(ctx, core, "TTY") != 0) {
+        return -1;
+    }
     return 0;
 }
 

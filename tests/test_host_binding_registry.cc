@@ -24,10 +24,12 @@
 namespace {
 
 using capsid::host::BindingRegistrySnapshot;
+using capsid::host::BindingRegistryScanPhase;
 using capsid::host::scan_bindings_root;
+using capsid::host::scan_bindings_root_with_test_hook;
 
 constexpr char kValidManifest[] =
-    R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["tjs:internal/core","tjs:posix-socket"],"net":{"allow":["*:27017"]}}})json";
+    R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["tjs:internal/core","tjs:utils"],"net":{"allow":["*:27017"]}}})json";
 
 [[noreturn]] void fail(const std::string &message) {
     std::cerr << "test-host-binding-registry: " << message << std::endl;
@@ -105,6 +107,14 @@ public:
             require(chmod(path.c_str(), mode) == 0,
                     "fixture write: chmod failed for " + path);
         }
+    }
+
+    void write_sized(const std::string &path, off_t size) const {
+        const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        require(fd >= 0, "fixture sized write: open failed for " + path);
+        require(ftruncate(fd, size) == 0,
+                "fixture sized write: ftruncate failed for " + path);
+        close(fd);
     }
 
     void add_valid_package(const std::string &id) const {
@@ -340,6 +350,92 @@ void test_size_limits_are_enforced() {
                                "oversized index.js");
 }
 
+void test_generation_source_limit_is_enforced() {
+    Fixture fixture;
+    static const char *const ids[] = {"alpha", "bravo", "charlie", "delta"};
+    for (const char *id : ids) {
+        require(mkdir(fixture.package(id).c_str(), 0755) == 0,
+                "fixture: mkdir failed");
+        fixture.write(fixture.package(id) + "/manifest.json", kValidManifest);
+        fixture.write_sized(fixture.package(id) + "/index.js",
+                            16U * 1024U * 1024U);
+    }
+    require(mkdir(fixture.package("echo").c_str(), 0755) == 0,
+            "fixture: mkdir failed");
+    fixture.write(fixture.package("echo") + "/manifest.json", kValidManifest);
+    fixture.write(fixture.package("echo") + "/index.js", "x");
+    fixture.require_scan_fail(current_uid_only(), "aggregate source",
+                              "generation source bytes above 64 MiB");
+}
+
+void test_root_replacement_during_scan_is_rejected() {
+    Fixture fixture;
+    fixture.add_valid_package("mongo");
+    const std::string displaced = fixture.root() + "-displaced";
+    bool replaced = false;
+    BindingRegistrySnapshot snapshot;
+    std::string error;
+    const bool ok = scan_bindings_root_with_test_hook(
+        fixture.root(), current_uid_only(),
+        [&](BindingRegistryScanPhase phase, std::string_view) {
+            if (phase != BindingRegistryScanPhase::kRootEnumerated || replaced) {
+                return;
+            }
+            replaced = true;
+            require(rename(fixture.root().c_str(), displaced.c_str()) == 0,
+                    "fixture: displace root failed");
+            require(mkdir(fixture.root().c_str(), 0755) == 0,
+                    "fixture: replacement root mkdir failed");
+            require(mkdir(fixture.package("mongo").c_str(), 0755) == 0,
+                    "fixture: replacement package mkdir failed");
+            fixture.write(fixture.package("mongo") + "/manifest.json",
+                          kValidManifest);
+            fixture.write(fixture.package("mongo") + "/index.js",
+                          "export default () => ({});");
+        },
+        &snapshot, &error);
+    remove_tree(fixture.root());
+    require(rename(displaced.c_str(), fixture.root().c_str()) == 0,
+            "fixture: restore root failed");
+    require(replaced, "root replacement hook did not run");
+    require(!ok && error.find("changed") != std::string::npos,
+            "replacement bindingsRoot was accepted: " + error);
+}
+
+void test_package_replacement_during_scan_is_rejected() {
+    Fixture fixture;
+    fixture.add_valid_package("mongo");
+    const std::string displaced = fixture.package("mongo") + "-displaced";
+    bool replaced = false;
+    BindingRegistrySnapshot snapshot;
+    std::string error;
+    const bool ok = scan_bindings_root_with_test_hook(
+        fixture.root(), current_uid_only(),
+        [&](BindingRegistryScanPhase phase, std::string_view package_id) {
+            if (phase != BindingRegistryScanPhase::kPackageEnumerated ||
+                package_id != "mongo" || replaced) {
+                return;
+            }
+            replaced = true;
+            require(rename(fixture.package("mongo").c_str(),
+                           displaced.c_str()) == 0,
+                    "fixture: displace package failed");
+            require(mkdir(fixture.package("mongo").c_str(), 0755) == 0,
+                    "fixture: replacement package mkdir failed");
+            fixture.write(fixture.package("mongo") + "/manifest.json",
+                          kValidManifest);
+            fixture.write(fixture.package("mongo") + "/index.js",
+                          "export default () => ({});");
+        },
+        &snapshot, &error);
+    remove_tree(fixture.package("mongo"));
+    require(rename(displaced.c_str(), fixture.package("mongo").c_str()) == 0,
+            "fixture: restore package failed");
+    require(replaced, "package replacement hook did not run");
+    require(!ok && error.find("changed") != std::string::npos,
+            "replacement binding package was accepted: " + error);
+}
+
 void test_invalid_package_names_and_stray_files_are_rejected() {
     Fixture fixture;
     fixture.add_valid_package("Mongo");
@@ -404,6 +500,9 @@ int main() {
     test_extra_and_missing_files_are_rejected();
     test_ownership_and_mode_are_enforced();
     test_size_limits_are_enforced();
+    test_generation_source_limit_is_enforced();
+    test_root_replacement_during_scan_is_rejected();
+    test_package_replacement_during_scan_is_rejected();
     test_invalid_package_names_and_stray_files_are_rejected();
     test_manifest_content_is_validated();
     test_snapshot_is_immutable();

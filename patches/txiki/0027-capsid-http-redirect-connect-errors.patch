@@ -1,0 +1,23 @@
+--- a/src/js/polyfills/http-client.js
++++ b/src/js/polyfills/http-client.js
+@@ -312,7 +312,19 @@ class HttpClient {
+                         this.#url = nextUrl.href;
+ 
+                         // Reconnect to the new URL.
+-                        this.#connect();
++                        try {
++                            this.#connect();
++                        } catch (error) {
++                            // Native open() reports an egress denial (and
++                            // other synchronous connect setup failures) by
++                            // throwing.  This callback runs from native lws;
++                            // never let that exception escape and stop the
++                            // runtime's event loop.  Preserve the normal
++                            // HttpClient completion/error contract instead.
++                            const reason = typeof error?.message === 'string'
++                                ? error.message : 'Redirect connection failed';
++                            this._oncomplete?.('CONNECTION_ERROR', reason);
++                        }
+                     };
+ 
+                     return;

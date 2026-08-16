@@ -10,13 +10,15 @@
  #include "bundles/c/stdlib/assert.c"
  #if defined(TJS_HAVE_FFI) && !defined(TJS_RESTRICTED_CORE)
  #include "bundles/c/stdlib/ffi.c"
-@@ -32,17 +30,15 @@
+@@ -32,17 +30,17 @@
  #include "bundles/c/stdlib/getopts.c"
  #include "bundles/c/stdlib/hashing.c"
  #include "bundles/c/stdlib/ipaddr.c"
 -#ifndef TJS_RESTRICTED_CORE
  #include "bundles/c/stdlib/path.c"
++#ifndef TJS_RESTRICTED_CORE
  #include "bundles/c/stdlib/posix-socket.c"
++#endif
  #include "bundles/c/stdlib/readline.c"
 -#endif
 -#if defined(TJS_HAVE_SQLITE) && (!defined(TJS_RESTRICTED_CORE) || defined(TJS_BENCHMARK_SQLITE_ONLY))
@@ -30,7 +32,7 @@
  #include "bundles/c/stdlib/wasi.c"
  #endif
  #include "private.h"
-@@ -61,21 +57,17 @@
+@@ -61,21 +59,19 @@
  #endif
      { "tjs:getopts", tjs__getopts, sizeof(tjs__getopts) },
      { "tjs:hashing", tjs__hashing, sizeof(tjs__hashing) },
@@ -40,7 +42,9 @@
      { "tjs:ipaddr", tjs__ipaddr, sizeof(tjs__ipaddr) },
 -#ifndef TJS_RESTRICTED_CORE
      { "tjs:path", tjs__path, sizeof(tjs__path) },
++#ifndef TJS_RESTRICTED_CORE
      { "tjs:posix-socket", tjs__posix_socket, sizeof(tjs__posix_socket) },
++#endif
      { "tjs:readline", tjs__readline, sizeof(tjs__readline) },
 -#endif
 -#if defined(TJS_HAVE_SQLITE) && (!defined(TJS_RESTRICTED_CORE) || defined(TJS_BENCHMARK_SQLITE_ONLY))
@@ -56,7 +60,7 @@
      { NULL, NULL, 0 },
 --- a/src/modules.c
 +++ b/src/modules.c
-@@ -139,16 +139,39 @@
+@@ -139,16 +139,38 @@
  
  JSModuleDef *tjs_module_loader(JSContext *ctx, const char *module_name, void *opaque, JSValueConst attributes) {
  #ifdef TJS_RESTRICTED_CORE
@@ -73,7 +77,6 @@
 +        "tjs:internal/path",
 +        "tjs:ipaddr",
 +        "tjs:path",
-+        "tjs:posix-socket",
 +        "tjs:readline",
 +        "tjs:sqlite",
 +        "tjs:utils",

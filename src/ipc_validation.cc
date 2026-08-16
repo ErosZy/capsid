@@ -312,7 +312,12 @@ bool parse_binding_blob(const std::vector<uint8_t> &blob,
         capsid::WorkerBindingSecret secret;
         if (!read_string16(&cursor, descriptor_end, &secret.key) ||
             contains_nul(secret.key) ||
-            !valid_binding_secret_key(secret.key)) {
+            !valid_binding_secret_key(secret.key) ||
+            std::any_of(
+                decoded.secrets.begin(), decoded.secrets.end(),
+                [&secret](const capsid::WorkerBindingSecret &existing) {
+                    return existing.key == secret.key;
+                })) {
             return reject(error, "invalid binding secret key");
         }
         uint32_t value_size = 0;

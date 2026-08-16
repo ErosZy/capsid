@@ -964,7 +964,7 @@ capsid::WorkerBindingDescriptor binding_descriptor(
 void test_binding_policy_origin_isolation() {
     const capsid::WorkerBindingDescriptor mongo = binding_descriptor(
         "mongo",
-        {"tjs:internal/core", "tjs:posix-socket"},
+        {"tjs:internal/core", "tjs:utils"},
         {"network-client", "filesystem-write"},
         {"127.0.0.1:27017"},
         {"/var/lib/capsid/mongo"});
@@ -994,16 +994,19 @@ void test_binding_policy_origin_isolation() {
     require(policy->module_decision("tjs:internal/core") ==
                 capsid::kModuleGranted,
             "granted binding module was denied");
-    require(policy->module_decision("tjs:posix-socket") ==
+    require(policy->module_decision("tjs:utils") ==
                 capsid::kModuleGranted,
             "granted binding module was denied");
+    require(policy->module_decision("tjs:posix-socket") ==
+                capsid::kModuleForbidden,
+            "raw Posix Socket was not permanently forbidden");
     require(policy->module_decision("capsid:fs") ==
                 capsid::kModuleDenied,
             "user facade was granted to the binding policy");
     require(policy->module_decision("tjs:ffi") ==
                 capsid::kModuleForbidden,
             "permanently forbidden module was not forbidden");
-    require(policy->module_decision("tjs:utils") ==
+    require(policy->module_decision("tjs:uuid") ==
                 capsid::kModuleDenied,
             "ungranted module was allowed");
 
@@ -1255,6 +1258,28 @@ void test_binding_profile_digest_and_consistency() {
                 &error) &&
                 !error.empty(),
             "fs read without the filesystem-read profile was accepted");
+
+    const capsid::WorkerBindingDescriptor sqlite_without_profile =
+        binding_descriptor(
+            "sqlite-bad", {"tjs:sqlite"}, {}, {}, {});
+    capsid::BindingPolicySet sqlite_set;
+    require(!sqlite_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{
+                    sqlite_without_profile},
+                &error) &&
+                error.find("sqlite") != std::string::npos,
+            "tjs:sqlite without the sqlite profile was accepted");
+
+    const capsid::WorkerBindingDescriptor wasi_without_profile =
+        binding_descriptor(
+            "wasi-bad", {"tjs:wasi"}, {}, {}, {});
+    capsid::BindingPolicySet wasi_set;
+    require(!wasi_set.configure(
+                std::vector<capsid::WorkerBindingDescriptor>{
+                    wasi_without_profile},
+                &error) &&
+                error.find("wasi") != std::string::npos,
+            "tjs:wasi without the wasi profile was accepted");
 
     // An empty allow list needs no profile.
     const capsid::WorkerBindingDescriptor empty_net = binding_descriptor(

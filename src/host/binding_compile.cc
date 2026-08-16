@@ -7,6 +7,7 @@
 
 #include "host/config.h"
 #include "ipc_validation.h"
+#include "sandbox.h"
 
 #include <jansson.h>
 
@@ -15,12 +16,37 @@
 #include <cstdlib>
 #include <cstring>
 #include <span>
-#include <utility>
 #include <string>
+#include <unordered_set>
+#include <utility>
 #include <vector>
+
+#if defined(__linux__)
+#include <linux/landlock.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#ifndef SYS_landlock_create_ruleset
+#ifdef __NR_landlock_create_ruleset
+#define SYS_landlock_create_ruleset __NR_landlock_create_ruleset
+#endif
+#endif
+#endif
 
 namespace capsid::host {
 namespace {
+
+uint32_t host_landlock_abi() {
+#if defined(__linux__) && defined(SYS_landlock_create_ruleset)
+    const int abi = static_cast<int>(syscall(
+        SYS_landlock_create_ruleset,
+        NULL,
+        0,
+        LANDLOCK_CREATE_RULESET_VERSION));
+    return abi > 0 ? static_cast<uint32_t>(abi) : 0;
+#else
+    return 0;
+#endif
+}
 
 bool fail(std::string* error, const char* message) {
     if (error != nullptr) {
@@ -353,13 +379,29 @@ std::string compute_effective_profile_digest(
         canonical.size()));
 }
 
+capsid::WorkerReadyProof expected_worker_ready_proof(
+    const std::vector<EffectiveBinding>& bindings,
+    bool strict_sandbox) {
+    capsid::WorkerReadyProof expected;
+    if (bindings.empty()) {
+        return expected;
+    }
+    expected.extended = true;
+    expected.applied_feature_bits = strict_sandbox
+        ? static_cast<uint32_t>(CAPSID_SANDBOX_FEATURE_STRICT_BASE)
+        : static_cast<uint32_t>(CAPSID_SANDBOX_FEATURE_RLIMITS);
+    expected.seccomp_mode = strict_sandbox ? capsid::kSeccompModeFilter : 0;
+    expected.landlock_abi = strict_sandbox ? host_landlock_abi() : 0;
+    expected.network_namespace_identity.clear();
+    expected.sandbox_profile_digest =
+        compute_effective_profile_digest(bindings);
+    return expected;
+}
+
 bool verify_worker_ready(
     const std::vector<std::uint8_t>& payload,
     const std::string& compatibility_id,
-    const std::vector<EffectiveBinding>& bindings,
-    uint32_t expected_seccomp_mode,
-    uint32_t expected_landlock_abi,
-    const std::string& expected_namespace_identity,
+    const capsid::WorkerReadyProof& expected,
     std::string* error) {
     if (error != nullptr) {
         error->clear();
@@ -380,50 +422,46 @@ bool verify_worker_ready(
         }
         return false;
     }
-    if (!proof.extended) {
-        // §7.2: a zero-binding worker reports the exact baseline; a
-        // Binding generation must carry the proof.
-        if (!bindings.empty()) {
-            if (error != nullptr) {
-                *error = "binding worker READY lacks the sandbox proof";
-            }
-            return false;
-        }
-        return true;
-    }
-    if (bindings.empty()) {
+    if (proof.extended != expected.extended) {
         if (error != nullptr) {
-            *error = "zero-binding worker reported an extended READY";
+            *error = expected.extended
+                ? "binding worker READY lacks the sandbox proof"
+                : "zero-binding worker reported an extended READY";
         }
         return false;
     }
-    const std::string expected =
-        compute_effective_profile_digest(bindings);
-    if (proof.sandbox_profile_digest != expected) {
+    if (!expected.extended) {
+        return true;
+    }
+    if (proof.applied_feature_bits != expected.applied_feature_bits) {
+        if (error != nullptr) {
+            *error = "worker READY applied sandbox features mismatch";
+        }
+        return false;
+    }
+    if (proof.sandbox_profile_digest != expected.sandbox_profile_digest) {
         if (error != nullptr) {
             *error = "worker READY profile digest mismatch";
         }
         return false;
     }
-    // §4.3: the Host pins the kernel-level proof values it can observe;
-    // a zero expectation skips the comparison (non-Linux hosts).
-    if (expected_seccomp_mode != 0 &&
-        proof.seccomp_mode != expected_seccomp_mode) {
+    // §4.3: every proof field is compared exactly. Zero and the empty
+    // namespace identity are real expected states (non-strict/no namespace),
+    // never sentinel values that disable verification.
+    if (proof.seccomp_mode != expected.seccomp_mode) {
         if (error != nullptr) {
             *error = "worker READY seccomp mode mismatch";
         }
         return false;
     }
-    if (expected_landlock_abi != 0 &&
-        proof.landlock_abi != expected_landlock_abi) {
+    if (proof.landlock_abi != expected.landlock_abi) {
         if (error != nullptr) {
             *error = "worker READY Landlock ABI mismatch";
         }
         return false;
     }
-    if (!expected_namespace_identity.empty() &&
-        proof.network_namespace_identity !=
-            expected_namespace_identity) {
+    if (proof.network_namespace_identity !=
+        expected.network_namespace_identity) {
         if (error != nullptr) {
             *error = "worker READY network namespace identity mismatch";
         }
@@ -435,42 +473,157 @@ bool verify_worker_ready(
 std::string serialize_bindings_snapshot(
     const std::vector<EffectiveBinding>& bindings) {
     json_t* root = json_array();
+    if (root == nullptr) {
+        return {};
+    }
+    std::vector<const EffectiveBinding*> ordered;
+    ordered.reserve(bindings.size());
     for (const EffectiveBinding& binding : bindings) {
+        ordered.push_back(&binding);
+    }
+    std::sort(ordered.begin(), ordered.end(),
+              [](const EffectiveBinding* left,
+                 const EffectiveBinding* right) {
+                  return left->id < right->id;
+              });
+    std::uint64_t total_source_bytes = 0;
+    std::string previous_id;
+    for (const EffectiveBinding* binding_pointer : ordered) {
+        const EffectiveBinding& binding = *binding_pointer;
+        if (!valid_binding_id(binding.id) ||
+            (!previous_id.empty() && binding.id <= previous_id) ||
+            binding.package.manifest_json.size() >
+                kMaxBindingManifestBytes ||
+            binding.package.source.size() > kMaxBindingSourceBytes ||
+            binding.request.config_json.size() >
+                kMaxBindingConfigBytes ||
+            binding.package.source.size() >
+                kMaxBindingGenerationSourceBytes - total_source_bytes ||
+            !validate_binding_manifest(
+                 binding.package.manifest_json).ok) {
+            json_decref(root);
+            return {};
+        }
+        previous_id = binding.id;
+        total_source_bytes += binding.package.source.size();
         json_t* entry = json_object();
-        json_object_set_new(entry, "id",
-                            json_string(binding.id.c_str()));
-        json_object_set_new(entry, "manifest",
-                            json_string(binding.package.manifest_json.c_str()));
-        json_object_set_new(entry, "source",
-                            json_string(binding.package.source.c_str()));
-        json_object_set_new(entry, "config",
-                            json_string(binding.request.config_json.c_str()));
+        const auto set_string = [entry](const char* key,
+                                        const std::string& value) {
+            json_t* encoded = json_stringn(value.data(), value.size());
+            return encoded != nullptr &&
+                   json_object_set_new(entry, key, encoded) == 0;
+        };
+        if (entry == nullptr || !set_string("id", binding.id) ||
+            !set_string("manifest", binding.package.manifest_json) ||
+            !set_string("source", binding.package.source) ||
+            !set_string("config", binding.request.config_json)) {
+            if (entry != nullptr) {
+                json_decref(entry);
+            }
+            json_decref(root);
+            return {};
+        }
         const auto list = [](const std::vector<std::string>& values) {
             json_t* array = json_array();
+            if (array == nullptr) {
+                return static_cast<json_t*>(nullptr);
+            }
             for (const std::string& value : values) {
-                json_array_append_new(array, json_string(value.c_str()));
+                json_t* encoded = json_stringn(value.data(), value.size());
+                if (encoded == nullptr ||
+                    json_array_append_new(array, encoded) != 0) {
+                    json_decref(array);
+                    return static_cast<json_t*>(nullptr);
+                }
             }
             return array;
         };
-        json_object_set_new(entry, "net", list(binding.request.net_rules));
-        json_object_set_new(entry, "fs_read", list(binding.request.fs_read));
-        json_object_set_new(entry, "fs_write", list(binding.request.fs_write));
-        json_object_set_new(entry, "env", list(binding.request.env));
-        json_object_set_new(entry, "stdio", list(binding.request.stdio));
-        json_object_set_new(entry, "profiles", list(binding.profiles));
-        json_object_set_new(entry, "modules", list(binding.modules));
-        json_t* secret_array = json_array();
-        for (const BindingSecretRef& secret_ref :
-             binding.request.secrets) {
-            json_t* pair = json_array();
-            json_array_append_new(
-                pair, json_string(secret_ref.name.c_str()));
-            json_array_append_new(
-                pair, json_string(secret_ref.key_id.c_str()));
-            json_array_append_new(secret_array, pair);
+        const auto set_list = [&list, entry](
+                                  const char* key,
+                                  const std::vector<std::string>& values) {
+            json_t* array = list(values);
+            // Jansson's _new APIs consume a non-null value on both success
+            // and failure, so no extra decref is permitted here.
+            return array != nullptr &&
+                   json_object_set_new(entry, key, array) == 0;
+        };
+        if (!set_list("net", binding.request.net_rules) ||
+            !set_list("fs_read", binding.request.fs_read) ||
+            !set_list("fs_write", binding.request.fs_write) ||
+            !set_list("env", binding.request.env) ||
+            !set_list("stdio", binding.request.stdio) ||
+            !set_list("profiles", binding.profiles) ||
+            !set_list("modules", binding.modules)) {
+            json_decref(entry);
+            json_decref(root);
+            return {};
         }
-        json_object_set_new(entry, "secrets", secret_array);
-        json_array_append_new(root, entry);
+        json_t* secret_array = json_array();
+        if (secret_array == nullptr) {
+            json_decref(entry);
+            json_decref(root);
+            return {};
+        }
+        std::vector<BindingSecretRef> sorted_secrets =
+            binding.request.secrets;
+        std::sort(sorted_secrets.begin(), sorted_secrets.end(),
+                  [](const BindingSecretRef& left,
+                     const BindingSecretRef& right) {
+                      if (left.name != right.name) {
+                          return left.name < right.name;
+                      }
+                      if (left.key_id != right.key_id) {
+                          return left.key_id < right.key_id;
+                      }
+                      return left.opaque_revision < right.opaque_revision;
+                  });
+        std::string previous_secret_name;
+        for (const BindingSecretRef& secret_ref : sorted_secrets) {
+            if (secret_ref.opaque_revision.empty()) {
+                json_decref(secret_array);
+                json_decref(entry);
+                json_decref(root);
+                return {};
+            }
+            if (!previous_secret_name.empty() &&
+                secret_ref.name == previous_secret_name) {
+                json_decref(secret_array);
+                json_decref(entry);
+                json_decref(root);
+                return {};
+            }
+            previous_secret_name = secret_ref.name;
+            json_t* pair = json_array();
+            const auto append_string = [pair](const std::string& value) {
+                json_t* encoded = json_stringn(value.data(), value.size());
+                return encoded != nullptr &&
+                       json_array_append_new(pair, encoded) == 0;
+            };
+            if (pair == nullptr || !append_string(secret_ref.name) ||
+                !append_string(secret_ref.key_id) ||
+                !append_string(secret_ref.opaque_revision)) {
+                json_decref(pair);
+                json_decref(secret_array);
+                json_decref(entry);
+                json_decref(root);
+                return {};
+            }
+            if (json_array_append_new(secret_array, pair) != 0) {
+                json_decref(secret_array);
+                json_decref(entry);
+                json_decref(root);
+                return {};
+            }
+        }
+        if (json_object_set_new(entry, "secrets", secret_array) != 0) {
+            json_decref(entry);
+            json_decref(root);
+            return {};
+        }
+        if (json_array_append_new(root, entry) != 0) {
+            json_decref(root);
+            return {};
+        }
     }
     char* text = json_dumps(root, JSON_COMPACT | JSON_ENSURE_ASCII);
     json_decref(root);
@@ -479,111 +632,373 @@ std::string serialize_bindings_snapshot(
     }
     std::string result(text);
     std::free(text);
+    if (result.size() > kMaxBindingsSnapshotBytes) {
+        return {};
+    }
     return result;
 }
+
+namespace {
+
+bool snapshot_string(json_t* parent, const char* key, std::string* out) {
+    json_t* value = json_object_get(parent, key);
+    if (!json_is_string(value)) {
+        return false;
+    }
+    out->assign(json_string_value(value), json_string_length(value));
+    return true;
+}
+
+bool snapshot_list(json_t* parent,
+                   const char* key,
+                   std::vector<std::string>* out) {
+    json_t* value = json_object_get(parent, key);
+    if (!json_is_array(value)) {
+        return false;
+    }
+    std::unordered_set<std::string> seen;
+    std::size_t index = 0;
+    json_t* item = nullptr;
+    json_array_foreach(value, index, item) {
+        if (!json_is_string(item)) {
+            return false;
+        }
+        std::string text(json_string_value(item), json_string_length(item));
+        if (!seen.insert(text).second) {
+            return false;
+        }
+        out->push_back(std::move(text));
+    }
+    return true;
+}
+
+bool canonical_config(const std::string& config, json_t** parsed) {
+    if (config.size() > kMaxBindingConfigBytes) {
+        return false;
+    }
+    json_error_t parse_error;
+    json_t* value = json_loadb(config.data(), config.size(),
+                               JSON_REJECT_DUPLICATES, &parse_error);
+    if (!json_is_object(value)) {
+        if (value != nullptr) {
+            json_decref(value);
+        }
+        return false;
+    }
+    char* dumped = json_dumps(value,
+                              JSON_COMPACT | JSON_SORT_KEYS |
+                                  JSON_ENSURE_ASCII);
+    if (dumped == nullptr) {
+        json_decref(value);
+        return false;
+    }
+    const bool matches = config == dumped;
+    std::free(dumped);
+    if (!matches) {
+        json_decref(value);
+        return false;
+    }
+    *parsed = value;
+    return true;
+}
+
+json_t* snapshot_json_list(const std::vector<std::string>& values) {
+    json_t* array = json_array();
+    if (array == nullptr) {
+        return nullptr;
+    }
+    for (const std::string& value : values) {
+        json_t* item = json_stringn(value.data(), value.size());
+        if (item == nullptr || json_array_append_new(array, item) != 0) {
+            // json_array_append_new consumes non-null item even on failure.
+            json_decref(array);
+            return nullptr;
+        }
+    }
+    return array;
+}
+
+// Rebuild one minimal capsid/app-v2 document and pass it through the same
+// schema boundary as deployment. This re-establishes Binding ID, net/env,
+// secret-name/key, config depth/size, and typed permission invariants during
+// recovery instead of trusting the committed JSON wrapper.
+bool validate_snapshot_request(const AppBindingRequest& request,
+                               json_t* config) {
+    json_t* app = json_object();
+    json_t* pool = json_object();
+    json_t* bindings = json_object();
+    json_t* binding = json_object();
+    json_t* permissions = json_object();
+    json_t* net = json_object();
+    json_t* fs = json_object();
+    json_t* secrets = json_object();
+    const auto cleanup = [&]() {
+        json_decref(app);
+        json_decref(pool);
+        json_decref(bindings);
+        json_decref(binding);
+        json_decref(permissions);
+        json_decref(net);
+        json_decref(fs);
+        json_decref(secrets);
+    };
+    if (app == nullptr || pool == nullptr || bindings == nullptr ||
+        binding == nullptr || permissions == nullptr || net == nullptr ||
+        fs == nullptr || secrets == nullptr) {
+        cleanup();
+        return false;
+    }
+    const auto put_new = [](json_t* object, const char* key, json_t* value) {
+        return value != nullptr &&
+               json_object_set_new(object, key, value) == 0;
+    };
+    const auto transfer = [](json_t* object, const char* key,
+                             json_t** value) {
+        if (*value == nullptr) {
+            return false;
+        }
+        json_t* owned = *value;
+        *value = nullptr;
+        return json_object_set_new(object, key, owned) == 0;
+    };
+    if (!put_new(app, "apiVersion", json_string("capsid/app-v2")) ||
+        !put_new(pool, "minReady", json_integer(1)) ||
+        !put_new(pool, "maxWorkers", json_integer(1)) ||
+        !transfer(app, "pool", &pool) ||
+        !put_new(net, "allow", snapshot_json_list(request.net_rules)) ||
+        !put_new(fs, "read", snapshot_json_list(request.fs_read)) ||
+        !put_new(fs, "write", snapshot_json_list(request.fs_write)) ||
+        !transfer(permissions, "net", &net) ||
+        !transfer(permissions, "fs", &fs) ||
+        !put_new(permissions, "env",
+                 snapshot_json_list(request.env)) ||
+        !put_new(permissions, "stdio",
+                 snapshot_json_list(request.stdio)) ||
+        !transfer(binding, "permissions", &permissions) ||
+        json_object_set(binding, "config", config) != 0) {
+        cleanup();
+        return false;
+    }
+    for (const BindingSecretRef& secret : request.secrets) {
+        json_t* reference = json_object();
+        if (reference == nullptr) {
+            cleanup();
+            return false;
+        }
+        if (!put_new(reference, "valueFrom",
+                     json_stringn(secret.key_id.data(),
+                                  secret.key_id.size()))) {
+            json_decref(reference);
+            cleanup();
+            return false;
+        }
+        // json_object_set_new_nocheck consumes reference on both success and
+        // failure, so it must not be decref'd after this call.
+        if (json_object_set_new_nocheck(
+                secrets, secret.name.c_str(), reference) != 0) {
+            cleanup();
+            return false;
+        }
+    }
+    if (!transfer(binding, "secrets", &secrets)) {
+        cleanup();
+        return false;
+    }
+    json_t* owned_binding = binding;
+    binding = nullptr;
+    if (json_object_set_new_nocheck(bindings, request.id.c_str(),
+                                    owned_binding) != 0 ||
+        !transfer(app, "bindings", &bindings)) {
+        cleanup();
+        return false;
+    }
+    char* text = json_dumps(app, JSON_COMPACT | JSON_ENSURE_ASCII);
+    json_decref(app);
+    if (text == nullptr) {
+        return false;
+    }
+    const ConfigValidationResult validation =
+        validate_config_json(ConfigDocument::kApplication, text);
+    std::free(text);
+    return validation.ok;
+}
+
+}  // namespace
 
 BindingSnapshotParseResult parse_bindings_snapshot(const std::string& json) {
     BindingSnapshotParseResult result;
     result.ok = false;
+    if (json.size() > kMaxBindingsSnapshotBytes) {
+        result.error = "bindings snapshot exceeds the size limit";
+        return result;
+    }
     json_error_t parse_error;
-    json_t* root = json_loads(json.c_str(), JSON_REJECT_DUPLICATES,
-                              &parse_error);
-    if (root == nullptr || !json_is_array(root)) {
+    json_t* root = json_loadb(json.data(), json.size(),
+                              JSON_REJECT_DUPLICATES, &parse_error);
+    if (!json_is_array(root)) {
         if (root != nullptr) {
             json_decref(root);
         }
         result.error = "bindings snapshot is malformed";
         return result;
     }
-    const auto read_list = [](json_t* entry, const char* key,
-                              std::vector<std::string>* out) -> bool {
-        json_t* value = json_object_get(entry, key);
-        if (value == nullptr || !json_is_array(value)) {
-            return false;
-        }
-        std::size_t index = 0;
-        json_t* item = nullptr;
-        json_array_foreach(value, index, item) {
-            if (!json_is_string(item)) {
-                return false;
-            }
-            out->push_back(json_string_value(item));
-        }
-        return true;
+
+    static const char* const kFields[] = {
+        "id",       "manifest", "source",  "config",
+        "net",      "fs_read",  "fs_write", "env",
+        "stdio",    "profiles", "modules", "secrets",
     };
+    BindingRegistrySnapshot registry;
+    std::vector<AppBindingRequest> requests;
+    std::vector<std::vector<std::string>> committed_profiles;
+    std::vector<std::vector<std::string>> committed_modules;
+    std::uint64_t total_source_bytes = 0;
+    std::string previous_id;
     std::size_t index = 0;
     json_t* entry = nullptr;
     json_array_foreach(root, index, entry) {
-        EffectiveBinding binding;
-        const char* id = json_string_value(json_object_get(entry, "id"));
-        const char* manifest =
-            json_string_value(json_object_get(entry, "manifest"));
-        const char* source =
-            json_string_value(json_object_get(entry, "source"));
-        const char* config =
-            json_string_value(json_object_get(entry, "config"));
-        if (id == nullptr || manifest == nullptr || source == nullptr ||
-            config == nullptr) {
+        if (!json_is_object(entry) ||
+            json_object_size(entry) !=
+                sizeof(kFields) / sizeof(kFields[0])) {
             json_decref(root);
-            result.error = "bindings snapshot entry is malformed";
+            result.error = "bindings snapshot entry has an invalid field set";
             return result;
         }
-        binding.id = id;
-        binding.package.id = id;
-        binding.package.manifest_json = manifest;
-        binding.package.source = source;
-        binding.package.manifest_digest =
-            compute_binding_manifest_digest(binding.package.manifest_json);
-        binding.package.source_digest = sha256_hex(std::span<const std::uint8_t>(
-            reinterpret_cast<const std::uint8_t*>(
-                binding.package.source.data()),
-            binding.package.source.size()));
-        binding.request.id = id;
-        binding.request.config_json = config;
-        // §6: recovery re-derives every identity digest from the
-        // committed bytes; it never trusts serialized digest fields.
-        fill_digest_entry(binding);
-        if (!read_list(entry, "net", &binding.request.net_rules) ||
-            !read_list(entry, "fs_read", &binding.request.fs_read) ||
-            !read_list(entry, "fs_write", &binding.request.fs_write) ||
-            !read_list(entry, "env", &binding.request.env) ||
-            !read_list(entry, "stdio", &binding.request.stdio) ||
-            !read_list(entry, "profiles", &binding.profiles) ||
-            !read_list(entry, "modules", &binding.modules)) {
-            json_decref(root);
-            result.error = "bindings snapshot entry is malformed";
-            return result;
-        }
-        json_t* secret_array = json_object_get(entry, "secrets");
-        if (secret_array != nullptr) {
-            if (!json_is_array(secret_array)) {
+        for (const char* field : kFields) {
+            if (json_object_get(entry, field) == nullptr) {
                 json_decref(root);
-                result.error = "bindings snapshot entry is malformed";
+                result.error =
+                    "bindings snapshot entry has an invalid field set";
                 return result;
             }
-            std::size_t pair_index = 0;
-            json_t* pair = nullptr;
-            json_array_foreach(secret_array, pair_index, pair) {
-                if (!json_is_array(pair) || json_array_size(pair) != 2 ||
-                    !json_is_string(json_array_get(pair, 0)) ||
-                    !json_is_string(json_array_get(pair, 1))) {
-                    json_decref(root);
-                    result.error =
-                        "bindings snapshot entry is malformed";
-                    return result;
-                }
-                BindingSecretRef secret_ref;
-                secret_ref.name =
-                    json_string_value(json_array_get(pair, 0));
-                secret_ref.key_id =
-                    json_string_value(json_array_get(pair, 1));
-                binding.request.secrets.push_back(
-                    std::move(secret_ref));
-            }
         }
-        result.bindings.push_back(std::move(binding));
+
+        BindingPackageSnapshot package;
+        AppBindingRequest request;
+        std::vector<std::string> profiles;
+        std::vector<std::string> modules;
+        if (!snapshot_string(entry, "id", &package.id) ||
+            !snapshot_string(entry, "manifest", &package.manifest_json) ||
+            !snapshot_string(entry, "source", &package.source) ||
+            !snapshot_string(entry, "config", &request.config_json) ||
+            !valid_binding_id(package.id) ||
+            (!previous_id.empty() && package.id <= previous_id)) {
+            json_decref(root);
+            result.error = "bindings snapshot binding IDs are invalid";
+            return result;
+        }
+        previous_id = package.id;
+        request.id = package.id;
+        if (package.manifest_json.size() > kMaxBindingManifestBytes ||
+            package.source.size() > kMaxBindingSourceBytes ||
+            package.source.size() >
+                kMaxBindingGenerationSourceBytes - total_source_bytes) {
+            json_decref(root);
+            result.error = "bindings snapshot artifact exceeds a size limit";
+            return result;
+        }
+        total_source_bytes += package.source.size();
+        const ConfigValidationResult manifest_validation =
+            validate_binding_manifest(package.manifest_json);
+        if (!manifest_validation.ok) {
+            json_decref(root);
+            result.error = "bindings snapshot manifest is invalid";
+            return result;
+        }
+        if (!snapshot_list(entry, "net", &request.net_rules) ||
+            !snapshot_list(entry, "fs_read", &request.fs_read) ||
+            !snapshot_list(entry, "fs_write", &request.fs_write) ||
+            !snapshot_list(entry, "env", &request.env) ||
+            !snapshot_list(entry, "stdio", &request.stdio) ||
+            !snapshot_list(entry, "profiles", &profiles) ||
+            !snapshot_list(entry, "modules", &modules)) {
+            json_decref(root);
+            result.error = "bindings snapshot list is invalid";
+            return result;
+        }
+
+        json_t* secret_array = json_object_get(entry, "secrets");
+        if (!json_is_array(secret_array)) {
+            json_decref(root);
+            result.error = "bindings snapshot secrets are invalid";
+            return result;
+        }
+        std::unordered_set<std::string> secret_names;
+        std::size_t pair_index = 0;
+        json_t* pair = nullptr;
+        json_array_foreach(secret_array, pair_index, pair) {
+            if (!json_is_array(pair) || json_array_size(pair) != 3) {
+                json_decref(root);
+                result.error = "bindings snapshot secrets are invalid";
+                return result;
+            }
+            BindingSecretRef secret;
+            json_t* public_name = json_array_get(pair, 0);
+            json_t* key_id = json_array_get(pair, 1);
+            json_t* revision = json_array_get(pair, 2);
+            if (!json_is_string(public_name) || !json_is_string(key_id) ||
+                !json_is_string(revision)) {
+                json_decref(root);
+                result.error = "bindings snapshot secrets are invalid";
+                return result;
+            }
+            secret.name.assign(json_string_value(public_name),
+                               json_string_length(public_name));
+            secret.key_id.assign(json_string_value(key_id),
+                                 json_string_length(key_id));
+            secret.opaque_revision.assign(json_string_value(revision),
+                                          json_string_length(revision));
+            if (secret.opaque_revision.empty() ||
+                !secret_names.insert(secret.name).second) {
+                json_decref(root);
+                result.error = "bindings snapshot secrets are invalid";
+                return result;
+            }
+            request.secrets.push_back(std::move(secret));
+        }
+
+        json_t* config = nullptr;
+        if (!canonical_config(request.config_json, &config) ||
+            !validate_snapshot_request(request, config)) {
+            if (config != nullptr) {
+                json_decref(config);
+            }
+            json_decref(root);
+            result.error = "bindings snapshot request is invalid";
+            return result;
+        }
+        json_decref(config);
+
+        package.manifest_digest =
+            compute_binding_manifest_digest(package.manifest_json);
+        package.source_digest = sha256_hex(std::span<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(package.source.data()),
+            package.source.size()));
+        registry.packages.push_back(std::move(package));
+        requests.push_back(std::move(request));
+        committed_profiles.push_back(std::move(profiles));
+        committed_modules.push_back(std::move(modules));
     }
     json_decref(root);
+
+    BindingCompileResult compiled =
+        compile_effective_bindings(registry, requests);
+    if (!compiled.ok || compiled.bindings.size() != committed_profiles.size()) {
+        result.error = "bindings snapshot effective policy is invalid";
+        return result;
+    }
+    for (std::size_t binding_index = 0;
+         binding_index < compiled.bindings.size(); ++binding_index) {
+        if (compiled.bindings[binding_index].profiles !=
+                committed_profiles[binding_index] ||
+            compiled.bindings[binding_index].modules !=
+                committed_modules[binding_index]) {
+            result.error =
+                "bindings snapshot manifest-derived fields do not match";
+            return result;
+        }
+    }
+    result.bindings = std::move(compiled.bindings);
     result.ok = true;
     return result;
 }
@@ -684,6 +1099,20 @@ bool build_binding_descriptor(const EffectiveBinding& binding,
 // committed bytes — used by both the deploy compile and the recovery
 // parse so both re-derive identical digest material.
 void fill_digest_entry(EffectiveBinding& binding) {
+    const auto append_u32 = [](std::vector<std::uint8_t>* output,
+                               std::size_t count) {
+        const std::uint32_t value = static_cast<std::uint32_t>(count);
+        output->push_back(static_cast<std::uint8_t>(value >> 24));
+        output->push_back(static_cast<std::uint8_t>(value >> 16));
+        output->push_back(static_cast<std::uint8_t>(value >> 8));
+        output->push_back(static_cast<std::uint8_t>(value));
+    };
+    const auto append_field = [&append_u32](
+                                  std::vector<std::uint8_t>* output,
+                                  std::string_view value) {
+        append_u32(output, value.size());
+        output->insert(output->end(), value.begin(), value.end());
+    };
     binding.digest_entry.id = binding.id;
     binding.digest_entry.manifest_digest =
         binding.package.manifest_digest;
@@ -694,30 +1123,26 @@ void fill_digest_entry(EffectiveBinding& binding) {
             reinterpret_cast<const std::uint8_t*>(
                 binding.request.config_json.data()),
             binding.request.config_json.size()));
-    std::string canonical = "net:";
-    for (const std::string& rule : binding.request.net_rules) {
-        canonical += rule + ",";
-    }
-    canonical += ";fs-read:";
-    for (const std::string& path : binding.request.fs_read) {
-        canonical += path + ",";
-    }
-    canonical += ";fs-write:";
-    for (const std::string& path : binding.request.fs_write) {
-        canonical += path + ",";
-    }
-    canonical += ";env:";
-    for (const std::string& name : binding.request.env) {
-        canonical += name + ",";
-    }
-    canonical += ";stdio:";
-    for (const std::string& stream : binding.request.stdio) {
-        canonical += stream + ",";
+    std::vector<std::uint8_t> canonical;
+    static constexpr char kPermissionDomain[] =
+        "capsid-binding-permissions-v1\0";
+    canonical.insert(canonical.end(), kPermissionDomain,
+                     kPermissionDomain + sizeof(kPermissionDomain) - 1);
+    const std::vector<std::string>* permission_lists[] = {
+        &binding.request.net_rules,
+        &binding.request.fs_read,
+        &binding.request.fs_write,
+        &binding.request.env,
+        &binding.request.stdio,
+    };
+    for (const std::vector<std::string>* list : permission_lists) {
+        append_u32(&canonical, list->size());
+        for (const std::string& value : *list) {
+            append_field(&canonical, value);
+        }
     }
     binding.digest_entry.permission_digest = sha256_hex(
-        std::span<const std::uint8_t>(
-            reinterpret_cast<const std::uint8_t*>(canonical.data()),
-            canonical.size()));
+        std::span<const std::uint8_t>(canonical.data(), canonical.size()));
     std::string profile_canonical;
     std::vector<std::string> sorted_profiles = binding.profiles;
     std::sort(sorted_profiles.begin(), sorted_profiles.end());
@@ -729,18 +1154,43 @@ void fill_digest_entry(EffectiveBinding& binding) {
             reinterpret_cast<const std::uint8_t*>(
                 profile_canonical.data()),
             profile_canonical.size()));
+    binding.digest_entry.binding_runtime_compatibility =
+        std::string(kBindingRuntimeCompatibilityVersion);
     binding.digest_entry.secret_key_ids.clear();
-    for (const BindingSecretRef& secret_ref : binding.request.secrets) {
+    std::vector<BindingSecretRef> sorted_secrets = binding.request.secrets;
+    std::sort(sorted_secrets.begin(), sorted_secrets.end(),
+              [](const BindingSecretRef& left,
+                 const BindingSecretRef& right) {
+                  if (left.name != right.name) {
+                      return left.name < right.name;
+                  }
+                  if (left.key_id != right.key_id) {
+                      return left.key_id < right.key_id;
+                  }
+                  return left.opaque_revision < right.opaque_revision;
+              });
+    std::vector<std::uint8_t> revision_record;
+    static constexpr char kSecretDomain[] =
+        "capsid-binding-secret-revisions-v1\0";
+    revision_record.insert(revision_record.end(), kSecretDomain,
+                           kSecretDomain + sizeof(kSecretDomain) - 1);
+    append_u32(&revision_record, sorted_secrets.size());
+    for (const BindingSecretRef& secret_ref : sorted_secrets) {
         binding.digest_entry.secret_key_ids.push_back(secret_ref.key_id);
+        append_field(&revision_record, secret_ref.name);
+        append_field(&revision_record, secret_ref.key_id);
+        append_field(&revision_record, secret_ref.opaque_revision);
     }
     std::sort(binding.digest_entry.secret_key_ids.begin(),
               binding.digest_entry.secret_key_ids.end());
+    binding.digest_entry.secret_revision = sha256_hex(
+        std::span<const std::uint8_t>(revision_record.data(),
+                                      revision_record.size()));
 }
 
 BindingCompileResult compile_effective_bindings(
     const BindingRegistrySnapshot& registry,
-    const std::vector<AppBindingRequest>& requests,
-    const std::string& secret_revision) {
+    const std::vector<AppBindingRequest>& requests) {
     BindingCompileResult result;
     result.ok = false;
 
@@ -860,19 +1310,26 @@ BindingCompileResult compile_effective_bindings(
         }
 
         fill_digest_entry(binding);
-        binding.digest_entry.secret_revision = secret_revision;
         effective.push_back(std::move(binding));
     }
-
-    std::vector<BindingSetDigestEntry> digest_entries;
-    digest_entries.reserve(effective.size());
-    for (const EffectiveBinding& binding : effective) {
-        digest_entries.push_back(binding.digest_entry);
-    }
-    result.set_digest = compute_binding_set_digest(digest_entries);
+    result.set_digest = refresh_binding_set_digest(&effective);
     result.bindings = std::move(effective);
     result.ok = true;
     return result;
+}
+
+std::string refresh_binding_set_digest(
+    std::vector<EffectiveBinding>* bindings) {
+    if (bindings == nullptr) {
+        return {};
+    }
+    std::vector<BindingSetDigestEntry> digest_entries;
+    digest_entries.reserve(bindings->size());
+    for (EffectiveBinding& binding : *bindings) {
+        fill_digest_entry(binding);
+        digest_entries.push_back(binding.digest_entry);
+    }
+    return compute_binding_set_digest(digest_entries);
 }
 
 }  // namespace capsid::host

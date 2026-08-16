@@ -39,6 +39,9 @@ public:
     bool configure(const capsid_egress_policy *policy, std::string *error);
     EgressDecision decide_host(const std::string &host,
                                uint16_t port) const;
+    // DNS has no destination port yet. It is authorized only when at least
+    // one allow rule covers the normalized host/address at some port.
+    EgressDecision decide_host_any_port(const std::string &host) const;
     EgressDecision decide_resolved_address(
         const struct sockaddr *address,
         socklen_t address_size,

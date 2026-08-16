@@ -628,6 +628,8 @@ void test_binding_set_digest() {
         value.config_digest = "sha256:" + std::string(64, 'c');
         value.permission_digest = "sha256:" + std::string(64, 'd');
         value.profile_digest = "sha256:" + std::string(64, 'e');
+        value.binding_runtime_compatibility =
+            std::string(capsid::host::kBindingRuntimeCompatibilityVersion);
         value.secret_key_ids = {"password", "username"};
         value.secret_revision = "rev-1";
         return value;
@@ -675,6 +677,12 @@ void test_binding_set_digest() {
     require(capsid::host::compute_binding_set_digest({mongo}) !=
                 capsid::host::compute_binding_set_digest({changed}),
             "profile digest change did not alter the set digest");
+    changed = mongo;
+    changed.binding_runtime_compatibility =
+        "capsid-binding-runtime-v2";
+    require(capsid::host::compute_binding_set_digest({mongo}) !=
+                capsid::host::compute_binding_set_digest({changed}),
+            "Binding Runtime compatibility change did not alter the set digest");
     changed = mongo;
     changed.secret_revision = "rev-2";
     require(capsid::host::compute_binding_set_digest({mongo}) !=

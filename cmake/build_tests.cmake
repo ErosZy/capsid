@@ -1983,6 +1983,43 @@ if(BUILD_TESTING)
         add_custom_target(test-binding-call-fixture
             DEPENDS "${CAPSID_BINDING_CALL_FIXTURE}")
 
+        set(CAPSID_BINDING_OWNER_FIXTURE
+            "${CAPSID_GENERATED_DIR}/test-binding-owner.js")
+        add_custom_command(
+            OUTPUT "${CAPSID_BINDING_OWNER_FIXTURE}"
+            COMMAND "${CAPSID_ESBUILD}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-owner.js"
+                --bundle
+                --target=esnext
+                --platform=neutral
+                --format=esm
+                "--external:capsid:binding/*"
+                "--outfile=${CAPSID_BINDING_OWNER_FIXTURE}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-owner.js"
+            VERBATIM
+        )
+        add_custom_target(test-binding-owner-fixture
+            DEPENDS "${CAPSID_BINDING_OWNER_FIXTURE}")
+
+        set(CAPSID_BINDING_LIFECYCLE_FIXTURE
+            "${CAPSID_GENERATED_DIR}/test-binding-lifecycle.js")
+        add_custom_command(
+            OUTPUT "${CAPSID_BINDING_LIFECYCLE_FIXTURE}"
+            COMMAND "${CAPSID_ESBUILD}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-lifecycle.js"
+                --bundle
+                --target=esnext
+                --platform=neutral
+                --format=esm
+                "--external:capsid:binding/*"
+                "--outfile=${CAPSID_BINDING_LIFECYCLE_FIXTURE}"
+            DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-lifecycle.js"
+            VERBATIM
+        )
+        add_custom_target(test-binding-lifecycle-fixture
+            DEPENDS "${CAPSID_BINDING_LIFECYCLE_FIXTURE}")
+
         set(CAPSID_P1_PLATFORM_FIXTURE
             "${CAPSID_GENERATED_DIR}/test-p1-platform-contract.js")
         add_custom_command(
@@ -4381,17 +4418,50 @@ if(BUILD_TESTING)
         target_include_directories(test-sandbox PRIVATE include src)
         target_link_libraries(test-sandbox PRIVATE capsid_sanitizers)
         add_test(NAME worker_sandbox_enforcement COMMAND test-sandbox)
-        set_tests_properties(worker_sandbox_enforcement PROPERTIES TIMEOUT 10)
+        set_tests_properties(worker_sandbox_enforcement PROPERTIES
+            TIMEOUT 10
+            LABELS "sandbox")
 
         # Binding v1 §7.9: the privileged profile conformance probes. Skip
         # 77 (unprivileged / non-Linux) is a failure in the Hosted
         # Validity workflow.
         set(CAPSID_BINDING_SANDBOX_DIR
             "${CMAKE_CURRENT_BINARY_DIR}/capsid-binding-sandbox-dir")
+        set(CAPSID_BINDING_SANDBOX_ALLOWED_FILE
+            "${CAPSID_BINDING_SANDBOX_DIR}/allowed.db")
+        set(CAPSID_BINDING_SANDBOX_DENIED_FILE
+            "${CMAKE_CURRENT_BINARY_DIR}/capsid-binding-denied.db")
+        file(MAKE_DIRECTORY "${CAPSID_BINDING_SANDBOX_DIR}")
+        file(WRITE "${CAPSID_BINDING_SANDBOX_ALLOWED_FILE}" "allowed\n")
+        file(WRITE "${CAPSID_BINDING_SANDBOX_DENIED_FILE}" "denied\n")
         add_test(NAME worker_binding_sandbox_write
             COMMAND test-sandbox --binding-write
                 "${CAPSID_BINDING_SANDBOX_DIR}")
         set_tests_properties(worker_binding_sandbox_write PROPERTIES
+            TIMEOUT 15
+            LABELS "sandbox"
+            SKIP_RETURN_CODE 77)
+        add_test(NAME worker_binding_sandbox_read
+            COMMAND test-sandbox --binding-read
+                "${CAPSID_BINDING_SANDBOX_ALLOWED_FILE}"
+                "${CAPSID_BINDING_SANDBOX_DENIED_FILE}")
+        set_tests_properties(worker_binding_sandbox_read PROPERTIES
+            TIMEOUT 15
+            LABELS "sandbox"
+            SKIP_RETURN_CODE 77)
+        add_test(NAME worker_binding_sandbox_watch
+            COMMAND test-sandbox --binding-watch
+                "${CAPSID_BINDING_SANDBOX_ALLOWED_FILE}")
+        set_tests_properties(worker_binding_sandbox_watch PROPERTIES
+            TIMEOUT 15
+            LABELS "sandbox"
+            SKIP_RETURN_CODE 77)
+        add_test(NAME worker_binding_sandbox_sqlite
+            COMMAND test-sandbox --binding-sqlite
+                "${CAPSID_BINDING_SANDBOX_DIR}"
+                "${CAPSID_BINDING_SANDBOX_ALLOWED_FILE}"
+                "${CAPSID_BINDING_SANDBOX_DENIED_FILE}")
+        set_tests_properties(worker_binding_sandbox_sqlite PROPERTIES
             TIMEOUT 15
             LABELS "sandbox"
             SKIP_RETURN_CODE 77)
@@ -4402,8 +4472,18 @@ if(BUILD_TESTING)
             LABELS "sandbox"
             SKIP_RETURN_CODE 77)
         add_test(NAME worker_binding_sandbox_wasi
-            COMMAND test-sandbox --binding-wasi)
+            COMMAND test-sandbox --binding-wasi
+                "${CAPSID_BINDING_SANDBOX_ALLOWED_FILE}")
         set_tests_properties(worker_binding_sandbox_wasi PROPERTIES
+            TIMEOUT 15
+            LABELS "sandbox"
+            SKIP_RETURN_CODE 77)
+        add_test(NAME worker_binding_sandbox_union
+            COMMAND test-sandbox --binding-union
+                "${CAPSID_BINDING_SANDBOX_DIR}"
+                "${CAPSID_BINDING_SANDBOX_ALLOWED_FILE}"
+                "${CAPSID_BINDING_SANDBOX_DENIED_FILE}")
+        set_tests_properties(worker_binding_sandbox_union PROPERTIES
             TIMEOUT 15
             LABELS "sandbox"
             SKIP_RETURN_CODE 77)
@@ -4527,7 +4607,9 @@ if(BUILD_TESTING)
             capsid-worker
             test-p0-fixture
             test-binding-import-fixture
-            test-binding-call-fixture)
+            test-binding-call-fixture
+            test-binding-owner-fixture
+            test-binding-lifecycle-fixture)
         add_test(
             NAME worker_zero_binding_regression
             COMMAND test-worker-zero-binding
@@ -4535,6 +4617,8 @@ if(BUILD_TESTING)
                 "${CAPSID_P0_FIXTURE}"
                 "${CAPSID_BINDING_IMPORT_FIXTURE}"
                 "${CAPSID_BINDING_CALL_FIXTURE}"
+                "${CAPSID_BINDING_OWNER_FIXTURE}"
+                "${CAPSID_BINDING_LIFECYCLE_FIXTURE}"
         )
         set_tests_properties(
             worker_zero_binding_regression

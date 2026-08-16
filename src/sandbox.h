@@ -49,6 +49,12 @@ bool apply_sandbox(const SandboxConfig &config,
                    uint32_t *seccomp_mode,
                    std::string *error);
 
+// Read-only Host/worker proof helpers. They never install or relax a sandbox.
+// The namespace identity is stable for the lifetime of the namespace and is
+// empty when no descriptor is configured.
+uint32_t query_landlock_abi();
+std::string network_namespace_identity(int descriptor);
+
 }  // namespace capsid
 
 #endif

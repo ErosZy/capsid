@@ -76,7 +76,7 @@ void test_minimal_and_full_shapes_are_valid() {
             "requires":["network-client","filesystem-read"]
           },
           "permissions":{
-            "modules":["tjs:internal/core","tjs:posix-socket","tjs:utils"],
+            "modules":["tjs:internal/core","tjs:ipaddr","tjs:utils"],
             "net":{"allow":["*:27017"]},
             "fs":{
               "read":["/etc/capsid/mongo"],
@@ -144,10 +144,14 @@ void test_manifest_envelope_is_exact() {
 }
 
 void test_manifest_modules_are_required_and_known() {
-    require_valid(manifest_with_modules(
-                      R"json(["tjs:internal/core","tjs:posix-socket","tjs:utils","tjs:assert","tjs:getopts","tjs:hashing","tjs:internal/path","tjs:ipaddr","tjs:path","tjs:readline","tjs:sqlite","tjs:uuid","tjs:wasi"])json"),
+    require_valid(
+                  R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["sqlite","wasi"]},"permissions":{"modules":["tjs:internal/core","tjs:utils","tjs:assert","tjs:getopts","tjs:hashing","tjs:internal/path","tjs:ipaddr","tjs:path","tjs:readline","tjs:sqlite","tjs:uuid","tjs:wasi"]}})json",
                   "every grantable module");
 
+    require_error(manifest_with_modules(R"json(["tjs:posix-socket"])json"),
+                  ConfigErrorCode::kInvalidValue,
+                  "/permissions/modules/0",
+                  "unsafe posix socket module");
     require_error(manifest_with_modules(R"json(["tjs:ffi"])json"),
                   ConfigErrorCode::kInvalidValue,
                   "/permissions/modules/0",
@@ -295,6 +299,22 @@ void test_manifest_profile_permission_consistency() {
     require_valid(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["tjs:utils"],"fs":{"read":[],"write":[]},"net":{"allow":[]}}})json",
         "empty resource permissions need no profiles");
+    require_error(
+        R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["tjs:sqlite"]}})json",
+        ConfigErrorCode::kInvalidValue,
+        "/permissions/modules",
+        "sqlite module without the sqlite profile");
+    require_valid(
+        R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["sqlite"]},"permissions":{"modules":["tjs:sqlite"]}})json",
+        "sqlite module with the sqlite profile");
+    require_error(
+        R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["tjs:wasi"]}})json",
+        ConfigErrorCode::kInvalidValue,
+        "/permissions/modules",
+        "wasi module without the wasi profile");
+    require_valid(
+        R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["wasi"]},"permissions":{"modules":["tjs:wasi"]}})json",
+        "wasi module with the wasi profile");
 }
 
 void test_manifest_json_envelope_is_strict() {
@@ -321,9 +341,9 @@ void test_manifest_json_envelope_is_strict() {
 
 void test_manifest_digest_is_canonical_and_deterministic() {
     const std::string first =
-        R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["tjs:utils","tjs:sqlite"],"net":{"allow":["*:27017"]}}})json";
+        R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client","sqlite"]},"permissions":{"modules":["tjs:utils","tjs:sqlite"],"net":{"allow":["*:27017"]}}})json";
     const std::string reordered =
-        R"json({"permissions":{"net":{"allow":["*:27017"]},"modules":["tjs:utils","tjs:sqlite"]},"sandbox":{"requires":["network-client"]},"apiVersion":"capsid/binding-v1"})json";
+        R"json({"permissions":{"net":{"allow":["*:27017"]},"modules":["tjs:utils","tjs:sqlite"]},"sandbox":{"requires":["network-client","sqlite"]},"apiVersion":"capsid/binding-v1"})json";
     const std::string different =
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["tjs:utils"],"net":{"allow":["*:27017"]}}})json";
 

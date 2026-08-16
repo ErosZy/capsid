@@ -81,6 +81,14 @@ void append_length_prefixed(std::vector<std::uint8_t> &output,
     output.insert(output.end(), value.begin(), value.end());
 }
 
+void append_count(std::vector<std::uint8_t> &output, std::size_t count) {
+    const std::uint32_t value = static_cast<std::uint32_t>(count);
+    output.push_back(static_cast<std::uint8_t>(value >> 24));
+    output.push_back(static_cast<std::uint8_t>(value >> 16));
+    output.push_back(static_cast<std::uint8_t>(value >> 8));
+    output.push_back(static_cast<std::uint8_t>(value));
+}
+
 }  // namespace
 
 std::string compute_generation_digest(const GenerationIdentityInput &input) {
@@ -122,11 +130,12 @@ std::string compute_binding_set_digest(
                   return a.id < b.id;
               });
     std::vector<std::uint8_t> message;
-    static constexpr char kDomain[] = "capsid-binding-set-v1\0";
+    static constexpr char kDomain[] = "capsid-binding-set-v2\0";
     message.insert(
         message.end(),
         reinterpret_cast<const std::uint8_t *>(kDomain),
         reinterpret_cast<const std::uint8_t *>(kDomain) + sizeof(kDomain) - 1);
+    append_count(message, sorted.size());
     for (const BindingSetDigestEntry &entry : sorted) {
         const std::string_view fields[] = {
             entry.id,
@@ -135,12 +144,14 @@ std::string compute_binding_set_digest(
             entry.config_digest,
             entry.permission_digest,
             entry.profile_digest,
+            entry.binding_runtime_compatibility,
         };
         for (const std::string_view field : fields) {
             append_length_prefixed(message, field);
         }
         std::vector<std::string> keys = entry.secret_key_ids;
         std::sort(keys.begin(), keys.end());
+        append_count(message, keys.size());
         for (const std::string &key : keys) {
             append_length_prefixed(message, key);
         }

@@ -9,6 +9,7 @@
 #include "capsid/runtime.h"
 #include "host/binding_registry.h"
 #include "host/generation_identity.h"
+#include "ipc_validation.h"
 
 #include <cstdint>
 #include <string>
@@ -23,6 +24,9 @@ namespace capsid::host {
 struct BindingSecretRef {
     std::string name;     // the factory-visible key
     std::string key_id;   // the provider lookup id
+    // Provider-owned opaque version. Filled after resolution or parsed from
+    // the immutable generation snapshot; never derived from secret bytes.
+    std::string opaque_revision;
 };
 
 struct AppBindingRequest {
@@ -75,6 +79,13 @@ struct BindingCompileResult {
 std::string compute_effective_profile_digest(
     const std::vector<EffectiveBinding>& bindings);
 
+// Constructs the exact proof a managed worker is required to report. Managed
+// workers currently do not receive a network namespace descriptor; an empty
+// namespace identity is therefore an exact value, not a wildcard.
+capsid::WorkerReadyProof expected_worker_ready_proof(
+    const std::vector<EffectiveBinding>& bindings,
+    bool strict_sandbox);
+
 // §4.3: the Host-side READY verdict. The payload must parse as the
 // 71-byte compatibility id plus an optional proof; a Binding worker's
 // proof must carry exactly the Host's expected profile digest. Returns
@@ -82,10 +93,7 @@ std::string compute_effective_profile_digest(
 bool verify_worker_ready(
     const std::vector<std::uint8_t>& payload,
     const std::string& compatibility_id,
-    const std::vector<EffectiveBinding>& bindings,
-    uint32_t expected_seccomp_mode,  // 0 = this Host does not pin it
-    uint32_t expected_landlock_abi,  // 0 = this Host does not pin it
-    const std::string& expected_namespace_identity,  // empty = not pinned
+    const capsid::WorkerReadyProof& expected,
     std::string* error);
 
 // Serializes the committed binding snapshot (manifest, source, config,
@@ -113,8 +121,12 @@ bool build_binding_descriptor(const EffectiveBinding& binding,
 // follows §6; secret values never enter it (they are not even inputs).
 BindingCompileResult compile_effective_bindings(
     const BindingRegistrySnapshot& registry,
-    const std::vector<AppBindingRequest>& requests,
-    const std::string& secret_revision);
+    const std::vector<AppBindingRequest>& requests);
+
+// Rebuilds every entry after provider revisions have been attached and
+// returns the complete Binding-set digest.
+std::string refresh_binding_set_digest(
+    std::vector<EffectiveBinding>* bindings);
 
 }  // namespace capsid::host
 

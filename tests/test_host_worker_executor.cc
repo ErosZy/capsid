@@ -23,6 +23,7 @@
 #include "host/worker_executor.h"
 
 #include "capsid/runtime.h"
+#include "protocol.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -43,6 +44,7 @@ using capsid::host::Command;
 using capsid::host::CommandType;
 using capsid::host::WorkerEvent;
 using capsid::host::WorkerExecutor;
+using capsid::host::decode_worker_log_event;
 
 [[noreturn]] void fail(const std::string& message) {
     std::cerr << "FAIL " << message << std::endl;
@@ -58,6 +60,79 @@ void require(bool condition, const std::string& message) {
 const char* kBundle =
     "export default { async fetch(request) {"
     " return new Response('hello-executor'); } };\n";
+
+void append_string16(std::vector<std::uint8_t>* output,
+                     const std::string& value) {
+    capsid::protocol::append_u16(
+        output, static_cast<std::uint16_t>(value.size()));
+    output->insert(output->end(), value.begin(), value.end());
+}
+
+void append_string32(std::vector<std::uint8_t>* output,
+                     const std::string& value) {
+    capsid::protocol::append_u32(
+        output, static_cast<std::uint32_t>(value.size()));
+    output->insert(output->end(), value.begin(), value.end());
+}
+
+capsid_event binding_log_event(const std::vector<std::uint8_t>& payload,
+                               std::uint32_t flags =
+                                   capsid::protocol::kFlagBindingLog) {
+    capsid_event event = {};
+    event.struct_size = sizeof(event);
+    event.type = CAPSID_EVENT_LOG;
+    event.flags = flags;
+    event.request_id = 108;
+    event.payload.data = payload.empty() ? nullptr : payload.data();
+    event.payload.size = payload.size();
+    return event;
+}
+
+void test_binding_log_decoder() {
+    std::vector<std::uint8_t> payload;
+    append_string16(&payload, "mongo");
+    append_string16(&payload, "warn");
+    append_string32(&payload, "visible");
+    append_string32(
+        &payload,
+        "{\"password\":\"[REDACTED]\",\"safe\":\"yes\"}");
+    WorkerEvent decoded;
+    std::string error;
+    require(decode_worker_log_event(
+                binding_log_event(payload), &decoded, &error),
+            "valid Binding log rejected: " + error);
+    require(decoded.binding_log && decoded.binding_id == "mongo" &&
+                decoded.log_level == "warn" && decoded.request_id == 108 &&
+                decoded.text == "visible" &&
+                decoded.log_fields_json.find("[REDACTED]") !=
+                    std::string::npos,
+            "Binding log envelope decoded incorrectly");
+
+    const std::vector<std::uint8_t> empty;
+    require(!decode_worker_log_event(
+                binding_log_event(empty), &decoded, &error),
+            "empty Binding log envelope accepted");
+    require(!decode_worker_log_event(
+                binding_log_event(payload, 0x80000000U), &decoded, &error),
+            "unknown LOG flag accepted");
+
+    std::vector<std::uint8_t> duplicate_fields;
+    append_string16(&duplicate_fields, "mongo");
+    append_string16(&duplicate_fields, "warn");
+    append_string32(&duplicate_fields, "visible");
+    append_string32(&duplicate_fields, "{\"x\":1,\"x\":2}");
+    require(!decode_worker_log_event(
+                binding_log_event(duplicate_fields), &decoded, &error),
+            "duplicate Binding log field accepted");
+
+    capsid_event ordinary = {};
+    ordinary.struct_size = sizeof(ordinary);
+    ordinary.type = CAPSID_EVENT_LOG;
+    require(decode_worker_log_event(ordinary, &decoded, &error) &&
+                !decoded.binding_log && decoded.text.empty(),
+            "empty ordinary log did not decode safely");
+    std::cout << "PASS: strict Binding log decoder" << std::endl;
+}
 
 // Wakes the waiting test thread whenever the executor queues a new event
 // batch (the notifier runs on the worker thread).
@@ -206,7 +281,8 @@ void test_startup_failure() {
 WorkerExecutor::WorkerFactory hello_factory(
     const std::string& worker_path,
     std::uint32_t initial_stream_window = 0) {
-    return [worker_path, initial_stream_window](capsid_worker** out,
+    const std::string bundle(kBundle);
+    return [worker_path, initial_stream_window, bundle](capsid_worker** out,
                          std::string* factory_error) -> bool {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
@@ -219,8 +295,9 @@ WorkerExecutor::WorkerFactory hello_factory(
             return false;
         }
         if (capsid_worker_load_bundle(
-                worker, reinterpret_cast<const std::uint8_t*>(kBundle),
-                std::char_traits<char>::length(kBundle)) != CAPSID_OK) {
+                worker,
+                reinterpret_cast<const std::uint8_t*>(bundle.data()),
+                bundle.size()) != CAPSID_OK) {
             capsid_worker_destroy(worker);  // the factory cleans its own
             *factory_error = "bundle load failed";
             return false;
@@ -233,6 +310,93 @@ WorkerExecutor::WorkerFactory hello_factory(
         *out = worker;
         return true;
     };
+}
+
+WorkerExecutor::WorkerFactory bundle_factory(
+    const std::string& worker_path,
+    std::string bundle) {
+    return [worker_path, bundle = std::move(bundle)](
+               capsid_worker** out,
+               std::string* factory_error) -> bool {
+        capsid_worker_config config;
+        capsid_worker_config_init(&config);
+        config.worker_path = worker_path.c_str();
+        config.request_timeout_ms = 2000;
+        capsid_worker* worker = nullptr;
+        if (capsid_worker_spawn(&config, &worker) != CAPSID_OK) {
+            *factory_error = "worker spawn failed";
+            return false;
+        }
+        if (capsid_worker_load_bundle(
+                worker,
+                reinterpret_cast<const std::uint8_t*>(bundle.data()),
+                bundle.size()) != CAPSID_OK ||
+            capsid_worker_flush(worker) != CAPSID_OK) {
+            capsid_worker_destroy(worker);
+            *factory_error = "bundle startup failed";
+            return false;
+        }
+        *out = worker;
+        return true;
+    };
+}
+
+void test_log_identity_is_host_owned(const std::string& worker_path) {
+    WorkerExecutor executor;
+    executor.set_log_identity("orders", "sha256:generation");
+    EventHarness harness(executor);
+    std::string error;
+    require(executor.start(
+                bundle_factory(
+                    worker_path,
+                    "console.log('identity-log');"
+                    "export default { fetch() {"
+                    " return new Response('ok'); } };\n"),
+                &error),
+            "log identity worker start: " + error);
+    std::vector<WorkerEvent> events;
+    harness.observe(
+        executor, events,
+        [](const std::vector<WorkerEvent>& observed) {
+            for (const WorkerEvent& event : observed) {
+                if (event.type == WorkerEvent::Type::kLog &&
+                    event.text.find("identity-log") != std::string::npos) {
+                    return true;
+                }
+            }
+            return false;
+        });
+    bool verified = false;
+    for (const WorkerEvent& event : events) {
+        if (event.type == WorkerEvent::Type::kLog &&
+            event.text.find("identity-log") != std::string::npos) {
+            verified = event.application_id == "orders" &&
+                       event.generation_digest == "sha256:generation";
+        }
+    }
+    require(verified, "worker-controlled LOG lost Host-owned identity");
+    executor.stop_and_join();
+    std::cout << "PASS: LOG identity is attached by the Host" << std::endl;
+}
+
+void test_factory_ready_proof_is_not_compatibility_only(
+    const std::string& worker_path) {
+    WorkerExecutor::WorkerFactory factory = hello_factory(worker_path);
+    factory.expected_ready.extended = true;
+    factory.expected_ready.applied_feature_bits =
+        CAPSID_SANDBOX_FEATURE_RLIMITS;
+    factory.expected_ready.sandbox_profile_digest =
+        "sha256:" + std::string(64, 'a');
+
+    WorkerExecutor executor;
+    std::string error;
+    require(!executor.start(factory, &error),
+            "compatibility-only READY was accepted for a Binding factory");
+    require(error.find("sandbox proof") != std::string::npos,
+            "Binding READY rejection lost its proof diagnostic: " + error);
+    require(!executor.available(),
+            "proof-mismatched replacement became available");
+    std::cout << "PASS: factory pins the complete READY proof" << std::endl;
 }
 
 void test_factory_lifecycle(const std::string& worker_path) {
@@ -399,7 +563,10 @@ int main(int argc, char** argv) {
         fail("expected capsid-worker path");
     }
     const std::string worker_path = argv[1];
+    test_binding_log_decoder();
+    test_log_identity_is_host_owned(worker_path);
     test_startup_failure();
+    test_factory_ready_proof_is_not_compatibility_only(worker_path);
     test_factory_lifecycle(worker_path);
     test_fixed_response_requires_credit(worker_path);
     test_adopt_ready(worker_path);

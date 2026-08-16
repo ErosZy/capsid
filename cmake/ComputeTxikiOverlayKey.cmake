@@ -177,10 +177,13 @@ function(capsid_compute_txiki_overlay_key)
     list(SORT CTOK_PATCH_LIST)
     list(LENGTH CTOK_PATCH_LIST CTOK_PATCH_COUNT)
     # Binding v1: 0016 shared loop; 0017 raw egress; 0018 FS native gate;
-    # 0019 Binding fs module gate; 0020 grantable module surface.
-    if(NOT CTOK_PATCH_COUNT EQUAL 21)
+    # 0019 Binding fs module gate; 0020 grantable module surface;
+    # 0021 WASI FS/stdio native gates; 0022 SQLite gates;
+    # 0023 fd-adoption gates; 0024 immutable native-resource owners;
+    # 0025 side-effect-free Date slot access; 0029 WebSocket Binding gates.
+    if(NOT CTOK_PATCH_COUNT EQUAL 30)
         message(FATAL_ERROR
-            "expected 21 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 30 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

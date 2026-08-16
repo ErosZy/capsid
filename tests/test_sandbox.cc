@@ -11,9 +11,12 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <linux/openat2.h>
+#include <sys/file.h>
+#include <sys/inotify.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 // macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
 // on the test paths, so a plain socket type is the portable fallback.
@@ -40,6 +43,105 @@ void require(bool condition, const char *message) {
 }
 
 #if defined(__linux__)
+
+int verify_permanent_denies(int base) {
+    errno = 0;
+    const pid_t child = fork();
+    if (child >= 0 || errno != EPERM) {
+        if (child == 0) {
+            _exit(0);
+        }
+        if (child > 0) {
+            waitpid(child, NULL, 0);
+        }
+        return base + 1;
+    }
+
+    errno = 0;
+    const int unix_socket = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (unix_socket >= 0 || errno != EPERM) {
+        if (unix_socket >= 0) {
+            close(unix_socket);
+        }
+        return base + 2;
+    }
+
+    errno = 0;
+    const int raw_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    if (raw_socket >= 0 || errno != EPERM) {
+        if (raw_socket >= 0) {
+            close(raw_socket);
+        }
+        return base + 3;
+    }
+
+    const int network_socket =
+        socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (network_socket < 0) {
+        return base + 4;
+    }
+    struct sockaddr_in local = {};
+    local.sin_family = AF_INET;
+    local.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    local.sin_port = 0;
+    errno = 0;
+    if (bind(network_socket,
+             reinterpret_cast<const struct sockaddr *>(&local),
+             sizeof(local)) == 0 || errno != EPERM) {
+        close(network_socket);
+        return base + 5;
+    }
+    close(network_socket);
+
+    errno = 0;
+    void *const executable = reinterpret_cast<void *>(syscall(
+        SYS_mmap,
+        NULL,
+        4096,
+        PROT_READ | PROT_EXEC,
+        MAP_PRIVATE | MAP_ANONYMOUS,
+        -1,
+        0));
+    if (executable != MAP_FAILED || errno != EPERM) {
+        if (executable != MAP_FAILED) {
+            munmap(executable, 4096);
+        }
+        return base + 6;
+    }
+    return 0;
+}
+
+int apply_binding_profile(
+    const std::vector<std::string> &profiles,
+    const std::vector<std::string> &read_paths,
+    const std::vector<std::string> &write_paths) {
+    capsid::SandboxConfig config;
+    config.address_space_limit = 0;
+    config.file_descriptor_limit = 64;
+    config.strict = true;
+    config.required_features = CAPSID_SANDBOX_FEATURE_STRICT_BASE;
+    config.preinstalled_features = 0;
+    config.binding_profiles = profiles;
+    config.binding_read_paths = read_paths;
+    config.binding_write_paths = write_paths;
+
+    uint32_t features = 0;
+    uint32_t landlock_abi = 0;
+    uint32_t seccomp_mode = 0;
+    std::string error;
+    if (!capsid::apply_sandbox(
+            config, &features, &landlock_abi, &seccomp_mode, &error)) {
+        std::cerr << "binding sandbox unavailable: " << error << std::endl;
+        return 77;
+    }
+    if ((features & CAPSID_SANDBOX_FEATURE_STRICT_BASE) !=
+            CAPSID_SANDBOX_FEATURE_STRICT_BASE ||
+        landlock_abi == 0 ||
+        seccomp_mode != capsid::kSeccompModeFilter) {
+        return 76;
+    }
+    return 0;
+}
 
 int run_linux_probe(const std::string &allowed_path,
                     const std::string &denied_path) {
@@ -243,32 +345,10 @@ int run_linux_namespace_probe() {
 // forked child with the binding profiles under test; the parent holds the
 // listener and the authorized directory.
 int run_binding_write_probe(const std::string &authorized_dir) {
-    capsid::SandboxConfig config;
-    config.address_space_limit = 0;
-    config.file_descriptor_limit = 64;
-    config.strict = true;
-    config.required_features = CAPSID_SANDBOX_FEATURE_STRICT_BASE;
-    config.preinstalled_features = 0;
-    config.binding_profiles = {"filesystem-write"};
-    config.binding_write_paths.push_back(authorized_dir);
-
-    uint32_t features = 0;
-    uint32_t landlock_abi = 0;
-    uint32_t seccomp_mode = 0;
-    std::string error;
-    if (!capsid::apply_sandbox(
-            config, &features, &landlock_abi, &seccomp_mode, &error)) {
-        std::cerr << "binding sandbox unavailable: " << error << std::endl;
-        return 77;
-    }
-    if (landlock_abi < 3) {
-        // §4.2: an old kernel must fail the worker startup — the launcher
-        // would have refused, so this build combination cannot run the
-        // conformance probe.
-        return 77;
-    }
-    if (seccomp_mode == 0) {
-        return 30;
+    const int setup = apply_binding_profile(
+        {"filesystem-write"}, {}, {authorized_dir});
+    if (setup != 0) {
+        return setup;
     }
     // Write inside the authorized directory succeeds.
     const std::string inside = authorized_dir + "/binding-probe.txt";
@@ -285,6 +365,23 @@ int run_binding_write_probe(const std::string &authorized_dir) {
     if (unlink(inside.c_str()) != 0) {
         return 33;
     }
+    const std::string first = authorized_dir + "/rename-first.txt";
+    const std::string second = authorized_dir + "/rename-second.txt";
+    const int rename_fd = open(
+        first.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+    if (rename_fd < 0) {
+        return 36;
+    }
+    close(rename_fd);
+    if (rename(first.c_str(), second.c_str()) != 0 ||
+        unlink(second.c_str()) != 0) {
+        return 37;
+    }
+    const std::string directory = authorized_dir + "/binding-probe-dir";
+    if (mkdir(directory.c_str(), 0700) != 0 ||
+        rmdir(directory.c_str()) != 0) {
+        return 38;
+    }
     // Writing outside the authorized directory fails (Landlock).
     errno = 0;
     const int escape_fd = open(
@@ -299,24 +396,100 @@ int run_binding_write_probe(const std::string &authorized_dir) {
     if (escape_errno != EACCES && escape_errno != EPERM) {
         return 35;
     }
-    return 0;
+    return verify_permanent_denies(40);
+}
+
+int run_binding_read_probe(const std::string &authorized_path,
+                           const std::string &denied_path) {
+    const int setup = apply_binding_profile(
+        {"filesystem-read"}, {authorized_path}, {});
+    if (setup != 0) {
+        return setup;
+    }
+    const int allowed = open(authorized_path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (allowed < 0) {
+        return 50;
+    }
+    char byte = 0;
+    const ssize_t count = read(allowed, &byte, 1);
+    close(allowed);
+    if (count != 1) {
+        return 51;
+    }
+    errno = 0;
+    const int denied = open(denied_path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (denied >= 0 || (errno != EACCES && errno != EPERM)) {
+        if (denied >= 0) {
+            close(denied);
+        }
+        return 52;
+    }
+    return verify_permanent_denies(52);
+}
+
+int run_binding_watch_probe(const std::string &authorized_path) {
+    const int setup = apply_binding_profile(
+        {"filesystem-read", "filesystem-watch"},
+        {authorized_path}, {});
+    if (setup != 0) {
+        return setup;
+    }
+    const int watcher = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (watcher < 0) {
+        return 60;
+    }
+    const int watch = inotify_add_watch(
+        watcher, authorized_path.c_str(), IN_MODIFY | IN_ATTRIB);
+    if (watch < 0) {
+        close(watcher);
+        return 61;
+    }
+    if (inotify_rm_watch(watcher, watch) != 0) {
+        close(watcher);
+        return 62;
+    }
+    close(watcher);
+    return verify_permanent_denies(62);
+}
+
+int run_binding_sqlite_probe(const std::string &authorized_dir,
+                             const std::string &authorized_path,
+                             const std::string &denied_path) {
+    const int setup = apply_binding_profile(
+        {"filesystem-read", "filesystem-write", "sqlite"},
+        {authorized_dir}, {authorized_dir});
+    if (setup != 0) {
+        return setup;
+    }
+    const int database = open(
+        authorized_path.c_str(), O_RDWR | O_CLOEXEC);
+    if (database < 0) {
+        return 70;
+    }
+    if (pwrite(database, "sqlite", 6, 0) != 6 ||
+        fsync(database) != 0 ||
+        ftruncate(database, 6) != 0 ||
+        flock(database, LOCK_EX) != 0 ||
+        flock(database, LOCK_UN) != 0) {
+        close(database);
+        return 71;
+    }
+    close(database);
+    errno = 0;
+    const int denied = open(denied_path.c_str(), O_RDWR | O_CLOEXEC);
+    if (denied >= 0 || (errno != EACCES && errno != EPERM)) {
+        if (denied >= 0) {
+            close(denied);
+        }
+        return 72;
+    }
+    return verify_permanent_denies(72);
 }
 
 int run_binding_network_probe(int listener_fd) {
-    capsid::SandboxConfig config;
-    config.address_space_limit = 0;
-    config.file_descriptor_limit = 64;
-    config.strict = true;
-    config.required_features = CAPSID_SANDBOX_FEATURE_STRICT_BASE;
-    config.preinstalled_features = 0;
-    config.binding_profiles = {"network-client"};
-
-    uint32_t features = 0;
-    std::string error;
-    if (!capsid::apply_sandbox(
-            config, &features, NULL, NULL, &error)) {
-        std::cerr << "binding sandbox unavailable: " << error << std::endl;
-        return 77;
+    const int setup = apply_binding_profile({"network-client"}, {}, {});
+    if (setup != 0) {
+        return setup;
     }
     // A client connect to the parent's listener succeeds.
     struct sockaddr_in address = {};
@@ -342,37 +515,77 @@ int run_binding_network_probe(int listener_fd) {
     }
     close(client);
     // Server syscalls stay permanently denied even with network-client.
-    errno = 0;
-    const int server = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    if (server >= 0) {
-        int reuse = 1;
-        setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-        if (bind(server, reinterpret_cast<struct sockaddr *>(&address),
-                 sizeof(address)) == 0) {
-            close(server);
-            return 42;
-        }
-        close(server);
-    }
-    return 0;
+    return verify_permanent_denies(80);
 }
 
-int run_binding_wasi_probe() {
-    capsid::SandboxConfig config;
-    config.address_space_limit = 0;
-    config.file_descriptor_limit = 64;
-    config.strict = true;
-    config.required_features = CAPSID_SANDBOX_FEATURE_STRICT_BASE;
-    config.preinstalled_features = 0;
-    config.binding_profiles = {"wasi"};
-    uint32_t features = 0;
-    std::string error;
-    if (!capsid::apply_sandbox(
-            config, &features, NULL, NULL, &error)) {
-        std::cerr << "wasi sandbox unavailable: " << error << std::endl;
-        return 77;
+int run_binding_wasi_probe(const std::string &authorized_path) {
+    const int setup = apply_binding_profile(
+        {"filesystem-read", "wasi"}, {authorized_path}, {});
+    if (setup != 0) {
+        return setup;
     }
-    return 0;
+    // The full tjs:wasi module executes a wasm fd_close workload in
+    // test_worker_zero_binding. At the kernel profile boundary, exercise
+    // the controlled-preopen primitive itself: an authorized descriptor
+    // can be opened and read with pread.
+    const int preopen = open(
+        authorized_path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (preopen < 0) {
+        return 90;
+    }
+    char byte = 0;
+    const ssize_t count = pread(preopen, &byte, 1, 0);
+    close(preopen);
+    if (count != 1) {
+        return 91;
+    }
+    return verify_permanent_denies(91);
+}
+
+int run_binding_union_probe(const std::string &authorized_dir,
+                            const std::string &authorized_path,
+                            const std::string &denied_path) {
+    const int setup = apply_binding_profile(
+        {"filesystem-read", "filesystem-write", "filesystem-watch",
+         "network-client", "sqlite", "wasi"},
+        {authorized_dir}, {authorized_dir});
+    if (setup != 0) {
+        return setup;
+    }
+
+    const int database = open(
+        authorized_path.c_str(), O_RDWR | O_CLOEXEC);
+    if (database < 0 || pwrite(database, "union", 5, 0) != 5 ||
+        fsync(database) != 0 || flock(database, LOCK_EX) != 0 ||
+        flock(database, LOCK_UN) != 0) {
+        if (database >= 0) {
+            close(database);
+        }
+        return 100;
+    }
+    close(database);
+
+    const int watcher = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (watcher < 0) {
+        return 101;
+    }
+    const int watch = inotify_add_watch(
+        watcher, authorized_path.c_str(), IN_MODIFY);
+    if (watch < 0 || inotify_rm_watch(watcher, watch) != 0) {
+        close(watcher);
+        return 102;
+    }
+    close(watcher);
+
+    errno = 0;
+    const int denied = open(denied_path.c_str(), O_RDWR | O_CLOEXEC);
+    if (denied >= 0 || (errno != EACCES && errno != EPERM)) {
+        if (denied >= 0) {
+            close(denied);
+        }
+        return 103;
+    }
+    return verify_permanent_denies(103);
 }
 
 int binding_probe_listener_port = 0;
@@ -409,6 +622,39 @@ int main(int argc, char **argv) {
                 "binding write probe reaped");
         return WIFEXITED(status) ? WEXITSTATUS(status) : 60;
     }
+    if (argc == 4 && std::string(argv[1]) == "--binding-read") {
+        const pid_t pid = fork();
+        require(pid >= 0, "binding read probe forked");
+        if (pid == 0) {
+            _exit(run_binding_read_probe(argv[2], argv[3]));
+        }
+        int status = 0;
+        require(waitpid(pid, &status, 0) == pid,
+                "binding read probe reaped");
+        return WIFEXITED(status) ? WEXITSTATUS(status) : 63;
+    }
+    if (argc == 3 && std::string(argv[1]) == "--binding-watch") {
+        const pid_t pid = fork();
+        require(pid >= 0, "binding watch probe forked");
+        if (pid == 0) {
+            _exit(run_binding_watch_probe(argv[2]));
+        }
+        int status = 0;
+        require(waitpid(pid, &status, 0) == pid,
+                "binding watch probe reaped");
+        return WIFEXITED(status) ? WEXITSTATUS(status) : 64;
+    }
+    if (argc == 5 && std::string(argv[1]) == "--binding-sqlite") {
+        const pid_t pid = fork();
+        require(pid >= 0, "binding sqlite probe forked");
+        if (pid == 0) {
+            _exit(run_binding_sqlite_probe(argv[2], argv[3], argv[4]));
+        }
+        int status = 0;
+        require(waitpid(pid, &status, 0) == pid,
+                "binding sqlite probe reaped");
+        return WIFEXITED(status) ? WEXITSTATUS(status) : 65;
+    }
     if (argc == 2 && std::string(argv[1]) == "--binding-network") {
         // Parent holds a listener; the child connects to it.
         const int listener = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -439,16 +685,27 @@ int main(int argc, char **argv) {
         close(listener);
         return WIFEXITED(status) ? WEXITSTATUS(status) : 61;
     }
-    if (argc == 2 && std::string(argv[1]) == "--binding-wasi") {
+    if (argc == 3 && std::string(argv[1]) == "--binding-wasi") {
         const pid_t pid = fork();
         require(pid >= 0, "binding wasi probe forked");
         if (pid == 0) {
-            _exit(run_binding_wasi_probe());
+            _exit(run_binding_wasi_probe(argv[2]));
         }
         int status = 0;
         require(waitpid(pid, &status, 0) == pid,
                 "binding wasi probe reaped");
         return WIFEXITED(status) ? WEXITSTATUS(status) : 62;
+    }
+    if (argc == 5 && std::string(argv[1]) == "--binding-union") {
+        const pid_t pid = fork();
+        require(pid >= 0, "binding union probe forked");
+        if (pid == 0) {
+            _exit(run_binding_union_probe(argv[2], argv[3], argv[4]));
+        }
+        int status = 0;
+        require(waitpid(pid, &status, 0) == pid,
+                "binding union probe reaped");
+        return WIFEXITED(status) ? WEXITSTATUS(status) : 66;
     }
     if (argc != 1) {
         fail("unknown sandbox test option");
@@ -491,10 +748,22 @@ int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--binding-network") {
         return 77;
     }
-    if (argc == 2 && std::string(argv[1]) == "--binding-wasi") {
+    if (argc == 3 && std::string(argv[1]) == "--binding-wasi") {
         return 77;
     }
     if (argc == 3 && std::string(argv[1]) == "--binding-write") {
+        return 77;
+    }
+    if (argc == 4 && std::string(argv[1]) == "--binding-read") {
+        return 77;
+    }
+    if (argc == 3 && std::string(argv[1]) == "--binding-watch") {
+        return 77;
+    }
+    if (argc == 5 && std::string(argv[1]) == "--binding-sqlite") {
+        return 77;
+    }
+    if (argc == 5 && std::string(argv[1]) == "--binding-union") {
         return 77;
     }
     if (argc != 1) {

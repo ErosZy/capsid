@@ -60,6 +60,9 @@ bool valid_flags(uint16_t type, uint32_t flags) {
     if (type == kReady) {
         return (flags & ~kReadySandboxFeatureMask) == 0;
     }
+    if (type == kLog) {
+        return (flags & ~kFlagBindingLog) == 0;
+    }
     return flags == 0;
 }
 

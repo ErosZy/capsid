@@ -57,6 +57,24 @@ void emit_log(StructuredLog* log, LogLane lane, LogFields fields) {
     }
 }
 
+void emit_worker_log(StructuredLog* log, const WorkerEvent& event) {
+    if (log == nullptr) {
+        return;
+    }
+    LogFields fields;
+    fields.level = event.binding_log ? event.log_level : "info";
+    fields.event = log_events::kAppLog;
+    fields.app = event.application_id;
+    fields.generation = event.generation_digest;
+    fields.binding = event.binding_id;
+    if (event.request_id != 0) {
+        fields.request_id = std::to_string(event.request_id);
+    }
+    fields.fields = event.log_fields_json;
+    fields.message = event.text;
+    log->log(LogLane::kApp, std::move(fields));
+}
+
 // M2 item 7 (design §12.1): the deploy-stage counters are emitted on the
 // success edge of every pipeline phase; an operation-level failure is
 // counted by the operation series at the terminal state.
@@ -605,21 +623,36 @@ WarmResult warm_worker(const ManagedHostOptions& options,
         const capsid_result result =
             capsid_worker_next_event(out.worker, &event);
         if (result == CAPSID_OK) {
+            if (event.type == CAPSID_EVENT_LOG) {
+                WorkerEvent decoded;
+                std::string log_error;
+                if (!decode_worker_log_event(
+                        event, &decoded, &log_error)) {
+                    capsid_worker_destroy(out.worker);
+                    out.worker = nullptr;
+                    out.error = "invalid worker log before READY";
+                    return out;
+                }
+                decoded.application_id = options.application;
+                decoded.generation_digest = generation;
+                emit_worker_log(options.log, decoded);
+                continue;
+            }
             if (event.type == CAPSID_EVENT_READY) {
                 // §4.3: the READY payload is the 71-byte compatibility id
                 // plus, for Binding workers, the sandbox proof. The Host
                 // compares both — the compat prefix and its own expected
                 // profile digest — never a whole-payload string equality.
                 std::string ready_error;
+                const capsid::WorkerReadyProof expected_ready =
+                    capsid::host::expected_worker_ready_proof(
+                        bindings, effective.strict_sandbox);
                 if (!capsid::host::verify_worker_ready(
                         std::vector<std::uint8_t>(
                             event.payload.data,
                             event.payload.data + event.payload.size),
                         options.runtime_compatibility_id,
-                        bindings,
-                        /*expected_seccomp_mode=*/0,
-                        /*expected_landlock_abi=*/0,
-                        /*expected_namespace_identity=*/"",
+                        expected_ready,
                         &ready_error)) {
                     capsid_worker_destroy(out.worker);
                     out.worker = nullptr;
@@ -706,7 +739,8 @@ WorkerExecutor::WorkerFactory make_generation_factory(
     const EffectiveConfig& effective,
     const std::vector<std::pair<std::string, std::string>>& env_values,
     const std::vector<capsid::host::EffectiveBinding>& bindings) {
-    return [options, bundle, trusted_bytecode, source_name, effective,
+    WorkerExecutor::WorkerFactory factory =
+        [options, bundle, trusted_bytecode, source_name, effective,
             env_values, bindings](capsid_worker** out,
                         std::string* factory_error) -> bool {
         if (options.stop_requested != nullptr &&
@@ -725,6 +759,10 @@ WorkerExecutor::WorkerFactory make_generation_factory(
         *out = worker;
         return true;
     };
+    factory.expected_ready =
+        capsid::host::expected_worker_ready_proof(
+            bindings, effective.strict_sandbox);
+    return factory;
 }
 
 struct WarmPoolResult {
@@ -2699,20 +2737,12 @@ bool has_secret_requests = false;
             }
             capsid::host::BindingCompileResult binding_result =
                 capsid::host::compile_effective_bindings(
-                    *registry, binding_requests, snapshot_revision);
+                    *registry, binding_requests);
             if (!binding_result.ok) {
                 fail(binding_result.error);
                 return prepared;
             }
             prepared.bindings = std::move(binding_result.bindings);
-            binding_set_digest = std::move(binding_result.set_digest);
-            prepared.bindings_json =
-                capsid::host::serialize_bindings_snapshot(
-                    prepared.bindings);
-            if (prepared.bindings_json.empty()) {
-                fail("binding snapshot serialization failed");
-                return prepared;
-            }
             // Binding secret values resolve from the provider outcomes
             // tail (env key ids first, binding key ids in declaration
             // order); the public name comes from the ref.
@@ -2724,7 +2754,7 @@ bool has_secret_requests = false;
             }
             for (capsid::host::EffectiveBinding& binding :
                  prepared.bindings) {
-                for (const capsid::host::BindingSecretRef& secret_ref :
+                for (capsid::host::BindingSecretRef& secret_ref :
                      binding.request.secrets) {
                     if (binding_outcome_index >= outcomes.size() ||
                         !outcomes[binding_outcome_index].error.empty()) {
@@ -2738,9 +2768,26 @@ bool has_secret_requests = false;
                     value.value.assign(
                         outcomes[binding_outcome_index].value.begin(),
                         outcomes[binding_outcome_index].value.end());
+                    secret_ref.opaque_revision =
+                        outcomes[binding_outcome_index].revision;
+                    if (secret_ref.opaque_revision.empty()) {
+                        fail("binding secret revision is empty: " +
+                             secret_ref.key_id);
+                        return prepared;
+                    }
                     binding.secret_values.push_back(std::move(value));
                     ++binding_outcome_index;
                 }
+            }
+            binding_set_digest =
+                capsid::host::refresh_binding_set_digest(
+                    &prepared.bindings);
+            prepared.bindings_json =
+                capsid::host::serialize_bindings_snapshot(
+                    prepared.bindings);
+            if (prepared.bindings_json.empty()) {
+                fail("binding snapshot serialization failed");
+                return prepared;
             }
         }
     }
@@ -3138,6 +3185,12 @@ ValidatedGeneration validate_committed_generation(
                          secret_ref.key_id);
                     return validated;
                 }
+                if (outcomes[binding_outcome_index].revision !=
+                    secret_ref.opaque_revision) {
+                    fail("committed binding secret revision mismatch: " +
+                         secret_ref.key_id);
+                    return validated;
+                }
                 capsid::host::EffectiveBinding::SecretValue value;
                 value.name = secret_ref.name;
                 value.key_id = secret_ref.key_id;
@@ -3276,17 +3329,10 @@ ValidatedGeneration validate_committed_generation(
     // committed snapshot, so a Binding generation re-derives the same
     // digest it was committed under.
     {
-        std::vector<capsid::host::BindingSetDigestEntry> digest_entries;
-        for (const capsid::host::EffectiveBinding& binding :
-             validated.bindings) {
-            BindingSetDigestEntry entry = binding.digest_entry;
-            entry.secret_revision =
-                snapshot.snapshot.secret_revision();
-            digest_entries.push_back(std::move(entry));
-        }
-        if (!digest_entries.empty()) {
+        if (!validated.bindings.empty()) {
             identity.binding_set_digest =
-                capsid::host::compute_binding_set_digest(digest_entries);
+                capsid::host::refresh_binding_set_digest(
+                    &validated.bindings);
         }
     }
     const std::string recomputed_digest = compute_generation_digest(identity);

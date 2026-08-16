@@ -703,7 +703,7 @@ bool is_sandbox_profile(std::string_view value) {
 constexpr std::string_view kBindingKnownModules[] = {
     "tjs:assert",       "tjs:getopts",     "tjs:hashing",
     "tjs:internal/core", "tjs:internal/path", "tjs:ipaddr",
-    "tjs:path",         "tjs:posix-socket", "tjs:readline",
+    "tjs:path",         "tjs:readline",
     "tjs:sqlite",       "tjs:utils",       "tjs:uuid",
     "tjs:wasi",
 };
@@ -1365,6 +1365,30 @@ bool check_manifest_consistency(json_t* root, ConfigError& error) {
     };
 
     const json_t* permissions = json_object_get(root, "permissions");
+    std::unordered_set<std::string> modules;
+    const json_t* module_list =
+        json_object_get(permissions, "modules");
+    if (json_is_array(module_list)) {
+        for (std::size_t index = 0; index < json_array_size(module_list);
+             ++index) {
+            modules.insert(
+                json_string_value(json_array_get(module_list, index)));
+        }
+    }
+    if (modules.count("tjs:sqlite") && !profiles.count("sqlite")) {
+        error.code = ConfigErrorCode::kInvalidValue;
+        error.path = "/permissions/modules";
+        error.message =
+            "tjs:sqlite requires the sqlite sandbox profile";
+        return false;
+    }
+    if (modules.count("tjs:wasi") && !profiles.count("wasi")) {
+        error.code = ConfigErrorCode::kInvalidValue;
+        error.path = "/permissions/modules";
+        error.message =
+            "tjs:wasi requires the wasi sandbox profile";
+        return false;
+    }
     const json_t* net = json_object_get(permissions, "net");
     if (net != nullptr) {
         const json_t* allow = json_object_get(net, "allow");

@@ -12,16 +12,19 @@
 
 #include <sys/types.h>
 
+#include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace capsid::host {
 
-// Binding v1 snapshot ceiling: every manifest (1 MiB), every source
-// (16 MiB), every config (256 KiB) plus framing for one generation's
-// bindings — recovery reads bindings.json under this bound.
+// Binding v1 committed-snapshot ceiling. Source is capped at 64 MiB per
+// generation before JSON encoding; 160 MiB leaves room for JSON escaping,
+// manifests, configs, permission lists, and framing while still bounding a
+// recovery read before parsing.
 inline constexpr std::size_t kMaxBindingsSnapshotBytes =
-    18U * 1024U * 1024U;
+    160U * 1024U * 1024U;
 
 // One validated Binding package, fully copied at scan time. The strings
 // are private copies of the file bytes; later edits to bindingsRoot cannot
@@ -48,6 +51,22 @@ bool scan_bindings_root(const std::string &root,
                         const std::vector<uid_t> &allowed_uids,
                         BindingRegistrySnapshot *out,
                         std::string *error);
+
+// Deterministic race-injection seam used only by the registry regression
+// tests. Production callers use scan_bindings_root() and cannot install a
+// hook. The hook runs after an opened directory has been enumerated.
+enum class BindingRegistryScanPhase {
+    kRootEnumerated,
+    kPackageEnumerated,
+};
+using BindingRegistryScanHook = std::function<void(
+    BindingRegistryScanPhase phase, std::string_view package_id)>;
+bool scan_bindings_root_with_test_hook(
+    const std::string &root,
+    const std::vector<uid_t> &allowed_uids,
+    const BindingRegistryScanHook &hook,
+    BindingRegistrySnapshot *out,
+    std::string *error);
 
 }  // namespace capsid::host
 

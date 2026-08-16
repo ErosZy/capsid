@@ -849,7 +849,7 @@ uint32_t binding_rule_id(const std::string &label) {
 const char *const kBindingModules[] = {
     "tjs:assert",        "tjs:getopts",      "tjs:hashing",
     "tjs:internal/core", "tjs:internal/path", "tjs:ipaddr",
-    "tjs:path",          "tjs:posix-socket", "tjs:readline",
+    "tjs:path",          "tjs:readline",
     "tjs:sqlite",        "tjs:utils",        "tjs:uuid",
     "tjs:wasi",
 };
@@ -876,6 +876,7 @@ bool binding_module_forbidden(const std::string &name) {
         "tjs:ffi",             "tjs:worker",
         "tjs:http-server",     "tjs:process",
         "tjs:signals",         "tjs:internal/worker",
+        "tjs:posix-socket",
     };
     return contains(forbidden,
                     sizeof(forbidden) / sizeof(forbidden[0]), name);
@@ -1188,6 +1189,36 @@ bool BindingPolicySet::configure(
                     *error =
                         "fs write requires the filesystem-write sandbox "
                         "profile";
+                }
+                return false;
+            }
+            const bool has_sqlite_module =
+                std::find(descriptor.modules.begin(),
+                          descriptor.modules.end(),
+                          "tjs:sqlite") != descriptor.modules.end();
+            const bool has_sqlite_profile =
+                std::find(descriptor.profiles.begin(),
+                          descriptor.profiles.end(),
+                          "sqlite") != descriptor.profiles.end();
+            if (has_sqlite_module && !has_sqlite_profile) {
+                if (error) {
+                    *error =
+                        "tjs:sqlite requires the sqlite sandbox profile";
+                }
+                return false;
+            }
+            const bool has_wasi_module =
+                std::find(descriptor.modules.begin(),
+                          descriptor.modules.end(),
+                          "tjs:wasi") != descriptor.modules.end();
+            const bool has_wasi_profile =
+                std::find(descriptor.profiles.begin(),
+                          descriptor.profiles.end(),
+                          "wasi") != descriptor.profiles.end();
+            if (has_wasi_module && !has_wasi_profile) {
+                if (error) {
+                    *error =
+                        "tjs:wasi requires the wasi sandbox profile";
                 }
                 return false;
             }

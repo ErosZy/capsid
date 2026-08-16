@@ -22,12 +22,18 @@ int capsid_tjs_set_ca_bundle_path(TJSRuntime *runtime, const char *path);
 int capsid_tjs_set_cookie_jar_path(TJSRuntime *runtime, const char *path);
 int capsid_tjs_set_fs_policy(
     TJSRuntime *runtime,
-    int (*check)(void *opaque, const char *path, int write_access,
+    int (*check)(void *opaque, const char *path, int access_kind,
+                 char *reason, size_t reason_size),
+    void *opaque);
+int capsid_tjs_set_stdio_policy(
+    TJSRuntime *runtime,
+    int (*check)(void *opaque, const char *stream,
                  char *reason, size_t reason_size),
     void *opaque);
 // Binding v1 §4.1: registers the raw core.fs module on a runtime (the
 // Binding Runtime only); every entry point is per-origin gated.
 int capsid_tjs_install_binding_fs(TJSRuntime *runtime);
+int capsid_tjs_harden_binding_core(TJSRuntime *runtime);
 int capsid_tjs_set_egress_policy(
     TJSRuntime *runtime,
     int (*check)(void *opaque,
@@ -59,6 +65,7 @@ void tjs__execute_jobs(JSContext *ctx);
 #include <sys/syscall.h>
 #endif
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -69,6 +76,7 @@ void tjs__execute_jobs(JSContext *ctx);
 #include <deque>
 #include <limits>
 #include <map>
+#include <new>
 #include <optional>
 #include <set>
 #include <string>
@@ -115,13 +123,30 @@ ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
 // §7.7: restores the binding dispatch window on scope exit so the egress
 // gate always observes a well-defined binding context.
 struct BindingWindowGuard {
-    std::string &slot;
-    const std::string previous;
-    BindingWindowGuard(std::string &slot, const std::string &id)
-        : slot(slot), previous(slot) {
-        slot = id;
+    std::string &id_slot;
+    uint64_t &request_slot;
+    const std::string previous_id;
+    const uint64_t previous_request;
+    BindingWindowGuard(std::string &id_slot,
+                       uint64_t &request_slot,
+                       const std::string &id,
+                       uint64_t request_id)
+        : id_slot(id_slot),
+          request_slot(request_slot),
+          previous_id(id_slot),
+          previous_request(request_slot) {
+        id_slot = id;
+        request_slot = request_id;
     }
-    ~BindingWindowGuard() { slot = previous; }
+    ~BindingWindowGuard() {
+        id_slot = previous_id;
+        request_slot = previous_request;
+    }
+};
+
+struct BindingAsyncContext {
+    std::string binding_id;
+    uint64_t request_id;
 };
 
 typedef capsid::WorkerStartupConfig WorkerConfig;
@@ -327,36 +352,39 @@ class WorkerRuntime {
     // §7.6: the user_to_binding / binding_to_user call queues. Calls carry
     // an id; the pending table owns the JSValues so the queues stay
     // relocatable.
+    enum class BindingCallState {
+        kQueued,
+        kDispatched,
+        kSettled,
+    };
+
     struct PendingBindingCall {
         PendingBindingCall()
-            : method(JS_ATOM_NULL),
-              request_id(0),
+            : request_id(0),
+              deadline_ns(0),
               user_resolve(JS_UNDEFINED),
               user_reject(JS_UNDEFINED),
               abort_controller(JS_UNDEFINED),
               binding_result(JS_UNDEFINED),
               binding_error(JS_UNDEFINED),
-              canceled(false),
-              dispatched(false),
-              settled(false) {}
+              state(BindingCallState::kQueued) {}
         std::string binding_id;
         size_t table_index = 0;
-        JSAtom method;
+        std::string method;
         capsid::NeutralValue input;
         uint64_t request_id;
+        uint64_t deadline_ns;
         JSValue user_resolve;      // user ctx
         JSValue user_reject;       // user ctx
         JSValue abort_controller;  // binding ctx
         JSValue binding_result;    // binding ctx (fulfillment value)
         JSValue binding_error;     // binding ctx (rejection reason)
-        bool canceled;
-        bool dispatched;
-        bool settled;
+        BindingCallState state;
     };
     std::deque<uint64_t> user_to_binding_;
     std::deque<uint64_t> binding_to_user_;
     std::map<uint64_t, PendingBindingCall> pending_binding_calls_;
-    uint64_t next_binding_call_id_ = 0;
+    uint64_t next_binding_call_id_ = 1;
     size_t inflight_binding_calls_ = 0;
     // binding id -> index into binding_tables_.
     std::map<std::string, size_t> binding_table_index_;
@@ -384,6 +412,11 @@ public:
           bundle_name_("capsid:app/main"),
           binding_runtime_(NULL),
           binding_ctx_(NULL),
+          binding_promise_ctor_(JS_UNDEFINED),
+          binding_promise_resolve_(JS_UNDEFINED),
+          binding_promise_then_(JS_UNDEFINED),
+          binding_abort_controller_ctor_(JS_UNDEFINED),
+          binding_abort_(JS_UNDEFINED),
           bootstrapping_binding_runtime_(false),
           application_handler_(JS_UNDEFINED),
           application_handler_this_(JS_UNDEFINED),
@@ -433,17 +466,15 @@ public:
             // §7.5: free the Binding Runtime first so its handles close on
             // the shared loop while the User runtime still owns the loop.
             for (size_t index = 0; index < binding_tables_.size(); ++index) {
-                for (size_t method = 0;
-                     method < binding_tables_[index].method_names.size();
-                     ++method) {
-                    JS_FreeAtom(
-                        binding_ctx_,
-                        binding_tables_[index].method_names[method]);
-                }
                 JS_FreeValue(
                     binding_ctx_,
                     binding_tables_[index].factory_object);
             }
+            JS_FreeValue(binding_ctx_, binding_promise_ctor_);
+            JS_FreeValue(binding_ctx_, binding_promise_resolve_);
+            JS_FreeValue(binding_ctx_, binding_promise_then_);
+            JS_FreeValue(binding_ctx_, binding_abort_controller_ctor_);
+            JS_FreeValue(binding_ctx_, binding_abort_);
             TJS_FreeRuntime(binding_runtime_);
             binding_runtime_ = NULL;
             binding_ctx_ = NULL;
@@ -573,6 +604,14 @@ public:
         uint32_t sandbox_features = 0;
         uint32_t sandbox_landlock_abi = 0;
         uint32_t sandbox_seccomp_mode = 0;
+        const std::string sandbox_namespace_identity =
+            capsid::network_namespace_identity(network_namespace_fd_);
+        if (network_namespace_fd_ >= 0 &&
+            sandbox_namespace_identity.empty()) {
+            send_error(0, "sandbox setup failed: network namespace identity unavailable");
+            flush_blocking();
+            return 1;
+        }
         std::string sandbox_error;
         if (!capsid::apply_sandbox(
                 sandbox_config, &sandbox_features, &sandbox_landlock_abi,
@@ -682,7 +721,7 @@ public:
             sandbox_features,
             sandbox_seccomp_mode,
             sandbox_landlock_abi,
-            "",
+            sandbox_namespace_identity,
             capsid::compute_binding_profile_digest(bindings_));
         send_payload(capsid::protocol::kReady, 0, sandbox_features,
                      ready_payload.data(), ready_payload.size());
@@ -806,8 +845,14 @@ private:
         WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
         *out_job_context = NULL;
         if (self && !self->current_binding_id_.empty()) {
-            *out_job_context =
-                strdup(self->current_binding_id_.c_str());
+            BindingAsyncContext *captured =
+                new (std::nothrow) BindingAsyncContext();
+            if (captured == NULL) {
+                return -1;
+            }
+            captured->binding_id = self->current_binding_id_;
+            captured->request_id = self->current_binding_request_id_;
+            *out_job_context = captured;
         }
         return 0;
     }
@@ -816,14 +861,21 @@ private:
                                         void *job_context,
                                         void *opaque) {
         WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
-        void *previous = self && !self->current_binding_id_.empty()
-                             ? strdup(self->current_binding_id_.c_str())
-                             : NULL;
+        BindingAsyncContext *previous = NULL;
+        if (self && !self->current_binding_id_.empty()) {
+            previous = new (std::nothrow) BindingAsyncContext();
+            if (previous != NULL) {
+                previous->binding_id = self->current_binding_id_;
+                previous->request_id = self->current_binding_request_id_;
+            }
+        }
         if (self) {
+            const BindingAsyncContext *captured =
+                static_cast<const BindingAsyncContext *>(job_context);
             self->current_binding_id_ =
-                job_context != NULL
-                    ? static_cast<const char *>(job_context)
-                    : "";
+                captured != NULL ? captured->binding_id : "";
+            self->current_binding_request_id_ =
+                captured != NULL ? captured->request_id : 0;
         }
         return previous;
     }
@@ -832,19 +884,35 @@ private:
                                        void *previous_context,
                                        void *opaque) {
         WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        const BindingAsyncContext *previous =
+            static_cast<const BindingAsyncContext *>(previous_context);
         if (self) {
             self->current_binding_id_ =
-                previous_context != NULL
-                    ? static_cast<const char *>(previous_context)
-                    : "";
+                previous != NULL ? previous->binding_id : "";
+            self->current_binding_request_id_ =
+                previous != NULL ? previous->request_id : 0;
         }
-        free(previous_context);
+        delete previous;
     }
 
     static void binding_job_release_hook(void *job_context,
                                          void *opaque) {
         (void)opaque;
-        free(job_context);
+        delete static_cast<BindingAsyncContext *>(job_context);
+    }
+
+    static int binding_resource_authorize_hook(JSContext *,
+                                               void *owner,
+                                               void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        const BindingAsyncContext *captured =
+            static_cast<const BindingAsyncContext *>(owner);
+        return self != NULL && owner != NULL &&
+                       !self->current_binding_id_.empty() &&
+                       self->current_binding_id_ ==
+                           captured->binding_id
+                   ? 1
+                   : 0;
     }
 
     // Installs the binding identity hooks on the Binding Runtime; every
@@ -864,6 +932,11 @@ private:
         async_hooks.leave = binding_job_leave_hook;
         async_hooks.release = binding_job_release_hook;
         tjs_set_async_context_hooks(binding_ctx_, &async_hooks, this);
+        TJSResourceOwnerHooks owner_hooks;
+        owner_hooks.capture = binding_job_capture_hook;
+        owner_hooks.authorize = binding_resource_authorize_hook;
+        owner_hooks.release = binding_job_release_hook;
+        tjs_set_resource_owner_hooks(binding_ctx_, &owner_hooks, this);
     }
 
     void retain_token(RequestToken *token) {
@@ -922,7 +995,7 @@ private:
                     static_cast<unsigned long long>(token->request_id),
                     site);
             }
-            poisoned_ = true;
+            enter_poison("request identity mismatch");
             JS_ThrowInternalError(ctx, "request identity mismatch");
             return NULL;
         }
@@ -939,7 +1012,7 @@ private:
                     "POISON SITE stale-token active=%llu\n",
                     static_cast<unsigned long long>(token->request_id));
             }
-            poisoned_ = true;
+            enter_poison("stale request token");
             JS_ThrowInternalError(ctx, "stale request token");
             return NULL;
         }
@@ -1004,6 +1077,13 @@ private:
                 it->second.token->terminal = true;
             }
             reject_pending(it->second, "worker poisoned");
+        }
+        // Poison is terminal for both heaps. Abort and erase every Binding
+        // call now instead of retaining cross-runtime JSValues through the
+        // grace period or waiting for an uncooperative Promise to settle.
+        while (!pending_binding_calls_.empty()) {
+            cancel_binding_calls(
+                pending_binding_calls_.begin()->second.request_id);
         }
     }
 
@@ -1178,6 +1258,10 @@ private:
         if (it == responses_.end()) {
             return;
         }
+        // A response terminal is also the lifetime boundary for every
+        // fire-and-forget Binding call created by that request. Reclaim them
+        // here even if the Binding Promise never cooperates or settles.
+        cancel_binding_calls(it->first);
         release_token(it->second.token);
         it->second.token = NULL;
         responses_.erase(it);
@@ -1289,10 +1373,13 @@ private:
             }
             // §7.7: the Binding Runtime's egress gate consults the
             // current binding's policy — never the User policy.
-            if (capsid_tjs_set_egress_policy(
+            if (capsid_tjs_set_cookie_jar_path(runtime, "") != 0 ||
+                capsid_tjs_set_egress_policy(
                     runtime, binding_egress_check, self) != 0 ||
                 capsid_tjs_set_fs_policy(
-                    runtime, binding_fs_check, self) != 0) {
+                    runtime, binding_fs_check, self) != 0 ||
+                capsid_tjs_set_stdio_policy(
+                    runtime, binding_stdio_check, self) != 0) {
                 if (!JS_HasException(ctx)) {
                     JS_ThrowInternalError(
                         ctx,
@@ -1300,8 +1387,19 @@ private:
                 }
                 return -1;
             }
-            return TJS_EvalBytecode(
+            const int bootstrap_result = TJS_EvalBytecode(
                 ctx, capsid__bootstrap, capsid__bootstrap_size, true);
+            if (bootstrap_result != 0) {
+                return bootstrap_result;
+            }
+            if (capsid_tjs_harden_binding_core(runtime) != 0) {
+                if (!JS_HasException(ctx)) {
+                    JS_ThrowInternalError(
+                        ctx, "failed to harden Binding core");
+                }
+                return -1;
+            }
+            return 0;
         }
         if (capsid_tjs_set_cookie_jar_path(runtime, "") != 0 ||
             capsid_tjs_set_egress_policy(
@@ -1395,38 +1493,76 @@ private:
         if (reason && reason_size != 0) {
             reason[0] = '\0';
         }
-        if (!self || !host || port == 0) {
+        if (!self || (!host && !address)) {
             return 0;
         }
         const capsid::BindingPolicy *policy =
             self->binding_policies_.policy(self->current_binding_id_);
+        const bool dns_request = host != NULL && port == 0 && address == NULL;
         if (policy == NULL || !policy->has_net_policy) {
             if (reason && reason_size != 0) {
-                const std::string text =
-                    "egress denied: no binding net policy";
+                const std::string text = dns_request
+                    ? "CAPSID_DNS_EGRESS_DENIED: " + std::string(host)
+                    : "egress denied: no binding net policy";
                 std::snprintf(reason, reason_size, "%s", text.c_str());
             }
             return 0;
         }
-        const std::string host_text(host);
-        const capsid::EgressDecision decision =
-            policy->egress.decide_host(host_text, port);
-        if (!decision.allowed) {
-            if (reason && reason_size != 0) {
-                const std::string text =
-                    "egress denied by binding policy: " + host_text +
-                    ":" + std::to_string(port);
-                std::snprintf(reason, reason_size, "%s", text.c_str());
+        if (dns_request) {
+            const std::string host_text(host);
+            const capsid::EgressDecision dns =
+                policy->egress.decide_host_any_port(host_text);
+            if (!dns.allowed) {
+                if (reason && reason_size != 0) {
+                    const std::string text =
+                        "CAPSID_DNS_EGRESS_DENIED: " + host_text;
+                    std::snprintf(reason, reason_size, "%s", text.c_str());
+                }
+                return 0;
             }
+            return 1;
+        }
+
+        uint16_t effective_port = port;
+        if (effective_port == 0 && address != NULL) {
+            if (address->sa_family == AF_INET &&
+                address_len >=
+                    static_cast<socklen_t>(sizeof(sockaddr_in))) {
+                effective_port = ntohs(
+                    reinterpret_cast<const sockaddr_in *>(address)->sin_port);
+            } else if (address->sa_family == AF_INET6 &&
+                       address_len >=
+                           static_cast<socklen_t>(sizeof(sockaddr_in6))) {
+                effective_port = ntohs(
+                    reinterpret_cast<const sockaddr_in6 *>(address)->sin6_port);
+            }
+        }
+        if (effective_port == 0) {
             return 0;
         }
-        // Hostname stage allowed. A resolved address must also be covered
-        // by an explicit address rule when the address is numeric; the
-        // same policy decides both stages.
+
+        if (host != NULL) {
+            const std::string host_text(host);
+            const capsid::EgressDecision host_decision =
+                policy->egress.decide_host(host_text, effective_port);
+            if (!host_decision.allowed) {
+                if (reason && reason_size != 0) {
+                    const std::string text =
+                        "egress denied by binding policy: " + host_text +
+                        ":" + std::to_string(effective_port);
+                    std::snprintf(reason, reason_size, "%s", text.c_str());
+                }
+                return 0;
+            }
+        }
+        // A resolved/raw address is checked after its host/literal preflight.
+        // Raw TCP/UDP call the same gate a second time with only sockaddr;
+        // derive the embedded port so the second stage cannot accidentally
+        // fail open or reject every explicitly allowed client connection.
         if (address != NULL) {
             const capsid::EgressDecision address_decision =
                 policy->egress.decide_resolved_address_authoritative(
-                    address, address_len, port);
+                    address, address_len, effective_port);
             if (!address_decision.allowed) {
                 if (reason && reason_size != 0) {
                     const std::string text =
@@ -1445,7 +1581,7 @@ private:
     // syscall.
     static int binding_fs_check(void *opaque,
                                 const char *path,
-                                int write_access,
+                                int access_kind,
                                 char *reason,
                                 size_t reason_size) {
         WorkerRuntime *self =
@@ -1458,18 +1594,25 @@ private:
         }
         const capsid::BindingPolicy *policy =
             self->binding_policies_.policy(self->current_binding_id_);
-        if (policy == NULL) {
+        const bool is_watch = access_kind == 2;
+        const bool watch_profile =
+            policy != NULL &&
+            std::find(policy->profiles.begin(), policy->profiles.end(),
+                      "filesystem-watch") != policy->profiles.end();
+        if (policy == NULL || (is_watch && !watch_profile)) {
             if (reason && reason_size != 0) {
                 const std::string text =
-                    "fs denied: no binding policy";
+                    is_watch && policy != NULL
+                        ? "CAPSID_FSWATCH_PROFILE_DENIED"
+                        : "fs denied: no binding policy";
                 std::snprintf(reason, reason_size, "%s", text.c_str());
             }
             return 0;
         }
         const capsid::PermissionDecision decision =
             policy->capability.evaluate(
-                write_access ? CAPSID_PERMISSION_WRITE
-                             : CAPSID_PERMISSION_READ,
+                access_kind == 1 ? CAPSID_PERMISSION_WRITE
+                                 : CAPSID_PERMISSION_READ,
                 path);
         if (decision.state != CAPSID_PERMISSION_STATE_GRANTED) {
             if (reason && reason_size != 0) {
@@ -1480,6 +1623,35 @@ private:
             return 0;
         }
         return 1;
+    }
+
+    // WASI receives only the conventional stream whose exact public name is
+    // present in the current Binding policy. The stream and Binding origin
+    // both come from native code, never from a caller-supplied origin value.
+    static int binding_stdio_check(void *opaque,
+                                   const char *stream,
+                                   char *reason,
+                                   size_t reason_size) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        if (reason && reason_size != 0) {
+            reason[0] = '\0';
+        }
+        if (!self || !stream) {
+            return 0;
+        }
+        const capsid::BindingPolicy *policy =
+            self->binding_policies_.policy(self->current_binding_id_);
+        if (policy != NULL &&
+            std::find(policy->stdio.begin(), policy->stdio.end(), stream) !=
+                policy->stdio.end()) {
+            return 1;
+        }
+        if (reason && reason_size != 0) {
+            const std::string text =
+                std::string("stdio denied by binding policy: ") + stream;
+            std::snprintf(reason, reason_size, "%s", text.c_str());
+        }
+        return 0;
     }
 
     static int egress_check(void *opaque,
@@ -4220,8 +4392,15 @@ private:
         (void)base_name;
         WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
         const std::string module = name ? name : "";
+        // Linking needs the package identity, but that identity must never
+        // become a native-operation token. Dynamic imports during a method
+        // dispatch use the active immutable Binding identity instead.
+        const std::string &binding_id =
+            !self->loading_binding_id_.empty()
+                ? self->loading_binding_id_
+                : self->current_binding_id_;
         const capsid::BindingPolicy *policy =
-            self->binding_policies_.policy(self->current_binding_id_);
+            self->binding_policies_.policy(binding_id);
         if (policy == NULL ||
             policy->module_decision(module) != capsid::kModuleGranted) {
             JS_ThrowReferenceError(
@@ -4244,6 +4423,89 @@ private:
         return tjs_module_loader(ctx, name, NULL, attributes);
     }
 
+    static WorkerRuntime *binding_worker_from_context(JSContext *ctx) {
+        TJSRuntime *runtime = TJS_GetRuntime(ctx);
+        return runtime != NULL
+                   ? static_cast<WorkerRuntime *>(
+                         TJS_GetBootstrapOpaque(runtime))
+                   : NULL;
+    }
+
+    static std::string json_escape_fragment(const std::string &value) {
+        static const char kHex[] = "0123456789abcdef";
+        std::string escaped;
+        escaped.reserve(value.size() + 8);
+        for (const unsigned char ch : value) {
+            switch (ch) {
+                case '"': escaped += "\\\""; break;
+                case '\\': escaped += "\\\\"; break;
+                case '\b': escaped += "\\b"; break;
+                case '\f': escaped += "\\f"; break;
+                case '\n': escaped += "\\n"; break;
+                case '\r': escaped += "\\r"; break;
+                case '\t': escaped += "\\t"; break;
+                default:
+                    if (ch < 0x20) {
+                        escaped += "\\u00";
+                        escaped.push_back(kHex[(ch >> 4) & 0x0f]);
+                        escaped.push_back(kHex[ch & 0x0f]);
+                    } else {
+                        escaped.push_back(static_cast<char>(ch));
+                    }
+                    break;
+            }
+        }
+        return escaped;
+    }
+
+    static void replace_all(std::string *text,
+                            const std::string &needle,
+                            const char *replacement) {
+        if (needle.empty()) {
+            return;
+        }
+        size_t offset = 0;
+        const size_t replacement_size = std::strlen(replacement);
+        while ((offset = text->find(needle, offset)) != std::string::npos) {
+            text->replace(offset, needle.size(), replacement);
+            offset += replacement_size;
+        }
+    }
+
+    void redact_binding_log(const std::string &binding_id,
+                            std::string *text) const {
+        const std::map<std::string, std::vector<std::string>>::const_iterator
+            found = binding_log_secret_values_.find(binding_id);
+        if (found == binding_log_secret_values_.end()) {
+            return;
+        }
+        for (const std::string &secret : found->second) {
+            replace_all(text, secret, "[REDACTED]");
+            const std::string escaped = json_escape_fragment(secret);
+            if (escaped != secret) {
+                replace_all(text, escaped, "[REDACTED]");
+            }
+        }
+    }
+
+    void redact_binding_log_fields(const std::string &binding_id,
+                                   std::string *text) const {
+        const std::map<std::string, std::vector<std::string>>::const_iterator
+            found = binding_log_secret_values_.find(binding_id);
+        if (found == binding_log_secret_values_.end()) {
+            return;
+        }
+        // `text` is JSON. Replacing a raw secret such as `"` or `{` could
+        // rewrite JSON syntax rather than a string value. Match the JSON
+        // representation instead, then parse the redacted result below.
+        // If an unescaped punctuation-only secret is ambiguous with JSON
+        // syntax, the parse fails and the log call emits nothing: fail
+        // closed rather than forwarding either a secret or malformed JSON.
+        for (const std::string &secret : found->second) {
+            replace_all(text, json_escape_fragment(secret), "[REDACTED]");
+        }
+    }
+
     static JSValue binding_log_fn(JSContext *ctx,
                                   JSValue this_val,
                                   int argc,
@@ -4251,88 +4513,235 @@ private:
                                   int magic,
                                   JSValue *func_data) {
         (void)this_val;
-        (void)func_data;
         static const char *const levels[] = {
             "debug", "info", "warn", "error"};
         const char *level = levels[magic & 3];
         std::string message;
         if (argc > 0 && !JS_IsUndefined(argv[0])) {
-            const char *text = JS_ToCString(ctx, argv[0]);
-            message = text ? text : "";
-            if (text) {
-                JS_FreeCString(ctx, text);
+            size_t length = 0;
+            const char *text = JS_ToCStringLen(ctx, &length, argv[0]);
+            if (text == NULL) {
+                return JS_EXCEPTION;
             }
+            message.assign(text, length);
+            JS_FreeCString(ctx, text);
         }
-        WorkerRuntime *self = g_worker;
+        std::string fields = "{}";
+        if (argc > 1 && !JS_IsUndefined(argv[1])) {
+            const bool is_array = JS_IsArray(argv[1]);
+            if (!JS_IsObject(argv[1]) || JS_IsNull(argv[1]) ||
+                is_array || JS_IsProxy(argv[1])) {
+                return JS_ThrowTypeError(
+                    ctx, "binding log fields must be a non-Proxy object");
+            }
+            JSValue encoded = JS_JSONStringify(
+                ctx, argv[1], JS_UNDEFINED, JS_UNDEFINED);
+            if (JS_IsException(encoded)) {
+                return encoded;
+            }
+            if (JS_IsUndefined(encoded)) {
+                JS_FreeValue(ctx, encoded);
+                return JS_ThrowTypeError(
+                    ctx, "binding log fields must serialize to an object");
+            }
+            size_t length = 0;
+            const char *text = JS_ToCStringLen(ctx, &length, encoded);
+            if (text == NULL) {
+                JS_FreeValue(ctx, encoded);
+                return JS_EXCEPTION;
+            }
+            fields.assign(text, length);
+            JS_FreeCString(ctx, text);
+            JS_FreeValue(ctx, encoded);
+        }
+        if (message.size() > kStdioMessageLimit ||
+            fields.size() > kStdioMessageLimit) {
+            return JS_ThrowRangeError(
+                ctx, "binding log message or fields exceeds 16384 bytes");
+        }
+        WorkerRuntime *self = binding_worker_from_context(ctx);
         if (!self || !self->binding_ctx_) {
-            return JS_UNDEFINED;
+            return JS_ThrowInternalError(
+                ctx, "binding log runtime owner is unavailable");
+        }
+        size_t binding_id_size = 0;
+        const char *binding_id_text = JS_ToCStringLen(
+            ctx, &binding_id_size, func_data[0]);
+        if (binding_id_text == NULL) {
+            return JS_EXCEPTION;
+        }
+        const std::string binding_id(binding_id_text, binding_id_size);
+        JS_FreeCString(ctx, binding_id_text);
+        self->redact_binding_log(binding_id, &message);
+        self->redact_binding_log_fields(binding_id, &fields);
+        if (message.size() > kStdioMessageLimit ||
+            fields.size() > kStdioMessageLimit) {
+            return JS_ThrowRangeError(
+                ctx, "redacted binding log exceeds 16384 bytes");
+        }
+        JSValue validated_fields = JS_ParseJSON(
+            ctx, fields.data(), fields.size(), "<binding-log-fields>");
+        if (JS_IsException(validated_fields)) {
+            return validated_fields;
+        }
+        const bool fields_is_array = JS_IsArray(validated_fields);
+        const bool fields_is_object = JS_IsObject(validated_fields) &&
+                                      !JS_IsNull(validated_fields) &&
+                                      !fields_is_array;
+        JS_FreeValue(ctx, validated_fields);
+        if (!fields_is_object) {
+            return JS_ThrowTypeError(
+                ctx, "binding log fields must serialize to an object");
         }
         capsid::protocol::Frame frame;
         frame.type = capsid::protocol::kLog;
-        frame.flags = 0;
-        frame.request_id = 0;
-        const std::string stream =
-            std::string("binding:") +
-            (self->current_binding_id_.empty()
-                 ? "<unknown>"
-                 : self->current_binding_id_);
+        frame.flags = capsid::protocol::kFlagBindingLog;
+        frame.request_id = self->current_binding_request_id_;
         append_string16(
             &frame.payload,
-            reinterpret_cast<const uint8_t *>(stream.data()),
-            stream.size());
-        frame.payload.insert(
-            frame.payload.end(), level, level + std::strlen(level));
-        frame.payload.push_back(' ');
-        frame.payload.insert(
-            frame.payload.end(), message.begin(), message.end());
-        self->queue_output(frame);
+            reinterpret_cast<const uint8_t *>(binding_id.data()),
+            binding_id.size());
+        append_string16(
+            &frame.payload,
+            reinterpret_cast<const uint8_t *>(level),
+            std::strlen(level));
+        append_string32(
+            &frame.payload,
+            reinterpret_cast<const uint8_t *>(message.data()),
+            message.size());
+        append_string32(
+            &frame.payload,
+            reinterpret_cast<const uint8_t *>(fields.data()),
+            fields.size());
+        if (!self->queue_output(frame)) {
+            return JS_ThrowInternalError(
+                ctx, "binding log output queue is full");
+        }
         return JS_UNDEFINED;
     }
 
-    JSValue build_binding_log_object() {
+    JSValue build_binding_log_object(const std::string &binding_id) {
         JSValue log = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        if (JS_IsException(log)) {
+            return log;
+        }
         static const char *const names[] = {
             "debug", "info", "warn", "error"};
         for (int index = 0; index < 4; ++index) {
-            JS_SetPropertyStr(
+            JSValue data[1] = {
+                JS_NewStringLen(binding_ctx_, binding_id.data(),
+                                binding_id.size())};
+            if (JS_IsException(data[0])) {
+                JS_FreeValue(binding_ctx_, log);
+                return JS_EXCEPTION;
+            }
+            JSValue function = JS_NewCFunctionData2(
+                binding_ctx_,
+                binding_log_fn,
+                names[index],
+                1,
+                index,
+                1,
+                data);
+            JS_FreeValue(binding_ctx_, data[0]);
+            if (JS_IsException(function)) {
+                JS_FreeValue(binding_ctx_, log);
+                return JS_EXCEPTION;
+            }
+            if (JS_SetPropertyStr(
                 binding_ctx_,
                 log,
                 names[index],
-                JS_NewCFunctionData2(
-                    binding_ctx_,
-                    binding_log_fn,
-                    names[index],
-                    1,
-                    index,
-                    0,
-                    NULL));
+                function) < 0) {
+                JS_FreeValue(binding_ctx_, log);
+                return JS_EXCEPTION;
+            }
         }
-        JS_FreezeObject(binding_ctx_, log);
+        if (JS_FreezeObject(binding_ctx_, log) < 0) {
+            JS_FreeValue(binding_ctx_, log);
+            return JS_EXCEPTION;
+        }
         return log;
     }
 
-    static void deep_freeze(JSContext *ctx, JSValue value) {
+    // Prepares JSON-derived factory inputs without executing user-visible
+    // property access. Plain objects receive null prototypes recursively;
+    // arrays keep Array.prototype but are recursively frozen. JSON and the
+    // Host-created secrets object cannot contain cycles, proxies, symbols or
+    // accessors, nevertheless every one is rejected explicitly so this
+    // helper remains safe if its callers evolve.
+    static bool prepare_binding_init_value(JSContext *ctx,
+                                           JSValueConst value,
+                                           size_t depth,
+                                           std::string *reason) {
         if (!JS_IsObject(value)) {
-            return;
+            return true;
+        }
+        if (depth > 64) {
+            *reason = "factory input exceeds the nesting limit";
+            return false;
+        }
+        if (JS_IsProxy(value)) {
+            *reason = "factory input contains a Proxy";
+            return false;
         }
         JSPropertyEnum *tab = NULL;
         uint32_t count = 0;
         if (JS_GetOwnPropertyNames(
                 ctx, &tab, &count, value,
-                JS_GPN_ENUM_ONLY | JS_GPN_STRING_MASK) == 0) {
-            for (uint32_t index = 0; index < count; ++index) {
-                JSValue child =
-                    JS_GetProperty(ctx, value, tab[index].atom);
-                if (!JS_IsException(child)) {
-                    deep_freeze(ctx, child);
-                }
-                JS_FreeValue(ctx, child);
+                JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK |
+                    JS_GPN_SET_ENUM) < 0) {
+            *reason = "factory input property enumeration failed";
+            return false;
+        }
+        for (uint32_t index = 0; index < count; ++index) {
+            JSValue atom_value = JS_AtomToValue(ctx, tab[index].atom);
+            const bool is_symbol = JS_IsSymbol(atom_value);
+            JS_FreeValue(ctx, atom_value);
+            if (is_symbol) {
+                JS_FreePropertyEnum(ctx, tab, count);
+                *reason = "factory input contains a symbol property";
+                return false;
+            }
+            JSPropertyDescriptor descriptor;
+            const int present = JS_GetOwnProperty(
+                ctx, &descriptor, value, tab[index].atom);
+            if (present <= 0) {
+                JS_FreePropertyEnum(ctx, tab, count);
+                *reason = "factory input property is unreadable";
+                return false;
+            }
+            const bool is_accessor =
+                !JS_IsUndefined(descriptor.getter) ||
+                !JS_IsUndefined(descriptor.setter);
+            if (is_accessor) {
+                JS_FreeValue(ctx, descriptor.getter);
+                JS_FreeValue(ctx, descriptor.setter);
+                JS_FreeValue(ctx, descriptor.value);
+                JS_FreePropertyEnum(ctx, tab, count);
+                *reason = "factory input contains an accessor";
+                return false;
+            }
+            const bool child_ok = prepare_binding_init_value(
+                ctx, descriptor.value, depth + 1, reason);
+            JS_FreeValue(ctx, descriptor.getter);
+            JS_FreeValue(ctx, descriptor.setter);
+            JS_FreeValue(ctx, descriptor.value);
+            if (!child_ok) {
+                JS_FreePropertyEnum(ctx, tab, count);
+                return false;
             }
         }
-        if (tab != NULL) {
-            JS_FreePropertyEnum(ctx, tab, count);
+        JS_FreePropertyEnum(ctx, tab, count);
+        if (!JS_IsArray(value) && JS_SetPrototype(ctx, value, JS_NULL) < 0) {
+            *reason = "factory input prototype could not be removed";
+            return false;
         }
-        JS_FreezeObject(ctx, value);
+        if (JS_FreezeObject(ctx, value) < 0) {
+            *reason = "factory input could not be frozen";
+            return false;
+        }
+        return true;
     }
 
     static bool valid_binding_method_name(const std::string &name) {
@@ -4349,15 +4758,19 @@ private:
                 return false;
             }
         }
-        const unsigned char first =
-            static_cast<unsigned char>(name[0]);
-        if (!(std::isalpha(first) || first == '_' || first == '$')) {
+        const auto ascii_alpha = [](unsigned char ch) {
+            return (ch >= 'a' && ch <= 'z') ||
+                   (ch >= 'A' && ch <= 'Z');
+        };
+        const unsigned char first = static_cast<unsigned char>(name[0]);
+        if (!(ascii_alpha(first) || first == '_' || first == '$')) {
             return false;
         }
         for (size_t index = 1; index < name.size(); ++index) {
             const unsigned char ch =
                 static_cast<unsigned char>(name[index]);
-            if (!(std::isalnum(ch) || ch == '_' || ch == '$')) {
+            if (!(ascii_alpha(ch) || (ch >= '0' && ch <= '9') ||
+                  ch == '_' || ch == '$')) {
                 return false;
             }
         }
@@ -4476,43 +4889,131 @@ private:
             JS_FreeValue(binding_ctx_, factory);
             return false;
         }
+        if (!JS_IsObject(config) || JS_IsArray(config)) {
+            *error = "binding '" + descriptor.name +
+                     "' config must be a JSON object";
+            JS_FreeValue(binding_ctx_, config);
+            JS_FreeValue(binding_ctx_, factory);
+            return false;
+        }
         JSValue secrets = JS_NewObjectProto(binding_ctx_, JS_NULL);
+        if (JS_IsException(secrets)) {
+            *error = "binding '" + descriptor.name +
+                     "' secrets object allocation failed";
+            JS_FreeValue(binding_ctx_, secrets);
+            JS_FreeValue(binding_ctx_, config);
+            JS_FreeValue(binding_ctx_, factory);
+            return false;
+        }
         for (size_t index = 0;
              index < descriptor.secrets.size();
              ++index) {
-            JS_SetPropertyStr(
+            JSValue secret_value = JS_NewStringLen(
                 binding_ctx_,
-                secrets,
-                descriptor.secrets[index].key.c_str(),
-                JS_NewStringLen(
-                    binding_ctx_,
-                    reinterpret_cast<const char *>(
-                        descriptor.secrets[index].value.data()),
-                    descriptor.secrets[index].value.size()));
+                reinterpret_cast<const char *>(
+                    descriptor.secrets[index].value.data()),
+                descriptor.secrets[index].value.size());
+            if (JS_IsException(secret_value) ||
+                JS_SetPropertyStr(
+                    binding_ctx_, secrets,
+                    descriptor.secrets[index].key.c_str(),
+                    secret_value) < 0) {
+                *error = "binding '" + descriptor.name +
+                         "' secrets object construction failed: " +
+                         js_error_text(binding_ctx_);
+                JS_FreeValue(binding_ctx_, secrets);
+                JS_FreeValue(binding_ctx_, config);
+                JS_FreeValue(binding_ctx_, factory);
+                return false;
+            }
         }
-        // §2.4: config and secrets are null-prototype, deep-frozen.
-        JS_SetPrototype(binding_ctx_, config, JS_NULL);
-        deep_freeze(binding_ctx_, config);
-        deep_freeze(binding_ctx_, secrets);
-        JSValue log = build_binding_log_object();
+        std::vector<std::string> &log_secrets =
+            binding_log_secret_values_[descriptor.name];
+        log_secrets.clear();
+        for (size_t index = 0; index < descriptor.secrets.size(); ++index) {
+            const std::vector<uint8_t> &bytes =
+                descriptor.secrets[index].value;
+            if (!bytes.empty()) {
+                log_secrets.push_back(std::string(
+                    reinterpret_cast<const char *>(bytes.data()),
+                    bytes.size()));
+            }
+        }
+        std::sort(log_secrets.begin(), log_secrets.end(),
+                  [](const std::string &left, const std::string &right) {
+                      if (left.size() != right.size()) {
+                          return left.size() > right.size();
+                      }
+                      return left < right;
+                  });
+        log_secrets.erase(
+            std::unique(log_secrets.begin(), log_secrets.end()),
+            log_secrets.end());
+        // §2.4: every plain object in config and secrets is
+        // null-prototype and every reachable object/array is frozen. The
+        // descriptor walk above never performs JS_GetProperty, so getters
+        // cannot execute while the trust boundary is being prepared.
+        std::string preparation_error;
+        if (!prepare_binding_init_value(
+                binding_ctx_, config, 1, &preparation_error) ||
+            !prepare_binding_init_value(
+                binding_ctx_, secrets, 1, &preparation_error)) {
+            if (JS_HasException(binding_ctx_)) {
+                preparation_error += ": " + js_error_text(binding_ctx_);
+            }
+            *error = "binding '" + descriptor.name +
+                     "' invalid factory input: " + preparation_error;
+            JS_FreeValue(binding_ctx_, secrets);
+            JS_FreeValue(binding_ctx_, config);
+            JS_FreeValue(binding_ctx_, factory);
+            return false;
+        }
+        JSValue log = build_binding_log_object(descriptor.name);
+        if (JS_IsException(log)) {
+            *error = "binding '" + descriptor.name +
+                     "' log object construction failed: " +
+                     js_error_text(binding_ctx_);
+            JS_FreeValue(binding_ctx_, log);
+            JS_FreeValue(binding_ctx_, secrets);
+            JS_FreeValue(binding_ctx_, config);
+            JS_FreeValue(binding_ctx_, factory);
+            return false;
+        }
         // §2.4: the factory runs outside any binding context — factory
         // initialization is pure JavaScript, so every native gate fails
         // closed during it.
         current_binding_id_.clear();
+        current_binding_request_id_ = 0;
         // §2.4: the factory receives one frozen object argument
-        // { config, secrets, log }. JS_SetPropertyStr transfers ownership
-        // of each value into `init`, so only `init` is freed afterwards.
+        // { config, secrets, log }. Duplicates are transferred into `init`;
+        // the local references are released immediately after freezing it.
         JSValue init = JS_NewObjectProto(binding_ctx_, JS_NULL);
-        JS_SetPropertyStr(binding_ctx_, init, "config", config);
-        JS_SetPropertyStr(binding_ctx_, init, "secrets", secrets);
-        JS_SetPropertyStr(binding_ctx_, init, "log", log);
-        JS_FreezeObject(binding_ctx_, init);
+        if (JS_IsException(init) ||
+            JS_SetPropertyStr(binding_ctx_, init, "config",
+                              JS_DupValue(binding_ctx_, config)) < 0 ||
+            JS_SetPropertyStr(binding_ctx_, init, "secrets",
+                              JS_DupValue(binding_ctx_, secrets)) < 0 ||
+            JS_SetPropertyStr(binding_ctx_, init, "log",
+                              JS_DupValue(binding_ctx_, log)) < 0 ||
+            JS_FreezeObject(binding_ctx_, init) < 0) {
+            *error = "binding '" + descriptor.name +
+                     "' init object construction failed: " +
+                     js_error_text(binding_ctx_);
+            JS_FreeValue(binding_ctx_, init);
+            JS_FreeValue(binding_ctx_, log);
+            JS_FreeValue(binding_ctx_, secrets);
+            JS_FreeValue(binding_ctx_, config);
+            JS_FreeValue(binding_ctx_, factory);
+            return false;
+        }
+        JS_FreeValue(binding_ctx_, log);
+        JS_FreeValue(binding_ctx_, secrets);
+        JS_FreeValue(binding_ctx_, config);
         JSValue args[1] = { init };
         JSValue result =
             JS_Call(binding_ctx_, factory, JS_UNDEFINED, 1, args);
         JS_FreeValue(binding_ctx_, init);
         JS_FreeValue(binding_ctx_, factory);
-        current_binding_id_ = descriptor.name;
         if (JS_IsException(result)) {
             *error = "binding '" + descriptor.name +
                      "' factory threw: " + js_error_text(binding_ctx_);
@@ -4525,57 +5026,56 @@ private:
                      "' factory must return an object";
             return false;
         }
+        // A Proxy can execute arbitrary ownKeys/getOwnPropertyDescriptor
+        // traps during discovery. Reject it before making any reflective
+        // call, so even a hostile trap is never invoked.
+        if (JS_IsProxy(result)) {
+            JS_FreeValue(binding_ctx_, result);
+            *error = "binding '" + descriptor.name +
+                     "' factory returned a Proxy method table";
+            return false;
+        }
 
         JSPropertyEnum *tab = NULL;
         uint32_t count = 0;
         if (JS_GetOwnPropertyNames(
                 binding_ctx_, &tab, &count, result,
-                JS_GPN_ENUM_ONLY | JS_GPN_STRING_MASK) < 0) {
+                JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK |
+                    JS_GPN_SET_ENUM) < 0) {
             JS_FreeValue(binding_ctx_, result);
             *error = "binding '" + descriptor.name +
                      "' method enumeration failed";
             return false;
         }
-        if (count == 0 || count > 128) {
-            JS_FreePropertyEnum(binding_ctx_, tab, count);
-            JS_FreeValue(binding_ctx_, result);
-            *error = "binding '" + descriptor.name +
-                     "' must expose between 1 and 128 methods";
-            return false;
-        }
-        BindingRuntimeMethodTable table;
-        table.id = descriptor.name;
-        table.policy = binding_policies_.policy(descriptor.name);
-        table.factory_object = JS_DupValue(binding_ctx_, result);
+        std::vector<std::string> method_names;
         for (uint32_t index = 0; index < count; ++index) {
+            JSValue atom_value =
+                JS_AtomToValue(binding_ctx_, tab[index].atom);
+            const bool is_symbol = JS_IsSymbol(atom_value);
+            JS_FreeValue(binding_ctx_, atom_value);
+            if (is_symbol) {
+                JS_FreePropertyEnum(binding_ctx_, tab, count);
+                JS_FreeValue(binding_ctx_, result);
+                *error = "binding '" + descriptor.name +
+                         "' method table contains a symbol property";
+                return false;
+            }
             const char *name =
                 JS_AtomToCString(binding_ctx_, tab[index].atom);
             if (name == NULL) {
-                JS_FreeCString(binding_ctx_, name);
                 JS_FreePropertyEnum(binding_ctx_, tab, count);
                 JS_FreeValue(binding_ctx_, result);
-                JS_FreeValue(binding_ctx_, table.factory_object);
                 *error = "binding '" + descriptor.name +
                          "' method name is not printable";
                 return false;
             }
             const std::string method_name(name);
             JS_FreeCString(binding_ctx_, name);
-            if (!valid_binding_method_name(method_name)) {
-                JS_FreePropertyEnum(binding_ctx_, tab, count);
-                JS_FreeValue(binding_ctx_, result);
-                JS_FreeValue(binding_ctx_, table.factory_object);
-                *error = "binding '" + descriptor.name +
-                         "' exposes an invalid method name: " +
-                         method_name;
-                return false;
-            }
             JSPropertyDescriptor member_descriptor;
             if (JS_GetOwnProperty(binding_ctx_, &member_descriptor,
-                                  result, tab[index].atom) < 0) {
+                                  result, tab[index].atom) != 1) {
                 JS_FreePropertyEnum(binding_ctx_, tab, count);
                 JS_FreeValue(binding_ctx_, result);
-                JS_FreeValue(binding_ctx_, table.factory_object);
                 *error = "binding '" + descriptor.name +
                          "' method property is unreadable";
                 return false;
@@ -4588,20 +5088,62 @@ private:
             JS_FreeValue(binding_ctx_, member_descriptor.getter);
             JS_FreeValue(binding_ctx_, member_descriptor.setter);
             JS_FreeValue(binding_ctx_, member_descriptor.value);
-            if (is_accessor || !is_function) {
+            if (is_accessor) {
                 JS_FreePropertyEnum(binding_ctx_, tab, count);
                 JS_FreeValue(binding_ctx_, result);
-                JS_FreeValue(binding_ctx_, table.factory_object);
+                *error = "binding '" + descriptor.name +
+                         "' method table contains an accessor: " +
+                         method_name;
+                return false;
+            }
+            if (!tab[index].is_enumerable) {
+                continue;
+            }
+            if (!valid_binding_method_name(method_name)) {
+                JS_FreePropertyEnum(binding_ctx_, tab, count);
+                JS_FreeValue(binding_ctx_, result);
+                *error = "binding '" + descriptor.name +
+                         "' exposes an invalid method name: " +
+                         method_name;
+                return false;
+            }
+            if (!is_function) {
+                JS_FreePropertyEnum(binding_ctx_, tab, count);
+                JS_FreeValue(binding_ctx_, result);
                 *error = "binding '" + descriptor.name +
                          "' method is not a function: " + method_name;
                 return false;
             }
-            table.method_names.push_back(
-                JS_DupAtom(binding_ctx_, tab[index].atom));
+            // Method identifiers cross the Runtime boundary only as owned
+            // bytes. QuickJS atoms belong to one JSRuntime; retaining a
+            // Binding atom and decoding it in the User Runtime can address
+            // an unrelated or invalid atom slot.
+            method_names.push_back(method_name);
         }
         JS_FreePropertyEnum(binding_ctx_, tab, count);
+        if (method_names.empty() || method_names.size() > 128) {
+            JS_FreeValue(binding_ctx_, result);
+            *error = "binding '" + descriptor.name +
+                     "' must expose between 1 and 128 methods";
+            return false;
+        }
+        // Freeze before any queued Promise job can run. Dispatch resolves
+        // methods from this exact object, so a package cannot change the
+        // audited surface after factory return.
+        if (JS_FreezeObject(binding_ctx_, result) < 0) {
+            *error = "binding '" + descriptor.name +
+                     "' method table could not be frozen: " +
+                     js_error_text(binding_ctx_);
+            JS_FreeValue(binding_ctx_, result);
+            return false;
+        }
+        BindingRuntimeMethodTable table;
+        table.id = descriptor.name;
+        table.policy = binding_policies_.policy(descriptor.name);
+        table.factory_object = JS_DupValue(binding_ctx_, result);
+        table.method_names = std::move(method_names);
         JS_FreeValue(binding_ctx_, result);
-        binding_tables_.push_back(table);
+        binding_tables_.push_back(std::move(table));
         return true;
     }
 
@@ -4633,6 +5175,45 @@ private:
             *error = "binding runtime has no context";
             return false;
         }
+        // Capture the bootstrap intrinsics before any Host package evaluates.
+        // A package may mutate its shared Binding global, but RPC plumbing for
+        // every package must continue to use the original Promise and abort
+        // operations rather than attacker-visible property lookups.
+        JSValue global = JS_GetGlobalObject(binding_ctx_);
+        binding_promise_ctor_ =
+            JS_GetPropertyStr(binding_ctx_, global, "Promise");
+        binding_abort_controller_ctor_ =
+            JS_GetPropertyStr(binding_ctx_, global, "AbortController");
+        JS_FreeValue(binding_ctx_, global);
+        if (JS_IsException(binding_promise_ctor_) ||
+            !JS_IsConstructor(binding_ctx_, binding_promise_ctor_) ||
+            JS_IsException(binding_abort_controller_ctor_) ||
+            !JS_IsConstructor(binding_ctx_, binding_abort_controller_ctor_)) {
+            *error = "binding runtime intrinsics are unavailable";
+            return false;
+        }
+        binding_promise_resolve_ = JS_GetPropertyStr(
+            binding_ctx_, binding_promise_ctor_, "resolve");
+        JSValue promise_prototype = JS_GetPropertyStr(
+            binding_ctx_, binding_promise_ctor_, "prototype");
+        if (!JS_IsException(promise_prototype)) {
+            binding_promise_then_ = JS_GetPropertyStr(
+                binding_ctx_, promise_prototype, "then");
+        }
+        JS_FreeValue(binding_ctx_, promise_prototype);
+        JSValue abort_prototype = JS_GetPropertyStr(
+            binding_ctx_, binding_abort_controller_ctor_, "prototype");
+        if (!JS_IsException(abort_prototype)) {
+            binding_abort_ = JS_GetPropertyStr(
+                binding_ctx_, abort_prototype, "abort");
+        }
+        JS_FreeValue(binding_ctx_, abort_prototype);
+        if (!JS_IsFunction(binding_ctx_, binding_promise_resolve_) ||
+            !JS_IsFunction(binding_ctx_, binding_promise_then_) ||
+            !JS_IsFunction(binding_ctx_, binding_abort_)) {
+            *error = "binding runtime control intrinsics are unavailable";
+            return false;
+        }
         JS_SetModuleLoaderFunc2(
             JS_GetRuntime(binding_ctx_),
             binding_normalize_module,
@@ -4644,10 +5225,17 @@ private:
         // loop; it never calls TJS_Run itself.
         TJS_StartRuntimeJobs(binding_runtime_);
         for (size_t index = 0; index < bindings_.size(); ++index) {
-            current_binding_id_ = bindings_[index].name;
+            // Resolve imports as this package, while module evaluation,
+            // factory execution and method-table inspection retain no
+            // native capability/owner token.
+            loading_binding_id_ = bindings_[index].name;
+            current_binding_id_.clear();
+            current_binding_request_id_ = 0;
             const bool loaded =
                 load_binding_package(bindings_[index], error);
+            loading_binding_id_.clear();
             current_binding_id_.clear();
+            current_binding_request_id_ = 0;
             if (!loaded) {
                 return false;
             }
@@ -4704,24 +5292,38 @@ private:
             self->binding_tables_[table_index];
         JSValue facade = JS_NewObjectProto(ctx, JS_NULL);
         for (size_t index = 0; index < table.method_names.size(); ++index) {
-            const char *method_name =
-                JS_AtomToCString(ctx, table.method_names[index]);
-            if (method_name == NULL) {
-                JS_FreeValue(ctx, facade);
-                return -1;
-            }
             JSValue data = JS_NewInt32(
                 ctx, static_cast<int32_t>(table_index));
             JSValue function = JS_NewCFunctionData2(
-                ctx, binding_facade_call, method_name, 1,
+                ctx, binding_facade_call,
+                table.method_names[index].c_str(), 1,
                 static_cast<int>(index), 1, &data);
             JS_FreeValue(ctx, data);
-            JS_FreeCString(ctx, method_name);
-            JS_SetPropertyStr(ctx, facade, method_name, function);
+            JS_SetPropertyStr(ctx, facade,
+                              table.method_names[index].c_str(), function);
         }
         JS_FreezeObject(ctx, facade);
         if (JS_SetModuleExport(ctx, module, "default", facade) < 0) {
             return -1;
+        }
+        return 0;
+    }
+
+    uint64_t allocate_binding_call_id() {
+        // Zero is reserved.  At most 1024 calls can be live, so probing one
+        // more slot than the table size is sufficient even across wraparound.
+        for (size_t probe = 0;
+             probe <= pending_binding_calls_.size();
+             ++probe) {
+            const uint64_t candidate = next_binding_call_id_;
+            next_binding_call_id_ =
+                candidate == std::numeric_limits<uint64_t>::max()
+                    ? 1
+                    : candidate + 1;
+            if (candidate != 0 &&
+                pending_binding_calls_.count(candidate) == 0) {
+                return candidate;
+            }
         }
         return 0;
     }
@@ -4817,13 +5419,20 @@ private:
         PendingBindingCall call;
         call.binding_id = table.id;
         call.table_index = static_cast<size_t>(table_index);
-        call.method = JS_DupAtom(ctx, table.method_names[method_index]);
+        call.method = table.method_names[method_index];
         call.input = std::move(input);
         call.request_id = token->request_id;
+        call.deadline_ns = token->deadline_ns;
         call.user_resolve = resolving[0];
         call.user_reject = resolving[1];
         call.abort_controller = self->new_binding_abort_controller();
-        const uint64_t call_id = self->next_binding_call_id_++;
+        const uint64_t call_id = self->allocate_binding_call_id();
+        if (call_id == 0) {
+            self->self_finish_binding_call(call);
+            JS_FreeValue(ctx, promise);
+            return JS_ThrowInternalError(
+                ctx, "binding call id space is exhausted");
+        }
         self->pending_binding_calls_[call_id] = call;
         self->user_to_binding_.push_back(call_id);
         ++self->inflight_binding_calls_;
@@ -4833,17 +5442,35 @@ private:
     // Creates an AbortController inside the Binding Runtime; cancel and
     // deadline abort it, and the call object exposes its signal.
     JSValue new_binding_abort_controller() {
-        JSValue global = JS_GetGlobalObject(binding_ctx_);
-        JSValue ctor = JS_GetPropertyStr(binding_ctx_, global, "AbortController");
-        JS_FreeValue(binding_ctx_, global);
-        if (JS_IsException(ctor) || !JS_IsConstructor(binding_ctx_, ctor)) {
-            JS_FreeValue(binding_ctx_, ctor);
+        if (!JS_IsConstructor(
+                binding_ctx_, binding_abort_controller_ctor_)) {
             return JS_UNDEFINED;
         }
-        JSValue controller =
-            JS_CallConstructor(binding_ctx_, ctor, 0, NULL);
-        JS_FreeValue(binding_ctx_, ctor);
-        return controller;
+        return JS_CallConstructor(
+            binding_ctx_, binding_abort_controller_ctor_, 0, NULL);
+    }
+
+    JSValue binding_abort_signal(JSValueConst controller) {
+        // txiki's controller constructor creates `signal` as an own data
+        // property. Read the descriptor directly so a package cannot replace
+        // a prototype getter and execute code inside the RPC setup path.
+        JSAtom signal_atom = JS_NewAtom(binding_ctx_, "signal");
+        JSPropertyDescriptor descriptor;
+        const int present = JS_GetOwnProperty(
+            binding_ctx_, &descriptor, controller, signal_atom);
+        JS_FreeAtom(binding_ctx_, signal_atom);
+        if (present <= 0) {
+            return JS_EXCEPTION;
+        }
+        const bool accessor = !JS_IsUndefined(descriptor.getter) ||
+                              !JS_IsUndefined(descriptor.setter);
+        JS_FreeValue(binding_ctx_, descriptor.getter);
+        JS_FreeValue(binding_ctx_, descriptor.setter);
+        if (accessor) {
+            JS_FreeValue(binding_ctx_, descriptor.value);
+            return JS_EXCEPTION;
+        }
+        return descriptor.value;
     }
 
     static JSValue binding_fulfilled(JSContext *ctx,
@@ -4858,15 +5485,15 @@ private:
         if (self == NULL || func_data == NULL) {
             return JS_UNDEFINED;
         }
-        int64_t call_id = -1;
-        if (JS_ToInt64(ctx, &call_id, func_data[0]) != 0 ||
-            call_id < 0) {
+        uint64_t call_id = 0;
+        if (!capsid::binding_call_id_from_js(
+                ctx, func_data[0], &call_id)) {
             return JS_UNDEFINED;
         }
         std::map<uint64_t, PendingBindingCall>::iterator found =
-            self->pending_binding_calls_.find(
-                static_cast<uint64_t>(call_id));
-        if (found == self->pending_binding_calls_.end()) {
+            self->pending_binding_calls_.find(call_id);
+        if (found == self->pending_binding_calls_.end() ||
+            found->second.state != BindingCallState::kDispatched) {
             return JS_UNDEFINED;
         }
         PendingBindingCall &call = found->second;
@@ -4875,9 +5502,8 @@ private:
             argc > 0 ? JS_DupValue(ctx, argv[0]) : JS_UNDEFINED;
         JS_FreeValue(ctx, call.binding_error);
         call.binding_error = JS_UNDEFINED;
-        call.settled = true;
-        self->binding_to_user_.push_back(
-            static_cast<uint64_t>(call_id));
+        call.state = BindingCallState::kSettled;
+        self->binding_to_user_.push_back(call_id);
         return JS_UNDEFINED;
     }
 
@@ -4893,15 +5519,15 @@ private:
         if (self == NULL || func_data == NULL) {
             return JS_UNDEFINED;
         }
-        int64_t call_id = -1;
-        if (JS_ToInt64(ctx, &call_id, func_data[0]) != 0 ||
-            call_id < 0) {
+        uint64_t call_id = 0;
+        if (!capsid::binding_call_id_from_js(
+                ctx, func_data[0], &call_id)) {
             return JS_UNDEFINED;
         }
         std::map<uint64_t, PendingBindingCall>::iterator found =
-            self->pending_binding_calls_.find(
-                static_cast<uint64_t>(call_id));
-        if (found == self->pending_binding_calls_.end()) {
+            self->pending_binding_calls_.find(call_id);
+        if (found == self->pending_binding_calls_.end() ||
+            found->second.state != BindingCallState::kDispatched) {
             return JS_UNDEFINED;
         }
         PendingBindingCall &call = found->second;
@@ -4910,10 +5536,42 @@ private:
             argc > 0 ? JS_DupValue(ctx, argv[0]) : JS_UNDEFINED;
         JS_FreeValue(ctx, call.binding_result);
         call.binding_result = JS_UNDEFINED;
-        call.settled = true;
-        self->binding_to_user_.push_back(
-            static_cast<uint64_t>(call_id));
+        call.state = BindingCallState::kSettled;
+        self->binding_to_user_.push_back(call_id);
         return JS_UNDEFINED;
+    }
+
+    // Takes ownership of `error`. Only a live dispatched call may enter the
+    // result queue; cancellation erases the table entry, so a late Promise
+    // reaction is an idempotent no-op.
+    void settle_binding_call_error(uint64_t call_id, JSValue error) {
+        std::map<uint64_t, PendingBindingCall>::iterator found =
+            pending_binding_calls_.find(call_id);
+        if (found == pending_binding_calls_.end() ||
+            found->second.state != BindingCallState::kDispatched) {
+            JS_FreeValue(binding_ctx_, error);
+            return;
+        }
+        PendingBindingCall &call = found->second;
+        JS_FreeValue(binding_ctx_, call.binding_error);
+        call.binding_error = error;
+        JS_FreeValue(binding_ctx_, call.binding_result);
+        call.binding_result = JS_UNDEFINED;
+        call.state = BindingCallState::kSettled;
+        binding_to_user_.push_back(call_id);
+    }
+
+    JSValue take_binding_exception(const char *fallback) {
+        JSValue exception = JS_GetException(binding_ctx_);
+        if (!JS_IsUndefined(exception) && !JS_IsNull(exception)) {
+            return exception;
+        }
+        JS_FreeValue(binding_ctx_, exception);
+        JSValue error = JS_NewError(binding_ctx_);
+        JS_DefinePropertyValueStr(
+            binding_ctx_, error, "message",
+            JS_NewString(binding_ctx_, fallback), JS_PROP_C_W_E);
+        return error;
     }
 
     // Dispatches one queued call inside the Binding Runtime (this runs on
@@ -4931,45 +5589,81 @@ private:
             return;
         }
         PendingBindingCall &call = found->second;
-        if (call.canceled) {
-            return;  // dropped before dispatch
+        if (call.state != BindingCallState::kQueued) {
+            return;
         }
-        call.dispatched = true;
+        call.state = BindingCallState::kDispatched;
         // The dispatch window sets the binding context the egress gate
         // (and later native gates) read; all return paths restore it.
-        BindingWindowGuard binding_window(current_binding_id_,
-                                          call.binding_id);
+        BindingWindowGuard binding_window(
+            current_binding_id_, current_binding_request_id_,
+            call.binding_id, call.request_id);
         const BindingRuntimeMethodTable &table =
             binding_tables_[call.table_index];
         JSValue method =
-            JS_GetProperty(binding_ctx_, table.factory_object, call.method);
+            JS_GetPropertyStr(binding_ctx_, table.factory_object,
+                              call.method.c_str());
+        if (JS_IsException(method)) {
+            JS_FreeValue(binding_ctx_, method);
+            settle_binding_call_error(
+                call_id,
+                take_binding_exception("binding method lookup failed"));
+            return;
+        }
         if (!JS_IsFunction(binding_ctx_, method)) {
             JS_FreeValue(binding_ctx_, method);
-            call.binding_error = JS_NewError(binding_ctx_);
-            call.settled = true;
-            binding_to_user_.push_back(call_id);
+            JSValue error = JS_NewError(binding_ctx_);
+            JS_DefinePropertyValueStr(
+                binding_ctx_, error, "message",
+                JS_NewString(binding_ctx_, "binding method is unavailable"),
+                JS_PROP_C_W_E);
+            settle_binding_call_error(call_id, error);
             return;
         }
         JSValue input = capsid::neutral_to_js(binding_ctx_, call.input);
         JSValue call_object = JS_NewObjectProto(binding_ctx_, JS_NULL);
-        JS_SetPropertyStr(
-            binding_ctx_, call_object, "requestId",
-            JS_NewInt64(binding_ctx_,
-                        static_cast<int64_t>(call.request_id)));
-        JS_SetPropertyStr(
-            binding_ctx_, call_object, "deadline",
-            JS_NewFloat64(
-                binding_ctx_,
-                static_cast<double>(config_.timeout_ms)));
-        if (!JS_IsUndefined(call.abort_controller)) {
-            JSValue signal = JS_GetPropertyStr(
-                binding_ctx_, call.abort_controller, "signal");
-            JS_SetPropertyStr(binding_ctx_, call_object, "signal", signal);
-        } else {
-            JS_SetPropertyStr(binding_ctx_, call_object, "signal",
-                              JS_UNDEFINED);
+        if (JS_IsException(input) || JS_IsException(call_object)) {
+            JS_FreeValue(binding_ctx_, input);
+            JS_FreeValue(binding_ctx_, call_object);
+            JS_FreeValue(binding_ctx_, method);
+            settle_binding_call_error(
+                call_id,
+                take_binding_exception("binding call setup failed"));
+            return;
         }
-        JS_FreezeObject(binding_ctx_, call_object);
+        bool call_object_ok =
+            JS_SetPropertyStr(
+                binding_ctx_, call_object, "requestId",
+                JS_NewBigUint64(binding_ctx_, call.request_id)) >= 0 &&
+            JS_SetPropertyStr(
+                binding_ctx_, call_object, "deadline",
+                JS_NewBigUint64(binding_ctx_, call.deadline_ns)) >= 0;
+        if (!JS_IsUndefined(call.abort_controller)) {
+            JSValue signal = binding_abort_signal(call.abort_controller);
+            if (JS_IsException(signal)) {
+                JS_FreeValue(binding_ctx_, signal);
+                call_object_ok = false;
+            } else if (JS_SetPropertyStr(
+                           binding_ctx_, call_object, "signal", signal) < 0) {
+                call_object_ok = false;
+            }
+        } else {
+            call_object_ok =
+                JS_SetPropertyStr(binding_ctx_, call_object, "signal",
+                                  JS_UNDEFINED) >= 0 &&
+                call_object_ok;
+        }
+        call_object_ok = call_object_ok &&
+                         JS_FreezeObject(binding_ctx_, call_object) >= 0;
+        if (!call_object_ok) {
+            JS_FreeValue(binding_ctx_, input);
+            JS_FreeValue(binding_ctx_, call_object);
+            JS_FreeValue(binding_ctx_, method);
+            settle_binding_call_error(
+                call_id,
+                take_binding_exception("binding call metadata failed"));
+            return;
+        }
         JSValue args[2] = { input, call_object };
         JSValue result = JS_Call(
             binding_ctx_, method, table.factory_object, 2, args);
@@ -4977,43 +5671,56 @@ private:
         JS_FreeValue(binding_ctx_, call_object);
         JS_FreeValue(binding_ctx_, method);
         if (JS_IsException(result)) {
-            call.binding_error = result;  // own the exception
-            call.settled = true;
-            binding_to_user_.push_back(call_id);
+            JS_FreeValue(binding_ctx_, result);
+            settle_binding_call_error(
+                call_id,
+                take_binding_exception("binding call threw"));
             return;
         }
         // §5.2: Promise.resolve() unifies sync and async returns.
-        JSValue global = JS_GetGlobalObject(binding_ctx_);
-        JSValue promise_ctor =
-            JS_GetPropertyStr(binding_ctx_, global, "Promise");
-        JS_FreeValue(binding_ctx_, global);
         JSValue resolved = JS_Call(
-            binding_ctx_,
-            JS_GetPropertyStr(binding_ctx_, promise_ctor, "resolve"),
-            promise_ctor, 1, &result);
+            binding_ctx_, binding_promise_resolve_,
+            binding_promise_ctor_, 1, &result);
         JS_FreeValue(binding_ctx_, result);
-        JS_FreeValue(binding_ctx_, promise_ctor);
         if (JS_IsException(resolved)) {
-            call.binding_error = resolved;
-            call.settled = true;
-            binding_to_user_.push_back(call_id);
+            JS_FreeValue(binding_ctx_, resolved);
+            settle_binding_call_error(
+                call_id,
+                take_binding_exception("binding result normalization failed"));
             return;
         }
-        JSValue data = JS_NewInt64(binding_ctx_, call_id);
+        JSValue data =
+            capsid::binding_call_id_to_js(binding_ctx_, call_id);
         JSValue on_fulfilled = JS_NewCFunctionData2(
             binding_ctx_, binding_fulfilled, "onFulfilled", 1, 0, 1,
             &data);
         JSValue on_rejected = JS_NewCFunctionData2(
             binding_ctx_, binding_rejected, "onRejected", 1, 0, 1, &data);
         JS_FreeValue(binding_ctx_, data);
+        if (JS_IsException(on_fulfilled) ||
+            JS_IsException(on_rejected)) {
+            JS_FreeValue(binding_ctx_, on_fulfilled);
+            JS_FreeValue(binding_ctx_, on_rejected);
+            JS_FreeValue(binding_ctx_, resolved);
+            settle_binding_call_error(
+                call_id,
+                take_binding_exception("binding settlement setup failed"));
+            return;
+        }
         JSValue handlers[2] = { on_fulfilled, on_rejected };
         JSValue then_result = JS_Call(
-            binding_ctx_,
-            JS_GetPropertyStr(binding_ctx_, resolved, "then"),
+            binding_ctx_, binding_promise_then_,
             resolved, 2, handlers);
         JS_FreeValue(binding_ctx_, on_fulfilled);
         JS_FreeValue(binding_ctx_, on_rejected);
         JS_FreeValue(binding_ctx_, resolved);
+        if (JS_IsException(then_result)) {
+            JS_FreeValue(binding_ctx_, then_result);
+            settle_binding_call_error(
+                call_id,
+                take_binding_exception("binding settlement failed"));
+            return;
+        }
         JS_FreeValue(binding_ctx_, then_result);
         // The .then handlers settle the call on a later job tick.
     }
@@ -5030,13 +5737,7 @@ private:
                 continue;
             }
             PendingBindingCall &call = found->second;
-            if (call.canceled) {
-                // §5.2: late results from canceled calls are dropped.
-                self_finish_binding_call(call);
-                pending_binding_calls_.erase(found);
-                if (inflight_binding_calls_ > 0) {
-                    --inflight_binding_calls_;
-                }
+            if (call.state != BindingCallState::kSettled) {
                 continue;
             }
             JSValue handler =
@@ -5094,26 +5795,38 @@ private:
                                      &payload);
             JS_FreeValue(ctx_, settle);
             JS_FreeValue(ctx_, payload);
-            self_finish_binding_call(call);
-            pending_binding_calls_.erase(found);
-            if (inflight_binding_calls_ > 0) {
-                --inflight_binding_calls_;
-            }
+            finish_binding_call(found);
         }
     }
 
     // Frees every cross-runtime JSValue a pending call owns.
     void self_finish_binding_call(PendingBindingCall &call) {
         if (binding_ctx_ != NULL) {
-            JS_FreeAtom(binding_ctx_, call.method);
             if (!JS_IsUndefined(call.abort_controller)) {
                 JS_FreeValue(binding_ctx_, call.abort_controller);
+                call.abort_controller = JS_UNDEFINED;
             }
             JS_FreeValue(binding_ctx_, call.binding_result);
+            call.binding_result = JS_UNDEFINED;
             JS_FreeValue(binding_ctx_, call.binding_error);
+            call.binding_error = JS_UNDEFINED;
         }
         JS_FreeValue(ctx_, call.user_resolve);
+        call.user_resolve = JS_UNDEFINED;
         JS_FreeValue(ctx_, call.user_reject);
+        call.user_reject = JS_UNDEFINED;
+    }
+
+    void finish_binding_call(
+        std::map<uint64_t, PendingBindingCall>::iterator found) {
+        if (found == pending_binding_calls_.end()) {
+            return;
+        }
+        self_finish_binding_call(found->second);
+        pending_binding_calls_.erase(found);
+        if (inflight_binding_calls_ > 0) {
+            --inflight_binding_calls_;
+        }
     }
 
     // §5.2: request cancel/deadline aborts matching calls — undispatched
@@ -5124,12 +5837,11 @@ private:
                  pending_binding_calls_.begin();
              it != pending_binding_calls_.end();) {
             PendingBindingCall &call = it->second;
-            if (call.request_id != request_id || call.canceled) {
+            if (call.request_id != request_id) {
                 ++it;
                 continue;
             }
-            call.canceled = true;
-            if (!call.dispatched) {
+            if (call.state == BindingCallState::kQueued) {
                 // §5.2: an undispatched call is dropped immediately — the
                 // queue entry and the inflight quota are released now,
                 // not when the pump would have reached it.
@@ -5141,20 +5853,23 @@ private:
                         break;
                     }
                 }
-                self_finish_binding_call(call);
-                pending_binding_calls_.erase(it++);
-                if (inflight_binding_calls_ > 0) {
-                    --inflight_binding_calls_;
-                }
-                continue;
             }
-            if (binding_ctx_ != NULL &&
+            if (call.state == BindingCallState::kDispatched &&
+                binding_ctx_ != NULL &&
                 !JS_IsUndefined(call.abort_controller)) {
+                // AbortSignal listeners run synchronously. They are Binding
+                // code and may close owned sockets/files, so restore the same
+                // immutable owner token used by the original dispatch.
+                BindingWindowGuard binding_window(
+                    current_binding_id_, current_binding_request_id_,
+                    call.binding_id, call.request_id);
                 JSValue ignored = JS_Call(
-                    binding_ctx_,
-                    JS_GetPropertyStr(
-                        binding_ctx_, call.abort_controller, "abort"),
+                    binding_ctx_, binding_abort_,
                     call.abort_controller, 0, NULL);
+                if (JS_IsException(ignored)) {
+                    JSValue exception = JS_GetException(binding_ctx_);
+                    JS_FreeValue(binding_ctx_, exception);
+                }
                 JS_FreeValue(binding_ctx_, ignored);
             }
             JSValue error = JS_NewError(ctx_);
@@ -5166,6 +5881,8 @@ private:
                 JS_Call(ctx_, call.user_reject, JS_UNDEFINED, 1, &error);
             JS_FreeValue(ctx_, settle);
             JS_FreeValue(ctx_, error);
+            std::map<uint64_t, PendingBindingCall>::iterator doomed = it++;
+            finish_binding_call(doomed);
         }
     }
 
@@ -5851,6 +6568,9 @@ private:
             state->second.deadline_ns = 0;
             state->second.phase = ResponsePhase::kFailurePending;
             reject_pending(state->second, "request timed out");
+            // Forced reclamation is independent of Binding cooperation and
+            // of whether the transport can queue the timeout terminal yet.
+            cancel_binding_calls(id);
             interrupted_request_id_ = id;
             call_id_bridge(cancel_request_, id);
             send_error(
@@ -6544,18 +7264,33 @@ private:
     // by it; heaps, globals, module loaders and job queues stay separate.
     TJSRuntime *binding_runtime_;
     JSContext *binding_ctx_;
+    // Captured before any Binding package evaluates. These keep RPC control
+    // flow independent of mutations to the shared Binding global object.
+    JSValue binding_promise_ctor_;
+    JSValue binding_promise_resolve_;
+    JSValue binding_promise_then_;
+    JSValue binding_abort_controller_ctor_;
+    JSValue binding_abort_;
     struct BindingRuntimeMethodTable {
         BindingRuntimeMethodTable() : policy(NULL),
                                       factory_object(JS_UNDEFINED) {}
         std::string id;
         const capsid::BindingPolicy *policy;
         JSValue factory_object;              // referenced
-        std::vector<JSAtom> method_names;    // duplicated atoms
+        std::vector<std::string> method_names;  // Runtime-neutral bytes
     };
     std::vector<BindingRuntimeMethodTable> binding_tables_;
-    // The binding id whose factory is currently initializing; the binding
-    // module loader authorizes imports against that binding's policy only.
+    // Native capability identity. Non-empty only inside method dispatch or
+    // an async continuation captured from that dispatch.
     std::string current_binding_id_;
+    uint64_t current_binding_request_id_ = 0;
+    // Plaintext exists only in the worker's Binding startup snapshot and is
+    // used here solely to redact Binding log message/fields before IPC.
+    std::map<std::string, std::vector<std::string>>
+        binding_log_secret_values_;
+    // Import authorization identity used only while a package graph is
+    // linked/evaluated. Native resource and operation gates never consult it.
+    std::string loading_binding_id_;
     // True while TJS_NewRuntimeOptions bootstraps the Binding Runtime, so
     // the shared bootstrap() switches to the bridge-less native shape.
     bool bootstrapping_binding_runtime_;

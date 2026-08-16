@@ -10,6 +10,7 @@ extern "C" {
 }
 
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -194,6 +195,120 @@ void test_rejected_values_fail_closed() {
     JS_ToInt32(fixture.ctx(), &ran_value, ran);
     JS_FreeValue(fixture.ctx(), ran);
     require(ran_value == 0, "clone executed a getter");
+
+    JSValue array_marker = fixture.eval(
+        "globalThis.__arrayGetterRan = false;"
+        "(() => { const arrayWithGetter = [1];"
+        "Object.defineProperty(arrayWithGetter, '0', { get() {"
+        "  globalThis.__arrayGetterRan = true; return 1; }, enumerable: true });"
+        "return arrayWithGetter; })()");
+    error.clear();
+    require(!capsid::neutral_from_js(
+                fixture.ctx(), array_marker, &neutral, &error) &&
+                error.find("accessor") != std::string::npos,
+            "array accessor property was accepted");
+    JS_FreeValue(fixture.ctx(), array_marker);
+    JSValue array_ran = fixture.eval("globalThis.__arrayGetterRan");
+    JS_ToInt32(fixture.ctx(), &ran_value, array_ran);
+    JS_FreeValue(fixture.ctx(), array_ran);
+    require(ran_value == 0, "clone executed an array getter");
+
+    fixture.require_rejected(
+        "(() => { const key = Symbol('secret'); const value = {};"
+        " value[key] = 1; return value; })()",
+        "symbol", "symbol-keyed property");
+
+    // Native type predicates must remain authoritative even when untrusted
+    // code replaces the corresponding globals.
+    fixture.require_rejected(
+        "(() => { const value = new Proxy({}, {});"
+        " globalThis.Proxy = function() {}; return value; })()",
+        "Proxy", "proxy after global replacement");
+    fixture.require_rejected(
+        "(() => { const value = new Map([['x', 1]]);"
+        " globalThis.Map = function() {}; return value; })()",
+        "Map", "map after global replacement");
+
+    JSValue date = fixture.eval(
+        "globalThis.__dateMethodRan = false;"
+        "(() => { const value = new Date(1700000000000);"
+        " value.getTime = () => { globalThis.__dateMethodRan = true; return 0; };"
+        " return value; })()");
+    error.clear();
+    require(capsid::neutral_from_js(
+                fixture.ctx(), date, &neutral, &error) &&
+                neutral.kind == capsid::NeutralValue::Kind::kDate &&
+                neutral.date_ms == 1700000000000.0,
+            "Date clone did not read the internal slot");
+    JS_FreeValue(fixture.ctx(), date);
+    JSValue date_ran = fixture.eval("globalThis.__dateMethodRan");
+    JS_ToInt32(fixture.ctx(), &ran_value, date_ran);
+    JS_FreeValue(fixture.ctx(), date_ran);
+    require(ran_value == 0, "Date clone executed an overridden method");
+}
+
+void test_call_ids_use_full_width_biguint64() {
+    RuntimeFixture fixture;
+    const std::uint64_t values[] = {
+        1,
+        UINT64_C(0x7fffffffffffffff),
+        UINT64_C(0x8000000000000000),
+        UINT64_MAX,
+    };
+    for (std::uint64_t expected : values) {
+        JSValue encoded =
+            capsid::binding_call_id_to_js(fixture.ctx(), expected);
+        require(!JS_IsException(encoded) && JS_IsBigInt(encoded),
+                "call id was not encoded as BigUint64");
+        std::uint64_t decoded = 0;
+        require(capsid::binding_call_id_from_js(
+                    fixture.ctx(), encoded, &decoded) &&
+                    decoded == expected,
+                "call id lost bits in the JS callback round trip");
+        JS_FreeValue(fixture.ctx(), encoded);
+    }
+    JSValue zero = JS_NewBigUint64(fixture.ctx(), 0);
+    std::uint64_t decoded = 9;
+    require(!capsid::binding_call_id_from_js(
+                fixture.ctx(), zero, &decoded),
+            "reserved call id zero was accepted");
+    JS_FreeValue(fixture.ctx(), zero);
+}
+
+void test_neutral_to_js_propagates_conversion_errors() {
+    RuntimeFixture fixture;
+
+    capsid::NeutralValue huge;
+    huge.kind = capsid::NeutralValue::Kind::kBigInt;
+    huge.bigint = "1234567890123456789012345678901234567890";
+    JSValue exact = capsid::neutral_to_js(fixture.ctx(), huge);
+    require(!JS_IsException(exact) && JS_IsBigInt(exact),
+            "large neutral bigint was not reconstructed");
+    const char *text = JS_ToCString(fixture.ctx(), exact);
+    require(text != NULL && huge.bigint == text,
+            "large neutral bigint lost precision");
+    if (text != NULL) {
+        JS_FreeCString(fixture.ctx(), text);
+    }
+    JS_FreeValue(fixture.ctx(), exact);
+
+    capsid::NeutralValue invalid;
+    invalid.kind = capsid::NeutralValue::Kind::kBigInt;
+    invalid.bigint = "not-a-decimal";
+    JSValue rejected = capsid::neutral_to_js(fixture.ctx(), invalid);
+    require(JS_IsException(rejected),
+            "invalid neutral bigint was converted to undefined");
+    JSValue exception = JS_GetException(fixture.ctx());
+    JS_FreeValue(fixture.ctx(), exception);
+
+    capsid::NeutralValue nested;
+    nested.kind = capsid::NeutralValue::Kind::kArray;
+    nested.array.push_back(invalid);
+    rejected = capsid::neutral_to_js(fixture.ctx(), nested);
+    require(JS_IsException(rejected),
+            "nested neutral conversion swallowed a child exception");
+    exception = JS_GetException(fixture.ctx());
+    JS_FreeValue(fixture.ctx(), exception);
 }
 
 void test_limits_fail_closed() {
@@ -240,5 +355,7 @@ int main() {
     test_rejected_values_fail_closed();
     test_limits_fail_closed();
     test_object_key_ordering_and_duplicates();
+    test_call_ids_use_full_width_biguint64();
+    test_neutral_to_js_propagates_conversion_errors();
     return 0;
 }

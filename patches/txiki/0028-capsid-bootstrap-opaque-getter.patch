@@ -1,0 +1,23 @@
+--- a/src/tjs.h
++++ b/src/tjs.h
+@@ -58,5 +58,8 @@ int TJS_Run(TJSRuntime *qrt);
+ void TJS_Stop(TJSRuntime *qrt);
+ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
++/* Embedders use this to recover the per-runtime bootstrap owner without a
++ * process-global singleton. The pointer is the exact options snapshot. */
++void *TJS_GetBootstrapOpaque(TJSRuntime *qrt);
+ /* Capsid Binding v1: the TJS_Run preamble — start this runtime's job-queue
+  * handles on its (possibly shared) loop. A shared-loop runtime is pumped
+  * by the owning runtime's loop; it never calls TJS_Run itself. */
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -1032,6 +1032,10 @@ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt) {
+     return tjs__effective_loop(qrt);
+ }
+ 
++void *TJS_GetBootstrapOpaque(TJSRuntime *qrt) {
++    return qrt != NULL ? qrt->options.bootstrap_opaque : NULL;
++}
++
+ int tjs__load_file(JSContext *ctx, TBuf *dbuf, const char *filename) {
+     uv_fs_t req;

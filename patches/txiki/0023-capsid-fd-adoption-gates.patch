@@ -1,0 +1,226 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -3888,6 +3888,13 @@
+     if (class_id < rt->class_count &&
+         rt->class_array[class_id].class_id != 0)
+         return -1;
++    /* A class ID is process-global while the allocation cursor is per
++       runtime. Embedders with multiple runtimes may register an already
++       allocated static ID before allocating a runtime-local class. Keep the
++       cursor beyond every explicitly registered ID to prevent type/prototype
++       aliasing in the later allocation. */
++    if (class_id >= rt->js_class_id_alloc)
++        rt->js_class_id_alloc = class_id + 1;
+ 
+     if (class_id >= rt->class_count) {
+         new_size = max_int(JS_CLASS_INIT_COUNT,
+--- a/src/mod_fs.c
++++ b/src/mod_fs.c
+@@ -656,6 +656,7 @@
+     return tjs_fsreq_init(ctx, fr, this_val);
+ }
+ 
++#ifndef TJS_RESTRICTED_CORE
+ static JSValue tjs_file_fileno(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSFile *f = tjs_file_get(ctx, this_val);
+     if (!f) {
+@@ -664,6 +665,7 @@
+ 
+     return JS_NewInt32(ctx, f->fd);
+ }
++#endif
+ 
+ static JSValue tjs_file_path_get(JSContext *ctx, JSValue this_val) {
+     TJSFile *f = tjs_file_get(ctx, this_val);
+@@ -1003,6 +1005,7 @@
+     return tjs_fsreq_init(ctx, fr, JS_UNDEFINED);
+ }
+ 
++#ifndef TJS_RESTRICTED_CORE
+ static JSValue tjs_file_constructor(JSContext *ctx, JSValue new_target, int argc, JSValue *argv) {
+     uv_file fd;
+ 
+@@ -1026,6 +1029,7 @@
+ 
+     return obj;
+ }
++#endif
+ 
+ static JSValue tjs_fs_stat(JSContext *ctx, JSValue this_val, int argc, JSValue *argv, int magic) {
+     const char *path = JS_ToCString(ctx, argv[0]);
+@@ -1792,7 +1796,9 @@
+     TJS_CFUNC_MAGIC_DEF("read", 2, tjs_file_rw, 0),
+     TJS_CFUNC_MAGIC_DEF("write", 2, tjs_file_rw, 1),
+     TJS_CFUNC_DEF("close", 0, tjs_file_close),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("fileno", 0, tjs_file_fileno),
++#endif
+     TJS_CFUNC_DEF("stat", 0, tjs_file_stat),
+     TJS_CFUNC_DEF("truncate", 1, tjs_file_truncate),
+     TJS_CFUNC_DEF("sync", 0, tjs_file_sync),
+@@ -1877,8 +1883,10 @@
+     proto = JS_NewObject(ctx);
+     JS_SetPropertyFunctionList(ctx, proto, tjs_file_proto_funcs, countof(tjs_file_proto_funcs));
+     JS_SetClassProto(ctx, tjs_file_class_id, proto);
++#ifndef TJS_RESTRICTED_CORE
+     JSValue file_ctor = JS_NewCFunction2(ctx, tjs_file_constructor, "File", 2, JS_CFUNC_constructor, 0);
+     JS_DefinePropertyValueStr(ctx, ns, "File", file_ctor, JS_PROP_C_W_E);
++#endif
+ 
+     /* Dir object */
+     JS_NewClassID(rt, &tjs_dir_class_id);
+--- a/src/mod_streams.c
++++ b/src/mod_streams.c
+@@ -1008,14 +1008,20 @@
+     JS_CGETSET_MAGIC_DEF("onconnect", tjs_stream_callback_get, tjs_stream_callback_set, STREAM_CB_CONNECT),
+     JS_CGETSET_MAGIC_DEF("onconnection", tjs_stream_callback_get, tjs_stream_callback_set, STREAM_CB_CONNECTION),
+     JS_CGETSET_MAGIC_DEF("onshutdown", tjs_stream_callback_get, tjs_stream_callback_set, STREAM_CB_SHUTDOWN),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("listen", 1, tjs_stream_listen),
++#endif
+     TJS_CFUNC_DEF("startRead", 0, tjs_stream_start_read),
+     TJS_CFUNC_DEF("stopRead", 0, tjs_stream_stop_read),
+     TJS_CFUNC_DEF("shutdown", 0, tjs_stream_shutdown),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("setBlocking", 1, tjs_stream_set_blocking),
++#endif
+     TJS_CFUNC_DEF("close", 0, tjs_stream_close),
+     TJS_CFUNC_DEF("write", 1, tjs_stream_write),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("fileno", 0, tjs_stream_fileno),
++#endif
+     TJS_CFUNC_DEF("ref", 0, tjs_stream_ref),
+     TJS_CFUNC_DEF("unref", 0, tjs_stream_unref),
+ };
+@@ -1025,7 +1031,9 @@
+     JS_CFUNC_MAGIC_DEF("getsockname", 0, tjs_tcp_getsockpeername, 0),
+     JS_CFUNC_MAGIC_DEF("getpeername", 0, tjs_tcp_getsockpeername, 1),
+     TJS_CFUNC_DEF("connect", 1, tjs_tcp_connect),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("bind", 2, tjs_tcp_bind),
++#endif
+     TJS_CFUNC_DEF("setKeepAlive", 2, tjs_tcp_keepalive),
+     TJS_CFUNC_DEF("setNoDelay", 1, tjs_tcp_nodelay),
+ };
+@@ -1049,6 +1057,14 @@
+     TJS_UVCONST(TTY_MODE_RAW),
+ };
+ 
++#ifdef TJS_RESTRICTED_CORE
++static JSCFunction *const capsid_forbidden_stream_functions[]
++    __attribute__((unused)) = {
++        tjs_stream_listen, tjs_stream_set_blocking,
++        tjs_stream_fileno, tjs_tcp_bind,
++    };
++#endif
++
+ void tjs__mod_streams_init(JSContext *ctx, JSValue ns) {
+     JSRuntime *rt = JS_GetRuntime(ctx);
+     JSValue proto, obj, stream_proto;
+--- a/src/mod_tls.c
++++ b/src/mod_tls.c
+@@ -1291,18 +1291,29 @@
+     TJS_CFUNC_DEF("close",        0, tjs_tls_close),
+     TJS_CFUNC_DEF("ref",          0, tjs_tls_ref),
+     TJS_CFUNC_DEF("unref",        0, tjs_tls_unref),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("fileno",       0, tjs_tls_fileno),
++#endif
+     JS_CFUNC_MAGIC_DEF("getsockname", 0, tjs_tls_getsockpeername, 0),
+     JS_CFUNC_MAGIC_DEF("getpeername", 0, tjs_tls_getsockpeername, 1),
+     TJS_CFUNC_DEF("connect",      1, tjs_tls_connect),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("bind",         2, tjs_tls_bind),
+     TJS_CFUNC_DEF("listen",       1, tjs_tls_listen),
++#endif
+     TJS_CFUNC_DEF("setKeepAlive", 2, tjs_tls_keepalive),
+     TJS_CFUNC_DEF("setNoDelay",   1, tjs_tls_nodelay),
+     TJS_CFUNC_DEF("getAlpn",      0, tjs_tls_get_alpn),
+ };
+ /* clang-format on */
+ 
++#ifdef TJS_RESTRICTED_CORE
++static JSCFunction *const capsid_forbidden_tls_functions[]
++    __attribute__((unused)) = {
++        tjs_tls_fileno, tjs_tls_bind, tjs_tls_listen,
++    };
++#endif
++
+ void tjs__mod_tls_init(JSContext *ctx, JSValue ns) {
+     JSRuntime *rt = JS_GetRuntime(ctx);
+     JSValue proto, obj;
+--- a/src/mod_udp.c
++++ b/src/mod_udp.c
+@@ -578,15 +578,19 @@
+     TJS_CFUNC_DEF("startRecv", 0, tjs_udp_start_recv),
+     TJS_CFUNC_DEF("stopRecv", 0, tjs_udp_stop_recv),
+     TJS_CFUNC_DEF("send", 2, tjs_udp_send),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("fileno", 0, tjs_udp_fileno),
++#endif
+     JS_CFUNC_MAGIC_DEF("getsockname", 0, tjs_udp_getsockpeername, 0),
+     JS_CFUNC_MAGIC_DEF("getpeername", 0, tjs_udp_getsockpeername, 1),
+     TJS_CFUNC_DEF("connect", 1, tjs_udp_connect),
++#ifndef TJS_RESTRICTED_CORE
+     TJS_CFUNC_DEF("bind", 2, tjs_udp_bind),
+     TJS_CFUNC_DEF("setMembership", 3, tjs_udp_set_membership),
+     TJS_CFUNC_DEF("setMulticastLoop", 1, tjs_udp_set_multicast_loop),
+     TJS_CFUNC_DEF("setMulticastTTL", 1, tjs_udp_set_multicast_ttl),
+     TJS_CFUNC_DEF("setMulticastInterface", 1, tjs_udp_set_multicast_interface),
++#endif
+     JS_PROP_STRING_DEF("[Symbol.toStringTag]", "UDP", JS_PROP_CONFIGURABLE),
+ };
+ 
+@@ -597,6 +601,15 @@
+     TJS_UVCONST(LEAVE_GROUP),
+ };
+ 
++#ifdef TJS_RESTRICTED_CORE
++static JSCFunction *const capsid_forbidden_udp_functions[]
++    __attribute__((unused)) = {
++        tjs_udp_fileno, tjs_udp_bind, tjs_udp_set_membership,
++        tjs_udp_set_multicast_loop, tjs_udp_set_multicast_ttl,
++        tjs_udp_set_multicast_interface,
++    };
++#endif
++
+ void tjs__mod_udp_init(JSContext *ctx, JSValue ns) {
+     JSRuntime *rt = JS_GetRuntime(ctx);
+     JSValue proto, obj;
+--- a/src/mod_dns.c
++++ b/src/mod_dns.c
+@@ -79,6 +79,24 @@
+             return JS_EXCEPTION;
+         }
+     }
++#ifdef TJS_RESTRICTED_CORE
++    /* DNS is an outbound operation too. A zero-port host check means the
++     * current Binding must have at least one net grant covering this host;
++     * denial happens before uv_getaddrinfo reaches the resolver. */
++    {
++        TJSRuntime *qrt = TJS_GetRuntime(ctx);
++        char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++        if (!node || !qrt || !qrt->egress.check ||
++            !qrt->egress.check(qrt->egress.opaque, node, 0, NULL, 0,
++                               reason, sizeof(reason))) {
++            JS_FreeCString(ctx, node);
++            JS_ThrowTypeError(ctx, "%s",
++                              reason[0] ? reason
++                                        : "CAPSID_DNS_EGRESS_DENIED");
++            return JS_EXCEPTION;
++        }
++    }
++#endif
+ 
+     JSValue opts = argv[1];
+     JSValue js_family = JS_GetPropertyStr(ctx, opts, "family");
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -254,6 +254,7 @@
+     tjs__mod_timers_init(ctx, ns);
+     tjs__mod_url_init(ctx, ns);
+     tjs__mod_dns_init(ctx, ns);
++    tjs__mod_udp_init(ctx, ns);
+     tjs__mod_tls_init(ctx, ns);
+     tjs__mod_httpclient_init(ctx, ns);
+     tjs__mod_miniz_init(ctx, ns);

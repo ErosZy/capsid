@@ -948,6 +948,7 @@ int run_managed(const std::string& host_config_path,
         capsid::host::ManagedListenerOptions listener_options;
         listener_options.config = config.listeners[0];
         listener_options.routing = routing;
+        listener_options.log = structured_log.get();
         data_plane = std::make_unique<capsid::host::ManagedListener>(
             std::move(listener_options));
         std::string listener_error;

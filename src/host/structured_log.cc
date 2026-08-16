@@ -159,23 +159,30 @@ std::string encode_log_line(const LogFields& fields,
     line += json_escape(fields.level);
     line += "\",\"event\":\"";
     line += json_escape(fields.event);
+    line += "\"";
     auto append_field = [&line](const char* name, const std::string& value) {
         if (!value.empty()) {
-            line += "\",\"";
+            line += ",\"";
             line += name;
             line += "\":\"";
             line += json_escape(value);
+            line += "\"";
         }
     };
     append_field("app", fields.app);
     append_field("version", fields.version);
     append_field("generation", fields.generation);
+    append_field("binding", fields.binding);
     append_field("worker_id", fields.worker_id);
     append_field("request_id", fields.request_id);
     append_field("operation_id", fields.operation_id);
     append_field("stage", fields.stage);
     append_field("result", fields.result);
-    line += "\",\"duration_ms\":";
+    if (!fields.fields.empty()) {
+        line += ",\"fields\":";
+        line += fields.fields;
+    }
+    line += ",\"duration_ms\":";
     line += std::to_string(fields.duration_ms);
     line += ",\"message\":\"";
     line += json_escape(fields.message);

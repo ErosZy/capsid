@@ -1,0 +1,74 @@
+diff --git a/src/mod_sqlite3.c b/src/mod_sqlite3.c
+--- a/src/mod_sqlite3.c
++++ b/src/mod_sqlite3.c
+@@ -180,26 +180,28 @@ static JSValue tjs_sqlite3_open(JSContext *ctx, JSValue this_val, int argc, JSVa
+     }
+ #endif
+ 
+ #ifdef TJS_RESTRICTED_CORE
+-    /* Capsid Binding v1: SQLite databases open through the per-origin FS
+-     * gate; a readable database still writes its journal and locks. */
+-    {
+-        TJSRuntime *qrt = TJS_GetRuntime(ctx);
+-        if (!qrt || !qrt->capsid_fs.check) {
+-            JS_FreeCString(ctx, db_name);
+-            JS_ThrowTypeError(ctx, "fs policy is unavailable");
+-            return JS_EXCEPTION;
+-        }
+-        char reason[TJS_EGRESS_REASON_MAX] = { 0 };
+-        const int write_access =
+-            (flags & SQLITE_OPEN_READONLY) == 0;
+-        if (!qrt->capsid_fs.check(qrt->capsid_fs.opaque, db_name,
+-                                  write_access, reason, sizeof(reason))) {
+-            JS_FreeCString(ctx, db_name);
+-            JS_ThrowTypeError(ctx, "%s",
+-                              reason[0] ? reason : "fs access denied");
+-            return JS_EXCEPTION;
++    /* :memory: never reaches the host filesystem. Every file-backed database
++     * is checked before sqlite3_open_v2; writable opens require WRITE. */
++    if (strcmp(db_name, ":memory:") != 0) {
++        {
++            TJSRuntime *qrt = TJS_GetRuntime(ctx);
++            if (!qrt || !qrt->capsid_fs.check) {
++                JS_FreeCString(ctx, db_name);
++                JS_ThrowTypeError(ctx, "fs policy is unavailable");
++                return JS_EXCEPTION;
++            }
++            char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++            const int write_access =
++                (flags & SQLITE_OPEN_READONLY) == 0;
++            if (!qrt->capsid_fs.check(qrt->capsid_fs.opaque, db_name,
++                                      write_access, reason, sizeof(reason))) {
++                JS_FreeCString(ctx, db_name);
++                JS_ThrowTypeError(ctx, "%s",
++                                  reason[0] ? reason : "fs access denied");
++                return JS_EXCEPTION;
++            }
+         }
+     }
+ #endif
+ 
+@@ -229,6 +231,9 @@ static JSValue tjs_sqlite3_open(JSContext *ctx, JSValue this_val, int argc, JSVa
+         r = sqlite3_set_authorizer(
+             handle, tjs_benchmark_sqlite_authorizer, NULL);
+     }
++#elif defined(TJS_RESTRICTED_CORE)
++    r = sqlite3_db_config(
++        handle, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 0, NULL);
+ #else
+     // Enable sqlite extensions (but only via C calls)
+     r = sqlite3_db_config(handle, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 1, NULL);
+@@ -274,6 +279,13 @@ static JSValue tjs_sqlite3_load_extension(JSContext *ctx, JSValue this_val, int
+     (void) argv;
+     return JS_ThrowTypeError(
+         ctx, "SQLite extensions are disabled in the benchmark worker");
++#elif defined(TJS_RESTRICTED_CORE)
++    (void) this_val;
++    (void) argc;
++    (void) argv;
++    return JS_ThrowTypeError(
++        ctx,
++        "CAPSID_SQLITE_EXTENSION_DENIED: extension loading is forbidden");
+ #else
+     TJSSqlite3Handle *h = tjs_sqlite3_get(ctx, argv[0]);
+ 

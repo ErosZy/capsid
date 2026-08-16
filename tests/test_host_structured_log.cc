@@ -56,7 +56,10 @@ int mode_encode_line_json() {
     fields.event = "recovery_decision";
     fields.app = "orders";
     fields.generation = "sha256:ab";
+    fields.binding = "mongo";
+    fields.request_id = "108";
     fields.result = "quarantine";
+    fields.fields = "{\"safe\":\"visible\",\"password\":\"[REDACTED]\"}";
     fields.duration_ms = 42;
     fields.message = "line one\n\"quoted\" \\ tail";
     const std::string line = encode_log_line(fields, 1700000000123ULL);
@@ -68,6 +71,17 @@ int mode_encode_line_json() {
     require(contains(line, "\"app\":\"orders\""), "encode omitted app");
     require(contains(line, "\"generation\":\"sha256:ab\""),
             "encode omitted generation");
+    require(contains(line, "\"binding\":\"mongo\""),
+            "encode omitted Binding identity");
+    require(contains(line, "\"request_id\":\"108\""),
+            "encode omitted request identity");
+    require(contains(
+                line,
+                "\"fields\":{\"safe\":\"visible\","
+                "\"password\":\"[REDACTED]\"}"),
+            "encode did not preserve structured fields: " + line);
+    require(!contains(line, "\"fields\":\"{"),
+            "encode double-encoded structured fields");
     require(contains(line, "\"result\":\"quarantine\""),
             "encode omitted result");
     require(contains(line, "\"duration_ms\":42"),

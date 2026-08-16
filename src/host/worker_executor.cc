@@ -6,10 +6,16 @@
 
 #include "host/worker_executor.h"
 
+#include "host/binding_compile.h"
+#include "host/config.h"
+
+#include <jansson.h>
+
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,6 +38,99 @@ void write_stderr(std::string_view message) {
 
 }  // namespace
 
+bool decode_worker_log_event(const capsid_event& event,
+                             WorkerEvent* output,
+                             std::string* error) {
+    if (output == nullptr || error == nullptr ||
+        event.type != CAPSID_EVENT_LOG) {
+        return false;
+    }
+    *output = WorkerEvent();
+    output->type = WorkerEvent::Type::kLog;
+    output->request_id = event.request_id;
+    error->clear();
+    if (event.flags == 0) {
+        if (event.payload.size != 0 && event.payload.data == nullptr) {
+            *error = "invalid application log payload";
+            return false;
+        }
+        if (event.payload.size != 0) {
+            output->text.assign(
+                reinterpret_cast<const char*>(event.payload.data),
+                event.payload.size);
+        }
+        return true;
+    }
+    if (event.flags != capsid::protocol::kFlagBindingLog ||
+        event.payload.size == 0 || event.payload.data == nullptr) {
+        *error = "invalid Binding log flags or payload";
+        return false;
+    }
+    const std::uint8_t* cursor = event.payload.data;
+    const std::uint8_t* end = cursor + event.payload.size;
+    const auto read_string16 = [&cursor, end](std::string* value) {
+        std::uint16_t size = 0;
+        if (!capsid::protocol::read_u16(&cursor, end, &size) ||
+            static_cast<std::size_t>(end - cursor) < size) {
+            return false;
+        }
+        value->assign(reinterpret_cast<const char*>(cursor), size);
+        cursor += size;
+        return true;
+    };
+    const auto read_string32 = [&cursor, end](std::string* value) {
+        std::uint32_t size = 0;
+        if (!capsid::protocol::read_u32(&cursor, end, &size) ||
+            static_cast<std::size_t>(end - cursor) < size) {
+            return false;
+        }
+        value->assign(reinterpret_cast<const char*>(cursor), size);
+        cursor += size;
+        return true;
+    };
+    if (!read_string16(&output->binding_id) ||
+        !read_string16(&output->log_level) ||
+        !read_string32(&output->text) ||
+        !read_string32(&output->log_fields_json) || cursor != end ||
+        !valid_binding_id(output->binding_id) ||
+        (output->log_level != "debug" && output->log_level != "info" &&
+         output->log_level != "warn" && output->log_level != "error") ||
+        output->text.size() > 16U * 1024U ||
+        output->log_fields_json.size() > 16U * 1024U ||
+        output->log_fields_json.size() < 2 ||
+        output->log_fields_json.front() != '{' ||
+        output->log_fields_json.back() != '}') {
+        *error = "invalid Binding log envelope";
+        return false;
+    }
+    json_error_t json_error = {};
+    json_t* fields = json_loadb(
+        output->log_fields_json.data(), output->log_fields_json.size(),
+        JSON_REJECT_DUPLICATES | JSON_DECODE_ANY, &json_error);
+    if (fields == nullptr || !json_is_object(fields)) {
+        if (fields != nullptr) {
+            json_decref(fields);
+        }
+        *error = "invalid Binding log fields";
+        return false;
+    }
+    char* canonical_fields = json_dumps(
+        fields, JSON_COMPACT | JSON_ENSURE_ASCII | JSON_SORT_KEYS);
+    json_decref(fields);
+    if (canonical_fields == nullptr) {
+        *error = "cannot canonicalize Binding log fields";
+        return false;
+    }
+    output->log_fields_json.assign(canonical_fields);
+    std::free(canonical_fields);
+    if (output->log_fields_json.size() > 16U * 1024U) {
+        *error = "canonical Binding log fields exceed the size limit";
+        return false;
+    }
+    output->binding_log = true;
+    return true;
+}
+
 WorkerExecutor::~WorkerExecutor() {
     stop_and_join();
 }
@@ -50,6 +149,7 @@ bool WorkerExecutor::start(const WorkerFactory& factory, std::string* error) {
         // join; stop_and_join() stays a safe no-op.
         return false;
     }
+    expected_ready_ = factory.expected_ready;
     worker_ = worker;
     source_.set_worker(worker);
 
@@ -62,7 +162,10 @@ bool WorkerExecutor::start(const WorkerFactory& factory, std::string* error) {
         // finish promptly. The shutdown command wakes the blocking wait.
         stop_and_join();
         if (error != nullptr) {
-            *error = "worker did not become READY";
+            std::unique_lock<std::mutex> lock(mutex_);
+            *error = ready_error_.empty()
+                ? "worker did not become READY"
+                : ready_error_;
         }
         return false;
     }
@@ -216,6 +319,15 @@ void WorkerExecutor::retire_terminal_request(std::uint64_t request_id) {
 
 void WorkerExecutor::set_event_notifier(EventNotifier notifier) {
     notifier_ = std::move(notifier);
+}
+
+void WorkerExecutor::set_log_identity(std::string application_id,
+                                      std::string generation_digest) {
+    if (started_.load(std::memory_order_relaxed)) {
+        return;
+    }
+    log_application_id_ = std::move(application_id);
+    log_generation_digest_ = std::move(generation_digest);
 }
 
 std::deque<WorkerEvent> WorkerExecutor::drain_events() {
@@ -653,22 +765,28 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
         capsid::WorkerReadyProof proof;
         std::string compat_id;
         std::string proof_error;
+        const std::vector<uint8_t> ready_payload(
+            event.payload.data,
+            event.payload.data + event.payload.size);
         const bool parsed = capsid::parse_ready_proof(
-            std::vector<uint8_t>(
-                event.payload.data,
-                event.payload.data + event.payload.size),
-            &compat_id, &proof, &proof_error);
+            ready_payload, &compat_id, &proof, &proof_error);
         capsid_build_info info;
         capsid_build_info_init(&info);
         const capsid_result result = capsid_runtime_build_info(&info);
         bool match = false;
+        std::string ready_error = proof_error;
         if (parsed && result == CAPSID_OK &&
             info.compatibility_id != nullptr) {
-            match = compat_id == info.compatibility_id;
+            match = capsid::host::verify_worker_ready(
+                ready_payload,
+                info.compatibility_id,
+                expected_ready_,
+                &ready_error);
         }
         std::unique_lock<std::mutex> lock(mutex_);
         ready_ = true;
         ready_match_ = match;
+        ready_error_ = match ? std::string() : ready_error;
         ready_proof_ = proof;
         cv_.notify_all();
         return true;
@@ -739,10 +857,13 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
     }
     case CAPSID_EVENT_LOG: {
         WorkerEvent worker_event;
-        worker_event.type = WorkerEvent::Type::kLog;
-        worker_event.text.assign(
-            reinterpret_cast<const char*>(event.payload.data),
-            event.payload.size);
+        std::string log_error;
+        if (!decode_worker_log_event(event, &worker_event, &log_error)) {
+            write_stderr(std::string("capsid-host: ") + log_error);
+            return false;
+        }
+        worker_event.application_id = log_application_id_;
+        worker_event.generation_digest = log_generation_digest_;
         queue_worker_event(std::move(worker_event));
         return true;
     }

@@ -452,7 +452,7 @@ void test_binding_startup_state_machine() {
         "mongo",
         R"json({"database":"orders"})json",
         {{"password", "s3cr3t"}},
-        {"tjs:internal/core", "tjs:posix-socket"},
+        {"tjs:internal/core", "tjs:utils"},
         {"network-client"},
         {"127.0.0.1:27017"},
         {"/etc/capsid/mongo"},
@@ -498,7 +498,7 @@ void test_binding_startup_state_machine() {
         require(
             binding.modules.size() == 2 &&
                 binding.modules[0] == "tjs:internal/core" &&
-                binding.modules[1] == "tjs:posix-socket",
+                binding.modules[1] == "tjs:utils",
             "binding modules decoded wrong");
         require(
             binding.config_json == R"json({"database":"orders"})json",
@@ -659,6 +659,21 @@ void test_binding_startup_state_machine() {
                                dup_module),
                            &error),
             "LOAD_BINDING with a duplicate module was accepted");
+    }
+    {
+        const std::vector<uint8_t> dup_secret = binding_blob(
+            "mongo", "{}", {{"password", "one"}, {"password", "two"}},
+            {}, {}, {}, {}, {}, {}, {}, "x");
+        capsid::WorkerStartupState state;
+        std::string error;
+        require(state.consume(hello_frame(), &error), error);
+        require(
+            !state.consume(load_binding_frame(
+                               capsid::protocol::kFlagStart |
+                                   capsid::protocol::kFlagEnd,
+                               dup_secret),
+                           &error),
+            "LOAD_BINDING with a duplicate secret key was accepted");
     }
 
     // A LOAD_BINDING after the bundle started is a sealed-sequence error.

@@ -9,6 +9,9 @@
 
 namespace capsid::host {
 
+inline constexpr std::string_view kBindingRuntimeCompatibilityVersion =
+    "capsid-binding-runtime-v1";
+
 // "sha256:" plus the lowercase hex SHA-256 of `bytes`. Shared by the
 // generation digest, the binding manifest digest and the binding registry
 // source digest.
@@ -60,6 +63,7 @@ struct BindingSetDigestEntry {
     std::string config_digest;
     std::string permission_digest;
     std::string profile_digest;
+    std::string binding_runtime_compatibility;
     std::vector<std::string> secret_key_ids;  // sorted
     std::string secret_revision;
 };

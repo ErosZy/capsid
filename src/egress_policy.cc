@@ -423,6 +423,47 @@ EgressDecision EgressPolicy::decide_host(
             : EgressDenyReason::kNoMatch);
 }
 
+EgressDecision EgressPolicy::decide_host_any_port(
+    const std::string &input) const {
+    uint8_t bytes[16] = {};
+    int family = AF_UNSPEC;
+    const bool numeric = parse_numeric(input, &family, bytes);
+    const uint8_t *address_bytes = bytes;
+    if (numeric && family == AF_INET6 && is_ipv4_mapped(bytes)) {
+        family = AF_INET;
+        address_bytes = bytes + 12;
+    }
+
+    std::string host;
+    bool input_wildcard = false;
+    if (!numeric &&
+        !normalize_hostname(input, false, &host, &input_wildcard)) {
+        return EgressDecision();
+    }
+    (void) input_wildcard;
+
+    for (std::vector<Rule>::const_iterator it = rules_.begin();
+         it != rules_.end(); ++it) {
+        if (it->action != CAPSID_EGRESS_ALLOW) {
+            continue;
+        }
+        const bool matches = numeric
+            ? it->address && it->family == family &&
+                  prefix_matches(address_bytes, it->network, it->prefix)
+            : !it->address &&
+                  host_rule_matches(host, it->host, it->wildcard);
+        if (matches) {
+            return EgressDecision(true, it->rule_id);
+        }
+    }
+    return EgressDecision(
+        default_action_ == CAPSID_EGRESS_ALLOW,
+        0,
+        default_action_ == CAPSID_EGRESS_ALLOW
+            ? EgressDenyReason::kNone
+            : EgressDenyReason::kNoMatch);
+}
+
 EgressDecision EgressPolicy::decide_address(
     const uint8_t *bytes,
     int family,

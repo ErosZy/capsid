@@ -36,6 +36,7 @@ namespace capsid::host {
 // Forward declaration: the ManagedListener implementation (the M1A server
 // pattern — a namespace-scope class, defined in managed_listener.cc).
 class ManagedListenerImpl;
+class StructuredLog;
 
 struct ManagedListenerOptions {
     // The configured listener. config.tcp is "host" or "host:port"; the
@@ -45,6 +46,9 @@ struct ManagedListenerOptions {
     // The published App → pool map. One snapshot load per request; the
     // pool found in that snapshot is pinned for the whole request.
     std::shared_ptr<RoutingTable> routing;
+    // Process-wide bounded structured log. Worker LOG events are emitted on
+    // its app lane; null keeps unit fixtures log-free.
+    StructuredLog* log = nullptr;
     // Beast request body limit for the buffered upload (413 beyond it).
     std::uint64_t max_request_body_bytes = 16U * 1024U * 1024U;
 };

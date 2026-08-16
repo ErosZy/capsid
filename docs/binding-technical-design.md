@@ -96,12 +96,22 @@ Binding ID 必须匹配 `[a-z][a-z0-9-]{0,62}`。Host 只扫描
 - 禁止 Symbolic Link、Hard Link、FIFO、Socket、设备文件和额外文件。
 - Root、Package 目录及文件必须属于 root 或 Host 有效 UID，且不能
   group/world writable。
+- 扫描从一个 `O_NOFOLLOW` Root FD 开始；Package 和文件只通过
+  `openat/fstatat(AT_SYMLINK_NOFOLLOW)` 访问。打开前后的 `dev/ino`、Owner、
+  Mode、Link Count、Size、mtime 和 ctime 必须一致。
+- 文件读取后重新比对打开 FD 与最终目录项；每个 Package 和 Root 在扫描结束时
+  都重新枚举并比对。因此 symlink、rename/replace、扫描中增删文件或原地改写都
+  fail-closed。
 - `manifest.json` 最大 1 MiB，`index.js` 最大 16 MiB；单个 Generation
   使用的 Binding 源码总量最大 64 MiB。
 - Manifest 或目录结构错误导致 Host 启动失败；JavaScript 语法、Factory 和
   方法导出错误导致引用该 Binding 的 Generation 预热失败。
 - Host 启动时形成不可变 Package 快照。v1 不 Watch 文件，也不支持在线
   Reload；更新 Package 后需重启 Host。
+- Generation 提交的 `bindings.json` 是按 Binding ID 排序、字段严格且有界的
+  Canonical Snapshot。恢复只读取该快照，不重新扫描 `bindingsRoot`；恢复时重新
+  校验 Manifest、App 子权限、Profile/Module 派生值、Config、Secret Revision
+  和 64 MiB 聚合上限，重复键、额外字段或非 Canonical Config 一律拒绝。
 - `index.js` 必须是单文件、自包含 ESM。第三方依赖需提前 Bundle；禁止相对、
   绝对、`file:`、HTTP 和动态 import。
 
@@ -122,7 +132,6 @@ Binding 才会进入 Generation，并通过 startup protocol 发给对应 worker
   "permissions": {
     "modules": [
       "tjs:internal/core",
-      "tjs:posix-socket",
       "tjs:utils"
     ],
     "net": {
@@ -271,6 +280,26 @@ Synthetic ESM 只有 frozen、null-prototype 的 default export。用户只能�
 Request Async Context 中调用；请求外调用返回 rejected Promise。Binding Runtime
 不能导入 `capsid:binding/*`。
 
+### 2.5 Binding 日志边界
+
+Binding 日志不复用可伪造的 User 文本日志格式。Worker 只发送带专用 Flag 的
+精确长度帧：
+
+```text
+binding-id:u16 | level:u16 | message:u32 | fields-json:u32
+```
+
+- Worker 只接受普通 Object 的 `fields`，拒绝 Array、Proxy、不可 JSON 序列化值
+  和超过 16 KiB 的 Message/Fields；输出前对当前 Binding 的所有 Secret 明文做
+  Message 与 JSON-escaped Fields 双重脱敏。
+- Host 要求 Flag 精确、帧无尾随字节、Binding ID/Level 合法，并以拒绝重复键的
+  JSON Parser 重新解析和 Canonicalize Fields；Fields 作为 JSON Object 写入，
+  不能注入第二条日志行。
+- `application` 和 `generation` 只由 Host 的 Pool/Executor 附加，Worker 不能
+  提供或覆盖；`binding` 来自已认证帧，`request` 来自协议头。
+- 预热阶段使用同一 Decoder。Malformed Binding Log 会使 worker 预热失败；运行
+  阶段不会降级成普通文本日志。Secret 不进入 Generation Snapshot 或日志。
+
 ## 3. 权限与 Runtime 隔离
 
 ### 3.1 三类策略
@@ -349,12 +378,15 @@ Gate 被拒绝，Mongo 访问 User 路径也在 Binding Gate 被拒绝。
 永久禁止：
 
 - `listen`、`serve`、TCP/TLS/UDP Listener、HTTP/WS Server。
-- Posix `bind/listen/accept`、AF_UNIX、Raw Socket、`createFromFD`。
+- 整个 `tjs:posix-socket`（v1 不可授权）；以及 Posix
+  `bind/listen/accept`、AF_UNIX、Raw Socket、`createFromFD`。
 - FFI、动态库、spawn/exec、Worker、exit/kill/signals 和进程控制。
 - SQLite Extension Loading。
 
-Posix Socket 只允许受控的 `AF_INET/AF_INET6` Client TCP/UDP，危险 Socket
-Option、广播和透明代理均拒绝。
+v1 不直接暴露 txiki 的 Posix Socket 模块，因为该模块把 Client API 与
+`createFromFD`、Listener、AF_UNIX 和危险 Socket Option 放在同一原生表面。
+后续若提供只含 `AF_INET/AF_INET6` Client TCP/UDP 的独立 Facade，必须在加入
+可授权集合前补齐操作级 egress 与 Owner 测试；不能通过初始化现有模块来扩权。
 
 ## 4. Linux Sandbox Profile
 
@@ -386,36 +418,42 @@ Profile 规则：
   要求 `filesystem-read`，`fs.write` 要求 `filesystem-write`，TJS SQLite/WASI
   分别要求 `sqlite`/`wasi`。
 
-### 4.2 当前 Seccomp/Landlock 的影响
+### 4.2 Seccomp/Landlock 的实现边界
 
 当前严格 Sandbox 已允许常见数据库 Client 所需的 IPv4/IPv6 Stream/Datagram
 Socket、`connect`、send/recv、DNS、TLS、event loop 和内存 syscall。因此
 MongoDB、MySQL 和 Redis 的常见 TCP/TLS Binding 通常只声明
 `network-client`，不需要扩大当前 Client syscall 集。
 
-当前仍硬拒绝：
+所有 Profile 的并集仍硬拒绝：
 
 - `bind/listen/accept`。
 - Unix/Raw Socket。
 - clone/fork/exec。
 - ptrace、BPF、perf、io_uring。
 - Mount/Namespace 变更。
-- FS Write、rename、unlink、mkdir。
 - 可执行内存。
 
-当前 Landlock 只添加只读 Path Rule，Seccomp 也会拒绝带写标志的
-`open/openat`。因此 FS Write、持久化 SQLite 和需要写缓存的 Binding 必须新增
-受控 Profile：
+`filesystem-write`、`filesystem-watch`、`sqlite` 和 `wasi` 已实现为受控
+Profile：
 
-- Seccomp 从永久禁止表开始，再追加 Profile 所需的固定 syscall；永久禁止项
-  优先，任何 Profile 都不能覆盖。
-- Landlock Path Rule 从单一 read-only 改为显式 Access Mask。
+- Seccomp 从永久禁止表开始，再按 Profile 追加固定 syscall；永久禁止项优先，
+  任何 Profile 都不能覆盖。`filesystem-write` 只增加创建、写入、同步、受控
+  rename/remove/mkdir 所需调用；`sqlite` 增加锁、pread/pwrite、ftruncate/fsync。
+- Landlock Path Rule 使用显式 Access Mask。Read 与 Write 路径分别形成 Rule，
+  进程安装所有 User/Binding Rule 的并集。
 - 目录 Write 可以允许普通文件创建、修改、删除和目录内 rename，但不能创建
   设备、FIFO、Unix Socket 或越出授权目录。
 - `filesystem-write` 要求能够安全表达所需 Access Mask 的 Landlock ABI；内核
   ABI 太旧时 worker 启动失败，不能降级成部分保护。
 - TCP/UDP Client 不开放用户指定本地 bind 地址；不为了 Client Profile 放开
   整个进程的 `bind`。
+
+Linux Profile Conformance Test 直接执行真实工作负载：read、create/write/
+rename/unlink/mkdir、inotify、SQLite 所需的 pwrite/fsync/ftruncate/flock、TCP
+connect 和 WASI preopen。每个 Profile 同时验证 fork、AF_UNIX、Raw Socket、
+bind 和 executable mmap 精确返回拒绝；所有 Profile 的并集也重复永久拒绝项。
+Hosted Validity 在 root 下运行 `ctest -L sandbox`，任何 Skip 77 都使 CI 失败。
 
 Network Namespace、Firewall 和 cgroup 仍由 Host 部署环境准备，Binding
 Manifest 不能创建或修改它们。
@@ -691,3 +729,54 @@ Binding Fatal Error进入现有 Crash Budget。
 - Binding Package、Policy、Profile、Config 和 Secret Revision进入不可变
   Generation Identity，Secret Value从不落盘。
 - 现有 ABI v7、无 Binding 运行路径和完整测试套件保持通过。
+
+### 8.1 需求到测试的验收矩阵
+
+以下测试必须命中真实 Native/Host 边界；只验证 Parser 或 Mock 不单独构成验收
+证据。
+
+| 验收边界 | 主要自动化证据 |
+| --- | --- |
+| Binding ID 在目录、App 和 import 中一一对应；拒绝 Provider Alias | `host_binding_config`、`host_binding_manifest`、`host_binding_registry`、`host_binding_compile` |
+| FD-relative Package 扫描、rename/replace、Owner/Mode/Link/大小和不可变恢复快照 | `host_binding_registry`、`host_binding_compile`、`host_secret_snapshot` |
+| 零 Binding 不创建第二 Runtime、不加载模块、不改变 READY/Sandbox 基线 | `worker_zero_binding_regression` |
+| 双 Runtime Heap/Global/Module/Job 隔离和只通过异步队列调用 | `worker_zero_binding_regression`、`binding_rpc` |
+| Structured Clone 类型、Getter/Proxy/Cycle/Native Handle 拒绝及配额 | `worker_zero_binding_regression`、`binding_rpc` |
+| Factory 无 Native Token，Config/Secret 深冻结 null-prototype，方法发现不执行 Getter | `worker_zero_binding_regression`、`host_binding_compile` |
+| User/Binding/Binding 间 Native Owner 不可跨越；User import 间接能力失败 | `capability_policy`、`worker_zero_binding_regression`、`worker_sandbox_enforcement` |
+| DNS/TCP/TLS/UDP/HTTP Redirect/WS/FS/SQLite/WASI 操作级 Gate；Posix Socket 不可授权 | `egress_policy`、`worker_fetch_direct_egress`、`worker_zero_binding_regression`、`txiki_vendor_patch_integrity` |
+| RPC 64-bit ID、Deadline、Cancel/Abort、Late Result、Quota 回收和 Poison | `binding_rpc`、`worker_zero_binding_regression` |
+| READY 完整比对 Profile Digest、Feature Bits、Seccomp、Landlock 和 Namespace | `host_binding_compile`、`host_worker_executor_contract`、`worker_sandbox_network_namespace`、`worker_zero_binding_regression` |
+| Secret Revision/Runtime Compatibility 进入 Digest，Secret Value 不进入快照/日志 | `host_binding_compile`、`host_secret_snapshot`、`worker_zero_binding_regression` |
+| Binding Log 严格帧、Host-owned App/Generation、JSON Fields 和 Secret 脱敏 | `structured_log_emits_single_line_json`、`host_worker_executor_contract`、`worker_zero_binding_regression` |
+| 每个 Linux Profile 真实正向操作且永久拒绝 fork/AF_UNIX/raw/bind/executable mmap | `worker_binding_sandbox_{read,write,watch,sqlite,network,wasi,union}`、`worker_sandbox_namespaces` |
+| TJS Overlay 版本、Patch 顺序、审计锚点和升级基线一致 | `txiki_async_context_inventory_audit`、`txiki_vendor_patch_integrity`、`txiki_overlay_audit_negative_controls` |
+
+### 8.2 2026-08-16 审计执行记录
+
+- macOS Debug 核心回归：Registry、Compile、Secret Snapshot、IPC、Capability、
+  Host Log/Executor、RPC、Sandbox 和零 Binding，共 10/10 通过。
+- macOS ASan（`detect_leaks=0`，Darwin 的 LeakSanitizer 不可用）：上述 Host/RPC/
+  双 Runtime 核心集合 8/8 通过，`halt_on_error=1`。
+- Linux 6.8/GCC 13 TSan：关闭 ASLR 后 Host/IPC/Policy/RPC/Sandbox/双 Runtime
+  核心集合 8/8 通过，`halt_on_error=1`；这是 sanitizer 证据，不替代下述真实
+  Seccomp/Landlock Profile Probe。
+- Linux 6.8/GCC 13 特权容器：Host Compile/Registry、IPC、Capability、RPC、零
+  Binding、Namespace 和 7 个真实 Binding Profile Probe，共 16/16 通过，0
+  skip；最终 WebSocket 补丁后又重跑 Sandbox Enforcement、7 个 Profile 与零
+  Binding 综合回归，9/9 通过，0 skip。Profile 结果不是 macOS 的 Skip 77
+  替代品。
+- WebSocket Client 使用真实 `101 Switching Protocols` 服务端覆盖：无授权规则在
+  `connect(2)` 前拒绝、显式允许目标握手成功且 `onopen` 恢复 Binding ID、句柄传给
+  另一 Binding 后拒绝操作；非 `ws/wss` scheme、非法端口和缺失 URL 同样关闭。
+- macOS 全量串行回归（排除明确要求外部 WPT 配置、以及要求 clean worktree 的两项
+  环境门禁，并把耗时打包复现项单独运行）235/235 通过；
+  `worker_package_reproducibility` 单独通过。Darwin 的 Profile/CPU Affinity/AB
+  Evidence skip 已由上述 Linux 真实结果覆盖，不被计作 Linux 证据。
+- Hosted Validity 的最终持续门禁位于
+  `.github/workflows/testing-validity.yml`：Release 完整 `ctest`、root
+  `ctest -L sandbox`（出现 `Skipped` 即失败）、delegated cgroup/netns，以及
+  ASan/UBSan/TSan 矩阵。
+
+此记录是一次审计结果，不替代 CI。TJS、Profile、Manifest Schema、协议或 Native
+入口发生变化后，必须重新执行 §7.9 与本矩阵，不能沿用旧结果。

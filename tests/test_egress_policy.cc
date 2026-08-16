@@ -127,6 +127,23 @@ void test_default_and_host_matching() {
             "wildcard ignored the DNS label boundary");
 }
 
+void test_dns_host_requires_some_covering_net_grant() {
+    capsid::EgressPolicy policy;
+    std::string error;
+    std::vector<capsid_egress_rule> rules;
+    rules.push_back(rule(
+        CAPSID_EGRESS_ALLOW, "db.example.test", 27017, 27017));
+    rules.push_back(rule(
+        CAPSID_EGRESS_ALLOW, "127.0.0.1", 6380, 6380));
+    require(configure(&policy, CAPSID_EGRESS_DENY, rules, &error), error);
+    require(policy.decide_host_any_port("DB.EXAMPLE.TEST.").allowed,
+            "DNS host covered by a port-scoped grant was denied");
+    require(policy.decide_host_any_port("127.0.0.1").allowed,
+            "numeric DNS target covered by a grant was denied");
+    require(!policy.decide_host_any_port("other.example.test").allowed,
+            "DNS host without any covering net grant was allowed");
+}
+
 void test_deny_precedence() {
     capsid::EgressPolicy policy;
     std::string error;
@@ -337,6 +354,7 @@ void test_malformed_rules() {
 
 int main() {
     test_default_and_host_matching();
+    test_dns_host_requires_some_covering_net_grant();
     test_deny_precedence();
     test_protected_addresses_and_rebinding();
     test_authoritative_hostname_resolution();

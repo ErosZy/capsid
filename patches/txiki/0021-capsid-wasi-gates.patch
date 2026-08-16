@@ -1,0 +1,152 @@
+diff --git a/src/private.h b/src/private.h
+--- a/src/private.h
++++ b/src/private.h
+@@ -129,5 +129,11 @@ struct TJSRuntime {
+         void *opaque;
+     } capsid_fs;
++    /* Capsid Binding v1: exact stdin/stdout/stderr grant check for WASI. */
++    struct {
++        int (*check)(void *opaque, const char *stream,
++                     char *reason, size_t reason_size);
++        void *opaque;
++    } capsid_stdio;
+ #endif
+     struct {
+         TJSTimer *timers;
+diff --git a/src/wasm.c b/src/wasm.c
+--- a/src/wasm.c
++++ b/src/wasm.c
+@@ -609,6 +609,7 @@ static void tjs__wasm_import_trampoline(wasm_exec_env_t exec_env, uint64_t *arg
+ }
+ 
+ #if WASM_ENABLE_LIBC_WASI != 0
++#ifndef TJS_RESTRICTED_CORE
+ /* Convert a non-negative integer fd from JS into a raw host handle for WAMR.
+  * Returns true on success; *handle is set to -1 to mean "use the embedder's
+  * default stdio" when js_fd is undefined (WAMR reads that as STDIN_FILENO/etc.
+@@ -645,6 +646,46 @@ static bool tjs__wasi_fd_to_handle(JSContext *ctx, JSValue js_fd, int64_t *hand
+     return true;
+ }
++#endif
+ 
++#ifdef TJS_RESTRICTED_CORE
++/* Binding WASI may only attach its corresponding conventional stdio fd, and
++ * only when the current Binding policy grants that exact stream. Undefined
++ * maps to Capsid's private -2 sentinel, which the WAMR patch below leaves
++ * absent from the guest fd table instead of falling back to host stdio. */
++static bool tjs__wasi_restricted_stdio(JSContext *ctx, JSValue js_fd,
++                                       const char *stream, int expected_fd,
++                                       int64_t *handle) {
++    if (JS_IsUndefined(js_fd)) {
++        *handle = -2;
++        return true;
++    }
++    int32_t fd;
++    if (JS_ToInt32(ctx, &fd, js_fd)) {
++        return false;
++    }
++    if (fd != expected_fd) {
++        JS_ThrowTypeError(ctx,
++                          "CAPSID_WASI_STDIO_DENIED: fd adoption is forbidden");
++        return false;
++    }
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (!qrt || !qrt->capsid_stdio.check) {
++        JS_ThrowTypeError(ctx,
++                          "CAPSID_WASI_STDIO_DENIED: policy unavailable");
++        return false;
++    }
++    char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++    if (!qrt->capsid_stdio.check(qrt->capsid_stdio.opaque, stream,
++                                 reason, sizeof(reason))) {
++        JS_ThrowTypeError(ctx, "CAPSID_WASI_STDIO_DENIED: %s",
++                          reason[0] ? reason : "access denied");
++        return false;
++    }
++    *handle = fd;
++    return true;
++}
++#endif
++
+ static JSValue tjs_wasm_setwasioptions(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSWasmModule *m = tjs_wasm_module_get(ctx, argv[0]);
+     if (!m) {
+@@ -657,10 +696,18 @@ static JSValue tjs_wasm_setwasioptions(JSContext *ctx, JSValue this_val, int arg
+     JSValue js_preopens = argv[3];
+ 
+     int64_t stdin_handle, stdout_handle, stderr_handle;
++#ifdef TJS_RESTRICTED_CORE
++    if (!tjs__wasi_restricted_stdio(ctx, argv[4], "stdin", 0, &stdin_handle)
++        || !tjs__wasi_restricted_stdio(ctx, argv[5], "stdout", 1, &stdout_handle)
++        || !tjs__wasi_restricted_stdio(ctx, argv[6], "stderr", 2, &stderr_handle)) {
++        return JS_EXCEPTION;
++    }
++#else
+     if (!tjs__wasi_fd_to_handle(ctx, argv[4], &stdin_handle) || !tjs__wasi_fd_to_handle(ctx, argv[5], &stdout_handle) ||
+         !tjs__wasi_fd_to_handle(ctx, argv[6], &stderr_handle)) {
+         return JS_EXCEPTION;
+     }
++#endif
+ 
+     char **wasi_argv = NULL;
+     uint32_t wasi_argc = 0;
+@@ -769,6 +816,21 @@ static JSValue tjs_wasm_setwasioptions(JSContext *ctx, JSValue this_val, int arg
+                 JS_FreePropertyEnum(ctx, ptab, plen);
+                 goto fail;
+             }
++#ifdef TJS_RESTRICTED_CORE
++            TJSRuntime *qrt = TJS_GetRuntime(ctx);
++            char reason[TJS_EGRESS_REASON_MAX] = { 0 };
++            if (!qrt || !qrt->capsid_fs.check
++                || !qrt->capsid_fs.check(qrt->capsid_fs.opaque, host_path,
++                                         1, reason, sizeof(reason))) {
++                JS_ThrowTypeError(ctx, "CAPSID_WASI_FS_DENIED: %s",
++                                  reason[0] ? reason :
++                                      "write policy unavailable or denied");
++                JS_FreeCString(ctx, guest_path);
++                JS_FreeCString(ctx, host_path);
++                JS_FreePropertyEnum(ctx, ptab, plen);
++                goto fail;
++            }
++#endif
+             /* Format: guest_path::host_path */
+             size_t entry_len = strlen(guest_path) + strlen(host_path) + 3; /* guest::host\0 */
+             wasi_map_dir_list[i] = js_malloc(ctx, entry_len);
+diff --git a/deps/wamr/core/iwasm/common/wasm_runtime_common.c b/deps/wamr/core/iwasm/common/wasm_runtime_common.c
+--- a/deps/wamr/core/iwasm/common/wasm_runtime_common.c
++++ b/deps/wamr/core/iwasm/common/wasm_runtime_common.c
+@@ -3662,18 +3662,27 @@ wasm_runtime_instantiate_internal(wasm_module_t module, uint32 stack_size,
+     addr_pool_inited = true;
+ 
++    /* Capsid uses raw handle -2 to mean that a WASI stdio capability was not
++     * granted. Unlike WAMR's -1, it must not fall back to process stdio. */
++    bool stdin_absent = stdinfd == (os_raw_file_handle)-2;
++    bool stdout_absent = stdoutfd == (os_raw_file_handle)-2;
++    bool stderr_absent = stderrfd == (os_raw_file_handle)-2;
+     os_file_handle stdin_file_handle = os_convert_stdin_handle(stdinfd);
+     os_file_handle stdout_file_handle = os_convert_stdout_handle(stdoutfd);
+     os_file_handle stderr_file_handle = os_convert_stderr_handle(stderrfd);
+ 
+-    if (!os_is_handle_valid(&stdin_file_handle)
+-        || !os_is_handle_valid(&stdout_file_handle)
+-        || !os_is_handle_valid(&stderr_file_handle))
++    if ((!stdin_absent && !os_is_handle_valid(&stdin_file_handle))
++        || (!stdout_absent && !os_is_handle_valid(&stdout_file_handle))
++        || (!stderr_absent && !os_is_handle_valid(&stderr_file_handle)))
+         goto fail;
+ 
+-    /* Prepopulate curfds with stdin, stdout, and stderr file descriptors. */
+-    if (!fd_table_insert_existing(curfds, 0, stdin_file_handle, true)
+-        || !fd_table_insert_existing(curfds, 1, stdout_file_handle, true)
+-        || !fd_table_insert_existing(curfds, 2, stderr_file_handle, true)) {
++    /* Only granted streams exist in the guest fd table. Ungranted 0/1/2
++     * return EBADF, while preopens continue to begin at guest fd 3. */
++    if ((!stdin_absent
++         && !fd_table_insert_existing(curfds, 0, stdin_file_handle, true))
++        || (!stdout_absent
++            && !fd_table_insert_existing(curfds, 1, stdout_file_handle, true))
++        || (!stderr_absent
++            && !fd_table_insert_existing(curfds, 2, stderr_file_handle, true))) {
+         set_error_buf(error_buf, error_buf_size,
+                       "Init wasi environment failed: init fd table failed");
+         goto fail;

@@ -16,6 +16,8 @@ inline constexpr std::size_t kMaxConfigNesting = 64U;
 // manifest.json, index.js and one binding's opaque config member.
 inline constexpr std::size_t kMaxBindingManifestBytes = 1024U * 1024U;
 inline constexpr std::size_t kMaxBindingSourceBytes = 16U * 1024U * 1024U;
+inline constexpr std::size_t kMaxBindingGenerationSourceBytes =
+    64U * 1024U * 1024U;
 inline constexpr std::size_t kMaxBindingConfigBytes = 256U * 1024U;
 
 enum class ConfigDocument {

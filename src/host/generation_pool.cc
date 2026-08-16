@@ -128,6 +128,8 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
     std::string spawn_error;
     for (std::uint32_t index = 0; index < pool->options_.workers; ++index) {
         std::shared_ptr<WorkerExecutor> executor(new WorkerExecutor());
+        executor->set_log_identity(pool->options_.application_id,
+                                   pool->options_.generation_digest);
         // The notifier wakes the pump; weak capture so the notifier never
         // keeps a stopped pool alive (the executor would otherwise hold a
         // shared_ptr cycle back into the pool).
@@ -252,6 +254,8 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
     pool->slots_.reserve(pool->options_.workers);
     for (std::uint32_t index = 0; index < pool->options_.workers; ++index) {
         std::shared_ptr<WorkerExecutor> executor(new WorkerExecutor());
+        executor->set_log_identity(pool->options_.application_id,
+                                   pool->options_.generation_digest);
         executor->set_event_notifier([weak = pool->weak_from_this(),
                                       owner = pool.get()] {
             // weak.lock() fails once the last shared_ptr is dropped — the
@@ -843,6 +847,8 @@ void GenerationPool::run_replacement(std::size_t slot) {
     // Spawn and READY through the same factory (same artifact, same
     // effective config — §8.3) into a fresh executor.
     std::shared_ptr<WorkerExecutor> replacement(new WorkerExecutor());
+    replacement->set_log_identity(options_.application_id,
+                                  options_.generation_digest);
     replacement->set_event_notifier([weak = weak_from_this()] {
         if (std::shared_ptr<GenerationPool> p = weak.lock()) {
             {

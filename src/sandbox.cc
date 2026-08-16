@@ -43,6 +43,36 @@
 
 namespace capsid {
 
+uint32_t query_landlock_abi() {
+#if defined(__linux__) && defined(SYS_landlock_create_ruleset)
+    const int abi = static_cast<int>(syscall(
+        SYS_landlock_create_ruleset,
+        NULL,
+        0,
+        LANDLOCK_CREATE_RULESET_VERSION));
+    return abi > 0 ? static_cast<uint32_t>(abi) : 0;
+#else
+    return 0;
+#endif
+}
+
+std::string network_namespace_identity(int descriptor) {
+#if defined(__linux__)
+    if (descriptor < 0) {
+        return {};
+    }
+    struct stat status = {};
+    if (fstat(descriptor, &status) != 0) {
+        return {};
+    }
+    return "net:[" + std::to_string(
+        static_cast<unsigned long long>(status.st_ino)) + "]";
+#else
+    (void)descriptor;
+    return {};
+#endif
+}
+
 namespace {
 
 bool set_limit(const char *name,
@@ -1032,6 +1062,33 @@ if (!allow_fs_write) {
 #define CAPSID_PROFILE_ALLOW_SYSCALL(name) \
     do { allow_syscall(&filter, __NR_##name); } while (0)
     if (allow_fs_write) {
+#ifdef __NR_creat
+        CAPSID_PROFILE_ALLOW_SYSCALL(creat);
+#endif
+#ifdef __NR_unlink
+        CAPSID_PROFILE_ALLOW_SYSCALL(unlink);
+#endif
+#ifdef __NR_unlinkat
+        CAPSID_PROFILE_ALLOW_SYSCALL(unlinkat);
+#endif
+#ifdef __NR_rename
+        CAPSID_PROFILE_ALLOW_SYSCALL(rename);
+#endif
+#ifdef __NR_renameat
+        CAPSID_PROFILE_ALLOW_SYSCALL(renameat);
+#endif
+#ifdef __NR_renameat2
+        CAPSID_PROFILE_ALLOW_SYSCALL(renameat2);
+#endif
+#ifdef __NR_mkdir
+        CAPSID_PROFILE_ALLOW_SYSCALL(mkdir);
+#endif
+#ifdef __NR_mkdirat
+        CAPSID_PROFILE_ALLOW_SYSCALL(mkdirat);
+#endif
+#ifdef __NR_rmdir
+        CAPSID_PROFILE_ALLOW_SYSCALL(rmdir);
+#endif
 #ifdef __NR_fsync
         CAPSID_PROFILE_ALLOW_SYSCALL(fsync);
 #endif
@@ -1194,12 +1251,7 @@ bool apply_sandbox(const SandboxConfig &config,
     features |= CAPSID_SANDBOX_FEATURE_LANDLOCK;
     if (landlock_abi) {
 #if defined(SYS_landlock_create_ruleset)
-        const int abi = static_cast<int>(syscall(
-            SYS_landlock_create_ruleset,
-            NULL,
-            0,
-            LANDLOCK_CREATE_RULESET_VERSION));
-        *landlock_abi = abi > 0 ? static_cast<uint32_t>(abi) : 0;
+        *landlock_abi = query_landlock_abi();
 #endif
     }
     if (!install_seccomp(config.binding_profiles, error)) {

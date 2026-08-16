@@ -1,0 +1,31 @@
+diff --git a/src/lws-utils.c b/src/lws-utils.c
+index 2fbcbbc..112f6c0 100644
+--- a/src/lws-utils.c
++++ b/src/lws-utils.c
+@@ -417,7 +417,7 @@ static void tjs__lws_init(TJSRuntime *qrt) {
+ 
+     /* Use the existing libuv event loop via our own event lib. */
+     info.event_lib_custom = &tjs_lws_evlib;
+-    void *foreign_loops[1] = { &qrt->loop };
++    void *foreign_loops[1] = { TJS_GetLoop(qrt) };
+     info.foreign_loops = foreign_loops;
+ 
+     /* Cookie jar is context-level in lws, must be set here. */
+@@ -462,7 +462,7 @@ static void tjs__lws_init(TJSRuntime *qrt) {
+     /* Keepalive handle: stays unrefed when idle so the loop can exit,
+      * gets refed while client connections are in flight to prevent
+      * the loop from exiting during async DNS resolution. */
+-    uv_async_init(&qrt->loop, &qrt->lws.keepalive, tjs__lws_keepalive_cb);
++    uv_async_init(TJS_GetLoop(qrt), &qrt->lws.keepalive, tjs__lws_keepalive_cb);
+     uv_unref((uv_handle_t *) &qrt->lws.keepalive);
+     qrt->lws.active_conns = 0;
+ }
+@@ -584,7 +584,7 @@ int tjs__lws_load_http(TJSRuntime *qrt, TBuf *dbuf, const char *url) {
+     hints.ai_socktype = SOCK_STREAM;
+ 
+     uv_getaddrinfo_t dns_req;
+-    if (uv_getaddrinfo(&qrt->loop, &dns_req, NULL, uri->host, NULL, &hints)) {
++    if (uv_getaddrinfo(TJS_GetLoop(qrt), &dns_req, NULL, uri->host, NULL, &hints)) {
+         lws_parse_uri_destroy(&uri);
+         return NULL;
+     }

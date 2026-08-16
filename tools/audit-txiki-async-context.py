@@ -4,7 +4,7 @@
 Every entry point where the txiki overlay calls back into JavaScript from a
 libuv callback must be consciously classified:
 
-  * ``tjs_call_handler`` invocation sites,
+  * ``tjs_call_handler`` / ``tjs_call_handler_ctx`` invocation sites,
   * ``TJS_InitPromise`` / ``TJS_SettlePromise`` / ``TJS_ClearPromise``
     invocation sites,
   * structs that store a ``JSValue callback`` / ``JSValue func`` field and
@@ -82,14 +82,35 @@ HANDLER_SITES = {
     ("httpserver.c", "tjs_http_emit_body_chunk"): CLASS_UNREACHABLE,
     ("httpserver.c", "tjs_http_callback"): CLASS_UNREACHABLE,
     ("httpserver.c", "tjs_http_invoke_handler"): CLASS_UNREACHABLE,
-    ("mod_fswatch.c", "uv__fs_event_cb"): CLASS_UNREACHABLE,
+    ("httpclient.c", "maybe_invoke_callback"): CLASS_WIRED,
+    ("mod_fswatch.c", "uv__fs_event_cb"): CLASS_WIRED,
     ("mod_process.c", "uv__exit_cb"): CLASS_UNREACHABLE,
-    ("mod_streams.c", "maybe_invoke_callback"): CLASS_UNREACHABLE,
-    ("mod_tls.c", "maybe_invoke_tls_callback"): CLASS_UNREACHABLE,
-    ("mod_udp.c", "maybe_invoke_callback"): CLASS_UNREACHABLE,
+    ("mod_streams.c", "maybe_invoke_callback"): CLASS_WIRED,
+    ("mod_tls.c", "maybe_invoke_tls_callback"): CLASS_WIRED,
+    ("mod_udp.c", "maybe_invoke_callback"): CLASS_WIRED,
     ("signals.c", "uv__signal_cb"): CLASS_UNREACHABLE,
+    ("timers.c", "uv__timer_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__digest_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__hmac_sign_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__cipher_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__pbkdf2_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__hkdf_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__ec_generate_key_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__ecdsa_sign_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__ecdsa_verify_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__ecdh_derive_bits_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__rsa_generate_key_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__rsa_oaep_encrypt_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__rsa_oaep_decrypt_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__rsa_sign_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__rsa_verify_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__ed25519_generate_key_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__ed25519_sign_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__ed25519_verify_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__x25519_generate_key_after_work_cb"): CLASS_WIRED,
+    ("webcrypto.c", "tjs__x25519_derive_bits_after_work_cb"): CLASS_WIRED,
     ("worker.c", "emit_event"): CLASS_UNREACHABLE,
-    ("ws.c", "maybe_call_callback"): CLASS_UNREACHABLE,
+    ("ws.c", "maybe_call_callback"): CLASS_WIRED,
 }
 
 # (file, enclosing function) -> class, for every TJS_(Init|Settle|Clear)
@@ -100,12 +121,12 @@ PROMISE_SITES = {
     ("utils.c", "TJS_InitPromise"): CLASS_WIRED,
     ("utils.c", "TJS_SettlePromise"): CLASS_WIRED,
     ("utils.c", "TJS_ClearPromise"): CLASS_WIRED,
-    ("mod_dns.c", "uv__getaddrinfo_cb"): CLASS_UNREACHABLE,
-    ("mod_dns.c", "tjs_dns_getaddrinfo"): CLASS_UNREACHABLE,
-    ("mod_fs.c", "tjs_fsreq_init"): CLASS_UNREACHABLE,
-    ("mod_fs.c", "uv__fs_req_cb"): CLASS_UNREACHABLE,
-    ("mod_fs.c", "tjs__readfile_after_work_cb"): CLASS_UNREACHABLE,
-    ("mod_fs.c", "tjs_fs_readfile"): CLASS_UNREACHABLE,
+    ("mod_dns.c", "uv__getaddrinfo_cb"): CLASS_WIRED,
+    ("mod_dns.c", "tjs_dns_getaddrinfo"): CLASS_WIRED,
+    ("mod_fs.c", "tjs_fsreq_init"): CLASS_WIRED,
+    ("mod_fs.c", "uv__fs_req_cb"): CLASS_WIRED,
+    ("mod_fs.c", "tjs__readfile_after_work_cb"): CLASS_WIRED,
+    ("mod_fs.c", "tjs_fs_readfile"): CLASS_WIRED,
 }
 
 # Files whose structs hold JSValue callback/func fields used across a libuv
@@ -123,16 +144,16 @@ STRUCT_FILES = {
     "wasm.c": CLASS_SYNC,          # TJSWasmImportCtx.func (WAMR trampoline)
     "httpserver.c": CLASS_UNREACHABLE,  # server callbacks + ws callbacks
     "mod_ffi.c": CLASS_UNREACHABLE,
-    "mod_fs.c": CLASS_UNREACHABLE,      # TJSFileReq.result (promise data)
-    "mod_fswatch.c": CLASS_UNREACHABLE,
+    "mod_fs.c": CLASS_VALUE,            # TJSFileReq.result (promise data)
+    "mod_fswatch.c": CLASS_WIRED,
     "mod_posix-socket.c": CLASS_UNREACHABLE,
     "mod_process.c": CLASS_UNREACHABLE,  # onexit
-    "mod_streams.c": CLASS_UNREACHABLE,
-    "mod_tls.c": CLASS_UNREACHABLE,
-    "mod_udp.c": CLASS_UNREACHABLE,
+    "mod_streams.c": CLASS_WIRED,
+    "mod_tls.c": CLASS_WIRED,
+    "mod_udp.c": CLASS_WIRED,
     "signals.c": CLASS_UNREACHABLE,      # sh->func
     "worker.c": CLASS_UNREACHABLE,
-    "ws.c": CLASS_UNREACHABLE,
+    "ws.c": CLASS_WIRED,
 }
 
 
@@ -163,9 +184,11 @@ def strip_comments(src):
 def scan_handler_sites(lines, path):
     sites = []
     for idx, line in enumerate(lines):
-        if 'tjs_call_handler(' not in line:
+        if not re.search(r'\btjs_call_handler(?:_ctx)?\s*\(', line):
             continue
-        if re.match(r'\s*(?:void|static)\s+tjs_call_handler\s*\(', line):
+        if re.match(
+                r'\s*(?:void|static)\s+tjs_call_handler(?:_ctx)?\s*\(',
+                line):
             continue  # definition
         fn = enclosing_function(lines, idx)
         sites.append((os.path.basename(path), idx + 1, fn,

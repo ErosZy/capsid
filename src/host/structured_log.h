@@ -15,7 +15,9 @@ namespace capsid::host {
 // M2 item 7 (design §12.2): every Host log line is a single JSON object
 // with the fixed field set — timestamp, level, event, app, version,
 // generation, worker_id, request_id, operation_id, stage, result,
-// duration_ms — plus a "message" field for sanitized human-readable text.
+// duration_ms — plus "binding", "fields", and a "message" field for
+// sanitized Binding/application output. `fields` is a pre-validated JSON
+// object and is emitted as an object, never as an escaped JSON string.
 //
 // Field-default rule: every string field appears only when it is non-empty
 // (an event carries the fields it concerns); duration_ms always appears
@@ -39,16 +41,18 @@ struct LogFields {
     // ({.event = ..., .app = ...}) remain complete under
     // -Wmissing-field-initializers; the field-default rule (non-empty
     // strings appear, empty ones are omitted) is applied at encode time.
-    std::string level = "info";  // info | warn | error
+    std::string level = "info";  // debug | info | warn | error
     std::string event = {};      // one of the fixed names below
     std::string app = {};
     std::string version = {};
     std::string generation = {};
+    std::string binding = {};
     std::string worker_id = {};
     std::string request_id = {};
     std::string operation_id = {};
     std::string stage = {};
     std::string result = {};
+    std::string fields = {};  // empty, or a validated JSON object
     std::uint64_t duration_ms = 0;
     std::string message = {};  // static or sanitized text only
 };

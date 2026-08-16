@@ -1,0 +1,389 @@
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -258,6 +258,7 @@ static void tjs__bootstrap_core(JSContext *ctx, JSValue ns) {
+     tjs__mod_udp_init(ctx, ns);
+     tjs__mod_tls_init(ctx, ns);
+     tjs__mod_httpclient_init(ctx, ns);
++    tjs__mod_ws_init(ctx, ns);
+     tjs__mod_miniz_init(ctx, ns);
+     tjs__webcrypto_init(ctx, ns);
+ #ifdef TJS_HAVE_SQLITE
+--- a/src/ws.c
++++ b/src/ws.c
+@@ -40,6 +40,7 @@ typedef struct {
+ 
+ typedef struct {
+     JSContext *ctx;
++    void *owner; /* immutable Binding resource owner */
+     JSValue callbacks[WS_CALLBACK_MAX];
+     JSValue this_val;
+     struct lws *wsi;
+@@ -54,6 +55,11 @@ typedef struct {
+     /* Close info (lws two-phase: stored in PEER_INITIATED_CLOSE, used in CLIENT_CLOSED) */
+     uint16_t close_code;
+     char close_reason[124]; /* RFC 6455: max 123 bytes + NUL */
++    char *host;
++    uint16_t port;
++#ifdef TJS_RESTRICTED_CORE
++    char egress_deny_reason[TJS_EGRESS_REASON_MAX];
++#endif
+ } TJSWs;
+ 
+ static JSClassID tjs_ws_class_id;
+@@ -74,6 +80,9 @@ static void tjs_ws_finalizer(JSRuntime *rt, JSValue val) {
+         tbuf_free(&w->recv_buf);
+         JS_FreeValueRT(rt, w->header_names);
+         JS_FreeValueRT(rt, w->header_values);
++        js_free_rt(rt, w->host);
++        tjs_release_resource_owner_rt(rt, w->owner);
++        w->owner = NULL;
+         js_free_rt(rt, w);
+     }
+ }
+@@ -96,7 +105,11 @@ static JSClassDef tjs_ws_class = {
+ };
+ 
+ static TJSWs *tjs_ws_get(JSContext *ctx, JSValue obj) {
+-    return JS_GetOpaque2(ctx, obj, tjs_ws_class_id);
++    TJSWs *w = JS_GetOpaque2(ctx, obj, tjs_ws_class_id);
++    if (w && tjs_require_resource_owner(ctx, w->owner) < 0) {
++        return NULL;
++    }
++    return w;
+ }
+ 
+ static void maybe_call_callback(TJSWs *w, int event, int argc, JSValue *argv) {
+@@ -111,13 +124,31 @@ static void maybe_call_callback(TJSWs *w, int event, int argc, JSValue *argv) {
+         return;
+     }
+ 
+-    tjs_call_handler(ctx, cb, argc, argv);
++    tjs_call_handler_ctx(ctx, w->owner, cb, argc, argv);
+ 
+     for (int i = 0; i < argc; i++) {
+         JS_FreeValue(ctx, argv[i]);
+     }
+ }
+ 
++#ifdef TJS_RESTRICTED_CORE
++static int tjs_ws_egress_allowed(TJSWs *w, const char *host, uint16_t port,
++                                 const struct sockaddr *address, socklen_t address_len) {
++    TJSRuntime *qrt = TJS_GetRuntime(w->ctx);
++    w->egress_deny_reason[0] = '\0';
++    if (!qrt || !qrt->egress.check) {
++        return 0;
++    }
++    void *previous_context = NULL;
++    tjs_enter_ctx(w->ctx, w->owner, &previous_context);
++    int allowed = qrt->egress.check(qrt->egress.opaque, host, port, address, address_len,
++                                    w->egress_deny_reason,
++                                    sizeof(w->egress_deny_reason));
++    tjs_leave_ctx(w->ctx, &previous_context);
++    return allowed;
++}
++#endif
++
+ static int tjs_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
+     TJSWs *w = (TJSWs *) user;
+ 
+@@ -126,7 +157,27 @@ static int tjs_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, v
+         return 0;
+     }
+ 
++    JSContext *callback_ctx = w->ctx;
++    int result = 0;
++    void *previous_context = NULL;
++    tjs_enter_ctx(callback_ctx, w->owner, &previous_context);
++
+     switch (reason) {
++#ifdef TJS_RESTRICTED_CORE
++        case LWS_CALLBACK_CONNECTING: {
++            struct sockaddr_storage address;
++            socklen_t address_len = sizeof(address);
++            memset(&address, 0, sizeof(address));
++            if (lws_get_connect_peer_address(wsi, &address, &address_len) ||
++                !tjs_ws_egress_allowed(w, w->host, w->port,
++                                       (const struct sockaddr *) &address,
++                                       address_len)) {
++                result = -1;
++                goto done;
++            }
++            break;
++        }
++#endif
+         case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER: {
+             if (!JS_IsArray(w->header_names)) {
+                 break;
+@@ -149,7 +200,8 @@ static int tjs_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, v
+                 if (!name || !value) {
+                     JS_FreeCString(ctx, name);
+                     JS_FreeCString(ctx, value);
+-                    return -1;
++                    result = -1;
++                    goto done;
+                 }
+ 
+                 int r = lws_add_http_header_by_name(wsi,
+@@ -162,7 +214,8 @@ static int tjs_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, v
+                 JS_FreeCString(ctx, value);
+ 
+                 if (r) {
+-                    return -1;
++                    result = -1;
++                    goto done;
+                 }
+             }
+             break;
+@@ -233,7 +286,8 @@ static int tjs_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, v
+ 
+             if (n < 0) {
+                 /* Connection failed. */
+-                return -1;
++                result = -1;
++                goto done;
+             }
+ 
+             /* Remove the sent item from the queue. */
+@@ -260,7 +314,7 @@ static int tjs_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, v
+                 }
+             }
+             /* Return 0 to let lws echo the close and then close the connection. */
+-            return 0;
++            goto done;
+         }
+ 
+         case LWS_CALLBACK_CLIENT_CLOSED: {
+@@ -316,7 +370,9 @@ static int tjs_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, v
+             break;
+     }
+ 
+-    return 0;
++done:
++    tjs_leave_ctx(callback_ctx, &previous_context);
++    return result;
+ }
+ 
+ const struct lws_protocols tjs_ws_protocol = {
+@@ -330,7 +386,7 @@ const struct lws_protocols tjs_ws_protocol = {
+ static JSValue emit_abnormal_close(JSContext *ctx, int argc, JSValue *argv) {
+     CHECK_EQ(argc, 1);
+ 
+-    TJSWs *w = JS_GetOpaque(argv[0], tjs_ws_class_id);
++    TJSWs *w = tjs_ws_get(ctx, argv[0]);
+     if (w) {
+         JSContext *ctx = w->ctx;
+ 
+@@ -346,7 +402,24 @@ static JSValue emit_abnormal_close(JSContext *ctx, int argc, JSValue *argv) {
+     return JS_UNDEFINED;
+ }
+ 
++static void tjs_ws_dispose_unattached(JSContext *ctx, TJSWs *w) {
++    if (!w) {
++        return;
++    }
++    tbuf_free(&w->recv_buf);
++    JS_FreeValue(ctx, w->header_names);
++    JS_FreeValue(ctx, w->header_values);
++    js_free(ctx, w->host);
++    tjs_release_resource_owner(ctx, w->owner);
++    w->owner = NULL;
++    js_free(ctx, w);
++}
++
+ static JSValue tjs_ws_constructor(JSContext *ctx, JSValue new_target, int argc, JSValue *argv) {
++    if (argc < 1) {
++        return JS_ThrowTypeError(ctx, "WebSocket URL is required");
++    }
++
+     JSValue obj = JS_NewObjectClass(ctx, tjs_ws_class_id);
+     if (JS_IsException(obj)) {
+         return obj;
+@@ -367,17 +440,28 @@ static JSValue tjs_ws_constructor(JSContext *ctx, JSValue new_target, int argc,
+     w->header_names = JS_UNDEFINED;
+     w->header_values = JS_UNDEFINED;
+     init_list_head(&w->pending_writes);
++    if (tjs_capture_resource_owner(ctx, &w->owner) < 0) {
++        tjs_ws_dispose_unattached(ctx, w);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+ 
+     const char *url = JS_ToCString(ctx, argv[0]);
+     if (!url) {
+-        js_free(ctx, w);
++        tjs_ws_dispose_unattached(ctx, w);
+         JS_FreeValue(ctx, obj);
+         return JS_EXCEPTION;
+     }
+ 
+     const char *protocols = NULL;
+-    if (!JS_IsNull(argv[1])) {
++    if (argc > 1 && !JS_IsNull(argv[1]) && !JS_IsUndefined(argv[1])) {
+         protocols = JS_ToCString(ctx, argv[1]);
++        if (!protocols) {
++            JS_FreeCString(ctx, url);
++            tjs_ws_dispose_unattached(ctx, w);
++            JS_FreeValue(ctx, obj);
++            return JS_EXCEPTION;
++        }
+     }
+ 
+     /* Optional third and fourth arguments: header names and values arrays. */
+@@ -391,12 +475,47 @@ static JSValue tjs_ws_constructor(JSContext *ctx, JSValue new_target, int argc,
+     JS_FreeCString(ctx, url);
+     if (!uri) {
+         JS_FreeCString(ctx, protocols);
+-        js_free(ctx, w);
++        tjs_ws_dispose_unattached(ctx, w);
++        JS_FreeValue(ctx, obj);
++        return JS_ThrowTypeError(ctx, "invalid WebSocket URL");
++    }
++
++    if ((!uri->scheme || (strcmp(uri->scheme, "ws") != 0 &&
++                          strcmp(uri->scheme, "wss") != 0)) ||
++        !uri->host || uri->port <= 0 || uri->port > 65535) {
++        JS_FreeCString(ctx, protocols);
++        lws_parse_uri_destroy(&uri);
++        tjs_ws_dispose_unattached(ctx, w);
+         JS_FreeValue(ctx, obj);
+         return JS_ThrowTypeError(ctx, "invalid WebSocket URL");
+     }
+ 
+-    bool use_ssl = !strcmp(uri->scheme, "wss") || !strcmp(uri->scheme, "https");
++#ifdef TJS_RESTRICTED_CORE
++    if (!tjs_ws_egress_allowed(w, uri->host, (uint16_t) uri->port, NULL, 0)) {
++        char denial[TJS_EGRESS_REASON_MAX];
++        snprintf(denial, sizeof(denial), "%s",
++                 w->egress_deny_reason[0]
++                     ? w->egress_deny_reason
++                     : "Network request denied by egress policy");
++        JS_FreeCString(ctx, protocols);
++        lws_parse_uri_destroy(&uri);
++        tjs_ws_dispose_unattached(ctx, w);
++        JS_FreeValue(ctx, obj);
++        return JS_ThrowTypeError(ctx, "%s", denial);
++    }
++#endif
++
++    w->host = js_strdup(ctx, uri->host);
++    w->port = (uint16_t) uri->port;
++    if (!w->host) {
++        JS_FreeCString(ctx, protocols);
++        lws_parse_uri_destroy(&uri);
++        tjs_ws_dispose_unattached(ctx, w);
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
++
++    bool use_ssl = !strcmp(uri->scheme, "wss");
+ 
+     /* Build the path with leading slash (the parsed path has it stripped). */
+     size_t path_len = strlen(uri->path);
+@@ -404,7 +523,7 @@ static JSValue tjs_ws_constructor(JSContext *ctx, JSValue new_target, int argc,
+     if (!full_path) {
+         JS_FreeCString(ctx, protocols);
+         lws_parse_uri_destroy(&uri);
+-        js_free(ctx, w);
++        tjs_ws_dispose_unattached(ctx, w);
+         JS_FreeValue(ctx, obj);
+         return JS_EXCEPTION;
+     }
+@@ -416,7 +535,7 @@ static JSValue tjs_ws_constructor(JSContext *ctx, JSValue new_target, int argc,
+         JS_FreeCString(ctx, protocols);
+         lws_parse_uri_destroy(&uri);
+         js_free(ctx, full_path);
+-        js_free(ctx, w);
++        tjs_ws_dispose_unattached(ctx, w);
+         JS_FreeValue(ctx, obj);
+         return JS_ThrowInternalError(ctx, "failed to create lws context");
+     }
+@@ -492,10 +611,19 @@ static JSValue tjs_ws_callback_set(JSContext *ctx, JSValue this_val, JSValue val
+     return JS_UNDEFINED;
+ }
+ 
+-static void ws_queue_write(TJSWs *w, const uint8_t *data, size_t len, bool is_text) {
++static int ws_queue_write(TJSWs *w, const uint8_t *data, size_t len, bool is_text) {
+     TJSWsPendingWrite *pw = js_malloc(w->ctx, sizeof(*pw));
+-    pw->data = js_malloc(w->ctx, len);
+-    memcpy(pw->data, data, len);
++    if (!pw) {
++        return -1;
++    }
++    pw->data = len ? js_malloc(w->ctx, len) : NULL;
++    if (len && !pw->data) {
++        js_free(w->ctx, pw);
++        return -1;
++    }
++    if (len) {
++        memcpy(pw->data, data, len);
++    }
+     pw->len = len;
+     pw->is_text = is_text;
+     list_add_tail(&pw->link, &w->pending_writes);
+@@ -503,6 +631,7 @@ static void ws_queue_write(TJSWs *w, const uint8_t *data, size_t len, bool is_te
+     if (w->wsi) {
+         lws_callback_on_writable(w->wsi);
+     }
++    return 0;
+ }
+ 
+ static JSValue tjs_ws_close(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+@@ -512,9 +641,18 @@ static JSValue tjs_ws_close(JSContext *ctx, JSValue this_val, int argc, JSValue
+     }
+ 
+     int code;
+-    JS_ToInt32(ctx, &code, argv[0]);
++    if (JS_ToInt32(ctx, &code, argv[0])) {
++        return JS_EXCEPTION;
++    }
+     size_t len;
+     const char *reason = JS_ToCStringLen(ctx, &len, argv[1]);
++    if (!reason) {
++        return JS_EXCEPTION;
++    }
++    if (len >= sizeof(w->close_reason)) {
++        JS_FreeCString(ctx, reason);
++        return JS_ThrowRangeError(ctx, "WebSocket close reason is too long");
++    }
+ 
+     /* Store the close info for use in CLIENT_CLOSED callback. */
+     w->close_code = (uint16_t) code;
+@@ -558,6 +696,10 @@ static JSValue tjs_ws_sendBinary(JSContext *ctx, JSValue this_val, int argc, JSV
+         }
+     }
+ 
++    if (off > size) {
++        return JS_ThrowRangeError(ctx, "array buffer overflow");
++    }
++
+     uint64_t blen = size - off;
+     if (argc > 2 && !JS_IsUndefined(argv[2])) {
+         if (JS_ToIndex(ctx, &blen, argv[2])) {
+@@ -565,7 +707,13 @@ static JSValue tjs_ws_sendBinary(JSContext *ctx, JSValue this_val, int argc, JSV
+         }
+     }
+ 
+-    ws_queue_write(w, buf + off, blen, false);
++    if (blen > size - off) {
++        return JS_ThrowRangeError(ctx, "array buffer overflow");
++    }
++
++    if (ws_queue_write(w, buf + off, blen, false) < 0) {
++        return JS_EXCEPTION;
++    }
+ 
+     return JS_UNDEFINED;
+ }
+@@ -582,7 +730,10 @@ static JSValue tjs_ws_sendText(JSContext *ctx, JSValue this_val, int argc, JSVal
+         return JS_EXCEPTION;
+     }
+ 
+-    ws_queue_write(w, (const uint8_t *) text, len, true);
++    if (ws_queue_write(w, (const uint8_t *) text, len, true) < 0) {
++        JS_FreeCString(ctx, text);
++        return JS_EXCEPTION;
++    }
+ 
+     JS_FreeCString(ctx, text);
+ 
+

@@ -58,6 +58,14 @@ bool neutral_from_js(JSContext *ctx,
 // neutral -> JS in the caller's context. The caller owns the result.
 JSValue neutral_to_js(JSContext *ctx, const NeutralValue &value);
 
+// Internal Binding RPC identifiers are never Number/Int64 values: IDs above
+// 2^63 must survive the JS callback-data round trip exactly and zero is
+// reserved as invalid.
+JSValue binding_call_id_to_js(JSContext *ctx, std::uint64_t call_id);
+bool binding_call_id_from_js(JSContext *ctx,
+                             JSValueConst value,
+                             std::uint64_t *call_id);
+
 }  // namespace capsid
 
 #endif
