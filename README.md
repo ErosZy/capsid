@@ -1,12 +1,10 @@
 ![Capsid](logo.png)
 
-**An embeddable JavaScript runtime for isolated, capability-based execution. Run untrusted and AI-generated code inside your application.**
-
 [![Testing validity](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml/badge.svg)](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml)
 [![Release](https://img.shields.io/github/v/release/ErosZy/capsid?label=release)](https://github.com/ErosZy/capsid/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-A process-isolated JavaScript runtime: the host manages `capsid-worker`
+**An embeddable JavaScript runtime for isolated, capability-based execution. Run untrusted and AI-generated code inside your application**: the host manages `capsid-worker`
 processes through `libcapsid_runtime`, each worker loads exactly one
 self-contained ESM, and serves HTTP requests over streaming FetchRPC. The
 runtime does not listen on ports, terminate TLS, or manage routing; those
