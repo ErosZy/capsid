@@ -2476,6 +2476,57 @@ void test_binding_grantable_modules_exist(const char *worker_path,
     finish_worker(fd, pid, true);
 }
 
+// Binding v1 §3.3 negative module matrix: private tjs:* names and every
+// permanently forbidden Capsid module fail Binding package evaluation, even
+// though several of them are present in the worker for other Binding
+// grants. Static imports make warm-up fail before READY with the loader's
+// authorization diagnostic.
+void test_binding_forbidden_imports_fail(const char *worker_path,
+                                         const char *p0_path) {
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import fs from 'tjs:fs';"
+        "export default () => ({ find() { return fs; } });",
+        "module is not authorized for this binding: tjs:fs");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import sqlite from 'tjs:sqlite';"
+        "export default () => ({ find() { return sqlite; } });",
+        "module is not authorized for this binding: tjs:sqlite");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import core from 'tjs:internal/core';"
+        "export default () => ({ find() { return core; } });",
+        "module is not authorized for this binding: tjs:internal/core");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import ffi from 'capsid:ffi';"
+        "export default () => ({ find() { return ffi; } });",
+        "module is not authorized for this binding: capsid:ffi");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import socket from 'capsid:posix-socket';"
+        "export default () => ({ find() { return socket; } });",
+        "module is not authorized for this binding: capsid:posix-socket");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import process from 'capsid:process';"
+        "export default () => ({ find() { return process; } });",
+        "module is not authorized for this binding: capsid:process");
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import server from 'capsid:http-server';"
+        "export default () => ({ find() { return server; } });",
+        "module is not authorized for this binding: capsid:http-server");
+    // Known and grantable, but not listed in this Binding's manifest:
+    // listing one module never implicitly authorizes another.
+    expect_binding_startup_failure(
+        worker_path, p0_path,
+        "import sqlite from 'capsid:sqlite';"
+        "export default () => ({ find() { return sqlite; } });",
+        "module is not authorized for this binding: capsid:sqlite");
+}
+
 void test_load_binding_abi_validation() {
     capsid_worker *worker = NULL;
     require(
@@ -2541,6 +2592,7 @@ int main(int argc, char **argv) {
     test_binding_fswatch_profile_and_path_gate(argv[1], argv[4]);
     test_binding_async_identity(argv[1], argv[4]);
     test_binding_wasi_workload(argv[1], argv[4]);
+    test_binding_forbidden_imports_fail(argv[1], argv[2]);
     test_binding_grantable_modules_exist(argv[1], argv[4]);
     test_load_binding_abi_validation();
     return 0;
