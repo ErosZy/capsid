@@ -11,6 +11,11 @@
 #include "host/policy_compiler.h"
 #include "win32_compat.h"
 
+#if defined(_WIN32)
+#else
+#include <sys/stat.h>
+#endif
+
 #include <jansson.h>
 
 #include <cerrno>
