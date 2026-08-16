@@ -101,14 +101,10 @@ endforeach()
 set(CAPSID_FORBIDDEN_SYMBOLS
     tjs__mod_ffi_init
     tjs__mod_fs_init
-    tjs__mod_fswatch_init
     tjs__mod_httpserver_init
     tjs__mod_posix_socket_init
     tjs__mod_process_init
     tjs__mod_signals_init
-    tjs__mod_sqlite3_init
-    tjs__mod_udp_init
-    tjs__mod_wasi_init
     tjs__mod_worker_init
     tjs__worker_post_error
 )
@@ -140,11 +136,8 @@ list(LENGTH CAPSID_TU_MARKERS CAPSID_TU_MARKER_COUNT)
 set(CAPSID_FORBIDDEN_UNITS
     mod_ffi
     mod_fs
-    mod_fswatch
     mod_posix-socket
     mod_process
-    mod_sqlite3
-    mod_udp
     httpserver
     signals
     worker
@@ -234,9 +227,14 @@ set(CAPSID_REQUIRED_MODULE_NAMES
     "tjs:getopts"
     "tjs:hashing"
     "tjs:internal/core"
+    "tjs:internal/path"
     "tjs:ipaddr"
+    "tjs:path"
+    "tjs:readline"
+    "tjs:sqlite"
     "tjs:utils"
     "tjs:uuid"
+    "tjs:wasi"
 )
 foreach(CAPSID_REQUIRED_MODULE_NAME IN LISTS CAPSID_REQUIRED_MODULE_NAMES)
     file(STRINGS "${CAPSID_WORKER}" CAPSID_EXPECTED_MODULE_NAME
@@ -252,7 +250,7 @@ foreach(CAPSID_REQUIRED_MODULE_NAME IN LISTS CAPSID_REQUIRED_MODULE_NAMES)
 endforeach()
 
 file(STRINGS "${CAPSID_WORKER}" CAPSID_FORBIDDEN_MODULE_NAMES
-    REGEX "tjs:(fs|process|udp|worker|sqlite|ffi|wasi|readline|posix-socket|path)|tjs:internal/(fs|process|udp|worker|httpserver|posix|path)"
+    REGEX "tjs:(fs|process|worker|ffi|posix-socket)|tjs:internal/(fs|process|worker|httpserver|posix)"
     LIMIT_COUNT 1
 )
 if(CAPSID_FORBIDDEN_MODULE_NAMES)

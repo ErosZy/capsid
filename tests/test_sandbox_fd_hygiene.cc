@@ -146,6 +146,22 @@ int main(int argc, char **argv) {
              capsid_result_string(result));
     }
 
+    // Binding v1 §4.3 startup order: the worker receives the App bundle
+    // bytes (no JavaScript runs) before installing the sandbox. Sending the
+    // bundle immediately after spawn keeps this test aligned with the
+    // current startup contract while still proving fd/environment hygiene
+    // and kernel sandbox activation before READY/JS execution.
+    static const char kMinimalBundle[] =
+        "export default { async fetch() { return new Response('ok'); } };";
+    if (capsid_worker_load_bundle(
+            worker,
+            reinterpret_cast<const uint8_t *>(kMinimalBundle),
+            sizeof(kMinimalBundle) - 1) != CAPSID_OK) {
+        capsid_worker_destroy(worker);
+        close(inherited);
+        fail("worker bundle load failed");
+    }
+
     const int64_t worker_pid = capsid_worker_pid(worker);
     const std::string inherited_path =
         std::string("/proc/") + std::to_string(worker_pid) +
@@ -177,7 +193,7 @@ int main(int argc, char **argv) {
            !kernel_sandbox_is_active(worker_pid)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    const bool sandbox_before_bundle =
+    const bool sandbox_before_ready =
         kernel_sandbox_is_active(worker_pid);
     const bool open_file_limit_applied =
         worker_open_file_limit_is(worker_pid, 48);
@@ -196,8 +212,8 @@ int main(int argc, char **argv) {
     if (!environment_empty) {
         fail("strict worker inherited the host environment");
     }
-    if (!sandbox_before_bundle) {
-        fail("strict kernel sandbox was not active after HELLO/before bundle");
+    if (!sandbox_before_ready) {
+        fail("strict kernel sandbox was not active after bundle bytes/before READY");
     }
     if (!open_file_limit_applied) {
         fail("configured open-file rlimit was not applied");
