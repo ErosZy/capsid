@@ -1051,6 +1051,52 @@ if(BUILD_TESTING)
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 
+            # v0.1.3 local capsid.json permissions (--capsid-json): env
+            # grants reach the worker, absent defaults stay deny-all, and
+            # worker/request/healthCheck sections, env valueFrom and an
+            # explicitly requested missing file all fail startup closed.
+            add_executable(
+                test-host-local-capsid-policy
+                tests/test_host_local_capsid_policy.cc
+                src/host/single_worker_server.cc)
+            target_include_directories(
+                test-host-local-capsid-policy PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-host-local-capsid-policy PRIVATE
+                capsid_runtime
+                capsid_host_core
+                Boost::system
+                capsid_sanitizers)
+            set_target_properties(
+                test-host-local-capsid-policy PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-host-local-capsid-policy PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-host-local-capsid-policy PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(
+                            test-host-local-capsid-policy PRIVATE
+                            -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_test(
+                NAME host_local_capsid_policy
+                COMMAND test-host-local-capsid-policy
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_local_capsid_policy PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+
             # Batch B begins RED before the production source exists. The
             # CONFIGURE_DEPENDS glob adds it to this isolated test target as
             # soon as the implementation is created, without requiring the
