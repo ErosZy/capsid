@@ -95,7 +95,7 @@
      qrt->stop.data = qrt;
  
      /* loader for ES modules */
-@@ -653,23 +666,27 @@
+@@ -653,23 +666,35 @@
      }
  #endif
  
@@ -133,6 +133,14 @@
 -    (void) closed;
 +        (void) closed;
  #endif
++    } else {
++        /* Capsid Binding v1: drain the close callbacks this runtime queued
++         * on the shared loop before freeing qrt; the owner keeps running the
++         * same loop and must never observe handles owned by freed memory. */
++        uv_loop_t *loop = tjs__effective_loop(qrt);
++        for (int i = 0; i < 5; i++) {
++            uv_run(loop, UV_RUN_NOWAIT);
++        }
 +    }
  
      tjs__free(qrt);

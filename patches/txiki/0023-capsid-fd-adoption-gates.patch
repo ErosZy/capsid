@@ -102,15 +102,16 @@
      TJS_CFUNC_DEF("setKeepAlive", 2, tjs_tcp_keepalive),
      TJS_CFUNC_DEF("setNoDelay", 1, tjs_tcp_nodelay),
  };
-@@ -1049,6 +1057,17 @@
+@@ -1049,6 +1057,18 @@
      TJS_UVCONST(TTY_MODE_RAW),
  };
  
 +#ifdef TJS_RESTRICTED_CORE
-+#if defined(_MSC_VER)
-+static JSCFunction *const capsid_forbidden_stream_functions[] = {
++#if defined(__GNUC__) || defined(__clang__)
++static JSCFunction *const capsid_forbidden_stream_functions[]
++    __attribute__((unused)) = {
 +#else
-+static JSCFunction *const capsid_forbidden_stream_functions[] __attribute__((unused)) = {
++static JSCFunction *const capsid_forbidden_stream_functions[] = {
 +#endif
 +        tjs_stream_listen, tjs_stream_set_blocking,
 +        tjs_stream_fileno, tjs_tcp_bind,
@@ -122,7 +123,7 @@
      JSValue proto, obj, stream_proto;
 --- a/src/mod_tls.c
 +++ b/src/mod_tls.c
-@@ -1291,18 +1291,32 @@
+@@ -1291,18 +1291,33 @@
      TJS_CFUNC_DEF("close",        0, tjs_tls_close),
      TJS_CFUNC_DEF("ref",          0, tjs_tls_ref),
      TJS_CFUNC_DEF("unref",        0, tjs_tls_unref),
@@ -143,10 +144,11 @@
  /* clang-format on */
  
 +#ifdef TJS_RESTRICTED_CORE
-+#if defined(_MSC_VER)
-+static JSCFunction *const capsid_forbidden_tls_functions[] = {
++#if defined(__GNUC__) || defined(__clang__)
++static JSCFunction *const capsid_forbidden_tls_functions[]
++    __attribute__((unused)) = {
 +#else
-+static JSCFunction *const capsid_forbidden_tls_functions[] __attribute__((unused)) = {
++static JSCFunction *const capsid_forbidden_tls_functions[] = {
 +#endif
 +        tjs_tls_fileno, tjs_tls_bind, tjs_tls_listen,
 +    };
@@ -177,15 +179,16 @@
      JS_PROP_STRING_DEF("[Symbol.toStringTag]", "UDP", JS_PROP_CONFIGURABLE),
  };
  
-@@ -597,6 +601,18 @@
+@@ -597,6 +601,19 @@
      TJS_UVCONST(LEAVE_GROUP),
  };
  
 +#ifdef TJS_RESTRICTED_CORE
-+#if defined(_MSC_VER)
-+static JSCFunction *const capsid_forbidden_udp_functions[] = {
++#if defined(__GNUC__) || defined(__clang__)
++static JSCFunction *const capsid_forbidden_udp_functions[]
++    __attribute__((unused)) = {
 +#else
-+static JSCFunction *const capsid_forbidden_udp_functions[] __attribute__((unused)) = {
++static JSCFunction *const capsid_forbidden_udp_functions[] = {
 +#endif
 +        tjs_udp_fileno, tjs_udp_bind, tjs_udp_set_membership,
 +        tjs_udp_set_multicast_loop, tjs_udp_set_multicast_ttl,

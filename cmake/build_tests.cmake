@@ -4723,6 +4723,7 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 10
         )
 
+        if(UNIX)
         add_executable(
             test-worker-zero-binding
             tests/test_worker_zero_binding.cc
@@ -4756,6 +4757,7 @@ if(BUILD_TESTING)
             worker_zero_binding_regression
             PROPERTIES TIMEOUT 60
         )
+        endif()  # UNIX — zero-binding regression uses POSIX spawn/socket
 
         add_executable(test-fetch-cancel tests/test_fetch_cancel.cc)
         target_link_libraries(
