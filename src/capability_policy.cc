@@ -159,19 +159,36 @@ bool valid_identity(const std::string &identity) {
 
 bool normalize_path(const std::string &input,
                     std::string *normalized) {
-    if (!normalized || input.empty() || input[0] != '/' ||
-        input.size() > 4096) {
+    if (!normalized || input.empty() || input.size() > 4096) {
+        return false;
+    }
+    std::string root = "/";
+    std::size_t start = 1;
+    bool windows_drive = false;
+#if defined(_WIN32)
+    if (input.size() >= 3 &&
+        std::isalpha(static_cast<unsigned char>(input[0])) &&
+        input[1] == ':' && (input[2] == '/' || input[2] == '\\')) {
+        root.clear();
+        root.push_back(static_cast<char>(
+            std::toupper(static_cast<unsigned char>(input[0]))));
+        root += ":/";
+        start = 3;
+        windows_drive = true;
+    }
+#endif
+    if (!windows_drive && input[0] != '/') {
         return false;
     }
     std::vector<std::string> components;
-    size_t start = 1;
     while (start <= input.size()) {
-        size_t end = input.find('/', start);
-        if (end == std::string::npos) {
-            end = input.size();
-        }
+        const std::size_t end = windows_drive
+            ? input.find_first_of("/\\", start)
+            : input.find('/', start);
+        const std::size_t component_end =
+            end == std::string::npos ? input.size() : end;
         const std::string component =
-            input.substr(start, end - start);
+            input.substr(start, component_end - start);
         if (component.empty() || component == ".") {
             /* Repeated and trailing separators normalize away. */
         } else if (component == "..") {
@@ -182,17 +199,21 @@ bool normalize_path(const std::string &input,
         } else {
             components.push_back(component);
         }
-        if (end == input.size()) {
+        if (component_end == input.size()) {
             break;
         }
-        start = end + 1;
+        start = component_end + 1;
     }
-    normalized->assign("/");
+    *normalized = root;
     for (size_t index = 0; index < components.size(); ++index) {
-        if (index != 0) {
+        if (!normalized->empty() && normalized->back() != '/') {
             normalized->push_back('/');
         }
         normalized->append(components[index]);
+    }
+    if (normalized->size() > root.size() &&
+        normalized->back() == '/') {
+        normalized->pop_back();
     }
     return true;
 }

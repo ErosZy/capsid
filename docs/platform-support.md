@@ -33,7 +33,9 @@ single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为�
 
 - Host `--mode managed`（coordinator/Admin/多 App）：仅 Linux；macOS/Windows
   在 CLI 直接提示后退出
-- `capsid:fs`（read/stat/list）：仅 Linux；macOS/Windows 调用拒绝
+- `capsid:fs`（read/stat/list）：Linux 完整支持；macOS/Windows 有损支持
+  但可用，且一律拒绝 symlink/reparse 路径（macOS：`openat(O_NOFOLLOW)`
+  dirfd walk；Windows：drive-letter 绝对路径，reparse point 拒绝）
 - strict sandbox（seccomp/Landlock/namespace/cgroup）：仅 Linux
 - 多 shard 共享端口（`SO_REUSEPORT`）：仅 Linux/macOS 的内部实现；
   Windows 使用池级共享 acceptor 实现同样的对外行为
@@ -59,8 +61,8 @@ single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为�
 - 使用系统 Clang 原生构建，Release 包为 `capsid-<版本>-darwin-arm64.tar.gz`；
 - single-worker 与 static-pool（single / multi shard）属三平台统一契约；
   multi shard 通过 `SO_REUSEPORT` 实现；
-- `capsid:fs` 不可用：该模块保持 Linux-only，macOS 调用返回
-  “filesystem module is unavailable on this platform”；
+- `capsid:fs` 有损但可用：readText/stat/list 与 Linux 行为一致，底层为
+  逐组件 `openat(O_NOFOLLOW)` dirfd walk，symlink 一律拒绝；
 - 没有 `sched_setaffinity` 等价 API，CPU affinity 测试按 CTest 77 跳过；
 - 请求 strict sandbox 会在 worker 启动握手期失败；`--mode managed` 在 CLI
   直接失败并提示“managed coordinator requires Linux strict sandbox”，与
@@ -72,8 +74,9 @@ single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为�
   `capsid-<版本>-windows-x86_64.zip`；
 - single-worker 与 static-pool（single / multi shard）属三平台统一契约；
   没有 `SO_REUSEPORT`，multi shard 由池级共享 acceptor 轮询分发；
-- `capsid:fs` 不可用：模块保持 Linux-only，Windows 调用返回
-  “filesystem module is unavailable on this platform”；
+- `capsid:fs` 有损但可用：readText/stat/list 与 Linux 行为一致，路径仅
+  接受 `C:/...`（也接受 `C:\...`）drive-letter 绝对路径，逐组件打开并拒绝
+  reparse point（symlink/junction）；UNC 路径不支持；
 - strict sandbox 与 managed Host 不可用；`--mode managed` 在 CLI 直接失败
   并提示，与 macOS 行为一致；
 - CPU affinity 通过 `SetProcessAffinityMask` 实现，但只覆盖当前处理器组；

@@ -933,6 +933,46 @@ void test_malformed_rules() {
             "duplicate rule id was accepted");
 }
 
+#if defined(_WIN32)
+void test_windows_drive_path_normalization() {
+    std::vector<capsid_permission_rule> rules;
+    rules.push_back(rule(
+        CAPSID_PERMISSION_READ,
+        CAPSID_PERMISSION_ALLOW,
+        "C:/srv/app/data",
+        70));
+    capsid::CapabilityPolicy compiled;
+    std::string error;
+    require(configure(
+                &compiled,
+                std::vector<const char *>(),
+                rules,
+                NULL,
+                &error),
+            error);
+    require(
+        compiled.evaluate(CAPSID_PERMISSION_READ,
+                          "C:/srv/app/data/public/file.txt").state ==
+            CAPSID_PERMISSION_STATE_GRANTED,
+        "Windows forward-slash path was not normalized");
+    require(
+        compiled.evaluate(CAPSID_PERMISSION_READ,
+                          "C:\\srv\\app\\data\\public\\file.txt").state ==
+            CAPSID_PERMISSION_STATE_GRANTED,
+        "Windows backslash path was not normalized");
+    require(
+        compiled.evaluate(CAPSID_PERMISSION_READ,
+                          "D:/srv/app/data/file.txt").state ==
+            CAPSID_PERMISSION_STATE_DENIED,
+        "Windows path escaped to another drive");
+    require(
+        compiled.evaluate(CAPSID_PERMISSION_READ,
+                          "C:/srv/app/../../etc").state ==
+            CAPSID_PERMISSION_STATE_DENIED,
+        "Windows path traversal escaped the root");
+}
+#endif
+
 }  // namespace
 
 int main() {
@@ -945,5 +985,8 @@ int main() {
     test_explicit_environment_snapshot();
     test_version_1_policy_compatibility();
     test_malformed_rules();
+#if defined(_WIN32)
+    test_windows_drive_path_normalization();
+#endif
     return 0;
 }

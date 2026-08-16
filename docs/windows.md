@@ -104,7 +104,7 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 | Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌（运行时提示） | ❌（运行时提示） |
 | 出站网络策略（egress host/address 规则、保护段） | ✅ | ✅ | ✅（JS 层） |
 | 能力策略（模块/权限/环境快照） | ✅ | ✅ | ✅ |
-| fs 权限模块（capsid:fs read/stat/list） | ✅ | ❌（函数调用拒绝） | ❌（函数调用拒绝） |
+| fs 权限模块（capsid:fs read/stat/list） | ✅ 完整 | ⚠️ 有损（dirfd walk，symlink 拒绝） | ⚠️ 有损（drive-letter 路径，reparse 拒绝） |
 | RLIMIT_AS / RLIMIT_NOFILE / RLIMIT_CORE | ✅ | 部分（RLIMIT_AS 编译期拒绝） | 部分（见下） |
 | strict sandbox（seccomp/Landlock/namespace/cgroup） | ✅ | ❌ | ❌（见下） |
 | 多 shard 共享端口（SO_REUSEPORT） | ✅ | ✅ | ❌（改用池级 acceptor 分发） |
@@ -167,10 +167,12 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   `SO_UPDATE_ACCEPT_CONTEXT` 重新绑定 listener 上下文：否则 AFD 回收
   listener 的端点名后，已接受 socket 的后续 I/O 会以
   `ERROR_ALREADY_EXISTS` 随机失败（socket 对两端都可能中毒）。
-- **fs 模块不可用**：`capsid:fs` 的读路径依赖 `openat2(RESOLVE_NO_SYMLINKS)`
-  （Linux-only）。Windows/macOS 上模块本身仍可注册（import 不报错），但
-  `readText`/`stat`/`list` 调用返回 “filesystem module is unavailable on
-  this platform”。需要读取文件的部署应使用 bundle 内资源或 storage 模块。
+- **fs 模块（有损但可用）**：Windows 上 `capsid:fs` 的 readText/stat/list
+  可用。路径必须写成 drive-letter 绝对路径（`C:/...` 或 `C:\...`，统一
+  规范化为 `C:/...`；UNC 不支持）；打开过程逐组件使用
+  `FILE_FLAG_OPEN_REPARSE_POINT` 并拒绝任何 symlink/junction。Linux 使用
+  `openat2(RESOLVE_NO_SYMLINKS)`，macOS 使用 `openat(O_NOFOLLOW)` dirfd
+  walk，三平台对外契约一致，且 symlink/reparse 路径一律拒绝。
 - **连接终止语义**：Windows 上对端 reset 的 socket 读以 EOF（返回 0）
   结束（`WSAECONNRESET` 并入正常关闭路径），因此 worker 异常终止时
   host 观察到的是 EXIT 事件；Linux 能区分 CLOSED 与 ERROR。WSAPoll 不

@@ -5,6 +5,7 @@
 #include <openssl/evp.h>
 
 #include <algorithm>
+#include <cctype>
 #include <limits>
 #include <map>
 #include <set>
@@ -43,18 +44,40 @@ std::uint32_t rule_id(const std::string& label) {
 }
 
 // Lexical path normalization: resolve "." and ".." without touching the
-// filesystem; rejects escapes above the root.
+// filesystem; rejects escapes above the root. POSIX paths keep the "/"
+// root; on Windows drive-letter absolute paths (C:/..., C:\...) normalize
+// to the canonical C:/... form shared with the capability policy.
 bool normalize_path(const std::string& path, std::string* out) {
-    if (path.empty() || path[0] != '/') {
+    if (path.empty() || path.size() > 4096) {
+        return false;
+    }
+    std::string root = "/";
+    std::size_t begin = 1;
+    bool windows_drive = false;
+#if defined(_WIN32)
+    if (path.size() >= 3 &&
+        std::isalpha(static_cast<unsigned char>(path[0])) &&
+        path[1] == ':' && (path[2] == '/' || path[2] == '\\')) {
+        root.clear();
+        root.push_back(static_cast<char>(
+            std::toupper(static_cast<unsigned char>(path[0]))));
+        root += ":/";
+        begin = 3;
+        windows_drive = true;
+    }
+#endif
+    if (!windows_drive && path[0] != '/') {
         return false;
     }
     std::vector<std::string> components;
-    std::size_t begin = 1;
     while (begin <= path.size()) {
-        const std::size_t end = path.find('/', begin);
+        const std::size_t end = windows_drive
+            ? path.find_first_of("/\\", begin)
+            : path.find('/', begin);
+        const std::size_t component_end =
+            end == std::string::npos ? path.size() : end;
         const std::string component =
-            path.substr(begin, end == std::string::npos ? std::string::npos
-                                                        : end - begin);
+            path.substr(begin, component_end - begin);
         if (component == "..") {
             if (components.empty()) {
                 return false;  // escapes the root
@@ -63,16 +86,21 @@ bool normalize_path(const std::string& path, std::string* out) {
         } else if (!component.empty() && component != ".") {
             components.push_back(component);
         }
-        if (end == std::string::npos) {
+        if (component_end == path.size()) {
             break;
         }
-        begin = end + 1;
+        begin = component_end + 1;
     }
-    std::ostringstream out_stream;
+    *out = root;
     for (const std::string& component : components) {
-        out_stream << '/' << component;
+        if (!out->empty() && out->back() != '/') {
+            out->push_back('/');
+        }
+        *out += component;
     }
-    *out = out_stream.str().empty() ? "/" : out_stream.str();
+    if (out->size() > root.size() && out->back() == '/') {
+        out->pop_back();
+    }
     return true;
 }
 
