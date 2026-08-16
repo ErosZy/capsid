@@ -295,6 +295,34 @@ curl --unix-socket /run/capsid/admin.sock http://localhost/v1/apps/orders
 `bytecode.sig`，会走可信字节码路径——这三个文件**全有或全无**，缺任一个
 都拒绝部署。
 
+## 本地模式（v0.1.3，`--capsid-json`）：不部署，直接跑
+
+`capsid-host --mode single-worker`（及 `static-pool`）是基准测试/本地开发
+数据面：不做蓝绿部署，也没有 Admin API。这种模式下没有 host.json——
+**capsid.json 文档本身就是权限权威**，不再与 host.json 取交集：
+
+```sh
+# 默认读当前目录的 ./capsid.json；不存在 = 回到 v0.1.2 的无权限基线（全拒绝）
+capsid-host --mode single-worker --source-bundle bundle.mjs
+
+# 显式指定：文件必须存在，缺失直接启动失败（不静默跳过）
+capsid-host --mode single-worker --source-bundle bundle.mjs \
+  --capsid-json ./my-policy.json
+```
+
+- 权限照常生效：`permissions.modules` / `env` / `fs` / `fetch` / `storage` /
+  `stdio`，走与托管模式**完全相同**的冻结 schema 校验和编译管线（规则 id、
+  摘要、规范化都在），本教程前面各节都适用；
+- `pool` 仍是 schema 必需字段（`minReady` == `maxWorkers`），但数值是惰性的
+  ——worker 数量由 CLI（`--workers`）决定；
+- 本地模式不能兑现的段**直接拒绝启动**，绝不静默跳过：
+  - `worker` / `request` / `healthCheck`：容量、资源与请求窗口由 CLI 掌控；
+  - env `valueFrom`：没有托管模式的 secret store，环境变量只能写字面量
+    `{"value": "..."}`。
+
+静态池模式下每个 shard 走同一条加载路径，任一 shard 加载失败都会让整个池
+启动失败。
+
 ## 常见错误（全部 fail closed）
 
 | 错误写法 | 结果 |
@@ -313,5 +341,8 @@ curl --unix-socket /run/capsid/admin.sock http://localhost/v1/apps/orders
 | 任何未列出的字段（如 `"cpu": 2`） | 拒绝：unknown configuration field |
 | 申请超过 host.json `maximums` | 部署拒绝 |
 | bundle 目录只有 `bundle.qjsb` 没有签名 | 拒绝：字节码必须全有或全无 |
+| 本地模式写 `worker` / `request` / `healthCheck` 段 | 拒绝启动：not applicable in local mode（CLI-owned） |
+| 本地模式 env 用 `valueFrom` | 拒绝启动：valueFrom is unavailable in local mode |
+| `--capsid-json` 指向不存在的文件 | 拒绝启动：cannot find …（默认 `./capsid.json` 缺失除外，那是无权限基线） |
 
 所有校验在部署前完成，错误不会在运行时悄悄跳过。

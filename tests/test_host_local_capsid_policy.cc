@@ -209,11 +209,7 @@ LoopbackFixture start_loopback_fixture(const std::string& body) {
             "cannot inspect loopback fixture port");
     fixture.port = ntohs(address.sin_port);
     fixture.thread = std::thread([listener, body]() {
-        struct sockaddr_in peer = {};
-        socklen_t peer_length = sizeof(peer);
-        const int client = capsid::win32::accept_fd(
-            listener, reinterpret_cast<struct sockaddr*>(&peer),
-            &peer_length);
+        const int client = capsid::win32::accept_fd(listener);
         if (client < 0) {
             close(listener);
             return;
