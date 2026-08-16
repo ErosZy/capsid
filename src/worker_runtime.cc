@@ -3290,7 +3290,7 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__APPLE__)
         // The filesystem permission module requires openat2 path semantics
         // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
         (void)ctx;
@@ -3376,7 +3376,7 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__APPLE__)
         // The filesystem permission module requires openat2 path semantics
         // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
         (void)ctx;
@@ -3441,7 +3441,7 @@ private:
         JSValueConst,
         int argc,
         JSValueConst *argv) {
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__APPLE__)
         // The filesystem permission module requires openat2 path semantics
         // (RESOLVE_NO_SYMLINKS, Linux-only); see docs/windows.md.
         (void)ctx;

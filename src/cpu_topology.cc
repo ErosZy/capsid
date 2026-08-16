@@ -9,6 +9,9 @@
 #include <sched.h>
 #elif defined(_WIN32)
 #include "win32_compat.h"
+#elif defined(__APPLE__)
+#include <sys/sysctl.h>
+#include <sys/types.h>
 #endif
 
 namespace capsid {
@@ -41,6 +44,20 @@ std::vector<uint32_t> available_cpus() {
         if ((process_mask & (static_cast<DWORD_PTR>(1) << cpu)) != 0) {
             output.push_back(cpu);
         }
+    }
+#elif defined(__APPLE__)
+    // macOS has no per-process CPU-affinity restriction (and no
+    // sched_getaffinity equivalent): the available set is the logical
+    // CPU count (hw.ncpu), which mirrors the unrestricted sched_getaffinity
+    // result on Linux.
+    int cpu_count = 0;
+    std::size_t size = sizeof(cpu_count);
+    if (sysctlbyname("hw.ncpu", &cpu_count, &size, nullptr, 0) != 0 ||
+        size != sizeof(cpu_count) || cpu_count <= 0) {
+        return output;
+    }
+    for (int cpu = 0; cpu < cpu_count; ++cpu) {
+        output.push_back(static_cast<uint32_t>(cpu));
     }
 #endif
     return output;
