@@ -3824,6 +3824,8 @@ if(BUILD_TESTING)
                 "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
                 "-DCAPSID_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/Testing/escape-capability-configure"
                 "-DCAPSID_GENERATOR=${CMAKE_GENERATOR}"
+                "-DCAPSID_C_COMPILER=${CMAKE_C_COMPILER}"
+                "-DCAPSID_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestEscapeCapabilityConfigure.cmake"
         )
         set_tests_properties(
