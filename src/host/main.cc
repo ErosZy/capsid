@@ -426,8 +426,8 @@ std::string read_host_config(const std::string& path) {
     return json;
 }
 
-int run_managed(const std::string& host_config_path,
-                const std::string& worker_path) {
+[[maybe_unused]] int run_managed(const std::string& host_config_path,
+                                 const std::string& worker_path) {
     // SIGTERM is blocked FIRST, before any thread exists: every thread
     // inherits the mask, and the main thread waits with sigwait below.
     sigset_t term_set;
