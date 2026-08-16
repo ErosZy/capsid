@@ -1071,6 +1071,11 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
                     json_decref(root);
                     return false;
                 }
+                if (!string_array(read, "deny", &app->fs_read_deny)) {
+                    *error = "invalid capsid.json permissions.fs.read.deny";
+                    json_decref(root);
+                    return false;
+                }
             }
         }
         json_t* fetch = json_object_get(permissions, "fetch");

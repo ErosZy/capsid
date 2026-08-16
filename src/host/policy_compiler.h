@@ -85,7 +85,8 @@ struct AppRequest {
         std::string literal;  // when !from_secret
     };
     std::vector<EnvRequest> env;
-    std::vector<std::string> fs_read;  // requested allow paths
+    std::vector<std::string> fs_read;       // requested allow paths
+    std::vector<std::string> fs_read_deny;  // requested deny paths (win over allow)
     std::vector<FetchTarget> fetch;
     bool storage = false;
     // Exact storage namespace allow list (permissions.storage.namespaces).
@@ -138,11 +139,13 @@ struct EffectiveConfig {
     std::vector<std::string> modules;          // sorted intersection
     std::vector<EffectiveEnvEntry> env;        // in app request order
     std::vector<std::string> fs_read;          // normalized allow list
+    std::vector<std::string> fs_read_deny;     // normalized deny list (win over allow)
     // Parallel stable rule ids from the policy compiler. The Runtime
     // capability policy requires every rule id to be non-zero and unique
     // within the policy, so these travel with the effective config instead
     // of being re-derived (or hard-coded) at descriptor build time.
     std::vector<std::uint32_t> fs_rule_ids;
+    std::vector<std::uint32_t> fs_deny_rule_ids;
     std::vector<FetchTarget> fetch;
     std::vector<std::uint32_t> fetch_rule_ids;
     bool storage = false;

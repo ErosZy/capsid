@@ -426,6 +426,25 @@ int main(int argc, char** argv) {
         "\"notAField\":true," + pool + "}",
         false, "rejected at");
 
+    // 9. `entry` is managed-only (the bundle entry is the CLI source
+    //    bundle): an operator setting it must hear about it, not have it
+    //    silently ignored.
+    run_failure_scenario(
+        argv[1], "entry-rejected",
+        "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
+        "\"permissions\":{}," + pool + "}",
+        false, "not applicable in local mode");
+
+    // 10. pool.queue* is CLI-owned on this path too: a document that sets
+    //     a queue depth must fail loudly instead of pretending the queue
+    //     exists.
+    run_failure_scenario(
+        argv[1], "pool-queue-rejected",
+        "{\"apiVersion\":\"capsid/app-v1\",\"permissions\":{},"
+        "\"pool\":{\"minReady\":1,\"maxWorkers\":1,"
+        "\"queueRequests\":8}}",
+        false, "not applicable in local mode");
+
     std::cout << "PASS" << std::endl;
     return 0;
 }

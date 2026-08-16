@@ -12,15 +12,17 @@
 #include "win32_compat.h"
 
 #if defined(_WIN32)
+#include <io.h>
 #else
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #include <jansson.h>
 
 #include <cerrno>
 #include <cstdint>
-#include <fstream>
 #include <string>
 #include <vector>
 
@@ -34,60 +36,191 @@ constexpr std::size_t kMaxLocalCapsidJsonBytes = 1024U * 1024U;
 
 enum class ReadOutcome { kOk, kMissing, kFailed };
 
-// Reads the file with the --source-bundle discipline (operator-owned local
-// input, same trust level as the bundle it grants permissions to) plus the
-// managed 1 MiB document cap. A missing file is distinguished from every
-// other failure: the default ./capsid.json is allowed to be absent, an
-// explicit --capsid-json is not.
+// Platform stat-timestamp accessors for the post-read identity re-check.
+#if defined(__APPLE__)
+#define CAPSID_LOCAL_MTIME_SEC(st) ((st).st_mtimespec.tv_sec)
+#define CAPSID_LOCAL_MTIME_NSEC(st) ((st).st_mtimespec.tv_nsec)
+#define CAPSID_LOCAL_CTIME_SEC(st) ((st).st_ctimespec.tv_sec)
+#define CAPSID_LOCAL_CTIME_NSEC(st) ((st).st_ctimespec.tv_nsec)
+#elif defined(_WIN32)
+#define CAPSID_LOCAL_MTIME_SEC(st) ((st).st_mtime)
+#define CAPSID_LOCAL_MTIME_NSEC(st) 0
+#define CAPSID_LOCAL_CTIME_SEC(st) ((st).st_ctime)
+#define CAPSID_LOCAL_CTIME_NSEC(st) 0
+#else
+#define CAPSID_LOCAL_MTIME_SEC(st) ((st).st_mtim.tv_sec)
+#define CAPSID_LOCAL_MTIME_NSEC(st) ((st).st_mtim.tv_nsec)
+#define CAPSID_LOCAL_CTIME_SEC(st) ((st).st_ctim.tv_sec)
+#define CAPSID_LOCAL_CTIME_NSEC(st) ((st).st_ctim.tv_nsec)
+#endif
+
+template <typename Stat>
+bool same_identity(const Stat& before, const Stat& after) {
+    return before.st_dev == after.st_dev && before.st_ino == after.st_ino &&
+           before.st_size == after.st_size &&
+           CAPSID_LOCAL_MTIME_SEC(before) == CAPSID_LOCAL_MTIME_SEC(after) &&
+           CAPSID_LOCAL_MTIME_NSEC(before) ==
+               CAPSID_LOCAL_MTIME_NSEC(after) &&
+           CAPSID_LOCAL_CTIME_SEC(before) == CAPSID_LOCAL_CTIME_SEC(after) &&
+           CAPSID_LOCAL_CTIME_NSEC(before) ==
+               CAPSID_LOCAL_CTIME_NSEC(after);
+}
+
+// Reads the file through a descriptor opened without following symlinks:
+// the policy document is the authority for what the worker may do, so the
+// loader must not be redirected by a reparse point/symlink planted at the
+// default ./capsid.json path, and a swap while reading is rejected by an
+// identity re-check. On POSIX the file must also be owned by the invoking
+// user. The managed 1 MiB document cap still applies. A missing file is
+// distinguished from every other failure: the default ./capsid.json is
+// allowed to be absent, an explicit --capsid-json is not.
 ReadOutcome read_local_config_file(const std::string& path,
                                    std::vector<std::uint8_t>* out,
                                    std::string* error) {
-    struct stat before = {};
-    if (stat(path.c_str(), &before) != 0) {
-        if (errno == ENOENT) {
+    int fd = -1;
+#if defined(_WIN32)
+    // UTF-8 -> UTF-16 for CreateFileW, opened with
+    // FILE_FLAG_OPEN_REPARSE_POINT so a symlink/junction is inspected
+    // (and rejected) instead of followed.
+    const int wide_size = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, nullptr, 0);
+    if (wide_size <= 0) {
+        *error = "cannot encode " + path;
+        return ReadOutcome::kFailed;
+    }
+    std::wstring wide_path(static_cast<std::size_t>(wide_size - 1), L'\0');
+    if (MultiByteToWideChar(
+            CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1,
+            &wide_path[0], wide_size) <= 0) {
+        *error = "cannot encode " + path;
+        return ReadOutcome::kFailed;
+    }
+    const HANDLE handle = CreateFileW(
+        wide_path.c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        const DWORD saved = GetLastError();
+        if (saved == ERROR_FILE_NOT_FOUND || saved == ERROR_PATH_NOT_FOUND) {
             return ReadOutcome::kMissing;
         }
-        *error = "cannot stat " + path;
-        return ReadOutcome::kFailed;
-    }
-#if defined(_WIN32)
-    const bool regular = (before.st_mode & _S_IFREG) != 0;
-#else
-    const bool regular = S_ISREG(before.st_mode);
-#endif
-    if (!regular) {
-        *error = path + " is not a regular file";
-        return ReadOutcome::kFailed;
-    }
-    if (static_cast<std::uint64_t>(before.st_size) >
-        kMaxLocalCapsidJsonBytes) {
-        *error = path + " exceeds the 1 MiB capsid.json cap";
-        return ReadOutcome::kFailed;
-    }
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
         *error = "cannot open " + path;
         return ReadOutcome::kFailed;
     }
-    input.seekg(0, std::ios::end);
-    const std::streamoff size = input.tellg();
-    if (size < 0) {
-        *error = "cannot size " + path;
+    FILE_ATTRIBUTE_TAG_INFO attributes = {};
+    if (!GetFileInformationByHandleEx(
+            handle, FileAttributeTagInfo, &attributes,
+            sizeof(attributes))) {
+        CloseHandle(handle);
+        *error = "cannot inspect " + path;
         return ReadOutcome::kFailed;
     }
-    if (static_cast<std::uint64_t>(size) > kMaxLocalCapsidJsonBytes) {
+    if ((attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+        CloseHandle(handle);
+        *error = path + " is not a regular file";
+        return ReadOutcome::kFailed;
+    }
+    fd = _open_osfhandle(
+        reinterpret_cast<intptr_t>(handle), _O_RDONLY | _O_BINARY);
+    if (fd < 0) {
+        CloseHandle(handle);
+        *error = "cannot open " + path;
+        return ReadOutcome::kFailed;
+    }
+#else
+    // O_NONBLOCK: a FIFO planted at the path must not block the host;
+    // O_NOFOLLOW: a symlink is rejected instead of redirecting the read.
+    fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    if (fd < 0) {
+        if (errno == ENOENT || errno == ENOTDIR) {
+            return ReadOutcome::kMissing;
+        }
+        *error = (errno == ELOOP)
+                     ? path + " is not a regular file"
+                     : "cannot open " + path;
+        return ReadOutcome::kFailed;
+    }
+#endif
+
+#if defined(_WIN32)
+    struct _stat64 before = {};
+    const bool stat_ok = _fstat64(fd, &before) == 0;
+    const bool regular = (before.st_mode & _S_IFREG) != 0;
+#else
+    struct stat before = {};
+    const bool stat_ok = fstat(fd, &before) == 0;
+    const bool regular = S_ISREG(before.st_mode);
+    const bool owned = stat_ok && before.st_uid == geteuid();
+#endif
+    if (!stat_ok) {
+        close(fd);
+        *error = "cannot stat " + path;
+        return ReadOutcome::kFailed;
+    }
+    if (!regular) {
+        close(fd);
+        *error = path + " is not a regular file";
+        return ReadOutcome::kFailed;
+    }
+#if !defined(_WIN32)
+    if (!owned) {
+        close(fd);
+        *error = path + " is not owned by the current user";
+        return ReadOutcome::kFailed;
+    }
+#endif
+    if (before.st_size < 0 ||
+        static_cast<std::uint64_t>(before.st_size) >
+            kMaxLocalCapsidJsonBytes) {
+        close(fd);
         *error = path + " exceeds the 1 MiB capsid.json cap";
         return ReadOutcome::kFailed;
     }
-    input.seekg(0, std::ios::beg);
-    out->resize(static_cast<std::size_t>(size));
-    if (size > 0) {
-        input.read(reinterpret_cast<char*>(out->data()),
-                   static_cast<std::streamsize>(size));
-        if (!input) {
+
+    out->resize(static_cast<std::size_t>(before.st_size));
+    std::size_t offset = 0;
+    while (offset < out->size()) {
+#if defined(_WIN32)
+        // MSVC read() takes an unsigned int count; the 1 MiB cap keeps the
+        // cast lossless.
+        const ssize_t count = read(
+            fd, out->data() + offset,
+            static_cast<unsigned int>(out->size() - offset));
+#else
+        const ssize_t count = read(
+            fd, out->data() + offset, out->size() - offset);
+#endif
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            close(fd);
             *error = "cannot read " + path;
             return ReadOutcome::kFailed;
         }
+        if (count == 0) {
+            break;  // truncated mid-read; the identity check below rejects it
+        }
+        offset += static_cast<std::size_t>(count);
+    }
+    if (offset != out->size()) {
+        close(fd);
+        *error = path + " changed while being read";
+        return ReadOutcome::kFailed;
+    }
+
+#if defined(_WIN32)
+    struct _stat64 after = {};
+    const bool recheck_ok = _fstat64(fd, &after) == 0;
+#else
+    struct stat after = {};
+    const bool recheck_ok = fstat(fd, &after) == 0;
+#endif
+    close(fd);
+    if (!recheck_ok || !same_identity(before, after)) {
+        *error = path + " changed while being read";
+        return ReadOutcome::kFailed;
     }
     return ReadOutcome::kOk;
 }
@@ -151,9 +284,11 @@ bool load_local_capsid_policy(const std::string& path,
     }
 
     // 2. Sections this path cannot honor must fail loudly, not silently
-    // skip: worker.* / request.* / healthCheck are CLI-owned in the
-    // single-worker and static-pool modes. (pool is schema-required but
-    // inert here — the worker count is CLI-decided.)
+    // skip: worker.* / request.* / healthCheck / entry and pool.queue* are
+    // CLI-owned in the single-worker and static-pool modes. (pool itself is
+    // schema-required but its worker count is inert here — the worker count
+    // is CLI-decided; pool.queue* would be silently ignored and are
+    // therefore rejected too.)
     {
         json_error_t parse_error;
         json_t* root = json_loadb(
@@ -166,15 +301,31 @@ bool load_local_capsid_policy(const std::string& path,
             *error = path + ": invalid capsid.json";
             return false;
         }
-        const char* sections[] = {"worker", "request", "healthCheck"};
+        const char* sections[] = {"worker", "request", "healthCheck", "entry"};
         for (const char* section : sections) {
             if (json_object_get(root, section) != nullptr) {
                 *error = path + ": \"" + section +
                          "\" is not applicable in local mode (capacity, "
-                         "resources and the request window stay "
-                         "CLI-owned; remove the section)";
+                         "resources, the request window and the source "
+                         "entry stay CLI-owned; remove the section)";
                 json_decref(root);
                 return false;
+            }
+        }
+        json_t* pool = json_object_get(root, "pool");
+        if (pool != nullptr && json_is_object(pool)) {
+            const char* queue_fields[] = {
+                "queueRequests", "queueHeaderBytes", "queueTimeout",
+            };
+            for (const char* field : queue_fields) {
+                if (json_object_get(pool, field) != nullptr) {
+                    *error = path + ": pool." + std::string(field) +
+                             " is not applicable in local mode (the "
+                             "admission queue is CLI-owned; remove the "
+                             "field)";
+                    json_decref(root);
+                    return false;
+                }
             }
         }
         json_decref(root);

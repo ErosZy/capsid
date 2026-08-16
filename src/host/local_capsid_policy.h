@@ -17,16 +17,18 @@ namespace capsid::host {
 // (apiVersion, unknown fields, duplicates, env grammar, pool equality), so
 // one grammar cannot diverge into two. What differs is the application
 // boundary:
-//   - permissions.* is applied: modules, env literals, fs read, fetch,
-//     storage namespaces and stdio streams;
+//   - permissions.* is applied: modules, env literals, fs read (including
+//     fs.read.deny, which wins over allow), fetch, storage namespaces and
+//     stdio streams;
 //   - env valueFrom is rejected — the managed secret store does not exist
 //     on this path;
-//   - worker.*, request.* and healthCheck are rejected as not applicable —
-//     capacity, resources and the request window stay CLI-owned in these
-//     modes, and an un-honored request fails loudly instead of being
-//     silently ignored;
-//   - pool is schema-required but inert here (the worker count is
-//     CLI-decided).
+//   - worker.*, request.*, healthCheck and entry are rejected as not
+//     applicable — capacity, resources, the request window and the bundle
+//     entry stay CLI-owned in these modes, and an un-honored request fails
+//     loudly instead of being silently ignored;
+//   - pool is schema-required but its worker count is inert here (the
+//     worker count is CLI-decided), and pool.queue* is rejected because
+//     the admission queue is CLI-owned too.
 struct LocalCapsidPolicy {
     // True when the file existed and its policy was applied. A missing
     // default ./capsid.json leaves the pre-v0.1.3 no-policy behavior

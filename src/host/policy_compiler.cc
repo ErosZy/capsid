@@ -282,6 +282,34 @@ PolicyCompileResult compile_policy(
         }
         result.effective.fs_read.push_back(normalized);
     }
+    // fs read denials: normalized deny paths must also stay within the
+    // Host roots (a deny outside every root is a no-op and therefore an
+    // operator error, not a silent rule), and deny always wins over allow
+    // in the Runtime's capability evaluation.
+    std::set<std::string> requested_fs_deny;
+    for (const std::string& raw : app.fs_read_deny) {
+        if (!requested_fs_deny.insert(raw).second) {
+            result.error = "duplicate filesystem denial";
+            return result;
+        }
+        std::string normalized;
+        if (!normalize_path(raw, &normalized)) {
+            result.error = "invalid filesystem deny path";
+            return result;
+        }
+        bool within = false;
+        for (const std::string& root : normalized_roots) {
+            if (path_within(normalized, root)) {
+                within = true;
+                break;
+            }
+        }
+        if (!within) {
+            result.error = "filesystem deny path outside the Host roots";
+            return result;
+        }
+        result.effective.fs_read_deny.push_back(normalized);
+    }
 
     // Fetch: app host:port must be covered by a host target.
     for (const FetchTarget& target : app.fetch) {
@@ -476,6 +504,8 @@ PolicyCompileResult compile_policy(
               });
     // Canonical fs ordering.
     std::sort(result.effective.fs_read.begin(), result.effective.fs_read.end());
+    std::sort(result.effective.fs_read_deny.begin(),
+              result.effective.fs_read_deny.end());
 
     // Canonical ordering: semantically identical inputs in any order must
     // produce the same effective config, JSON and digests.
@@ -545,6 +575,16 @@ PolicyCompileResult compile_policy(
             return result;
         }
         result.effective.fs_rule_ids.push_back(rule_id("fs:" + path));
+    }
+    for (const std::string& path : result.effective.fs_read_deny) {
+        // Distinct label namespace from allow rules: an allow and a deny on
+        // the same path must each keep a unique id, and the Runtime applies
+        // the deny before the allow regardless of path specificity.
+        if (!add_rule("fs-deny:" + path)) {
+            return result;
+        }
+        result.effective.fs_deny_rule_ids.push_back(
+            rule_id("fs-deny:" + path));
     }
     for (const FetchTarget& target : result.effective.fetch) {
         if (!add_rule("fetch:" + target.host)) {
@@ -626,6 +666,22 @@ PolicyCompileResult compile_policy(
              << json_escape(result.effective.fs_read[index])
              << "\",\"ruleId\":" << id->second << '}';
     }
+    json << "],\"fsDeny\":[";
+    for (std::size_t index = 0;
+         index < result.effective.fs_read_deny.size(); ++index) {
+        if (index > 0) {
+            json << ',';
+        }
+        const std::map<std::string, std::uint32_t>::const_iterator id =
+            id_by_label.find("fs-deny:" + result.effective.fs_read_deny[index]);
+        if (id == id_by_label.end()) {
+            result.error = "missing fs deny rule id";
+            return result;
+        }
+        json << "{\"path\":\""
+             << json_escape(result.effective.fs_read_deny[index])
+             << "\",\"ruleId\":" << id->second << '}';
+    }
     json << "],\"fetch\":[";
     for (std::size_t index = 0; index < result.effective.fetch.size(); ++index) {
         if (index > 0) {
@@ -704,6 +760,9 @@ PolicyCompileResult compile_policy(
     for (const std::string& path : app.fs_read) {
         app_stream << "f:" << path << ';';
     }
+    for (const std::string& path : app.fs_read_deny) {
+        app_stream << "fd:" << path << ';';
+    }
     for (const FetchTarget& target : app.fetch) {
         app_stream << "t:" << target.host << ':';
         for (const std::uint16_t port : target.ports) {
@@ -764,12 +823,16 @@ bool build_runtime_policy(
     out->rule_resources.clear();
     out->rule_resources.reserve(effective.env.size() +
                                 effective.fs_read.size() +
+                                effective.fs_read_deny.size() +
                                 effective.storage_namespaces.size() +
                                 effective.stdio_streams.size());
     for (const EffectiveEnvEntry& entry : effective.env) {
         out->rule_resources.push_back(entry.name);
     }
     for (const std::string& path : effective.fs_read) {
+        out->rule_resources.push_back(path);
+    }
+    for (const std::string& path : effective.fs_read_deny) {
         out->rule_resources.push_back(path);
     }
     for (const std::string& namespace_name : effective.storage_namespaces) {
@@ -810,6 +873,25 @@ bool build_runtime_policy(
         capsid_permission_rule_init(&rule);
         rule.permission = CAPSID_PERMISSION_READ;
         rule.action = CAPSID_PERMISSION_ALLOW;
+        rule.resource = out->rule_resources[resource_index].c_str();
+        rule.rule_id = rule_id;
+        ++resource_index;
+        out->rules.push_back(rule);
+    }
+    for (std::size_t index = 0;
+         index < effective.fs_read_deny.size(); ++index) {
+        const std::uint32_t rule_id =
+            index < effective.fs_deny_rule_ids.size()
+                ? effective.fs_deny_rule_ids[index]
+                : 0;
+        if (rule_id == 0) {
+            *error = "missing fs deny rule id";
+            return false;
+        }
+        capsid_permission_rule rule;
+        capsid_permission_rule_init(&rule);
+        rule.permission = CAPSID_PERMISSION_READ;
+        rule.action = CAPSID_PERMISSION_DENY;
         rule.resource = out->rule_resources[resource_index].c_str();
         rule.rule_id = rule_id;
         ++resource_index;

@@ -310,15 +310,21 @@ capsid-host --mode single-worker --source-bundle bundle.mjs \
   --capsid-json ./my-policy.json
 ```
 
-- 权限照常生效：`permissions.modules` / `env` / `fs` / `fetch` / `storage` /
-  `stdio`，走与托管模式**完全相同**的冻结 schema 校验和编译管线（规则 id、
-  摘要、规范化都在），本教程前面各节都适用；
+- 权限照常生效：`permissions.modules` / `env` / `fs`（含 `fs.read.deny`，
+  deny 仍优先于 allow）/ `fetch` / `storage` / `stdio`，走与托管模式
+  **完全相同**的冻结 schema 校验和编译管线（规则 id、摘要、规范化都在），
+  本教程前面各节都适用；
 - `pool` 仍是 schema 必需字段（`minReady` == `maxWorkers`），但数值是惰性的
   ——worker 数量由 CLI（`--workers`）决定；
 - 本地模式不能兑现的段**直接拒绝启动**，绝不静默跳过：
-  - `worker` / `request` / `healthCheck`：容量、资源与请求窗口由 CLI 掌控；
+  - `worker` / `request` / `healthCheck` / `entry`：容量、资源、请求窗口与
+    bundle 入口由 CLI 掌控；
+  - `pool.queueRequests` / `queueHeaderBytes` / `queueTimeout`：准入队列由
+    CLI 掌控；
   - env `valueFrom`：没有托管模式的 secret store，环境变量只能写字面量
-    `{"value": "..."}`。
+    `{"value": "..."}`；
+- 策略文件必须是当前用户拥有的普通文件（不接受符号链接/目录/FIFO），大小
+  ≤ 1 MiB，且读取期间被并发替换会拒绝启动。
 
 静态池模式下每个 shard 走同一条加载路径，任一 shard 加载失败都会让整个池
 启动失败。
@@ -341,8 +347,10 @@ capsid-host --mode single-worker --source-bundle bundle.mjs \
 | 任何未列出的字段（如 `"cpu": 2`） | 拒绝：unknown configuration field |
 | 申请超过 host.json `maximums` | 部署拒绝 |
 | bundle 目录只有 `bundle.qjsb` 没有签名 | 拒绝：字节码必须全有或全无 |
-| 本地模式写 `worker` / `request` / `healthCheck` 段 | 拒绝启动：not applicable in local mode（CLI-owned） |
+| 本地模式写 `worker` / `request` / `healthCheck` / `entry` 段 | 拒绝启动：not applicable in local mode（CLI-owned） |
+| 本地模式写 `pool.queue*` | 拒绝启动：admission queue is CLI-owned |
 | 本地模式 env 用 `valueFrom` | 拒绝启动：valueFrom is unavailable in local mode |
+| `--capsid-json` 指向符号链接 / 目录 / 非本用户文件 | 拒绝启动：not a regular file / not owned |
 | `--capsid-json` 指向不存在的文件 | 拒绝启动：cannot find …（默认 `./capsid.json` 缺失除外，那是无权限基线） |
 
 所有校验在部署前完成，错误不会在运行时悄悄跳过。

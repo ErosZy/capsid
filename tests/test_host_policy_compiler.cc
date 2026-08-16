@@ -139,6 +139,66 @@ int main() {
                 "fs traversal accepted");
     }
 
+    // 4b. fs deny compiles to a DENY rule inside the allow roots; deny
+    // paths outside the roots, traversal and duplicates all reject.
+    {
+        capsid::host::AppRequest app = legal_app();
+        app.fs_read = { "/srv/app" };
+        app.fs_read_deny = { "/srv/app/private" };
+        EffectiveEnvEntry resolved;
+        resolved.name = "APP_TOKEN";
+        resolved.from_secret = true;
+        resolved.secret_key_id = "api-token";
+        resolved.secret_revision = "file-v1:1:2:3:4:5";
+        const PolicyCompileResult result =
+            compile_policy(default_host(), app, { resolved });
+        require(result.ok, "legal fs deny rejected: " + result.error);
+        require(result.effective.fs_read_deny.size() == 1 &&
+                    result.effective.fs_read_deny[0] == "/srv/app/private",
+                "fs deny path wrong");
+        require(result.effective.fs_deny_rule_ids.size() == 1 &&
+                    result.effective.fs_deny_rule_ids[0] != 0,
+                "fs deny rule id missing");
+        require(result.effective.effective_json.find("\"fsDeny\"") !=
+                    std::string::npos &&
+                    result.effective.effective_json.find(
+                        "/srv/app/private") != std::string::npos,
+                "effective.json lost the fs deny rule");
+
+        capsid::host::RuntimePolicy runtime_policy;
+        std::string build_error;
+        require(capsid::host::build_runtime_policy(
+                    result.effective,
+                    { { "APP_TOKEN", "value-not-persisted" } },
+                    &runtime_policy, &build_error),
+                "fs deny descriptor build failed: " + build_error);
+        bool found_deny = false;
+        for (const capsid_permission_rule& rule : runtime_policy.rules) {
+            if (rule.permission == CAPSID_PERMISSION_READ &&
+                rule.action == CAPSID_PERMISSION_DENY &&
+                rule.resource == std::string("/srv/app/private")) {
+                found_deny = true;
+            }
+        }
+        require(found_deny, "fs deny did not become a DENY rule");
+
+        capsid::host::AppRequest outside = legal_app();
+        outside.fs_read = { "/srv/app" };
+        outside.fs_read_deny = { "/etc/passwd" };
+        require(!compile_policy(default_host(), outside, {}).ok,
+                "fs deny outside roots accepted");
+        capsid::host::AppRequest traversal = legal_app();
+        traversal.fs_read = { "/srv/app" };
+        traversal.fs_read_deny = { "/srv/app/../../etc" };
+        require(!compile_policy(default_host(), traversal, {}).ok,
+                "fs deny traversal accepted");
+        capsid::host::AppRequest duplicate = legal_app();
+        duplicate.fs_read = { "/srv/app" };
+        duplicate.fs_read_deny = { "/srv/app/private", "/srv/app/private" };
+        require(!compile_policy(default_host(), duplicate, {}).ok,
+                "duplicate fs deny accepted");
+    }
+
     // 5. Fetch overreach rejects.
     {
         capsid::host::AppRequest app = legal_app();
