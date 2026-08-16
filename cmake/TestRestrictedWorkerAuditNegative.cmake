@@ -85,7 +85,9 @@ capsid_expect_audit_failure(
 
 set(CAPSID_SPECIFIER "${CAPSID_TEST_WORK_DIR}/capsid-worker-specifier")
 configure_file("${CAPSID_WORKER}" "${CAPSID_SPECIFIER}" COPYONLY)
-file(APPEND "${CAPSID_SPECIFIER}" "\ntjs:fs\n")
+# tjs:fs is now a legitimate Binding-only alias (Binding v1), so use a
+# permanently forbidden specifier for the negative control.
+file(APPEND "${CAPSID_SPECIFIER}" "\ntjs:process\n")
 capsid_expect_audit_failure(
     "${CAPSID_SPECIFIER}"
     "forbidden txiki.js module name"
@@ -96,7 +98,7 @@ if(CAPSID_ENABLE_BINARY_INJECTION)
     configure_file("${CAPSID_WORKER}" "${CAPSID_SYMBOL}" COPYONLY)
     execute_process(
         COMMAND "${CAPSID_OBJCOPY}"
-            --add-symbol "tjs__mod_fs_init=.text:0,global"
+            --add-symbol "tjs__mod_process_init=.text:0,global"
             "${CAPSID_SYMBOL}"
         RESULT_VARIABLE CAPSID_OBJCOPY_RESULT
         ERROR_VARIABLE CAPSID_OBJCOPY_ERROR)
@@ -113,7 +115,7 @@ if(CAPSID_ENABLE_BINARY_INJECTION)
     configure_file("${CAPSID_WORKER}" "${CAPSID_UNIT}" COPYONLY)
     execute_process(
         COMMAND "${CAPSID_OBJCOPY}"
-            --add-symbol "mod_fs.c.deadbeef=.text:0,global"
+            --add-symbol "mod_process.c.deadbeef=.text:0,global"
             "${CAPSID_UNIT}"
         RESULT_VARIABLE CAPSID_OBJCOPY_RESULT
         ERROR_VARIABLE CAPSID_OBJCOPY_ERROR)

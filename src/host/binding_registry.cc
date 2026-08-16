@@ -1048,11 +1048,12 @@ bool scan_bindings_root_impl_win(
         // Final package-level checks: entries, directory identity, and the
         // final names of both files.
         std::vector<std::wstring> files_after;
-        if (!win_enumerate(package_wide, &files_after, package_path, error) ||
-            files_after != files) {
-            if (files_after == files) {
-                *error = package_path + " changed during scan";
-            }
+        if (!win_enumerate(package_wide, &files_after, package_path, error)) {
+            LocalFree(current_user);
+            return false;
+        }
+        if (files_after != files) {
+            *error = package_path + " changed during scan";
             LocalFree(current_user);
             return false;
         }
@@ -1086,11 +1087,12 @@ bool scan_bindings_root_impl_win(
     }
 
     std::vector<std::wstring> root_entries_after;
-    if (!win_enumerate(root_wide, &root_entries_after, root, error) ||
-        root_entries_after != root_entries) {
-        if (root_entries_after == root_entries) {
-            *error = root + " changed during scan";
-        }
+    if (!win_enumerate(root_wide, &root_entries_after, root, error)) {
+        LocalFree(current_user);
+        return false;
+    }
+    if (root_entries_after != root_entries) {
+        *error = root + " changed during scan";
         LocalFree(current_user);
         return false;
     }
