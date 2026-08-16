@@ -32,7 +32,10 @@ std::vector<uint32_t> available_cpus() {
     }
 #elif defined(_WIN32)
     // The process affinity mask reports the CPUs the worker may run on,
-    // mirroring sched_getaffinity on Linux.
+    // mirroring sched_getaffinity on Linux. GetProcessAffinityMask covers
+    // only the process's current processor group (one DWORD_PTR), so on
+    // >64-logical-processor machines CPUs in other groups are not
+    // enumerated; see docs/windows.md.
     DWORD_PTR process_mask = 0;
     DWORD_PTR system_mask = 0;
     if (!GetProcessAffinityMask(

@@ -53,9 +53,10 @@ namespace {
 
 #if defined(_WIN32)
 bool install_windows_memory_limit(uint64_t limit_bytes, std::string *error) {
-    // Windows job objects bound the committed working set, not the virtual
-    // address range RLIMIT_AS bounds on Linux. The enforcement is real but
-    // the semantics differ; see docs/windows.md for the capability matrix.
+    // Windows job objects bound committed memory (JOB_OBJECT_LIMIT_PROCESS_MEMORY),
+    // not the virtual address range RLIMIT_AS bounds on Linux and not the
+    // working set. The enforcement is real but the semantics differ; see
+    // docs/windows.md for the capability matrix.
     if (limit_bytes > static_cast<uint64_t>(
                           std::numeric_limits<SIZE_T>::max())) {
         if (error) {
@@ -80,8 +81,16 @@ bool install_windows_memory_limit(uint64_t limit_bytes, std::string *error) {
             job,
             JobObjectExtendedLimitInformation,
             &info,
-            sizeof(info)) ||
-        !AssignProcessToJobObject(job, GetCurrentProcess())) {
+            sizeof(info))) {
+        const DWORD saved_error = GetLastError();
+        CloseHandle(job);
+        if (error) {
+            *error = std::string("SetInformationJobObject failed: ") +
+                std::to_string(saved_error);
+        }
+        return false;
+    }
+    if (!AssignProcessToJobObject(job, GetCurrentProcess())) {
         const DWORD saved_error = GetLastError();
         CloseHandle(job);
         if (error) {

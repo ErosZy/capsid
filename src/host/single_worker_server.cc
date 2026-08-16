@@ -2423,7 +2423,8 @@ bool Impl::bind_listener() {
     // instead of silently degrading to a fake multi-process pool. The
     // default (single-worker) path never asks for it. Windows has no
     // SO_REUSEPORT: the multi-shard static pool is rejected there with
-    // the same message (a one-worker pool never asks for the option).
+    // the same message (a one-worker pool never asks for the option, so
+    // single-shard static-pool remains supported on Windows).
     if (options_.so_reuseport) {
 #if defined(_WIN32)
         emit_log(log(), LogLane::kControl,

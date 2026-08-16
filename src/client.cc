@@ -2073,7 +2073,14 @@ capsid_result capsid_worker_set_cpu_affinity(
     // given CPU, mirroring sched_setaffinity(pid) on Linux: the child's
     // threads all inherit the process mask. The cpu must fall inside the
     // caller's own mask (the worker inherits it at spawn), validated
-    // through the same topology surface as the Linux branch.
+    // through the same topology surface as the Linux branch. The mask is
+    // one DWORD_PTR (current processor group only), so CPUs outside that
+    // width are not representable and reject here; available_cpus()
+    // never returns them.
+    const uint32_t width = sizeof(DWORD_PTR) * 8;
+    if (cpu >= width) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
     const std::vector<uint32_t> cpus =
         capsid::topology::available_cpus();
     if (std::find(cpus.begin(), cpus.end(), cpu) == cpus.end()) {

@@ -362,8 +362,11 @@ int main(int argc, char** argv) {
 #if defined(__linux__)
         test_worker_exit_isolation(argv[2]);
 #else
-        std::cout << "SKIP: Linux /proc process evidence is unavailable"
+        // /proc process evidence is Linux-only. Report the missing
+        // coverage with the CTest skip code instead of a green pass.
+        std::cerr << "SKIP: Linux /proc process evidence is unavailable"
                   << std::endl;
+        return 77;
 #endif
     } else {
         fail("unknown static-pool integration mode");

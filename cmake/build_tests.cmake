@@ -1139,13 +1139,18 @@ if(BUILD_TESTING)
                 endif()
             endif()
             # Multi-shard scenarios require SO_REUSEPORT, which Windows
-            # does not provide; only the single-shard scenarios run there
-            # (see docs/windows.md).
+            # does not provide; the single-shard scenarios (including drain)
+            # run everywhere (see docs/windows.md).
             if(NOT WIN32)
             add_test(
                 NAME host_static_pool_server_shared_port_lifecycle
                 COMMAND test-host-static-pool-server lifecycle
                     $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                host_static_pool_server_shared_port_lifecycle PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+            endif()
             add_test(
                 NAME host_static_pool_server_drain_inflight_completes
                 COMMAND test-host-static-pool-server drain-inflight-completes
@@ -1159,13 +1164,11 @@ if(BUILD_TESTING)
                 COMMAND test-host-static-pool-server drain-idle-exits
                     $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
-                host_static_pool_server_shared_port_lifecycle
                 host_static_pool_server_drain_inflight_completes
                 host_static_pool_server_drain_deadline_forces
                 host_static_pool_server_drain_idle_exits PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
-            endif()
             add_test(
                 NAME host_static_pool_server_atomic_start_failure
                 COMMAND test-host-static-pool-server atomic-failure
@@ -1450,6 +1453,11 @@ if(BUILD_TESTING)
                     host_static_pool_worker_exit_isolation PROPERTIES
                     LABELS "host;integration;m2"
                     TIMEOUT 30)
+                # The worker-exit scenario needs /proc evidence: on macOS it
+                # reports SKIP (77) after the portable scenarios run.
+                set_tests_properties(
+                    host_static_pool_worker_exit_isolation PROPERTIES
+                    SKIP_RETURN_CODE 77)
             endif()
 
             find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)

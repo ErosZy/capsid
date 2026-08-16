@@ -150,7 +150,9 @@ jobs:
           echo "${OPENSSL_SHA256}  openssl-3.5.7.tar.gz" > openssl.sha256
           if ! {
             curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-            sha256sum -c openssl.sha256
+            # macOS ships shasum, not GNU sha256sum; the two-space
+            # checksum-file format works with both.
+            shasum -a 256 -c openssl.sha256
             tar xzf openssl-3.5.7.tar.gz
             cd openssl-3.5.7
             ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests

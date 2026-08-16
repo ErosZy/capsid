@@ -98,15 +98,15 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 | Runtime C ABI（spawn/request/credit/streaming） | ✅ | ✅ | ✅ |
 | `capsid-worker`（txiki.js + 受限核心） | ✅ | ✅ | ✅ |
 | `capsid-bytecode-compile`（M1D 可信字节码） | ✅ | ✅ | ✅ |
-| Host `--mode single-worker` / `static-pool` | ✅ | ✅ | ✅ |
+| Host `--mode single-worker` / `static-pool` | ✅ | ✅ | ✅（仅单 shard，见下） |
 | Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌（运行时失败） | ❌（构建排除） |
 | 出站网络策略（egress host/address 规则、保护段） | ✅ | ✅ | ✅（JS 层） |
 | 能力策略（模块/权限/环境快照） | ✅ | ✅ | ✅ |
-| fs 权限模块（capsid:fs read/stat/list） | ✅ | ❌（模块边界拒绝） | ❌（模块边界拒绝） |
+| fs 权限模块（capsid:fs read/stat/list） | ✅ | ❌（函数调用拒绝） | ❌（函数调用拒绝） |
 | RLIMIT_AS / RLIMIT_NOFILE / RLIMIT_CORE | ✅ | 部分（RLIMIT_AS 编译期拒绝） | 部分（见下） |
 | strict sandbox（seccomp/Landlock/namespace/cgroup） | ✅ | ❌ | ❌（见下） |
 | 多 shard 共享端口（SO_REUSEPORT） | ✅ | ✅ | ❌ |
-| worker CPU affinity（`capsid_worker_set_cpu_affinity`） | ✅ | ❌ | ✅ |
+| worker CPU affinity（`capsid_worker_set_cpu_affinity`） | ✅ | ❌ | ✅（当前处理器组内） |
 
 ### worker 沙箱语义（Windows）
 
@@ -124,28 +124,30 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   的该部分——申请了该 feature 的宿主会在 hello 校验中看到缺失并失败；
 - **core dump 抑制**（RLIMIT_CORE 等价）：`SetErrorMode` 抑制 WER 崩溃
   对话框，worker 崩溃不会阻塞前台会话；
-- **strict 模式**：与 Linux 在 spawn 阶段即返回错误不同，Windows 上
-  spawn 返回成功，strict-only 参数（网络 namespace fd、cgroup 路径等）
-  被接受；worker 启动后发现自己无法施加 strict sandbox，在启动握手期
-  异步报 “strict sandbox is unavailable on this platform/build” 并以
-  退出码 1 退出。宿主通过 worker 的退出事件感知失败，而不是 spawn 的
-  返回值。macOS 的 strict 语义与 Windows 一致（见下文 Host 的 managed
-  条目）。
+- **strict 模式**：Linux 上 strict 是可用能力；Windows/macOS 上只有裸
+  `strict_sandbox=true` 时 spawn 返回成功——worker 启动后发现自己无法施加
+  strict sandbox，在启动握手期异步报 “strict sandbox is unavailable on
+  this platform/build” 并以退出码 1 退出，宿主通过 worker 的退出事件感知
+  失败而不是 spawn 的返回值。strict-only 参数在 spawn 阶段即拒绝：非
+  Linux 上网络 namespace fd 返回 `CAPSID_INVALID_ARGUMENT`；cgroup 路径
+  会在子进程启动后被立即终止，spawn 同样返回 `CAPSID_INVALID_ARGUMENT`。
+  macOS 的 strict 语义与 Windows 一致（见下文 Host 的 managed 条目）。
 
 ### Host（Windows）
 
-- **single-worker / static-pool** 完整可用。进程停止信号：Windows 没有
-  `sigwait`，`static-pool` 用控制台控制处理器（CTRL_C/CTRL_BREAK/关闭）
-  触发同一停止路径；`single-worker` 使用 Boost.Asio `signal_set`（Windows
-  下同样可用）。
+- **single-worker / static-pool** 完整可用：单 shard 池（`--workers 1`）
+  在 Windows 上正常启动，因为单 shard 不需要共享端口选项；`--workers ≥ 2`
+  的多 shard 池见下一条。进程停止信号：Windows 没有 `sigwait`，
+  `static-pool` 用控制台控制处理器（CTRL_C/CTRL_BREAK/关闭）触发同一停止
+  路径；`single-worker` 使用 Boost.Asio `signal_set`（Windows 下同样可用）。
 - **多 shard 静态池不可用**：多 shard 共享端口依赖 `SO_REUSEPORT`。
-  Windows 不提供该选项（Linux/macOS 均可用），Windows 构建只支持单
-  shard 池；多 shard 启动会被拒绝。多 shard 场景测试
-  （`host_static_pool_server_shared_port_lifecycle`、
-  `host_admission_pool_forwards_options`、`host_concurrent_pool_wait`）
-  在 Windows 上不注册；m2 组其余测试（含 single-worker 与单 shard 池
-  场景）正常注册并运行。m2 组中另有两个因 POSIX 依赖而不注册的场景，
-  见下文“Windows 上的测试覆盖差异”。
+  Windows 不提供该选项（Linux/macOS 均可用），多 shard 启动会被拒绝。
+  多 shard 场景测试（`host_static_pool_server_shared_port_lifecycle`、
+  `host_admission_pool_forwards_options`、`host_concurrent_pool_wait`）在
+  Windows 上不注册；单 shard 场景（含
+  `drain-inflight-completes` / `drain-deadline-forces` /
+  `drain-idle-exits`）在 Windows 上注册并运行。m2 组中另有两个因 POSIX
+  依赖而不注册的场景，见下文“Windows 上的测试覆盖差异”。
 - **managed 模式不可用**：coordinator 的状态机依赖 dirfd 相对路径
   （openat/mkdirat/fstatat）、uid 属主校验与 UDS Admin 平面；这些语义
   无法在 Windows 上等价实现，构建直接排除（`--mode managed` 启动时报错
@@ -169,15 +171,15 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   listener 的端点名后，已接受 socket 的后续 I/O 会以
   `ERROR_ALREADY_EXISTS` 随机失败（socket 对两端都可能中毒）。
 - **fs 模块不可用**：`capsid:fs` 的读路径依赖 `openat2(RESOLVE_NO_SYMLINKS)`
-  （Linux-only），Windows 上模块调用返回 “filesystem module is
-  unavailable on this platform”（与 macOS 一致）。需要读取文件的部署应
-  使用 bundle 内资源或 storage 模块。
+  （Linux-only）。Windows/macOS 上模块本身仍可注册（import 不报错），但
+  `readText`/`stat`/`list` 调用返回 “filesystem module is unavailable on
+  this platform”。需要读取文件的部署应使用 bundle 内资源或 storage 模块。
 - **连接终止语义**：Windows 上对端 reset 的 socket 读以 EOF（返回 0）
   结束（`WSAECONNRESET` 并入正常关闭路径），因此 worker 异常终止时
   host 观察到的是 EXIT 事件；Linux 能区分 CLOSED 与 ERROR。WSAPoll 不
   报告 `POLLHUP`，连接关闭只能通过读返回 0 检测。
-- **启动握手超时**：worker 启动阶段的协议读取有 2s 上限（POSIX 侧无界），
-  启动过慢或僵住的 worker 会被宿主判定启动失败。
+- **启动握手超时**：worker 启动阶段协议读取的非阻塞重试路径有 2s 上限
+  （POSIX 侧无界）；若启动 fd 本身就是阻塞 fd，两平台都会一直等待。
 - **进程终止退出码**：`TerminateProcess` 固定报退出码 1（SIGKILL 的
   语义等价物），与 Linux 按信号映射的 128+N 退出码不同——该差异仅在
   检查退出码的测试中可见。
@@ -219,8 +221,10 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 - **A/B benchmark 证据契约**（`host_single_worker_ab_emits_complete_evidence`）：
   runner 是 POSIX shell 包装（`bench/run-ab.sh`），Windows 无可用 perf
   路径，按 77 跳过。
-- **worker_package_\* 打包四件套**：默认 ctest 命令以 `-E` 排除（见
-  上文构建步骤），CI 同样不跑；需要单独显式运行。
+- **worker_package_\* 打包三件套**（`contents` / `smoke` /
+  `reproducibility`）：默认 ctest 命令以 `-E` 排除（见上文构建步骤），CI
+  同样不跑；需要单独显式运行。`worker_install_tree` 不在该排除正则里，
+  默认会运行。
 
 ## 更新检查单
 

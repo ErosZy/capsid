@@ -3373,7 +3373,7 @@ private:
         close(descriptor);
         return JS_NewStringLen(
             ctx, contents.data(), contents.size());
-#endif  // !defined(_WIN32)
+#endif  // !defined(_WIN32) && !defined(__APPLE__)
     }
 
     static JSValue js_fs_stat(
@@ -3438,7 +3438,7 @@ private:
             return JS_EXCEPTION;
         }
         return result;
-#endif  // !defined(_WIN32)
+#endif  // !defined(_WIN32) && !defined(__APPLE__)
     }
 
     static JSValue js_fs_list(
@@ -3534,7 +3534,7 @@ private:
             return JS_EXCEPTION;
         }
         return result;
-#endif  // !defined(_WIN32)
+#endif  // !defined(_WIN32) && !defined(__APPLE__)
     }
 
     static int fs_module_init(

@@ -120,7 +120,11 @@ public:
             shard_options.ready_fd = -1;           // pool owns the READY record
             shard_options.write_ready_record = false;  // pool-level READY
             shard_options.install_process_signals = false;  // pool owns signals
-            shard_options.so_reuseport = true;     // one shared port
+            // Only a multi-shard pool needs the shared-port option. A
+            // one-worker pool must not ask for SO_REUSEPORT: Windows has no
+            // such option, and a single-shard pool is still a valid
+            // static-pool there (see docs/windows.md).
+            shard_options.so_reuseport = options_.workers > 1;
             shard_options.defer_accept = true;     // pool-wide activation barrier
             // E-1 admission (§10.3): pool-level options are forwarded into
             // every shard (a non-zero pool field overrides the shard

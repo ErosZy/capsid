@@ -476,7 +476,14 @@ void test_atomic_start_failure(const char* worker_path) {
 #endif
     require(read_only_ready_fd >= 0,
             "cannot create failed pool READY fixture");
+#if defined(_WIN32)
+    // A one-worker pool has no SO_REUSEPORT dependency on Windows, so this
+    // scenario reaches the intended unwritable-READY-fd failure instead of
+    // stopping earlier at the shared-port gate.
+    auto options = make_options(worker_path, read_only_ready_fd, 1);
+#else
     auto options = make_options(worker_path, read_only_ready_fd, 3);
+#endif
     options.worker_options.listen_port = port;
     capsid::host::StaticPoolServer pool(std::move(options));
     std::string error;
