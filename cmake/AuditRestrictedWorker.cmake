@@ -100,7 +100,6 @@ endforeach()
 
 set(CAPSID_FORBIDDEN_SYMBOLS
     tjs__mod_ffi_init
-    tjs__mod_fs_init
     tjs__mod_httpserver_init
     tjs__mod_posix_socket_init
     tjs__mod_process_init
@@ -135,7 +134,6 @@ list(LENGTH CAPSID_TU_MARKERS CAPSID_TU_MARKER_COUNT)
 
 set(CAPSID_FORBIDDEN_UNITS
     mod_ffi
-    mod_fs
     mod_posix-socket
     mod_process
     httpserver
@@ -250,7 +248,7 @@ foreach(CAPSID_REQUIRED_MODULE_NAME IN LISTS CAPSID_REQUIRED_MODULE_NAMES)
 endforeach()
 
 file(STRINGS "${CAPSID_WORKER}" CAPSID_FORBIDDEN_MODULE_NAMES
-    REGEX "tjs:(fs|process|worker|ffi|posix-socket)|tjs:internal/(fs|process|worker|httpserver|posix)"
+    REGEX "tjs:(process|worker|ffi|posix-socket)|tjs:internal/(process|worker|httpserver|posix)"
     LIMIT_COUNT 1
 )
 if(CAPSID_FORBIDDEN_MODULE_NAMES)
