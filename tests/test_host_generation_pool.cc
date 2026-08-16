@@ -452,7 +452,14 @@ int main(int argc, char** argv) {
     test_crash_budget_quarantine(worker_path);
     test_drain_during_replacement(worker_path);
 #else
-    std::cout << "SKIP: kill-injection tests need /proc (Linux)" << std::endl;
+    // The kill-injection subtests above need /proc pid scan + SIGKILL and
+    // are compiled out on non-Linux. Report the missing coverage with the
+    // CTest skip code instead of a green pass that asserted nothing (the
+    // remaining scenarios above did run).
+    std::cerr << "SKIP: kill-injection scenarios need /proc (Linux); "
+                 "the create/drain and startup-failure scenarios ran"
+              << std::endl;
+    return 77;
 #endif
     std::cout << "PASS: GenerationPool fleet + replacement (WP-04 §8.2/§8.3)"
               << std::endl;

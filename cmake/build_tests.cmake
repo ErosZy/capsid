@@ -3828,7 +3828,8 @@ if(BUILD_TESTING)
             NAME host_generation_pool_contract
             COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker>)
         set_tests_properties(host_generation_pool_contract PROPERTIES
-            TIMEOUT 90)
+            TIMEOUT 90
+            SKIP_RETURN_CODE 77)
         endif()  # TARGET capsid_host_core
 
         # WP-05 PR-09 §9.2: RoutingSnapshot / RoutingTable + the adopt-create
