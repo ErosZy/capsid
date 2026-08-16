@@ -124,8 +124,13 @@ const size_t kStorageEntryLimit = 256u;
 const size_t kStorageKeyLimit = 256u;
 const size_t kStorageValueLimit = 16u * 1024u;
 const size_t kStdioMessageLimit = 16u * 1024u;
+#if defined(__linux__)
+// Consumed only by the capsid:fs permission module, which is gated to
+// Linux (openat2 path semantics); other platforms compile without the
+// module and must not carry unused constants under -Werror.
 const size_t kFsFileLimit = 1024u * 1024u;
 const size_t kFsDirectoryEntryLimit = 1024u;
+#endif
 
 bool is_utility_module(const char *name) {
     static const char *const modules[] = {
