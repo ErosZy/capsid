@@ -1521,6 +1521,86 @@ int main(int argc, char **argv) {
         CAPSID_AUDIT_STAGE_MODULE,
         CAPSID_AUDIT_DENY);
 
+    // Binding v1 links fs/sqlite/path/readline for the Host-trusted Binding
+    // Runtime only. Their presence in the binary must never widen the User
+    // loader: every private tjs:* alias and the internal core stays
+    // forbidden for untrusted app code.
+    test_module_gate(
+        argv[1],
+        std::vector<const char *>(),
+        "tjs:fs",
+        "module is forbidden: tjs:fs",
+        CAPSID_AUDIT_STAGE_MODULE,
+        CAPSID_AUDIT_DENY);
+
+    test_module_gate(
+        argv[1],
+        std::vector<const char *>(),
+        "tjs:sqlite",
+        "module is forbidden: tjs:sqlite",
+        CAPSID_AUDIT_STAGE_MODULE,
+        CAPSID_AUDIT_DENY);
+
+    test_module_gate(
+        argv[1],
+        std::vector<const char *>(),
+        "tjs:path",
+        "module is forbidden: tjs:path",
+        CAPSID_AUDIT_STAGE_MODULE,
+        CAPSID_AUDIT_DENY);
+
+    test_module_gate(
+        argv[1],
+        std::vector<const char *>(),
+        "tjs:readline",
+        "module is forbidden: tjs:readline",
+        CAPSID_AUDIT_STAGE_MODULE,
+        CAPSID_AUDIT_DENY);
+
+    test_module_gate(
+        argv[1],
+        std::vector<const char *>(),
+        "tjs:internal/path",
+        "module is forbidden: tjs:internal/path",
+        CAPSID_AUDIT_STAGE_MODULE,
+        CAPSID_AUDIT_DENY);
+
+    test_module_gate(
+        argv[1],
+        std::vector<const char *>(),
+        "capsid:internal/core",
+        "module is forbidden: capsid:internal/core",
+        CAPSID_AUDIT_STAGE_MODULE,
+        CAPSID_AUDIT_DENY);
+
+    test_module_gate(
+        argv[1],
+        std::vector<const char *>(),
+        "capsid:internal/path",
+        "module is forbidden: capsid:internal/path",
+        CAPSID_AUDIT_STAGE_MODULE,
+        CAPSID_AUDIT_DENY);
+
+    unavailable.clear();
+    unavailable.push_back("capsid:sqlite");
+    test_module_gate(
+        argv[1],
+        unavailable,
+        "capsid:sqlite",
+        "module is unavailable: capsid:sqlite",
+        CAPSID_AUDIT_STAGE_BUILD,
+        CAPSID_AUDIT_UNAVAILABLE);
+
+    unavailable.clear();
+    unavailable.push_back("capsid:path");
+    test_module_gate(
+        argv[1],
+        unavailable,
+        "capsid:path",
+        "module is unavailable: capsid:path",
+        CAPSID_AUDIT_STAGE_BUILD,
+        CAPSID_AUDIT_UNAVAILABLE);
+
     test_module_gate(
         argv[1],
         std::vector<const char *>(),
