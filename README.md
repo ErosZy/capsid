@@ -52,7 +52,7 @@ Capsid 是面向 HTTP 网关、应用服务器与 worker pool 的**进程隔离 
   一致，multi shard 使用 SO_REUSEPORT）
 - **生产隔离**：无 ❌ —— 没有等价隔离，生产请使用 Linux 容器或 VM
 - `capsid:fs` 可用（与 Linux 相同的 no-symlink 读取语义）；`strict_sandbox`
-  与 managed Host 无法提供有效隔离
+  不可用，`--mode managed` 运行时直接失败并提示（与 Windows 一致）
 
 ### Windows（x86-64，MSVC）
 

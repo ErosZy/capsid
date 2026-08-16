@@ -101,7 +101,7 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
 | `capsid-worker`（txiki.js + 受限核心） | ✅ | ✅ | ✅ |
 | `capsid-bytecode-compile`（M1D 可信字节码） | ✅ | ✅ | ✅ |
 | Host `--mode single-worker` / `static-pool` | ✅ | ✅ | ✅（multi shard 经池级 acceptor） |
-| Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌（运行时失败） | ❌（构建排除） |
+| Host `--mode managed`（coordinator/Admin/多 App） | ✅ | ❌（运行时提示） | ❌（运行时提示；构建也排除） |
 | 出站网络策略（egress host/address 规则、保护段） | ✅ | ✅ | ✅（JS 层） |
 | 能力策略（模块/权限/环境快照） | ✅ | ✅ | ✅ |
 | fs 权限模块（capsid:fs read/stat/list） | ✅ | ✅（no-symlink dirfd walk） | ❌（函数调用拒绝） |
@@ -150,12 +150,11 @@ cmake --build build --target package   # 产出 build/capsid-<版本>-windows-x8
   POSIX 依赖而不注册的场景，见下文“Windows 上的测试覆盖差异”。
 - **managed 模式不可用**：coordinator 的状态机依赖 dirfd 相对路径
   （openat/mkdirat/fstatat）、uid 属主校验与 UDS Admin 平面；这些语义
-  无法在 Windows 上等价实现，构建直接排除（`--mode managed` 启动时报错
-  并指向本页）。macOS 上 managed 可编译且能启动，但每次 spawn 都会打开
-  strict sandbox（Landlock/seccomp/namespace 均无 macOS 实现），首个
-  worker 必然失败——macOS 上部署 managed 同样不可行，只是失败点在
-  spawn 而不是构建期。进程快照（RSS/CPU）在 Windows 上通过
-  `GetProcessMemoryInfo`/`GetProcessTimes` 提供（PSS 无等价物，回退 RSS）。
+  无法在 Windows 上等价实现，构建直接排除。`--mode managed` 在运行时直接
+  失败并提示 “managed coordinator requires Linux strict sandbox”，与
+  macOS 行为一致，而不是启动后以 worker 失败收场。进程快照（RSS/CPU）在
+  Windows 上通过 `GetProcessMemoryInfo`/`GetProcessTimes` 提供（PSS 无等价物，
+  回退 RSS）。
 - **文件属主/权限校验**（trusted key store、部署读取、状态目录）：
   Windows 没有 uid/mode 位，属主检查被跳过；边界由 NTFS ACL 承担，
   部署读取保留 reparse-point（符号链接/junction）拒绝语义。

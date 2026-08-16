@@ -61,8 +61,9 @@ single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为�
 - `capsid:fs` 可用：与 Linux 相同的 no-symlink 读取语义，通过逐组件
   `openat(O_NOFOLLOW)` 实现；
 - 没有 `sched_setaffinity` 等价 API，CPU affinity 测试按 CTest 77 跳过；
-- 请求 strict sandbox 会在 worker 启动握手期失败；managed Host 虽可构建，
-  但其每次 spawn 都要求 strict，因此不可用于生产。
+- 请求 strict sandbox 会在 worker 启动握手期失败；`--mode managed` 在 CLI
+  直接失败并提示“managed coordinator requires Linux strict sandbox”，与
+  Windows 行为一致。
 
 ### Windows
 
@@ -70,7 +71,8 @@ single 与 multi shard 在 Linux、macOS、Windows 上均可用，对外行为�
   `capsid-<版本>-windows-x86_64.zip`；
 - single-worker 与 static-pool（single / multi shard）属三平台统一契约；
   没有 `SO_REUSEPORT`，multi shard 由池级共享 acceptor 轮询分发；
-- `capsid:fs`、strict sandbox、managed Host 不可用；
+- `capsid:fs`、strict sandbox、managed Host 不可用；`--mode managed` 在 CLI
+  直接失败并提示，与 macOS 行为一致；
 - CPU affinity 通过 `SetProcessAffinityMask` 实现，但只覆盖当前处理器组；
 - Worker 内存上限通过 Job Object 的 `JOB_OBJECT_LIMIT_PROCESS_MEMORY` 约束
   **已提交内存**，与 Linux `RLIMIT_AS`（虚拟地址空间）语义不同。

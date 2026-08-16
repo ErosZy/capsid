@@ -1094,7 +1094,7 @@ int main(int argc, char** argv) {
     };
 
     const std::string mode = require("mode");
-#if !defined(_WIN32)
+#if defined(__linux__)
     if (mode == "managed") {
         // Strict managed CLI: only --host-config and --worker are allowed.
         for (const std::pair<const std::string, std::string>& entry :
@@ -1109,8 +1109,13 @@ int main(int argc, char** argv) {
     }
 #else
     if (mode == "managed") {
-        fail("--mode managed is unavailable on Windows (see "
-             "docs/windows.md)");
+        // macOS and Windows keep the same runtime behavior: fail
+        // immediately with a clear, actionable diagnostic instead of
+        // building/starting a managed Host that cannot enforce strict
+        // sandbox.
+        fail("--mode managed is unavailable on this platform: the managed "
+             "coordinator requires Linux strict sandbox (see "
+             "docs/platform-support.md)");
     }
 #endif
     if (mode != "single-worker" && mode != "static-pool") {
