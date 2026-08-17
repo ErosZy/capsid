@@ -1072,10 +1072,11 @@ void test_binding_log_envelope_and_redaction(const char *worker_path,
 // Binding v1 §3.1/§5.1/§7.3: every Binding package runs in its own
 // QuickJS runtime/context. A value stashed on one Binding's globalThis must
 // stay invisible to another equally-permitted Binding — including a native
-// handle, the factory `log` object, a 32 MiB heap allocation and a mutated
-// builtin module. The owner Binding must keep its own global and
-// module-cache state untouched and be able to reuse and close its resources
-// afterwards.
+// handle, the factory `log` object, and a mutated builtin module. Each
+// Binding's 64 MiB heap limit is also exercised with a retained 32 MiB
+// allocation (an allocation smoke proving the limits are independent). The
+// owner Binding must keep its own global and module-cache state untouched
+// and be able to reuse and close its resources afterwards.
 void test_binding_isolation_globals_modules_and_handles(
     const char *worker_path,
     const char *owner_path) {

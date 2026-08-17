@@ -271,7 +271,7 @@ steps. This section only keeps a field quick reference:
 | `permissions.stdio` | | Only `stdin`/`stdout`/`stderr` accepted |
 | `worker.jsHeap` / `processAddressSpace` / `memoryMax` / `fileDescriptors` / `pidsMax` | | Omitted = worker's own defaults; capped by `maximums.worker` |
 | `request.timeout` / `maxInflightPerWorker` / `maxStreamingInflightPerWorker` / `streamIdleTimeoutMs` / `writeTimeoutMs` | | Request windows and SSE slots |
-| `healthCheck.path` / `timeout` | | Worker-internal path (does not go through listener routing); empty = no probe |
+| `healthCheck.path` / `timeout` | | Startup probe; managed mode probes worker-internal, local single-worker/static-pool modes probe through the real listener path; empty = no probe |
 
 Artifact rules for the same directory as capsid.json:
 

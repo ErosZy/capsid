@@ -167,7 +167,9 @@ If an App declares no Binding, `--bindings-root` is unnecessary, no
 `LOAD_BINDING` message is sent, and no Binding Runtime is created. Secure
 local registry scanning is supported on Linux, macOS, and Windows native-dev.
 Windows uses reparse-point (symlink/junction) and hard-link rejection plus
-current-user ownership and Everyone/Users writable ACL checks. Sandbox
+an ownership allow-list of the process identity and Administrators/SYSTEM
+(broad groups such as Everyone, Users and Authenticated Users are never
+trusted), and Everyone/Users writable ACL checks. Sandbox
 profiles remain Linux kernel capabilities: Windows runs the same Binding
 Runtime and native gates, but profile enforcement must still be validated on
 Linux; a Windows-run package should not claim seccomp/Landlock profile
@@ -787,10 +789,10 @@ tests are not sufficient evidence by themselves.
 | Local single-worker/static-pool use the production registry/compiler/READY path and shards share immutable compilation | `host_local_capsid_policy`, `host_static_pool_server_binding_local_policy` |
 | FD-relative registry scanning, replacement races, owner/mode/link/size checks, immutable recovery | `host_binding_registry`, `host_binding_compile`, `host_secret_snapshot` |
 | Zero Bindings preserve the single-runtime and sandbox baseline | `worker_zero_binding_regression` |
-| Runtime heap/global/module/job isolation and asynchronous queues | `worker_zero_binding_regression`, `binding_rpc` |
+| Runtime heap/global/module/job isolation and asynchronous queues | `worker_zero_binding_regression` (32 MiB per-Binding allocation smoke + global/module visibility), `binding_rpc` |
 | Structured clone types, getter/proxy/cycle/handle rejection, and quotas | `worker_zero_binding_regression`, `binding_rpc` |
 | Factory token absence, deep-frozen config/secrets, safe method discovery | `worker_zero_binding_regression`, `host_binding_compile` |
-| User/Binding/native-owner isolation and indirect module denial | `capability_policy`, `worker_zero_binding_regression`, `worker_sandbox_enforcement` |
+| User/Binding visibility isolation, same-Binding native-handle reuse, and indirect module denial | `capability_policy`, `worker_zero_binding_regression`, `worker_sandbox_enforcement` |
 | DNS/TCP/TLS/UDP/redirect/WS/FS/SQLite/WASI gates; POSIX socket denial | `egress_policy`, `worker_fetch_direct_egress`, `worker_zero_binding_regression`, `txiki_vendor_patch_integrity` |
 | 64-bit RPC IDs, deadlines, abort, late results, quotas, and poison | `binding_rpc`, `worker_zero_binding_regression` |
 | READY profile digest, feature bits, seccomp, Landlock, namespace proof | `host_binding_compile`, `host_worker_executor_contract`, `worker_sandbox_network_namespace`, `worker_zero_binding_regression` |
@@ -798,6 +800,12 @@ tests are not sufficient evidence by themselves.
 | Authenticated logs, Host-owned metadata, JSON fields, secret redaction | `structured_log_emits_single_line_json`, `host_worker_executor_contract`, `worker_zero_binding_regression` |
 | Linux profile positive operations and permanent fork/AF_UNIX/raw/bind/executable-mmap denies | `worker_binding_sandbox_{read,write,watch,sqlite,network,wasi,union}`, `worker_sandbox_namespaces` |
 | TJS overlay version, patch order, audit anchors, and upgrade baseline | `txiki_async_context_inventory_audit`, `txiki_vendor_patch_integrity`, `txiki_overlay_audit_negative_controls` |
+
+With per-Binding runtimes, a Binding cannot obtain another Binding's native
+handle or `log` object through JavaScript, so the old direct
+cross-Binding-owner-mismatch assertion is replaced by the visibility test;
+the native owner-tag and log-identity checks remain in the worker as
+defense-in-depth.
 
 ### 8.2 Audit evidence recorded on 2026-08-16
 

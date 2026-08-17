@@ -162,7 +162,8 @@ int main(int argc, char **argv) {
     // Binding Runtime can evaluate a module and serve a User call. It also
     // stamps this Binding's own globalThis and the `capsid:getopts` module
     // instance, so the smoke covers per-Binding global/module ownership
-    // bookkeeping on Windows.
+    // bookkeeping for the single Windows Binding (cross-Binding isolation
+    // itself is asserted by the POSIX zero-binding regression).
     const std::string binding_source =
         "import getopts from 'capsid:getopts';"
         "export default function createBinding({ config, secrets, log }) {"

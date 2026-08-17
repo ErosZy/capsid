@@ -351,12 +351,13 @@ capsid-host --mode single-worker --source-bundle bundle.mjs \
   (`--workers`);
 - The runtime sections are honored locally (v0.2.x), with the CLI as the
   override — an explicit CLI flag always wins over the document:
-  - `entry` names the bundle file inside the capsid.json directory; with no
+  - `entry` names one plain bundle file inside the capsid.json directory
+    (no separators, drive letters, or `..` components); with no
     `--source-bundle`/`--source-name` the Host derives both from it, so a
     production capsid.json runs unchanged;
   - `worker.jsHeap` / `processAddressSpace` / `fileDescriptors` map onto the
-    same worker spawn fields as the managed spawn (`memoryMax` stays budget
-    accounting);
+    same worker spawn fields as the managed spawn; `memoryMax` is rejected in
+    local mode because there is no local cgroup budget to apply it to;
   - `request.timeout` / `maxInflightPerWorker` / `maxStreamingInflightPerWorker`
     / `streamIdleTimeoutMs` / `writeTimeoutMs` fill the request window;
   - `pool.queueRequests` / `queueHeaderBytes` / `queueTimeout` arm the bounded
@@ -364,9 +365,11 @@ capsid-host --mode single-worker --source-bundle bundle.mjs \
   - an armed `healthCheck` gates the READY record on one startup probe
     through the real listener path (non-2xx fails startup);
 - env `valueFrom` resolves against an explicit `--secrets-root` directory
-  (one regular file per key id, the managed layout); without the root the
-  document is rejected at the CLI phase — there is no implicit secret
-  store on this path, and a value is never silently empty;
+  (one regular file per key id, the managed layout); each value follows the
+  managed secret contract (at most 16 KiB, no embedded NUL, valid UTF-8).
+  Without the root the document is rejected at the CLI phase — there is no
+  implicit secret store on this path, and a value is never silently empty
+  or silently truncated;
 - `capsid/app-v2` Binding declarations are supported for Binding development.
   They use the managed path's Registry scan, Manifest ∩ App permission
   proof, pre-bundle load ordering and READY proof. A declaration without an
@@ -401,7 +404,9 @@ Binding set, and if any shard fails to load, the whole pool fails startup.
 | Bundle directory has only `bundle.qjsb` without a signature | Rejected: bytecode must be all-or-nothing |
 | Local mode with `worker` / `request` / `healthCheck` / `entry` sections | Applied locally (v0.2.x); an explicit CLI flag wins over the document |
 | Local mode with `pool.queue*` | Applied locally (v0.2.x): document presence arms the bounded admission queue; 0 = queueing disabled |
-| Local mode env with `valueFrom` | Rejected at startup: valueFrom is unavailable in local mode |
+| Local mode env with `valueFrom` but no `--secrets-root` | Rejected at startup: valueFrom is unavailable without an explicit secret store |
+| Local mode env `valueFrom` file with NUL, invalid UTF-8, or over 16 KiB | Rejected at startup: value must be at most 16384 bytes of NUL-free UTF-8 text |
+| Local mode `entry` with `/`, `\`, `:`, or a `..` component | Rejected at startup: entry must be a plain file name inside the capsid.json directory |
 | `--capsid-json` points to a symlink / directory / file not owned by the user | Rejected at startup: not a regular file / not owned |
 | `--capsid-json` points to a nonexistent file | Rejected at startup: cannot find … (except a missing default `./capsid.json`, which is the no-permission baseline) |
 
