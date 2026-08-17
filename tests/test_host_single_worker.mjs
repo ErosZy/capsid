@@ -848,6 +848,86 @@ try {
     }
 }
 
+// ---- Local admission queue behavior: maxInflightPerWorker=1 plus
+// queueRequests=2 means two requests park while the worker is busy and the
+// third concurrent request is rejected with 429 (not silently unlimited).
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-local-queue-'));
+    fs.writeFileSync(path.join(dir, 'slow-bundle.js'), `
+        export default {
+            async fetch(request) {
+                const url = new URL(request.url);
+                if (url.pathname.endsWith('/slow')) {
+                    await new Promise((resolve) => setTimeout(resolve, 1200));
+                    return new Response('slow-ok');
+                }
+                return new Response('fast-ok');
+            },
+        };
+    `);
+    fs.writeFileSync(path.join(dir, 'capsid.json'), JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'slow-bundle.js',
+        pool: {
+            minReady: 1,
+            maxWorkers: 1,
+            queueRequests: 2,
+            queueHeaderBytes: '64KiB',
+            queueTimeout: '5s',
+        },
+        request: {
+            timeout: '10s',
+            maxInflightPerWorker: 1,
+        },
+    }));
+    const child = spawn(args.get('host'), [
+        '--mode', 'single-worker',
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', path.join(dir, 'capsid.json'),
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+    ], {
+        cwd: dir,
+        stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    try {
+        const readyLine = await readLine(child.stdio[3], child, 10000, () => stderr);
+        const ready = JSON.parse(readyLine);
+        const slowTarget = '/@capsid/orders/slow';
+        const fastTarget = '/@capsid/orders/fast';
+        const slow1 = request(ready.port, { target: slowTarget, timeoutMs: 10000 });
+        await delay(100);
+        const slow2 = request(ready.port, { target: slowTarget, timeoutMs: 10000 });
+        await delay(100);
+        const fastQueued = request(ready.port, { target: fastTarget, timeoutMs: 10000 });
+        await delay(100);
+        const overflow = await request(ready.port, { target: fastTarget, timeoutMs: 10000 });
+        assert.equal(overflow.status, 429,
+            'inflight-full queue overflow must be rejected with 429');
+        const first = await slow1;
+        assert.equal(first.status, 200);
+        assert.equal(first.body.toString('utf8'), 'slow-ok');
+        const second = await slow2;
+        assert.equal(second.status, 200);
+        assert.equal(second.body.toString('utf8'), 'slow-ok');
+        const fast = await fastQueued;
+        assert.equal(fast.status, 200);
+        assert.equal(fast.body.toString('utf8'), 'fast-ok');
+    } finally {
+        child.kill('SIGTERM');
+        await waitForExit(child, 3000);
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+
 // ---- Local env valueFrom (--secrets-root): one regular file per key id,
 // the managed layout; without the root the document is rejected.
 {
