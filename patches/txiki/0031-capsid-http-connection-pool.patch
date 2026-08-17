@@ -426,7 +426,7 @@ index 35466e9..a52b129 100644
  #if defined(LWS_WITH_TLS)
  #if defined(LWS_ROLE_H1)
  	const char *my_alpn = lws_wsi_client_stash_item(wsi, CIS_ALPN,
-@@ -2071,8 +2072,16 @@ lws_vhost_active_conns(struct lws *wsi, struct lws **nwsi, const char *adsin)
+@@ -2071,8 +2072,20 @@ lws_vhost_active_conns(struct lws *wsi, struct lws **nwsi, const char *adsin)
  		    (w->role_ops == wsi->role_ops ||
  		     (lwsi_role_http(w) && lwsi_role_http(wsi))) &&
  		     /* ... same role, or at least both some kind of http */
@@ -442,6 +442,10 @@ index 35466e9..a52b129 100644
 +		    /* same actual peer address: the resolved address of the
 +		     * new request must equal the address the pooled
 +		     * connection is really connected to */
++		    w->client_pipeline &&
++		    /* the pooled connection itself opted into pooling: a
++		     * solo connection (streaming request body) must never
++		     * be reused by a later pipelined request */
  #if defined(LWS_WITH_TLS)
  #if defined(LWS_ROLE_H1)
  		   !(newconn_cannot_use_h1 && w->role_ops == &role_ops_h1) &&
