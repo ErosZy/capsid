@@ -552,10 +552,23 @@ jobs:
 
       - name: Run Windows host-side matrix
         run: |
+          $ctest_log = Join-Path $env:RUNNER_TEMP 'windows-ctest.log'
           ctest --test-dir build-windows `
             --output-on-failure `
             --output-junit windows-junit.xml `
-            -E '^(wpt_conformance_not_configured|worker_package_.*)$'
+            -E '^(wpt_conformance_not_configured|worker_package_.*)$' `
+            2>&1 | Tee-Object -FilePath $ctest_log
+          if ($LASTEXITCODE -ne 0) {
+            # ctest output-on-failure already prints each failing test's
+            # diagnostic block; promote its FAIL lines into workflow
+            # annotations so the run page names the failure without a login.
+            $failures = Select-String -Path $ctest_log -Pattern 'FAIL:'
+            foreach ($failure in $failures) {
+              Write-Host "::error title=Windows ctest::$($failure.Line.Trim())"
+            }
+            Get-Content $ctest_log -Tail 120
+            exit $LASTEXITCODE
+          }
         shell: pwsh
 
       - name: Save Windows evidence
