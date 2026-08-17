@@ -634,12 +634,13 @@ bool win_current_user_sid(PSID *out, std::string *error) {
     return true;
 }
 
-// An owner is trusted when it is the process identity or one of the
-// process token's enabled groups. Windows runners and production services
-// routinely create files owned by the Administrators group while running
-// under a member account; rejecting those as "foreign" would make the
-// scanner unusable there, while accepting any arbitrary owner would break
-// the trust boundary.
+// The Windows owner boundary trusts the process identity, and — only for
+// privileged principals the process actually carries — Administrators or
+// SYSTEM. Runners and services routinely create trees owned by
+// Administrators while running under a member account. Arbitrary enabled
+// groups are NOT trusted: Everyone, Users, Authenticated Users and similar
+// broad principals appear in every ordinary token and must never satisfy
+// the ownership check.
 bool win_token_contains_sid(PSID candidate) {
     HANDLE token = INVALID_HANDLE_VALUE;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
@@ -664,6 +665,25 @@ bool win_token_contains_sid(PSID candidate) {
     }
     CloseHandle(token);
     return contains;
+}
+
+bool win_sid_is_privileged_owner(PSID candidate) {
+    PSID administrators = NULL;
+    PSID system = NULL;
+    const BOOL administrators_ok = ConvertStringSidToSidW(
+        L"S-1-5-32-544", &administrators);
+    const BOOL system_ok = ConvertStringSidToSidW(
+        L"S-1-5-18", &system);
+    const bool privileged =
+        (administrators_ok && EqualSid(candidate, administrators)) ||
+        (system_ok && EqualSid(candidate, system));
+    if (administrators != NULL) {
+        LocalFree(administrators);
+    }
+    if (system != NULL) {
+        LocalFree(system);
+    }
+    return privileged;
 }
 
 constexpr DWORD kWinPublicWritableMask =
@@ -706,7 +726,8 @@ bool win_validate_security(HANDLE handle,
     if (owner == NULL) {
         *error = path + " has no owner";
     } else if (!EqualSid(owner, current_user) &&
-               !win_token_contains_sid(owner)) {
+               !(win_sid_is_privileged_owner(owner) &&
+                 win_token_contains_sid(owner))) {
         *error = path + " has a disallowed owner";
     } else if (dacl == NULL) {
         *error = path + " has no DACL (everyone has full access)";
