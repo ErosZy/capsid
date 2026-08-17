@@ -20,9 +20,9 @@
 #include "host/config.h"
 #include "host/binding_registry.h"
 #include "host/generation_pool.h"
+#include "host/local_capsid_policy.h"
 #if !defined(_WIN32)
 #include "host/host_config_model.h"
-#include "host/local_capsid_policy.h"
 #include "host/managed_admin_backend.h"
 #include "host/managed_listener.h"
 #endif

@@ -10,7 +10,6 @@
 
 #include "host/config.h"
 #include "host/policy_compiler.h"
-#include "host/secret_file_provider.h"
 #include "win32_compat.h"
 
 #if defined(_WIN32)
@@ -35,6 +34,26 @@ namespace {
 // capsid.json is an operator document, not a deployment artifact, but the
 // budget is identical.
 constexpr std::size_t kMaxLocalCapsidJsonBytes = 1024U * 1024U;
+
+// Same secret key-id grammar as the managed provider
+// ([A-Za-z0-9._-], no empty/dot components, <= 128 bytes). The managed
+// implementation lives in the POSIX-only provider unit, so the Windows
+// local data plane carries this copy instead of linking that unit.
+constexpr std::size_t kMaxLocalSecretKeyIdBytes = 128U;
+bool valid_local_secret_key_id(const std::string& key_id) {
+    if (key_id.empty() || key_id.size() > kMaxLocalSecretKeyIdBytes) {
+        return false;
+    }
+    for (const unsigned char c : key_id) {
+        const bool alnum =
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9');
+        if (!alnum && c != '.' && c != '_' && c != '-') {
+            return false;
+        }
+    }
+    return key_id.find("..") == std::string::npos;
+}
 
 enum class ReadOutcome { kOk, kMissing, kFailed };
 
@@ -402,7 +421,7 @@ bool load_local_capsid_policy(const std::string& path,
             if (!request.from_secret) {
                 continue;
             }
-            if (!valid_secret_key_id(request.secret_key_id)) {
+            if (!valid_local_secret_key_id(request.secret_key_id)) {
                 *error = path + ": invalid env valueFrom key id";
                 return false;
             }
