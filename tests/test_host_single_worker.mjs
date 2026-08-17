@@ -301,6 +301,41 @@ const args = parseArgs(process.argv.slice(2));
     }
 }
 {
+    // capsid.json `entry` is a plain file name inside the capsid.json
+    // directory. Traversal and absolute/drive forms are rejected at the
+    // CLI phase, before the bundle path is composed.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-entry-'));
+    fs.writeFileSync(path.join(dir, 'capsid.json'), JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: '../outside.mjs',
+        pool: { minReady: 1, maxWorkers: 1 },
+        request: { timeout: '10s' },
+    }));
+    const child = spawn(args.get('host'), [
+        '--mode', 'single-worker',
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', path.join(dir, 'capsid.json'),
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+    ], {
+        cwd: dir,
+        stdio: [ 'ignore', 'pipe', 'pipe', 'ignore' ],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const entryExit = await waitForExit(child, 5000);
+    assert.equal(entryExit.code, 2, 'traversal entry must fail the CLI phase');
+    assert.match(stderr, /entry must be a plain file name/,
+        'entry rejection must name the containment rule');
+    fs.rmSync(dir, { recursive: true, force: true });
+}
+{
     // fd 3 is a read-only descriptor: the READY record write fails after
     // the worker spawned and became READY, and the Host must exit with
     // code 1 instead of hanging on the worker thread.

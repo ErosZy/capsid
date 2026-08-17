@@ -55,6 +55,21 @@ bool valid_local_secret_key_id(const std::string& key_id) {
     return key_id.find("..") == std::string::npos;
 }
 
+// `entry` names one bundle file inside the capsid.json directory. It can
+// never be absolute, a separator-led traversal (".." / "x/../y"), a drive
+// path, or a directory component. The local data plane resolves it against
+// the capsid.json directory, so the grammar is the containment boundary.
+bool valid_local_entry_name(const std::string& entry) {
+    if (entry.empty() || entry.size() > 255 || entry == "." ||
+        entry == ".." || entry.find('/') != std::string::npos ||
+        entry.find('\\') != std::string::npos ||
+        entry.find(':') != std::string::npos ||
+        entry.find('\0') != std::string::npos) {
+        return false;
+    }
+    return entry.find("..") == std::string::npos;
+}
+
 enum class ReadOutcome { kOk, kMissing, kFailed };
 
 // Platform stat-timestamp accessors for the post-read identity re-check.
@@ -330,8 +345,9 @@ bool load_local_capsid_policy(const std::string& path,
         json_t* entry = json_object_get(root, "entry");
         if (json_is_string(entry)) {
             const std::string value = json_string_value(entry);
-            if (value.empty()) {
-                *error = path + ": entry must be a non-empty file name";
+            if (!valid_local_entry_name(value)) {
+                *error = path + ": entry must be a plain file name "
+                         "inside the capsid.json directory";
                 json_decref(root);
                 return false;
             }
