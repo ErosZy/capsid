@@ -162,6 +162,24 @@ async function runMatrix(primary, secondary, closedPort) {
         `Connection: close response must evict the pooled connection: ${acceptsAfter} -> ${acceptsEvicted}`);
     completed.push('connection-reuse');
 
+    setMatrixStage('pool-isolation');
+    const primaryAcceptsBefore = Number(
+        await (await fetch(`${primary}/accept-count`)).text());
+    const secondaryAcceptsBefore = Number(
+        await (await fetch(`${secondary}/accept-count`)).text());
+    await (await fetch(`${primary}/headers`)).text();
+    await (await fetch(`${secondary}/headers`)).text();
+    await (await fetch(`${primary}/headers`)).text();
+    const primaryAcceptsAfter = Number(
+        await (await fetch(`${primary}/accept-count`)).text());
+    const secondaryAcceptsAfter = Number(
+        await (await fetch(`${secondary}/accept-count`)).text());
+    assert(primaryAcceptsAfter === primaryAcceptsBefore + 1,
+        `primary endpoint opened ${primaryAcceptsAfter - primaryAcceptsBefore} connections instead of 1`);
+    assert(secondaryAcceptsAfter === secondaryAcceptsBefore + 1,
+        `secondary endpoint opened ${secondaryAcceptsAfter - secondaryAcceptsBefore} connections instead of 1`);
+    completed.push('pool-isolation');
+
     setMatrixStage('redirect-302-post');
     const post302 = await fetch(`${primary}/redirect?code=302&to=/inspect`, {
         method: 'POST',
