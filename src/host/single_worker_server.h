@@ -3,6 +3,8 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
+#include "request_normalization.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -30,6 +32,16 @@ struct SingleWorkerServerOptions {
     std::uint16_t listen_port = 0;
     std::string public_scheme;
     std::string public_authority;
+    // Request routing (CLI --routing, aligned with the managed listeners'
+    // routing matrix; see request_normalization.h): path / subdomain /
+    // header. subdomain requires routing_suffix (the leading-dot DNS
+    // suffix the app label is extracted from); header requires
+    // routing_trusted=true and fails closed at startup otherwise. The
+    // server validates the policy again before binding, mirroring the
+    // managed listener.
+    RequestRoutingMode routing_mode = RequestRoutingMode::kPath;
+    std::string routing_suffix;
+    bool routing_trusted = false;
     std::uint64_t request_timeout_ms = 0;
     std::uint32_t initial_stream_window = 0;
     bool strict_sandbox = false;

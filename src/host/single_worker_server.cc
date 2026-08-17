@@ -721,10 +721,11 @@ void Session::handle_request(http::request<http::string_body> request) {
     }
 
     RequestRoutingPolicy policy;
-    policy.mode = RequestRoutingMode::kPath;
+    policy.mode = impl_->options_.routing_mode;
     policy.public_scheme = impl_->options_.public_scheme;
     policy.public_authority = impl_->options_.public_authority;
-    policy.trusted_header_routing = false;
+    policy.subdomain_suffix = impl_->options_.routing_suffix;
+    policy.trusted_header_routing = impl_->options_.routing_trusted;
 
     std::vector<PublicRequestHeaderView> views;
     views.reserve(16);
@@ -880,6 +881,26 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
                      "max_inflight_per_worker (except the 1/1 boundary)";
         }
         return false;
+    }
+    // ---- routing policy fail-closed (CLI --routing) ----
+    // The managed listeners validate their routing policy before bind; the
+    // single-worker data plane applies the same rule so a malformed
+    // subdomain suffix or an untrusted header mode fails startup instead
+    // of the first request (validate_policy mirrors host-config.md).
+    {
+        RequestRoutingPolicy routing_policy;
+        routing_policy.mode = options_.routing_mode;
+        routing_policy.public_scheme = options_.public_scheme;
+        routing_policy.public_authority = options_.public_authority;
+        routing_policy.subdomain_suffix = options_.routing_suffix;
+        routing_policy.trusted_header_routing = options_.routing_trusted;
+        RequestNormalizationError routing_error;
+        if (!is_valid_routing_policy(routing_policy, &routing_error)) {
+            if (error != nullptr) {
+                *error = routing_error.message;
+            }
+            return false;
+        }
     }
     // ---- 0. local capsid.json permissions (v0.1.3, --capsid-json) ----
     // Loaded once at start, before any spawn: a missing explicit file, a

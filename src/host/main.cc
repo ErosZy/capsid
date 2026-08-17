@@ -27,6 +27,7 @@
 #endif
 #include "host/metrics.h"
 #include "host/process_snapshot.h"
+#include "host/request_normalization.h"
 #if !defined(_WIN32)
 #include "host/routing_snapshot.h"
 #endif
@@ -1166,8 +1167,37 @@ int main(int argc, char** argv) {
         (void)address;
     }
     const std::string routing = require("routing");
-    if (routing != "path") {
-        fail("--routing must be path in M1A");
+    if (routing == "path") {
+        options.routing_mode = capsid::host::RequestRoutingMode::kPath;
+    } else if (routing == "subdomain") {
+        options.routing_mode = capsid::host::RequestRoutingMode::kSubdomain;
+    } else if (routing == "header") {
+        options.routing_mode = capsid::host::RequestRoutingMode::kHeader;
+    } else {
+        fail("--routing must be path, subdomain or header");
+    }
+    // Subdomain suffix: required exactly for subdomain (managed contract:
+    // suffix names the leading-dot DNS suffix the app label is extracted
+    // from; its grammar is validated below and again at server start).
+    const auto suffix_it = values.find("routing-suffix");
+    if (options.routing_mode == capsid::host::RequestRoutingMode::kSubdomain) {
+        if (suffix_it == values.end()) {
+            fail("--routing subdomain requires --routing-suffix");
+        }
+        options.routing_suffix = suffix_it->second;
+    } else if (suffix_it != values.end()) {
+        fail("--routing-suffix is only valid with --routing subdomain");
+    }
+    // Header routing requires a trusted listener (the managed contract
+    // fails closed before bind; the CLI fails at argument time).
+    const auto trusted_it = values.find("routing-trusted");
+    if (options.routing_mode == capsid::host::RequestRoutingMode::kHeader) {
+        if (trusted_it == values.end() || trusted_it->second != "on") {
+            fail("--routing header requires --routing-trusted on");
+        }
+        options.routing_trusted = true;
+    } else if (trusted_it != values.end()) {
+        fail("--routing-trusted is only valid with --routing header");
     }
     options.public_scheme = require("public-scheme");
     if (options.public_scheme != "http" && options.public_scheme != "https") {
@@ -1177,6 +1207,22 @@ int main(int argc, char** argv) {
     if (!capsid::host::is_valid_public_authority(
             options.public_authority)) {
         fail("--public-authority must be host[:port]");
+    }
+    // The routing policy itself is validated before anything is spawned —
+    // the same fail-closed rule the managed listener applies before bind
+    // (subdomain suffix grammar, header-mode trust requirement).
+    {
+        capsid::host::RequestRoutingPolicy routing_policy;
+        routing_policy.mode = options.routing_mode;
+        routing_policy.public_scheme = options.public_scheme;
+        routing_policy.public_authority = options.public_authority;
+        routing_policy.subdomain_suffix = options.routing_suffix;
+        routing_policy.trusted_header_routing = options.routing_trusted;
+        capsid::host::RequestNormalizationError routing_error;
+        if (!capsid::host::is_valid_routing_policy(routing_policy,
+                                                   &routing_error)) {
+            fail(routing_error.message);
+        }
     }
     options.request_timeout_ms =
         parse_positive_integer(require("request-timeout-ms"),

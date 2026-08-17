@@ -124,8 +124,16 @@ function waitForExit(child, timeoutMs) {
 }
 
 // The frozen M1A CLI as an argument list, with the scenario knobs exposed
-// for the startup-failure regressions.
-function hostArgs(args, { requestTimeoutMs, listen = '127.0.0.1:0' } = {}) {
+// for the startup-failure regressions. routing knobs mirror the managed
+// routing matrix: subdomain carries --routing-suffix, header carries
+// --routing-trusted.
+function hostArgs(args, {
+    requestTimeoutMs,
+    listen = '127.0.0.1:0',
+    routing = 'path',
+    routingSuffix,
+    routingTrusted,
+} = {}) {
     const bundle = path.resolve(args.get('bundle'));
     return [
         '--mode', 'single-worker',
@@ -134,7 +142,9 @@ function hostArgs(args, { requestTimeoutMs, listen = '127.0.0.1:0' } = {}) {
         '--source-name', pathToFileURL(bundle).href,
         '--application', 'orders',
         '--listen', listen,
-        '--routing', 'path',
+        '--routing', routing,
+        ...(routing === 'subdomain' ? [ '--routing-suffix', routingSuffix ] : []),
+        ...(routing === 'header' ? [ '--routing-trusted', routingTrusted ] : []),
         '--public-scheme', 'http',
         '--public-authority', 'public.example',
         '--request-timeout-ms', String(requestTimeoutMs),
@@ -149,9 +159,9 @@ function hostArgs(args, { requestTimeoutMs, listen = '127.0.0.1:0' } = {}) {
 // with a loose deadline (streaming correctness is asserted, not wall-clock
 // throughput), and the timeout phase runs the frozen 100ms deadline against
 // an independent slow endpoint.
-async function startHost(args, { requestTimeoutMs }) {
+async function startHost(args, { requestTimeoutMs, ...hostKnobs }) {
     const child = spawn(args.get('host'),
-        hostArgs(args, { requestTimeoutMs }),
+        hostArgs(args, { requestTimeoutMs, ...hostKnobs }),
         {
             stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
         });
@@ -226,6 +236,42 @@ const args = parseArgs(process.argv.slice(2));
         2,
         'invalid listen address must fail the CLI phase before spawn',
     );
+}
+{
+    // Routing-argument validation mirrors the managed routing matrix at
+    // the CLI phase: subdomain needs a suffix, header needs a trusted
+    // listener, and each knob is rejected outside its mode.
+    const bundle = path.resolve(args.get('bundle'));
+    const routingCases = [
+        [ '--routing', 'subdomain' ],
+        [ '--routing', 'header' ],
+        [ '--routing', 'path', '--routing-suffix', '.apps.local' ],
+        [ '--routing', 'path', '--routing-trusted', 'on' ],
+    ];
+    for (const extra of routingCases) {
+        const child = spawn(args.get('host'), [
+            '--mode', 'single-worker',
+            ...extra,
+            '--worker', path.resolve(args.get('worker')),
+            '--source-bundle', bundle,
+            '--source-name', pathToFileURL(bundle).href,
+            '--application', 'orders',
+            '--listen', '127.0.0.1:0',
+            '--public-scheme', 'http',
+            '--public-authority', 'public.example',
+            '--request-timeout-ms', '10000',
+            '--strict-sandbox', 'off',
+            '--ready-fd', '3',
+        ], {
+            stdio: [ 'ignore', 'pipe', 'pipe', 'ignore' ],
+        });
+        const routingExit = await waitForExit(child, 5000);
+        assert.equal(
+            routingExit.code,
+            2,
+            `CLI must reject routing arguments: ${extra.join(' ')}`,
+        );
+    }
 }
 {
     // fd 3 is a read-only descriptor: the READY record write fails after
@@ -497,6 +543,67 @@ try {
 
 // ---- TCP_NODELAY behavior: default is on; only the exact value "0"
 // disables it. The runner exports CAPSID_TCP_NODELAY=1 by default.
+// ---- Routing matrix alignment: the CLI mirrors the managed listeners'
+// subdomain/header extraction. The extracted App must equal --application;
+// anything else is 404, malformed control fields are 400.
+{
+    const subdomain = await startHost(args, {
+        requestTimeoutMs: 10000,
+        routing: 'subdomain',
+        routingSuffix: '.apps.local',
+    });
+    try {
+        const match = await request(subdomain.port, {
+            target: '/fixed',
+            headers: { host: 'orders.apps.local' },
+        });
+        assert.equal(match.status, 200);
+        assert.equal(match.body.length, 1024);
+
+        const mismatch = await request(subdomain.port, {
+            target: '/fixed',
+            headers: { host: 'other.apps.local' },
+        });
+        assert.equal(mismatch.status, 404, 'subdomain app mismatch must be 404');
+    } finally {
+        await stopHost(subdomain);
+    }
+}
+{
+    const header = await startHost(args, {
+        requestTimeoutMs: 10000,
+        routing: 'header',
+        routingTrusted: 'on',
+    });
+    try {
+        const match = await request(header.port, {
+            target: '/fixed',
+            headers: { 'capsid-app': 'orders' },
+        });
+        assert.equal(match.status, 200);
+        assert.equal(match.body.length, 1024);
+
+        const mismatch = await request(header.port, {
+            target: '/fixed',
+            headers: { 'capsid-app': 'other' },
+        });
+        assert.equal(mismatch.status, 404, 'header app mismatch must be 404');
+
+        // Missing Capsid-App routes nowhere (404, same as the managed
+        // listener); a duplicate is a malformed control field (400).
+        const missing = await request(header.port, { target: '/fixed' });
+        assert.equal(missing.status, 404, 'missing Capsid-App must be 404');
+
+        const duplicate = await request(header.port, {
+            target: '/fixed',
+            headers: { 'capsid-app': [ 'orders', 'orders' ] },
+        });
+        assert.equal(duplicate.status, 400, 'duplicate Capsid-App must be 400');
+    } finally {
+        await stopHost(header);
+    }
+}
+
 async function nodelayProbe(envValue) {
     const child = spawn(args.get('host'), hostArgs(args, { requestTimeoutMs: 10000 }), {
         env: {

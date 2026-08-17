@@ -291,5 +291,9 @@ header listener with `trusted: false` fails closed before bind; path and subdoma
 routing do not require that declaration.
 
 External reverse proxies (nginx/Caddy/Envoy) handle TLS/H2 termination and external
-path, Host, or header mapping. `path` mode uses the same contract as the CLI's
-`--routing path`.
+path, Host, or header mapping. The CLI's `--routing` accepts the same matrix
+(`path` / `subdomain` / `header`), with `--routing-suffix` required for
+`subdomain` and `--routing-trusted on` required for `header`; the single-worker
+server validates the policy before bind, exactly like a managed listener. The
+CLI serves one App, so an extracted App that differs from `--application` is
+404.
