@@ -310,7 +310,8 @@ public:
           port_(0),
           ipv6_(ipv6),
           stopping_(false),
-          requests_(0) {
+          requests_(0),
+          accepts_(0) {
         fd_ = capsid::win32::create_socket_fd(ipv6_ ? AF_INET6 : AF_INET);
         if (fd_ < 0) {
             fail("cannot create HTTP matrix socket");
@@ -554,6 +555,27 @@ private:
                 "Connection: keep-alive\r\n\r\n");
             return false;
         }
+        if (path == "/accept-count") {
+            // Reported to the fixture so connection-reuse stages can assert
+            // that sequential fetches share one pooled connection.
+            const std::string body = std::to_string(accepts_);
+            std::ostringstream response;
+            response << "HTTP/1.1 200 OK\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "Connection: keep-alive\r\n\r\n"
+                     << body;
+            send_all(client, response.str());
+            return true;
+        }
+        if (path == "/conn-close") {
+            // A `Connection: close` response must evict the connection from
+            // the fetch pool; returning false closes the socket afterwards.
+            send_all(client,
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Length: 0\r\n"
+                "Connection: close\r\n\r\n");
+            return false;
+        }
 
         send_all(client,
             "HTTP/1.1 404 Not Found\r\n"
@@ -611,6 +633,7 @@ private:
             if (client < 0) {
                 continue;
             }
+            ++accepts_;
             workers.push_back(std::thread(&HttpMatrixServer::serve_client,
                                           this, client));
         }
@@ -624,6 +647,7 @@ private:
     bool ipv6_;
     std::atomic<bool> stopping_;
     std::atomic<unsigned int> requests_;
+    std::atomic<unsigned int> accepts_;
     std::thread thread_;
 };
 

@@ -1,0 +1,420 @@
+diff --git a/src/httpclient.c b/src/httpclient.c
+index 768fe3f..fc8e033 100644
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -82,6 +82,7 @@ typedef struct {
+     bool resolving;
+     bool resolve_cancelled;
+     bool http_established;
++    bool torn_down; /* terminal teardown already ran (idempotent) */
+     int dns_status;
+     struct addrinfo *dns_results_pending; /* set by the resolve callback */
+     struct addrinfo *dns_results;         /* owned list; head kept for free */
+@@ -413,6 +414,68 @@ static void tjs_httpclient_release_after_resolve(TJSHttpClient *h) {
+     JS_FreeValue(h->ctx, val);
+ }
+ 
++/* Release our hold on a finished request.  With connection reuse
++ * (LCCSCF_PIPELINE) a wsi is no longer 1:1 with a socket: on transaction
++ * completion lws keeps the connection warm and migrates it to the next
++ * queued request — the retired leader is then destroyed WITHOUT a
++ * CLOSED_CLIENT_HTTP callback. So teardown must run from whichever terminal
++ * callback fires first: COMPLETED_CLIENT_HTTP on success,
++ * CLOSED/CONNECTION_ERROR on failure; an idle connection's eventual CLOSED
++ * arrives after we have already detached here and is a no-op.
++ *
++ * This drops loop-liveness (so idle pooled connections don't keep the
++ * process alive), cancels the request timeout, and detaches h from the wsi
++ * so no later callback on the reused/idle connection sees this client.  It
++ * does NOT free h: that stays the GC finalizer's job, since the JS wrapper
++ * (and abort()) may still reach it until it is collected.
++ *
++ * Callers are wsi-bound terminal callbacks only — a connection ref was
++ * taken at connect time.  The resolution-phase terminal paths
++ * (tjs_httpclient_fail_async / tjs_httpclient_release_after_resolve) have
++ * no connection ref and never call this. */
++static void tjs_httpclient_teardown(TJSHttpClient *h, struct lws *cbwsi) {
++    if (h->torn_down) {
++        return;
++    }
++    h->torn_down = true;
++
++    tjs__lws_conn_unref(h->ctx);
++
++    if (h->wsi) {
++        lws_set_timer_usecs(h->wsi, LWS_SET_TIMER_USEC_CANCEL);
++    }
++
++    /* Detach h from every wsi that carries it as user_space, so no later
++     * callback on a reused/idle connection dereferences a client we no
++     * longer own. h->wsi is what lws wrote to cci.pwsi; cbwsi is the wsi
++     * of the terminal callback we tear down from.  Each is cleared only
++     * when it still points at this client. */
++    struct lws *carriers[3] = { h->wsi, cbwsi, cbwsi ? lws_get_network_wsi(cbwsi) : NULL };
++    for (size_t i = 0; i < sizeof(carriers) / sizeof(carriers[0]); i++) {
++        if (carriers[i] && lws_wsi_user(carriers[i]) == h) {
++            lws_set_wsi_user(carriers[i], NULL);
++        }
++    }
++    h->wsi = NULL;
++
++    if (h->dns_results_pending) {
++        uv_freeaddrinfo(h->dns_results_pending);
++        h->dns_results_pending = NULL;
++    }
++    if (h->dns_results) {
++        uv_freeaddrinfo(h->dns_results);
++        h->dns_results = NULL;
++        h->dns_next = NULL;
++    }
++
++    /* Drop the prevent-GC reference.  The GC finalizer will free
++     * callbacks, url, buffers, and the struct itself. */
++    CHECK(!JS_IsUndefined(h->this_val));
++    JSValue val = h->this_val;
++    h->this_val = JS_UNDEFINED;
++    JS_FreeValue(h->ctx, val);
++}
++
+ /* Establish an lws connection to `address`.  For pre-resolved targets it
+  * is a numeric address and h->connect_host keeps the Host header and SNI;
+  * for numeric-direct and proxied targets both are the hostname lws hands
+@@ -434,7 +497,21 @@ static int tjs_httpclient_connect_addr(TJSHttpClient *h, const char *address) {
+     cci.path = h->connect_path;
+     cci.host = h->connect_host;
+     cci.origin = h->connect_host;
+-    cci.ssl_connection = (h->connect_ssl ? LCCSCF_USE_SSL : 0) | h->ssl_flags | LCCSCF_HTTP_NO_FOLLOW_REDIRECT;
++    /* LCCSCF_PIPELINE opts this connection into lws's client connection
++     * pool: requests to the same endpoint (address+port+tls, per vhost)
++     * reuse a warm connection instead of a fresh TCP+TLS handshake each
++     * time.  Without it lws also sends "Connection: close" on every
++     * request.
++     *
++     * A streaming (unknown-length) request body is sent chunked, and a
++     * keep-alive peer that cannot de-frame a chunked request body would
++     * fail to parse the next request on a reused connection (lws itself
++     * has no such server-side de-framer).  Rather than pool such a
++     * connection and evict it afterwards, we keep it out of the pool from
++     * the start: no LCCSCF_PIPELINE, so lws gives it its own connection
++     * and sends "Connection: close". */
++    cci.ssl_connection = (h->connect_ssl ? LCCSCF_USE_SSL : 0) | h->ssl_flags | LCCSCF_HTTP_NO_FOLLOW_REDIRECT |
++                         (h->streaming ? 0 : LCCSCF_PIPELINE);
+     cci.method = h->method;
+     cci.local_protocol_name = TJS_LWS_HTTP_PROTOCOL_NAME;
+     cci.userdata = h;
+@@ -728,6 +805,15 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+             h->http_established = true;
+             int status = (int) lws_http_client_http_response(wsi);
+ 
++            /* When a request reuses an existing connection, lws fires this
++             * callback once with no response yet (HTTP status 0) purely to
++             * signal the stream is ready; the real response headers arrive
++             * in a later ESTABLISHED.  Ignore the signalling one so we
++             * don't deliver a bogus status-0 response. */
++            if (status <= 0) {
++                break;
++            }
++
+             /* Detect Content-Encoding before firing headers. */
+             const char *encoding = detect_content_encoding(wsi);
+             if (encoding) {
+@@ -858,7 +944,17 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+                 maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+                 tjs_httpclient_done(h);
+             }
+-            return -1;
++            tjs_httpclient_teardown(h, wsi);
++            /* Always return 0.  Pooled connections stay warm for reuse
++             * (a response that carried "Connection: close" was marked
++             * keepalive_rejected at ESTABLISHED, so later requests to the
++             * same endpoint connect fresh instead of queueing onto it).
++             * Non-pooled connections (streaming request bodies, no
++             * LCCSCF_PIPELINE) retire on the peer's FIN or the response
++             * timeout.  Returning -1 here closes the connection in a way
++             * that lets the very next request queue onto the dying
++             * connection and fail. */
++            return 0;
+         }
+ 
+         case LWS_CALLBACK_TIMER: {
+@@ -868,6 +964,9 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+                 maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+                 tjs_httpclient_done(h);
+             }
++            /* A timed-out request leaves the connection state unknown:
++             * close it rather than return it to the pool. */
++            tjs_httpclient_teardown(h, wsi);
+             return -1;
+         }
+ 
+@@ -878,18 +977,19 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+ 
+         case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
+         case LWS_CALLBACK_CLIENT_CONNECTION_ERROR: {
+-            tjs__lws_conn_unref(h->ctx);
+-            lws_set_wsi_user(h->wsi, NULL);
+-            h->wsi = NULL;
+-
+             /* A pre-resolved target that failed before reaching HTTP
+              * retries the next resolved address.  Egress denials are
+              * terminal — the deny reason must surface, not trigger a
+-             * retry. */
++             * retry.  The retry path detaches from the failed connection
++             * and re-refs through connect_next; it must not run teardown,
++             * because the request is still in flight. */
+             if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR &&
+                 !h->completed && !h->http_established &&
+                 h->egress_deny_reason[0] == '\0' &&
+                 h->dns_next && h->dns_next->ai_next) {
++                tjs__lws_conn_unref(h->ctx);
++                lws_set_wsi_user(h->wsi, NULL);
++                h->wsi = NULL;
+                 h->dns_next = h->dns_next->ai_next;
+                 if (!tjs_httpclient_connect_next(h)) {
+                     break;
+@@ -898,12 +998,6 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+                  * fall through and report the failure */
+             }
+ 
+-            if (h->dns_results) {
+-                uv_freeaddrinfo(h->dns_results);
+-                h->dns_results = NULL;
+-                h->dns_next = NULL;
+-            }
+-
+             if (!h->completed) {
+                 h->completed = true;
+                 if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR) {
+@@ -922,12 +1016,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+                 tjs_httpclient_done(h);
+             }
+ 
+-            /* Drop the prevent-GC reference.  The GC finalizer will free
+-             * callbacks, url, buffers, and the struct itself. */
+-            CHECK(!JS_IsUndefined(h->this_val));
+-            JSValue val = h->this_val;
+-            h->this_val = JS_UNDEFINED;
+-            JS_FreeValue(h->ctx, val);
++            tjs_httpclient_teardown(h, wsi);
+             break;
+         }
+ 
+diff --git a/src/lws-evlib.c b/src/lws-evlib.c
+index c07397b..6746b98 100644
+--- a/src/lws-evlib.c
++++ b/src/lws-evlib.c
+@@ -118,6 +118,21 @@ static TJSEvlibWatcher *tjs__evlib_watcher_find(const TJSEvlibPt *evpt, const st
+     return watcher;
+ }
+ 
++/* Find a watcher by fd: the h1 pipeline migration hands the leader's
++ * connected socket to the queued child wsi, so the fd may still be
++ * watched under the leader's key. */
++static TJSEvlibWatcher *tjs__evlib_watcher_find_by_fd(const TJSEvlibPt *evpt, lws_sockfd_type fd) {
++    TJSEvlibWatcher *watcher, *tmp;
++
++    HASH_ITER(hh, evpt->watchers, watcher, tmp) {
++        if (watcher->fd == fd) {
++            return watcher;
++        }
++    }
++
++    return NULL;
++}
++
+ static void tjs__evlib_watcher_close_cb(uv_handle_t *handle) {
+     CHECK_NOT_NULL(handle->data);
+     tjs__free(handle->data);
+@@ -168,6 +183,18 @@ static void tjs__evlib_watcher_detach(TJSEvlibPt *evpt, const struct lws *wsi) {
+     uv_close((uv_handle_t *) &watcher->poll, tjs__evlib_watcher_close_cb);
+ }
+ 
++static void tjs__evlib_watcher_detach_by_fd(TJSEvlibPt *evpt, lws_sockfd_type fd) {
++    TJSEvlibWatcher *watcher = tjs__evlib_watcher_find_by_fd(evpt, fd);
++
++    if (!watcher) {
++        return;
++    }
++
++    HASH_DEL(evpt->watchers, watcher);
++    uv_poll_stop(&watcher->poll);
++    uv_close((uv_handle_t *) &watcher->poll, tjs__evlib_watcher_close_cb);
++}
++
+ static int tjs__evlib_watcher_create(TJSEvlibPt *evpt, struct lws *wsi, bool unref) {
+     TJSEvlibWatcher *watcher = tjs__malloc(sizeof(*watcher));
+ 
+@@ -268,8 +295,23 @@ static int tjs__evlib_init_pt(struct lws_context *cx, void *loop, int tsi) {
+ 
+ static void tjs__evlib_io(struct lws *wsi, unsigned int flags) {
+     TJSEvlibPt *evpt = lws_evlib_wsi_to_evlib_pt(wsi);
++    lws_sockfd_type fd = lws_get_socket_fd(wsi);
+     TJSEvlibWatcher *watcher = tjs__evlib_watcher_find(evpt, wsi);
+ 
++    /* The h1 pipeline migration hands the leader's connected fd to the
++     * queued child without always pairing an io() call with the wsi that
++     * owns the watcher.  Resolve by fd as well: if the watcher is still
++     * keyed to the retired leader, take it over for this wsi so poll
++     * events keep flowing on the migrated socket. */
++    if (!watcher && fd != LWS_SOCK_INVALID) {
++        watcher = tjs__evlib_watcher_find_by_fd(evpt, fd);
++        if (watcher && watcher->wsi != wsi) {
++            HASH_DEL(evpt->watchers, watcher);
++            watcher->wsi = (struct lws *) wsi;
++            HASH_ADD_PTR(evpt->watchers, wsi, watcher);
++        }
++    }
++
+     /* The watcher may be gone (or not exist yet) while lws still adjusts
+      * pollfd state; ignore those. */
+     if (!watcher) {
+@@ -301,10 +343,15 @@ static void tjs__evlib_io(struct lws *wsi, unsigned int flags) {
+ 
+ static int tjs__evlib_sock_accept(struct lws *wsi) {
+     TJSEvlibPt *evpt = lws_evlib_wsi_to_evlib_pt(wsi);
++    lws_sockfd_type fd = lws_get_socket_fd(wsi);
+ 
+     /* lws may have replaced the wsi's fd (client connect DNS-retry path
+-     * closes the socket behind our back); drop any stale watcher. */
++     * closes the socket behind our back); drop any stale watcher.  The
++     * pipeline migration also hands a leader's live fd to the queued
++     * child, so drop any watcher still holding this fd under the old
++     * wsi's key before watching it for the new one. */
+     tjs__evlib_watcher_detach(evpt, wsi);
++    tjs__evlib_watcher_detach_by_fd(evpt, fd);
+ 
+     return tjs__evlib_watcher_create(evpt, wsi, true);
+ }
+diff --git a/deps/libwebsockets/lib/core-net/wsi.c b/deps/libwebsockets/lib/core-net/wsi.c
+index a9c4eba..aa8149d 100644
+--- a/deps/libwebsockets/lib/core-net/wsi.c
++++ b/deps/libwebsockets/lib/core-net/wsi.c
+@@ -1133,12 +1133,10 @@ int _lws_generic_transaction_completed_active_conn(struct lws **_wsi,
+ 	 * new guy and snuff out the old guy's magic spark at that level as well
+ 	 */
+ 
+-#if defined(LWS_WITH_EVENT_LIBS)
+ 	if (wsi->a.context->event_loop_ops->destroy_wsi)
+ 		wsi->a.context->event_loop_ops->destroy_wsi(wsi);
+ 	if (wsi->a.context->event_loop_ops->sock_accept)
+ 		wsi->a.context->event_loop_ops->sock_accept(wnew);
+-#endif
+ 
+ 	/* point the fd table entry to new guy */
+ 
+diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/deps/libwebsockets/lib/roles/http/client/client-http.c
+index 1216fd6..fdc981a 100644
+--- a/deps/libwebsockets/lib/roles/http/client/client-http.c
++++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
+@@ -1403,6 +1403,33 @@ lws_client_interpret_server_handshake(struct lws *wsi)
+ 
+ 	if (!wsi->client_h2_alpn && !wsi->client_mux_substream) {
+ 		/* ie, coming to this for the first time */
++
++		/* A response that explicitly carries a "Connection: close"
++		 * token means the peer will not keep the connection alive
++		 * even when it sent a content-length.  Treat it like a
++		 * close-delimited response: mark the connection
++		 * keepalive_rejected below so later requests to this
++		 * endpoint connect fresh instead of queueing onto a socket
++		 * the peer is about to tear down. */
++		p = (char *)lws_hdr_simple_ptr(wsi, WSI_TOKEN_CONNECTION);
++		if (p) {
++			/* Connection is a comma-separated token list; a
++			 * "close" token anywhere means no keepalive. */
++			while (*p) {
++				while (*p == ' ' || *p == ',')
++					p++;
++				if (!strncasecmp(p, "close", 5) &&
++				    (p[5] == '\0' || p[5] == ' ' ||
++				     p[5] == ',')) {
++					wsi->http.conn_type =
++						HTTP_CONNECTION_CLOSE;
++					break;
++				}
++				while (*p && *p != ',')
++					p++;
++			}
++		}
++
+ 		if (wsi->http.conn_type == HTTP_CONNECTION_KEEP_ALIVE)
+ 			wsi->keepalive_active = 1;
+ 		else {
+diff --git a/deps/libwebsockets/lib/core-net/client/connect2.c b/deps/libwebsockets/lib/core-net/client/connect2.c
+index ed38609..901ed83 100644
+--- a/deps/libwebsockets/lib/core-net/client/connect2.c
++++ b/deps/libwebsockets/lib/core-net/client/connect2.c
+@@ -194,27 +194,34 @@ lws_client_connect_2_dnsreq_MAY_CLOSE_WSI(struct lws *wsi)
+ 	int n, port = 0;
+ 	struct lws *w;
+ 
+-	if (lwsi_state(wsi) == LRS_WAITING_DNS ||
+-	    lwsi_state(wsi) == LRS_WAITING_CONNECT) {
+-		lwsl_wsi_info(wsi, "LRS_WAITING_DNS / CONNECT");
+-
+-		return wsi;
+-	}
+-
+ 	/*
+ 	 * clients who will create their own fresh connection keep a copy of
+ 	 * the hostname they originally connected to, in case other connections
+ 	 * want to use it too
++	 *
++	 * The connect_info stash may already be consumed into the ah here
++	 * (lws_http_client_connect_via_info2); the CLIENT_HOST fallback token
++	 * preserves the original hostname in that case.  The previous fallback
++	 * (CLIENT_PEER_ADDRESS) copied the resolved address instead, which
++	 * let a request for a different hostname pool onto this connection
++	 * and skip TLS hostname verification.
+ 	 */
+ 
+ 	if (!wsi->cli_hostname_copy) {
+ 		const char *pa = lws_wsi_client_stash_item(wsi, CIS_HOST,
+-					_WSI_TOKEN_CLIENT_PEER_ADDRESS);
++					_WSI_TOKEN_CLIENT_HOST);
+ 
+ 		if (pa)
+ 			wsi->cli_hostname_copy = lws_strdup(pa);
+ 	}
+ 
++	if (lwsi_state(wsi) == LRS_WAITING_DNS ||
++	    lwsi_state(wsi) == LRS_WAITING_CONNECT) {
++		lwsl_wsi_info(wsi, "LRS_WAITING_DNS / CONNECT");
++
++		return wsi;
++	}
++
+ 	/*
+ 	 * The first job is figure out if we want to pipeline on or just join
+ 	 * an existing "active connection" to the same place
+diff --git a/deps/libwebsockets/lib/core-net/vhost.c b/deps/libwebsockets/lib/core-net/vhost.c
+index 35466e9..a52b129 100644
+--- a/deps/libwebsockets/lib/core-net/vhost.c
++++ b/deps/libwebsockets/lib/core-net/vhost.c
+@@ -2005,6 +2005,7 @@ lws_get_vhost_by_name(struct lws_context *context, const char *name)
+ int
+ lws_vhost_active_conns(struct lws *wsi, struct lws **nwsi, const char *adsin)
+ {
++	char peer[64];
+ #if defined(LWS_WITH_TLS)
+ #if defined(LWS_ROLE_H1)
+ 	const char *my_alpn = lws_wsi_client_stash_item(wsi, CIS_ALPN,
+@@ -2071,8 +2072,16 @@ lws_vhost_active_conns(struct lws *wsi, struct lws **nwsi, const char *adsin)
+ 		    (w->role_ops == wsi->role_ops ||
+ 		     (lwsi_role_http(w) && lwsi_role_http(wsi))) &&
+ 		     /* ... same role, or at least both some kind of http */
+-		    w->cli_hostname_copy && !strcmp(adsin, w->cli_hostname_copy) &&
+-		    /* same endpoint hostname */
++		    w->cli_hostname_copy && wsi->cli_hostname_copy &&
++		    !strcmp(wsi->cli_hostname_copy, w->cli_hostname_copy) &&
++		    /* same endpoint hostname: pooling must not hand a
++		     * request for host B a connection whose TLS session was
++		     * verified for host A */
++		    lws_get_peer_simple(w, peer, sizeof(peer)) &&
++		    !strcmp(adsin, peer) &&
++		    /* same actual peer address: the resolved address of the
++		     * new request must equal the address the pooled
++		     * connection is really connected to */
+ #if defined(LWS_WITH_TLS)
+ #if defined(LWS_ROLE_H1)
+ 		   !(newconn_cannot_use_h1 && w->role_ops == &role_ops_h1) &&

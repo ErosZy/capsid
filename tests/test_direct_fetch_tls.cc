@@ -292,7 +292,7 @@ public:
     MbedTlsServer(const char *certificate,
                   const char *private_key,
                   uint16_t port)
-        : stopping_(false) {
+        : stopping_(false), accepts_(0) {
         mbedtls_net_init(&listener_);
         mbedtls_ssl_config_init(&config_);
         mbedtls_x509_crt_init(&certificate_);
@@ -392,39 +392,67 @@ private:
             } while (retryable(result));
         }
         if (result == 0) {
-            char request[4096];
-            size_t used = 0;
-            while (used < sizeof(request) &&
-                   (used < 4 ||
-                    std::string(request, used).find("\r\n\r\n") ==
-                        std::string::npos)) {
-                result = mbedtls_ssl_read(
-                    &ssl,
-                    reinterpret_cast<unsigned char *>(request) + used,
-                    sizeof(request) - used);
-                if (result > 0) {
-                    used += static_cast<size_t>(result);
-                    continue;
+            // Keep-alive: serve requests until the client closes. This is
+            // what lets the connection-reuse fixture stage assert that
+            // sequential fetches share one pooled TLS connection.
+            for (;;) {
+                char request[4096];
+                size_t used = 0;
+                while (used < sizeof(request) &&
+                       (used < 4 ||
+                        std::string(request, used).find("\r\n\r\n") ==
+                            std::string::npos)) {
+                    result = mbedtls_ssl_read(
+                        &ssl,
+                        reinterpret_cast<unsigned char *>(request) + used,
+                        sizeof(request) - used);
+                    if (result > 0) {
+                        used += static_cast<size_t>(result);
+                        continue;
+                    }
+                    if (!retryable(result)) {
+                        break;
+                    }
                 }
-                if (!retryable(result)) {
+                if (used == 0) {
+                    // Client closed (or sent a fatal alert) before any
+                    // request bytes: done with this connection.
                     break;
                 }
-            }
-            if (used > 0) {
-                static const char response[] =
+                const std::string head(request, used);
+                const size_t first_space = head.find(' ');
+                const size_t last_space =
+                    first_space == std::string::npos
+                        ? std::string::npos
+                        : head.find(' ', first_space + 1);
+                const std::string target = head.substr(
+                    first_space == std::string::npos ? 0 : first_space + 1,
+                    last_space == std::string::npos
+                        ? std::string::npos
+                        : last_space - first_space - 1);
+                std::string body;
+                if (target == "/with-custom-ca") {
+                    body = "capsid tls ok";
+                } else if (target == "/accept-count") {
+                    body = std::to_string(accepts_);
+                }
+                const std::string response =
                     "HTTP/1.1 200 OK\r\n"
                     "Content-Type: text/plain\r\n"
-                    "Content-Length: 13\r\n"
-                    "Connection: close\r\n"
+                    "Content-Length: " +
+                    std::to_string(body.size()) +
                     "\r\n"
-                    "capsid tls ok";
+                    "Connection: keep-alive\r\n"
+                    "\r\n" +
+                    body;
                 size_t offset = 0;
-                while (offset < sizeof(response) - 1) {
+                while (offset < response.size()) {
                     result = mbedtls_ssl_write(
                         &ssl,
-                        reinterpret_cast<const unsigned char *>(response) +
+                        reinterpret_cast<const unsigned char *>(
+                            response.data()) +
                             offset,
-                        sizeof(response) - 1 - offset);
+                        response.size() - offset);
                     if (result > 0) {
                         offset += static_cast<size_t>(result);
                     } else if (!retryable(result)) {
@@ -444,6 +472,7 @@ private:
             const int result =
                 mbedtls_net_accept(&listener_, &client, NULL, 0, NULL);
             if (result == 0) {
+                ++accepts_;
                 serve_client(&client);
             }
             mbedtls_net_free(&client);
@@ -455,6 +484,7 @@ private:
     }
 
     std::atomic<bool> stopping_;
+    std::atomic<unsigned int> accepts_;
     mbedtls_net_context listener_;
     mbedtls_ssl_config config_;
     mbedtls_x509_crt certificate_;

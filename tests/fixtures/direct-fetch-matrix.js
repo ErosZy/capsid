@@ -137,6 +137,31 @@ async function runMatrix(primary, secondary, closedPort) {
     assert(await headersResponse.text() === 'one, two', 'headers: duplicate request value');
     completed.push('headers');
 
+    setMatrixStage('connection-reuse');
+    const acceptsBefore = Number(
+        await (await fetch(`${primary}/accept-count`)).text());
+    for (let reuse = 0; reuse < 2; ++reuse) {
+        const pooled = await fetch(`${primary}/headers`, {
+            headers: [
+                [ 'x-request-duplicate', 'one' ],
+                [ 'x-request-duplicate', 'two' ],
+            ],
+        });
+        assert(await pooled.text() === 'one, two',
+            'pooled connection headers body');
+    }
+    const acceptsAfter = Number(
+        await (await fetch(`${primary}/accept-count`)).text());
+    assert(acceptsAfter === acceptsBefore,
+        `sequential fetch must reuse the pooled connection: ${acceptsBefore} -> ${acceptsAfter}`);
+    const evicted = await fetch(`${primary}/conn-close`);
+    assert(evicted.status === 200, 'conn-close response status');
+    const acceptsEvicted = Number(
+        await (await fetch(`${primary}/accept-count`)).text());
+    assert(acceptsEvicted === acceptsAfter + 1,
+        `Connection: close response must evict the pooled connection: ${acceptsAfter} -> ${acceptsEvicted}`);
+    completed.push('connection-reuse');
+
     setMatrixStage('redirect-302-post');
     const post302 = await fetch(`${primary}/redirect?code=302&to=/inspect`, {
         method: 'POST',

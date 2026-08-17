@@ -42,6 +42,8 @@ capsid-worker
 
 Inbound requests and application responses pass through length-prefixed FetchRPC. Outbound `fetch()` calls made by the application use the worker's internal txiki.js HttpClient/libwebsockets directly, bypassing the host HTTP proxy or FetchRPC broker. Hostname targets resolve through the operating system resolver (`uv_getaddrinfo` — Windows DNS Client, nsswitch, `/etc/hosts`) before connect, rather than lws's internal raw-DNS client; numeric addresses and proxied targets connect directly as-is. The egress policy still inspects the hostname, every resolved address, and every redirect.
 
+Connections reuse lws's client connection pool (`LCCSCF_PIPELINE`): sequential requests to the same endpoint — original hostname, resolved peer address, port, and TLS — share one warm TCP/TLS session, with a fresh handshake only when the pool is cold. The hostname is part of the pool key: a pooled TLS session was verified for its original hostname, and a request for a different hostname at the same address always opens a fresh connection rather than inheriting that verification. A response carrying `Connection: close` evicts the connection — the connection is marked `keepalive_rejected` at handshake time so later requests connect fresh instead of queueing onto it, and the peer's FIN (or the idle warm timeout) retires it. Streaming (chunked) request bodies stay out of the pool: without a server-side de-framer the next request on a reused connection could not be parsed.
+
 ## Platform Contract
 
 Platform support splits into two independent commitments: native development and production isolation.
