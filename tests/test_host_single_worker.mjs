@@ -123,6 +123,26 @@ function waitForExit(child, timeoutMs) {
     });
 }
 
+// Windows may briefly hold the child's working directory after process exit,
+// so directory cleanup retries transient EPERM/EBUSY/ENOTEMPTY before giving
+// up. This keeps test-side cleanup deterministic without weakening what the
+// test asserts about the Host.
+async function removeTreeRetry(target, attempts = 20) {
+    for (let attempt = 1; ; ++attempt) {
+        try {
+            fs.rmSync(target, { recursive: true, force: true });
+            return;
+        } catch (error) {
+            const transient = error?.code === 'EPERM' ||
+                error?.code === 'EBUSY' || error?.code === 'ENOTEMPTY';
+            if (!transient || attempt >= attempts) {
+                throw error;
+            }
+            await delay(25 * attempt);
+        }
+    }
+}
+
 // The frozen M1A CLI as an argument list, with the scenario knobs exposed
 // for the startup-failure regressions. routing knobs mirror the managed
 // routing matrix: subdomain carries --routing-suffix, header carries
@@ -333,7 +353,7 @@ const args = parseArgs(process.argv.slice(2));
     assert.equal(entryExit.code, 2, 'traversal entry must fail the CLI phase');
     assert.match(stderr, /entry must be a plain file name/,
         'entry rejection must name the containment rule');
-    fs.rmSync(dir, { recursive: true, force: true });
+    await removeTreeRetry(dir);
 }
 {
     // fd 3 is a read-only descriptor: the READY record write fails after
@@ -737,7 +757,7 @@ try {
     } finally {
         child.kill('SIGTERM');
         await waitForExit(child, 3000);
-        fs.rmSync(dir, { recursive: true, force: true });
+        await removeTreeRetry(dir);
     }
 }
 {
@@ -778,7 +798,7 @@ try {
         assert.match(stderr, /health check failed/,
             'startup failure must name the health probe');
     } finally {
-        fs.rmSync(dir, { recursive: true, force: true });
+        await removeTreeRetry(dir);
     }
 }
 
@@ -793,7 +813,9 @@ try {
         fs.writeFileSync(capsidJson, JSON.stringify({
             apiVersion: 'capsid/app-v1',
             entry: 'host-single-worker.js',
-            pool: { minReady: 1, maxWorkers: 2 },
+            // The local document schema requires minReady == maxWorkers;
+            // actual static-pool sizing comes from --workers on the CLI.
+            pool: { minReady: 2, maxWorkers: 2 },
             request: { timeout: '10s' },
             healthCheck: { path: healthPath, timeout: '3s' },
         }));
@@ -844,7 +866,7 @@ try {
         assert.match(brokenStderr, /health check failed/,
             'static-pool healthCheck failure must name the probe');
     } finally {
-        fs.rmSync(dir, { recursive: true, force: true });
+        await removeTreeRetry(dir);
     }
 }
 
@@ -878,6 +900,9 @@ try {
         request: {
             timeout: '10s',
             maxInflightPerWorker: 1,
+            // The documented 1/1 streaming boundary: with one inflight slot
+            // the streaming permit must be 1 (the default 2 would exceed it).
+            maxStreamingInflightPerWorker: 1,
         },
     }));
     const child = spawn(args.get('host'), [
@@ -924,7 +949,7 @@ try {
     } finally {
         child.kill('SIGTERM');
         await waitForExit(child, 3000);
-        fs.rmSync(dir, { recursive: true, force: true });
+        await removeTreeRetry(dir);
     }
 }
 
@@ -1032,7 +1057,7 @@ try {
             );
         }
     } finally {
-        fs.rmSync(dir, { recursive: true, force: true });
+        await removeTreeRetry(dir);
     }
 }
 
@@ -1124,7 +1149,7 @@ try {
         child.kill('SIGTERM');
         await waitForExit(child, 3000);
         upstream.close();
-        fs.rmSync(dir, { recursive: true, force: true });
+        await removeTreeRetry(dir);
     }
 }
 
