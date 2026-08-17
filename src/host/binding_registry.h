@@ -25,6 +25,11 @@ namespace capsid::host {
 
 #if defined(_WIN32)
 using BindingOwnerId = std::uint32_t;
+// Owner allow-list predicate shared with the Windows registry regression:
+// true for the process identity and, only when present in the process
+// token, Administrators or SYSTEM. Broad groups (Everyone/Users/
+// Authenticated Users) always return false.
+bool binding_owner_is_trusted(const void* owner_sid);
 #else
 using BindingOwnerId = uid_t;
 #endif

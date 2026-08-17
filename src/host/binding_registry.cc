@@ -1188,6 +1188,26 @@ bool scan_bindings_root_impl_win(
 }  // namespace
 #endif
 
+#if defined(_WIN32)
+bool binding_owner_is_trusted(const void *owner_sid) {
+    if (owner_sid == NULL) {
+        return false;
+    }
+    PSID owner = const_cast<PSID>(owner_sid);
+    std::string error;
+    PSID current_user = NULL;
+    if (!win_current_user_sid(&current_user, &error)) {
+        return false;
+    }
+    const bool trusted =
+        EqualSid(owner, current_user) ||
+        (win_sid_is_privileged_owner(owner) &&
+         win_token_contains_sid(owner));
+    LocalFree(current_user);
+    return trusted;
+}
+#endif
+
 bool scan_bindings_root(const std::string &root,
                         const std::vector<BindingOwnerId> &allowed_uids,
                         BindingRegistrySnapshot *out,
