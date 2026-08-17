@@ -261,6 +261,12 @@ async function runMatrix(primary, secondary, closedPort) {
     completed.push('redirect');
 
     setMatrixStage('request-streaming');
+    // A streaming (unknown-length) request body is sent chunked on its own
+    // connection and must never re-enter the keep-alive pool: the server
+    // counts any later request served on the connection that carried the
+    // POST /upload, and that count must stay zero.
+    const streamingReuseBefore = Number((await (await fetch(
+        `${primary}/streaming-reuse-count`)).text()));
     let uploadIndex = 0;
     const upload = new ReadableStream({
         pull(controller) {
@@ -281,6 +287,14 @@ async function runMatrix(primary, secondary, closedPort) {
     });
     assert(await uploadResponse.text() === '524288|0|63',
         'streaming request body was truncated or reordered');
+    // Two follow-up requests give a wrongly pooled streaming connection two
+    // chances to be reused; the count probe itself is a third.
+    await (await fetch(`${primary}/headers`)).text();
+    await (await fetch(`${primary}/headers`)).text();
+    const streamingReuseAfter = Number((await (await fetch(
+        `${primary}/streaming-reuse-count`)).text()));
+    assert(streamingReuseAfter === streamingReuseBefore,
+        `streaming request connection was returned to the keep-alive pool: ${streamingReuseBefore} -> ${streamingReuseAfter}`);
 
     setMatrixStage('response-streaming');
     const streamedResponse = await fetch(`${primary}/stream-response`);

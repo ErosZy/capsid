@@ -4,6 +4,7 @@
 
 #include "win32_compat.h"
 #if defined(_WIN32)
+#include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
 #endif
@@ -13,10 +14,14 @@
 #include <netinet/in.h>
 #endif
 #include "win32_compat.h"
-#include "win32_compat.h"
 #if defined(_WIN32)
 #else
 #include <sys/socket.h>
+#endif
+#include "win32_compat.h"
+#if defined(_WIN32)
+#else
+#include <netdb.h>
 #endif
 #include "win32_compat.h"
 #if defined(_WIN32)
@@ -312,7 +317,8 @@ public:
           ipv6_(ipv6),
           stopping_(false),
           requests_(0),
-          accepts_(0) {
+          accepts_(0),
+          streaming_connections_reused_(0) {
         fd_ = capsid::win32::create_socket_fd(ipv6_ ? AF_INET6 : AF_INET);
         if (fd_ < 0) {
             fail("cannot create HTTP matrix socket");
@@ -584,6 +590,21 @@ private:
             send_all(client, response.str());
             return true;
         }
+        if (path == "/streaming-reuse-count") {
+            // Incremented per request served on a connection that already
+            // carried the chunked POST upload. The streaming-request stage
+            // asserts it stays 0: that connection must never re-enter the
+            // keep-alive pool.
+            const std::string body =
+                std::to_string(streaming_connections_reused_.load());
+            std::ostringstream response;
+            response << "HTTP/1.1 200 OK\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "Connection: keep-alive\r\n\r\n"
+                     << body;
+            send_all(client, response.str());
+            return true;
+        }
         if (path == "/conn-close") {
             // A `Connection: close` response must evict the connection from
             // the fetch pool; returning false closes the socket afterwards.
@@ -608,6 +629,7 @@ private:
         setsockopt(
             client, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
 #endif
+        bool served_streaming_upload = false;
         for (;;) {
             HttpRequest request;
             if (!read_http_request(client, &request)) {
@@ -623,6 +645,18 @@ private:
                 break;
             }
             ++requests_;
+            const bool streaming_upload =
+                request.method == "POST" &&
+                (request.target == "/upload" ||
+                 request.target.rfind("/upload?", 0) == 0);
+            if (served_streaming_upload && !streaming_upload) {
+                // A connection that carried the chunked POST must never be
+                // handed to a later keep-alive request.
+                streaming_connections_reused_.fetch_add(
+                    1, std::memory_order_relaxed);
+            } else if (streaming_upload) {
+                served_streaming_upload = true;
+            }
             if (!respond(client, request)) {
                 break;
             }
@@ -665,6 +699,7 @@ private:
     std::atomic<bool> stopping_;
     std::atomic<unsigned int> requests_;
     std::atomic<unsigned int> accepts_;
+    std::atomic<unsigned int> streaming_connections_reused_;
     std::mutex served_path_mutex_;
     std::map<std::string, unsigned int> served_path_counts_;
     std::thread thread_;
@@ -689,6 +724,39 @@ uint16_t unused_port() {
     const uint16_t port = ntohs(address.sin_port);
     close(fd);
     return port;
+}
+
+// The multi-address retry regression needs the loopback family the system
+// resolver lists LAST for "localhost": the server binds that family, the
+// earlier family stays closed, and a successful fetch can only come from
+// retrying the next pre-resolved address. Returns 0 when localhost resolves
+// to fewer than two distinct families (the test then skips).
+int localhost_last_family() {
+    capsid::win32::ensure_winsock();
+    struct addrinfo hints = {};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_ADDRCONFIG | AI_V4MAPPED;
+    struct addrinfo *list = NULL;
+    if (getaddrinfo("localhost", NULL, &hints, &list) != 0 ||
+        list == NULL) {
+        return 0;
+    }
+    int last = 0;
+    bool seen_ipv4 = false;
+    bool seen_ipv6 = false;
+    for (struct addrinfo *entry = list; entry != NULL;
+         entry = entry->ai_next) {
+        if (entry->ai_family == AF_INET && !seen_ipv4) {
+            seen_ipv4 = true;
+            last = AF_INET;
+        } else if (entry->ai_family == AF_INET6 && !seen_ipv6) {
+            seen_ipv6 = true;
+            last = AF_INET6;
+        }
+    }
+    freeaddrinfo(list);
+    return seen_ipv4 && seen_ipv6 ? last : 0;
 }
 
 uint32_t wait_for_ready(capsid_worker *worker) {
@@ -998,6 +1066,44 @@ int main(int argc, char **argv) {
             "\"allowed\":false") != std::string::npos &&
             primary.requests() == before_default_deny + 1,
         "hostname allow also authorized a direct IP-literal request");
+
+    // Pre-resolved multi-address retry (txiki 0030/0031): on a dual-stack
+    // runner "localhost" resolves to both loopback families. Bind the
+    // server only on the LAST family so the first connect attempt is
+    // refused and the fetch must retry the next pre-resolved address.
+    // Single-family runners skip the scenario instead of asserting it
+    // vacuously.
+    const int last_family = localhost_last_family();
+    if (last_family == 0) {
+        std::cout << "multi-address localhost retry skipped (single-family "
+                     "resolver)"
+                  << std::endl;
+    } else {
+        HttpMatrixServer retry_server(last_family == AF_INET6);
+        capsid_egress_rule retry_rule;
+        capsid_egress_rule_init(&retry_rule);
+        retry_rule.action = CAPSID_EGRESS_ALLOW;
+        retry_rule.target = "localhost";
+        retry_rule.port_start = retry_server.port();
+        retry_rule.port_end = retry_server.port();
+        capsid_egress_policy retry_policy;
+        capsid_egress_policy_init(&retry_policy);
+        retry_policy.rules = &retry_rule;
+        retry_policy.rule_count = 1;
+        const Result retried = run_policy_probe(
+            argv[1],
+            bundle,
+            &retry_policy,
+            std::string("http://localhost:") +
+                std::to_string(retry_server.port()) + "/headers");
+        require(
+            retried.status == 200 &&
+                retried.body.find("\"allowed\":true") !=
+                    std::string::npos &&
+                retry_server.requests() == 1,
+            "localhost multi-address fetch did not retry the next resolved "
+            "address");
+    }
 
     capsid_egress_rule allow_primary;
     capsid_egress_rule_init(&allow_primary);
