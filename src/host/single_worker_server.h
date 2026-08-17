@@ -213,6 +213,18 @@ private:
     std::shared_ptr<Impl> impl_;
 };
 
+// Static-pool composition seam: performs the same one-probe local
+// healthCheck the single-worker server uses, against an already-accepting
+// pool endpoint. Returns true for a 2xx response; on failure *error names
+// the probe stage.
+bool probe_local_health(const std::string& address,
+                        std::uint16_t port,
+                        const std::string& target,
+                        const std::string& host_header,
+                        const std::string& capsid_app,
+                        std::uint64_t timeout_ms,
+                        std::string* error);
+
 }  // namespace capsid::host
 
 #endif

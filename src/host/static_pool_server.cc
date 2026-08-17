@@ -289,6 +289,47 @@ public:
             }
         }
 #endif
+        // M2 item 6: a pool-level healthCheck gates the pool READY record.
+        // The probe runs through the now-accepting pool endpoint (shared
+        // listener or pool acceptor), using the same routing-aware target an
+        // external client would build.
+        const SingleWorkerServerOptions& worker_options =
+            options_.worker_options;
+        if (worker_options.health_check.configured) {
+            std::string probe_target = worker_options.health_check.path;
+            std::string probe_host = worker_options.public_authority;
+            std::string probe_capsid_app;
+            switch (worker_options.routing_mode) {
+            case RequestRoutingMode::kPath:
+                probe_target = "/@capsid/" + worker_options.application +
+                               worker_options.health_check.path;
+                break;
+            case RequestRoutingMode::kSubdomain:
+                probe_host = worker_options.application +
+                             worker_options.routing_suffix;
+                break;
+            case RequestRoutingMode::kHeader:
+                probe_capsid_app = worker_options.application;
+                break;
+            }
+            std::string probe_error;
+            const bool probe_ok = probe_local_health(
+                worker_options.listen_address,
+#if defined(_WIN32)
+                pool_port_,
+#else
+                shared_port,
+#endif
+                probe_target, probe_host, probe_capsid_app,
+                worker_options.health_check.timeout_ms, &probe_error);
+            if (!probe_ok) {
+                if (error != nullptr) {
+                    *error = "health check failed: " + probe_error;
+                }
+                rollback(shards_.size(), error);
+                return false;
+            }
+        }
         if (stop_requested_.load(std::memory_order_acquire)) {
             rollback(shards_.size(), error);
             return false;

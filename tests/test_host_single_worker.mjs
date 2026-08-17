@@ -782,6 +782,72 @@ try {
     }
 }
 
+// ---- Static-pool healthCheck: the pool-level READY record is gated by
+// one real HTTP probe through the pool endpoint (single-worker covers the
+// single-listener path; static-pool must not silently skip its probe).
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-pool-health-'));
+    fs.copyFileSync(args.get('bundle'), path.join(dir, 'host-single-worker.js'));
+    const spawnPool = (healthPath) => {
+        const capsidJson = path.join(dir, `capsid-${healthPath.replaceAll('/', '-')}.json`);
+        fs.writeFileSync(capsidJson, JSON.stringify({
+            apiVersion: 'capsid/app-v1',
+            entry: 'host-single-worker.js',
+            pool: { minReady: 1, maxWorkers: 2 },
+            request: { timeout: '10s' },
+            healthCheck: { path: healthPath, timeout: '3s' },
+        }));
+        return spawn(args.get('host'), [
+            '--mode', 'static-pool',
+            '--workers', '2',
+            '--worker', path.resolve(args.get('worker')),
+            '--capsid-json', capsidJson,
+            '--application', 'orders',
+            '--listen', '127.0.0.1:0',
+            '--routing', 'path',
+            '--public-scheme', 'http',
+            '--public-authority', 'public.example',
+            '--strict-sandbox', 'off',
+            '--ready-fd', '3',
+        ], {
+            cwd: dir,
+            stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+        });
+    };
+    try {
+        const healthy = spawnPool('/health');
+        let healthyStderr = '';
+        healthy.stderr.setEncoding('utf8');
+        healthy.stderr.on('data', (chunk) => { healthyStderr += chunk; });
+        try {
+            const readyLine = await readLine(
+                healthy.stdio[3], healthy, 10000, () => healthyStderr);
+            const ready = JSON.parse(readyLine);
+            const response = await request(ready.port, {
+                target: '/@capsid/orders/health',
+                timeoutMs: 3000,
+            });
+            assert.equal(response.status, 200,
+                'static-pool healthCheck must pass through the real endpoint');
+        } finally {
+            healthy.kill('SIGTERM');
+            await waitForExit(healthy, 3000);
+        }
+
+        const broken = spawnPool('/nope');
+        let brokenStderr = '';
+        broken.stderr.setEncoding('utf8');
+        broken.stderr.on('data', (chunk) => { brokenStderr += chunk; });
+        const brokenExit = await waitForExit(broken, 10000);
+        assert.equal(brokenExit.code, 1,
+            'static-pool healthCheck failure must exit 1');
+        assert.match(brokenStderr, /health check failed/,
+            'static-pool healthCheck failure must name the probe');
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+
 // ---- Local env valueFrom (--secrets-root): one regular file per key id,
 // the managed layout; without the root the document is rejected.
 {

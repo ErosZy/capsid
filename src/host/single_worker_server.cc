@@ -257,6 +257,20 @@ bool probe_health_once(const std::string& address,
 using tcp = asio::ip::tcp;
 using SteadyClock = std::chrono::steady_clock;
 
+// Static-pool composition seam: the pool owns the accepting listener (or
+// shared acceptor), so the shard-level probe runs here after the pool is
+// fully activated.
+bool probe_local_health(const std::string& address,
+                        std::uint16_t port,
+                        const std::string& target,
+                        const std::string& host_header,
+                        const std::string& capsid_app,
+                        std::uint64_t timeout_ms,
+                        std::string* error) {
+    return probe_health_once(address, port, target, host_header, capsid_app,
+                             timeout_ms, error);
+}
+
 constexpr std::size_t kMaxRequestBodyBytes = 16u * 1024u * 1024u;
 
 // Early-credit window (host): frames are reimbursed on receive while
