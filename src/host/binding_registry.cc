@@ -1137,8 +1137,16 @@ bool scan_bindings_root(const std::string &root,
                         BindingRegistrySnapshot *out,
                         std::string *error) {
 #if defined(_WIN32)
-    return scan_bindings_root_impl_win(
+    const bool ok = scan_bindings_root_impl_win(
         root, allowed_uids, BindingRegistryScanHook(), out, error);
+    // Every explicit path names the offending object. Keep the contract
+    // airtight even if a future path forgets: an empty diagnostic must
+    // never reach the operator or a regression test.
+    if (!ok && error != nullptr && error->empty()) {
+        *error = root + " rejected by the Windows registry scanner (code=" +
+                 std::to_string(GetLastError()) + ")";
+    }
+    return ok;
 #else
     return scan_bindings_root_impl(root, allowed_uids, {}, out, error);
 #endif
@@ -1151,8 +1159,13 @@ bool scan_bindings_root_with_test_hook(
     BindingRegistrySnapshot *out,
     std::string *error) {
 #if defined(_WIN32)
-    return scan_bindings_root_impl_win(
+    const bool ok = scan_bindings_root_impl_win(
         root, allowed_uids, hook, out, error);
+    if (!ok && error != nullptr && error->empty()) {
+        *error = root + " rejected by the Windows registry scanner (code=" +
+                 std::to_string(GetLastError()) + ")";
+    }
+    return ok;
 #else
     return scan_bindings_root_impl(root, allowed_uids, hook, out, error);
 #endif

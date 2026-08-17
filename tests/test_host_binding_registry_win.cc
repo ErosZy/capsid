@@ -167,8 +167,21 @@ void test_valid_packages_and_sorted_order(Fixture *fixture) {
     fixture->add_valid_package("alpha");
     std::string error;
     capsid::host::BindingRegistrySnapshot snapshot;
-    require(scan_bindings_root(fixture->root(), {0}, &snapshot, &error),
-            "valid Windows registry rejected: " + error);
+    bool ok = false;
+    // A freshly written NTFS tree can be touched by search indexers or
+    // antivirus on shared runners between two opens; the scanner is
+    // required to fail closed on that, so retry the pristine fixture a few
+    // times before treating it as a rejection.
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        error.clear();
+        ok = scan_bindings_root(
+            fixture->root(), {0}, &snapshot, &error);
+        if (ok) {
+            break;
+        }
+        Sleep(50);
+    }
+    require(ok, "valid Windows registry rejected: " + error);
     require(snapshot.packages.size() == 2, "expected two packages");
     require(snapshot.packages[0].id == "alpha" &&
                 snapshot.packages[1].id == "zulu",
