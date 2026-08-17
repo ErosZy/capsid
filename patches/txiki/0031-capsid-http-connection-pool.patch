@@ -325,10 +325,10 @@ index a9c4eba..aa8149d 100644
  	/* point the fd table entry to new guy */
  
 diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/b/deps/libwebsockets/lib/roles/http/client/client-http.c
-index 1216fd6..fdc981a 100644
+index 1216fd6..3dd1941 100644
 --- a/deps/libwebsockets/lib/roles/http/client/client-http.c
 +++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
-@@ -1403,6 +1403,33 @@ lws_client_interpret_server_handshake(struct lws *wsi)
+@@ -1403,6 +1403,38 @@ lws_client_interpret_server_handshake(struct lws *wsi)
  
  	if (!wsi->client_h2_alpn && !wsi->client_mux_substream) {
  		/* ie, coming to this for the first time */
@@ -347,9 +347,14 @@ index 1216fd6..fdc981a 100644
 +			while (*p) {
 +				while (*p == ' ' || *p == ',')
 +					p++;
-+				if (!strncasecmp(p, "close", 5) &&
-+				    (p[5] == '\0' || p[5] == ' ' ||
-+				     p[5] == ',')) {
++				/* Portability: strncasecmp is POSIX-only and the
++				 * pre-existing callers here are all digest-auth
++				 * (never built); a bytewise ASCII fold keeps the
++				 * MSVC C build working. */
++				if (((p[0] | 0x20) == 'c') && ((p[1] | 0x20) == 'l') &&
++				    ((p[2] | 0x20) == 'o') && ((p[3] | 0x20) == 's') &&
++				    ((p[4] | 0x20) == 'e') &&
++				    (p[5] == '\0' || p[5] == ' ' || p[5] == ',')) {
 +					wsi->http.conn_type =
 +						HTTP_CONNECTION_CLOSE;
 +					break;
