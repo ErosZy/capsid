@@ -168,10 +168,12 @@ void test_valid_packages_and_sorted_order(Fixture *fixture) {
     std::string error;
     capsid::host::BindingRegistrySnapshot snapshot;
     bool ok = false;
+    std::string first_error;
     // A freshly written NTFS tree can be touched by search indexers or
     // antivirus on shared runners between two opens; the scanner is
-    // required to fail closed on that, so retry the pristine fixture a few
-    // times before treating it as a rejection.
+    // required to fail closed on that, so retry only the recognized
+    // transient identity-change diagnostics. A policy rejection (owner,
+    // ACL, link, layout) is deterministic and fails immediately.
     for (int attempt = 0; attempt < 3; ++attempt) {
         error.clear();
         ok = scan_bindings_root(
@@ -179,9 +181,17 @@ void test_valid_packages_and_sorted_order(Fixture *fixture) {
         if (ok) {
             break;
         }
+        if (first_error.empty()) {
+            first_error = error;
+        }
+        if (error.find("changed") == std::string::npos) {
+            break;
+        }
         Sleep(50);
     }
-    require(ok, "valid Windows registry rejected: " + error);
+    require(ok, "valid Windows registry rejected: " +
+                    (first_error.empty() ? error : first_error) +
+                    (first_error != error ? " (last: " + error + ")" : ""));
     require(snapshot.packages.size() == 2, "expected two packages");
     require(snapshot.packages[0].id == "alpha" &&
                 snapshot.packages[1].id == "zulu",
@@ -262,6 +272,34 @@ void test_world_writable_acl_rejected(Fixture *fixture) {
             "Everyone-writable file ACL was accepted");
 }
 
+// The owner allow-list on Windows is the process identity plus
+// Administrators/SYSTEM. Broad token groups such as Everyone, Users and
+// Authenticated Users must never satisfy it. Changing ownership requires a
+// privileged runner; where the process cannot set the owner, the check is
+// skipped rather than asserted vacuously.
+void test_foreign_group_owner_rejected(Fixture *fixture) {
+    fixture->add_valid_package("mongo");
+    PSID users = NULL;
+    require(ConvertStringSidToSidW(L"S-1-5-32-545", &users),
+            "ConvertStringSidToSidW failed");
+    const DWORD set_owner = SetNamedSecurityInfoW(
+        const_cast<wchar_t *>(widen(fixture->root()).c_str()),
+        SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, users, NULL, NULL, NULL);
+    LocalFree(users);
+    if (set_owner == ERROR_PRIVILEGE_NOT_HELD ||
+        set_owner == ERROR_ACCESS_DENIED) {
+        std::cout << "foreign-owner check skipped (owner change privilege "
+                     "unavailable)"
+                  << std::endl;
+        return;
+    }
+    require(set_owner == ERROR_SUCCESS,
+            "SetNamedSecurityInfoW owner failed");
+    std::string error;
+    require(!scan_ok(fixture, &error),
+            "Users-owned bindingsRoot was accepted as trusted");
+}
+
 void test_oversized_source_rejected(Fixture *fixture) {
     fixture->write("mongo\\manifest.json", kValidManifest);
     fixture->write("mongo\\index.js", std::string());
@@ -324,6 +362,10 @@ int main() {
     {
         Fixture fixture;
         test_world_writable_acl_rejected(&fixture);
+    }
+    {
+        Fixture fixture;
+        test_foreign_group_owner_rejected(&fixture);
     }
     {
         Fixture fixture;
