@@ -407,10 +407,10 @@ bool load_local_capsid_policy(const std::string& path,
                 return false;
             }
             std::vector<std::uint8_t> secret_bytes;
-            const ReadOutcome outcome = read_local_config_file(
+            const ReadOutcome secret_outcome = read_local_config_file(
                 secrets_root + "/" + request.secret_key_id, &secret_bytes,
                 error);
-            if (outcome != ReadOutcome::kOk) {
+            if (secret_outcome != ReadOutcome::kOk) {
                 *error = path + ": env valueFrom \"" +
                          request.secret_key_id + "\": " + *error;
                 return false;
