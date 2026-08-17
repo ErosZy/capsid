@@ -40,7 +40,7 @@ capsid-worker
     └─ DNS + TLS + HTTP client (standard fetch only)
 ```
 
-Inbound requests and application responses pass through length-prefixed FetchRPC. Outbound `fetch()` calls made by the application use the worker's internal txiki.js HttpClient/libwebsockets directly, bypassing the host HTTP proxy or FetchRPC broker.
+Inbound requests and application responses pass through length-prefixed FetchRPC. Outbound `fetch()` calls made by the application use the worker's internal txiki.js HttpClient/libwebsockets directly, bypassing the host HTTP proxy or FetchRPC broker. Hostname targets resolve through the operating system resolver (`uv_getaddrinfo` — Windows DNS Client, nsswitch, `/etc/hosts`) before connect, rather than lws's internal raw-DNS client; numeric addresses and proxied targets connect directly as-is. The egress policy still inspects the hostname, every resolved address, and every redirect.
 
 ## Platform Contract
 

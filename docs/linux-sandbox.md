@@ -17,7 +17,7 @@ All workers close unrelated inherited fds before initializing txiki.js and start
 
 Landlock opens only resolver/hosts configuration, system CAs, timezone data, the kernel random device, and the explicit `tls_ca_bundle_path` read-only. The application bundle always stays in memory.
 
-seccomp allows the process memory, event loop, DNS, TLS, and IPv4/IPv6 stream/datagram operations required by txiki.js standard `fetch()`; it denies listeners, Unix/raw sockets, process/thread creation, exec, ptrace, namespace/mount changes after sandbox installation, filesystem writes, executable mappings, and kernel interfaces such as key/BPF/perf.
+seccomp allows the process memory, event loop, DNS, TLS, and IPv4/IPv6 stream/datagram operations required by txiki.js standard `fetch()`; it denies listeners, Unix/raw sockets, process/thread creation, exec, ptrace, namespace/mount changes after sandbox installation, filesystem writes, executable mappings, and kernel interfaces such as key/BPF/perf. Because thread creation is denied after installation, the libuv work pool that `fetch()` hostname pre-resolution runs on is warmed — and the system resolver primed — before the sandbox installs.
 
 Strict mode currently requires Linux x86-64/AArch64 with usable Landlock and seccomp. If any mandatory feature is missing, startup fails; READY cannot be reported in a partially strict mode. Requesting strict mode on other platforms also fails closed.
 

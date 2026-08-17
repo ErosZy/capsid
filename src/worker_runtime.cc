@@ -921,6 +921,33 @@ public:
             flush_blocking();
             return 1;
         }
+        // Fetch pre-resolution runs uv_getaddrinfo on libuv's
+        // process-global work pool. The pool's threads are created on
+        // first submission, and libuv aborts the process when creation
+        // fails; the strict sandbox denies clone, so warm the pool —
+        // and prime the system resolver — before the kernel sandbox
+        // installs.
+        {
+            uv_loop_t warm_loop;
+            uv_getaddrinfo_t warm_req;
+            int warm_done = 0;
+            struct addrinfo hints;
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_family = AF_UNSPEC;
+            hints.ai_socktype = SOCK_STREAM;
+            hints.ai_flags = AI_ADDRCONFIG | AI_V4MAPPED;
+            if (uv_loop_init(&warm_loop) == 0) {
+                warm_req.data = &warm_done;
+                if (uv_getaddrinfo(&warm_loop, &warm_req,
+                                   warm_resolve_callback, "localhost",
+                                   NULL, &hints) == 0) {
+                    while (warm_done == 0 &&
+                           uv_run(&warm_loop, UV_RUN_ONCE) != 0) {
+                    }
+                }
+                uv_loop_close(&warm_loop);
+            }
+        }
         std::string sandbox_error;
         if (!capsid::apply_sandbox(
                 sandbox_config, &sandbox_features, &sandbox_landlock_abi,
@@ -6649,6 +6676,19 @@ private:
             return stack_text;
         }
         return description + "\n" + stack_text;
+    }
+
+    // Pre-sandbox pool warmup callback; req->data points at an int that
+    // run() spins on. Resolution failures still count as completion —
+    // the goal is that the pool threads now exist, not a specific answer.
+    static void warm_resolve_callback(uv_getaddrinfo_t *req,
+                                      int status,
+                                      struct addrinfo *res) {
+        (void)status;
+        *static_cast<int *>(req->data) = 1;
+        if (res != NULL) {
+            uv_freeaddrinfo(res);
+        }
     }
 
     static void poll_callback(uv_poll_t *handle, int status, int events) {

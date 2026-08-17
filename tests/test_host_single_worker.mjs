@@ -829,6 +829,98 @@ try {
     }
 }
 
+// ---- Fetch pre-resolution: hostname targets resolve through the system
+// resolver before connect (txiki 0030). "localhost" is not a numeric
+// address and no proxy applies here, so a successful roundtrip proves the
+// pre-resolve path end to end through the real listener.
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-preresolve-'));
+    const upstream = http.createServer((req, res) => {
+        if (req.url === '/probe') {
+            res.writeHead(200, { 'content-type': 'text/plain' });
+            res.end('capsid-preresolve-ok');
+            return;
+        }
+        res.writeHead(404);
+        res.end();
+    });
+    await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const upstreamPort = upstream.address().port;
+
+    fs.writeFileSync(path.join(dir, 'preresolve-bundle.js'), `
+        export default {
+            async fetch(request) {
+                const url = new URL(request.url);
+                if (url.pathname !== '/probe') {
+                    return new Response('no route', { status: 404 });
+                }
+                try {
+                    const upstream = await fetch('http://localhost:${upstreamPort}/probe');
+                    return new Response(await upstream.text(), {
+                        status: upstream.status,
+                    });
+                } catch (error) {
+                    return new Response(JSON.stringify({
+                        errorName: error?.name,
+                        errorMessage: error?.message,
+                    }), { status: 500 });
+                }
+            },
+        };
+    `);
+    const capsidJson = path.join(dir, 'capsid.json');
+    fs.writeFileSync(capsidJson, JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'preresolve-bundle.js',
+        pool: { minReady: 1, maxWorkers: 1 },
+        request: { timeout: '10s' },
+        permissions: {
+            fetch: { allow: [ `localhost:${upstreamPort}` ] },
+        },
+    }));
+
+    const child = spawn(args.get('host'), [
+        '--mode', 'single-worker',
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', capsidJson,
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+    ], {
+        stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    try {
+        const readyLine = await readLine(child.stdio[3], child, 10000, () => stderr);
+        const ready = JSON.parse(readyLine);
+        const response = await request(ready.port, {
+            target: '/@capsid/orders/probe',
+            timeoutMs: 5000,
+        });
+        assert.equal(
+            response.status,
+            200,
+            `hostname fetch failed: ${response.body.toString('utf8')}; stderr=${stderr}`,
+        );
+        assert.equal(
+            response.body.toString('utf8'),
+            'capsid-preresolve-ok',
+            'the worker must reach the upstream through the pre-resolve path',
+        );
+    } finally {
+        child.kill('SIGTERM');
+        await waitForExit(child, 3000);
+        upstream.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+
 async function nodelayProbe(envValue) {
     const child = spawn(args.get('host'), hostArgs(args, { requestTimeoutMs: 10000 }), {
         env: {

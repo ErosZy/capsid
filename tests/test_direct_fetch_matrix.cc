@@ -767,12 +767,14 @@ Result run_request(capsid_worker *worker, const std::string &url) {
 Result run_policy_probe(const char *worker_path,
                         const std::string &bundle,
                         const capsid_egress_policy *policy,
-                        const std::string &target) {
+                        const std::string &target,
+                        bool strict_worker = false) {
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = worker_path;
     config.request_timeout_ms = 10000;
     config.egress_policy = policy;
+    config.strict_sandbox = strict_worker ? 1 : 0;
 
     capsid_worker *worker = NULL;
     require_result(
@@ -1024,5 +1026,25 @@ int main(int argc, char **argv) {
             std::string::npos &&
             ipv6.requests() == 1,
         "explicit IPv6 loopback CIDR/port allow failed");
+
+    if (strict) {
+        // The hostname resolution path under the strict sandbox: the
+        // system resolver runs on the pre-warmed libuv work pool, and
+        // the hostname allow rule must authorize the resolved loopback
+        // address.
+        const Result strict_hostname_allowed = run_policy_probe(
+            argv[1],
+            bundle,
+            &host_only,
+            std::string("http://localhost:") +
+                std::to_string(primary.port()) + "/headers",
+            true);
+        require(
+            strict_hostname_allowed.status == 200 &&
+                strict_hostname_allowed.body.find("\"allowed\":true") !=
+                    std::string::npos &&
+                primary.requests() == before_default_deny + 4,
+            "strict sandbox did not authorize a resolved localhost fetch");
+    }
     return 0;
 }
