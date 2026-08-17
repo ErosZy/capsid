@@ -241,6 +241,9 @@ ListenerConfig path_listener(const std::string& name) {
 struct HttpResponse {
     int status = 0;
     std::string body;
+    // The raw response head block (for header-level assertions like the
+    // CORS stamp).
+    std::string head;
     std::int64_t content_length = -1;
     bool chunked = false;
 };
@@ -350,6 +353,7 @@ HttpResponse http_exchange(int fd, const std::string& request) {
     }
     const std::string::size_type head_end = wire.find("\r\n\r\n");
     if (head_end != std::string::npos) {
+        response.head = wire.substr(0, head_end);
         response.body =
             chunked ? chunked_body : wire.substr(head_end + 4);
     }
@@ -650,6 +654,107 @@ void test_trusted_header_gate(const std::string& worker_path) {
     std::cout << "PASS: trusted-header gate" << std::endl;
 }
 
+// Listener-level CORS: the listener answers browser preflights before
+// routing (a preflight can never carry the header-routing control header)
+// and stamps the matched Origin on every response path.
+void test_cors_preflight(const std::string& worker_path) {
+    std::shared_ptr<GenerationPool> pool_a =
+        make_pool(worker_path, "app-a", kBundleA, 2000);
+    std::shared_ptr<RoutingTable> routing = std::make_shared<RoutingTable>();
+    routing->publish(RoutingSnapshot::build({{"app-a", pool_a}}));
+
+    const auto head_has = [](const std::string& head,
+                             const std::string& name) {
+        std::string lower;
+        lower.reserve(head.size());
+        for (const unsigned char c : head) {
+            lower.push_back(static_cast<char>(
+                (c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c));
+        }
+        return lower.find(name) != std::string::npos;
+    };
+
+    ManagedListenerOptions options;
+    options.config = path_listener("edge");
+    options.config.routing.mode = "header";
+    options.config.trusted = true;
+    options.config.cors.configured = true;
+    options.config.cors.allowed_origins = {"http://localhost:57694"};
+    options.config.cors.allowed_methods = {"GET", "POST"};
+    options.config.cors.allowed_headers = {"content-type", "capsid-app"};
+    options.config.cors.max_age_ms = 86400000;
+    options.routing = routing;
+    ManagedListener listener(options);
+    std::string error;
+    require(listener.start(&error), "cors listener start failed: " + error);
+
+    // Preflight with a matching origin/method/headers: 204 with the
+    // full Access-Control-* set, no routing involved.
+    {
+        const int fd = connect_listener(listener.bound_port());
+        const HttpResponse preflight = http_exchange(
+            fd, "OPTIONS /api/auth/token HTTP/1.1\r\n"
+                "Host: localhost\r\n"
+                "Origin: http://localhost:57694\r\n"
+                "Access-Control-Request-Method: POST\r\n"
+                "Access-Control-Request-Headers: content-type, capsid-app\r\n"
+                "Connection: close\r\n\r\n");
+        require(preflight.status == 204,
+                "preflight was not answered with 204 (" +
+                    std::to_string(preflight.status) + ")");
+        require(
+            head_has(preflight.head, "access-control-allow-origin: http://localhost:57694"),
+            "preflight missed the matched Allow-Origin");
+        require(head_has(preflight.head, "access-control-allow-methods:"),
+                "preflight missed Allow-Methods");
+        require(head_has(preflight.head, "access-control-allow-headers:"),
+                "preflight missed Allow-Headers");
+        require(head_has(preflight.head, "access-control-max-age: 86400"),
+                "preflight missed Max-Age");
+        close(fd);
+    }
+    // A disallowed origin: 403 with NO Access-Control-Allow-* field (the
+    // browser reports the CORS failure; the listener leaks nothing).
+    {
+        const int fd = connect_listener(listener.bound_port());
+        const HttpResponse denied = http_exchange(
+            fd, "OPTIONS /api/auth/token HTTP/1.1\r\n"
+                "Host: localhost\r\n"
+                "Origin: http://evil.example\r\n"
+                "Access-Control-Request-Method: POST\r\n"
+                "Connection: close\r\n\r\n");
+        require(denied.status == 403,
+                "disallowed preflight was not rejected (" +
+                    std::to_string(denied.status) + ")");
+        require(!head_has(denied.head, "access-control-allow-origin:"),
+                "rejected preflight leaked Allow-Origin");
+        close(fd);
+    }
+    // The actual request (with Capsid-App) is routed normally and the
+    // worker response carries the stamped Allow-Origin.
+    {
+        const int fd = connect_listener(listener.bound_port());
+        const HttpResponse actual = http_exchange(
+            fd, "GET /private/ HTTP/1.1\r\n"
+                "Host: localhost\r\n"
+                "Origin: http://localhost:57694\r\n"
+                "Capsid-App: app-a\r\n"
+                "Connection: close\r\n\r\n");
+        require(actual.status == 200 && actual.body == "hello-app-a",
+                "CORS-stamped request did not reach app-a (" +
+                    std::to_string(actual.status) + ")");
+        require(
+            head_has(actual.head, "access-control-allow-origin: http://localhost:57694"),
+            "worker response missed the stamped Allow-Origin");
+        close(fd);
+    }
+
+    listener.request_stop();
+    listener.wait(&error);
+    pool_a->stop_and_join();
+    std::cout << "PASS: listener-level CORS preflight and stamping" << std::endl;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -662,6 +767,7 @@ int main(int argc, char** argv) {
     test_post_echo_and_ceiling(worker_path);
     test_big_response_credit(worker_path);
     test_trusted_header_gate(worker_path);
+    test_cors_preflight(worker_path);
     std::cout << "PASS: Managed listener data plane (WP-05 §9.2)" << std::endl;
     return 0;
 }

@@ -177,6 +177,15 @@ constexpr std::array kListenerLimitMembers{
 constexpr Schema kListenerLimitSchema{
     Schema::Kind::kObject, std::span<const Member>(kListenerLimitMembers)};
 
+constexpr std::array kCorsMembers{
+    Member{"allowedOrigins", &kStringArraySchema, true},
+    Member{"allowedMethods", &kStringArraySchema, true},
+    Member{"allowedHeaders", &kStringArraySchema, true},
+    Member{"maxAge", &kStringSchema, false},
+};
+constexpr Schema kCorsSchema{
+    Schema::Kind::kObject, std::span<const Member>(kCorsMembers)};
+
 constexpr std::array kListenerMembers{
     Member{"name", &kStringSchema, false},
     Member{"tcp", &kStringSchema, false},
@@ -185,6 +194,7 @@ constexpr std::array kListenerMembers{
     Member{"trusted", &kBooleanSchema, false},
     Member{"routing", &kRoutingSchema, false},
     Member{"limits", &kListenerLimitSchema, false},
+    Member{"cors", &kCorsSchema, false},
 };
 constexpr Schema kListenerSchema{
     Schema::Kind::kObject, std::span<const Member>(kListenerMembers)};

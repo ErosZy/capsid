@@ -70,6 +70,12 @@ All other fields are optional.
         "headerTimeout": "5s",
         "bodyIdleTimeout": "30s",
         "streamIdleTimeout": "60s"
+      },
+      "cors": {
+        "allowedOrigins": ["https://dev.example.com"],
+        "allowedMethods": ["GET", "POST", "OPTIONS"],
+        "allowedHeaders": ["content-type", "capsid-app", "access-token"],
+        "maxAge": "86400s"
       }
     }
   ],
@@ -297,3 +303,38 @@ path, Host, or header mapping. The CLI's `--routing` accepts the same matrix
 server validates the policy before bind, exactly like a managed listener. The
 CLI serves one App, so an extracted App that differs from `--application` is
 404.
+
+## Listener CORS
+
+The optional `listeners[].cors` object makes the listener itself answer
+browser CORS preflights — **before routing** — and stamp the matched
+`Access-Control-Allow-Origin` on every response the listener serves. It is an
+edge/trust-boundary concern, exactly like `trusted`, and exists because a
+preflight can never carry the header-routing control field: the custom header
+is precisely what the preflight asks about, so without listener-level CORS
+header routing is unreachable from any CORS-enforcing browser client.
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `allowedOrigins` | ✓ | `"*"` (any origin) or exact `http(s)://host[:port]` origins |
+| `allowedMethods` | ✓ | HTTP method tokens; matched case-insensitively |
+| `allowedHeaders` | ✓ | Header names; matched case-insensitively |
+| `maxAge` | | Preflight cache lifetime (`Access-Control-Max-Age`); omitted = no caching hint |
+
+Semantics:
+
+- `OPTIONS` with `Origin` and `Access-Control-Request-Method` is a preflight:
+  the listener answers it itself. Origin, requested method and every requested
+  header must match the config; a match is `204` with
+  `Access-Control-Allow-Origin` (the echoed origin), `Allow-Methods`,
+  `Allow-Headers`, `Vary: Origin` and the optional `Max-Age`. A mismatch is
+  `403` with **no** `Access-Control-Allow-*` field — the browser reports the
+  CORS failure and no CORS decision leaks.
+- Any other request records whether its `Origin` is allowed; both response
+  paths (Host-synthesized and worker responses) stamp
+  `Access-Control-Allow-Origin` + `Vary: Origin` for allowed origins. An App
+  that sets its own CORS headers keeps them (the listener never duplicates a
+  field).
+- An `OPTIONS` without the preflight fields is not a preflight and routes
+  normally (the App may handle it).
+- Absent `cors`, nothing changes: the App owns CORS entirely.

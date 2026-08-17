@@ -9,6 +9,8 @@
 
 #include "host/host_config_model.h"
 
+#include "host/request_normalization.h"
+
 #include <jansson.h>
 
 #include <sys/stat.h>
@@ -22,6 +24,61 @@
 namespace capsid::host {
 
 namespace {
+
+// ---- jansson helpers ------------------------------------------------------
+
+// Listener CORS value grammars. An allowed origin is "*" or an exact
+// "scheme://host[:port]" (http/https only, portless = the default port);
+// method tokens are uppercased; header names are lowercased HTTP field
+// names. Rejects empty lists — a cors object with no origins can never
+// match a browser preflight and is a misconfiguration, not a decision.
+bool valid_cors_origin(const std::string& value) {
+    if (value == "*") {
+        return true;
+    }
+    const std::string::size_type scheme_end = value.find("://");
+    if (scheme_end == std::string::npos) {
+        return false;
+    }
+    const std::string scheme = value.substr(0, scheme_end);
+    if (scheme != "http" && scheme != "https") {
+        return false;
+    }
+    return is_valid_public_authority(
+        std::string_view(value).substr(scheme_end + 3));
+}
+
+bool valid_cors_method_token(const std::string& value) {
+    if (value.empty()) {
+        return false;
+    }
+    for (const unsigned char c : value) {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                        (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+                        c == '.' || c == '!' || c == '*' || c == '\'' ||
+                        c == '(' || c == ')' || c == '+' || c == ',' ||
+                        c == ':' || c == '=' || c == '@' || c == '[' ||
+                        c == ']' || c == '~';
+        if (!ok) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool valid_cors_header_token(const std::string& value) {
+    if (value.empty()) {
+        return false;
+    }
+    for (const unsigned char c : value) {
+        const bool alnum = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                           (c >= '0' && c <= '9');
+        if (!alnum && c != '-' && c != '_') {
+            return false;
+        }
+    }
+    return true;
+}
 
 // ---- jansson helpers ------------------------------------------------------
 
@@ -292,6 +349,49 @@ bool parse_listeners(json_t* root, std::vector<ListenerConfig>* out) {
                     limits, "streamIdleTimeout",
                     &config.limits.stream_idle_timeout_ms)) {
                 return false;
+            }
+        }
+        json_t* cors = json_object_get(listener, "cors");
+        if (json_is_object(cors)) {
+            config.cors.configured = true;
+            if (!parse_string_array(cors, "allowedOrigins",
+                                    &config.cors.allowed_origins) ||
+                !parse_string_array(cors, "allowedMethods",
+                                    &config.cors.allowed_methods) ||
+                !parse_string_array(cors, "allowedHeaders",
+                                    &config.cors.allowed_headers) ||
+                !parse_duration_text_field(cors, "maxAge",
+                                           &config.cors.max_age_ms)) {
+                return false;
+            }
+            if (config.cors.allowed_origins.empty() ||
+                config.cors.allowed_methods.empty()) {
+                return false;
+            }
+            for (const std::string& origin : config.cors.allowed_origins) {
+                if (!valid_cors_origin(origin)) {
+                    return false;
+                }
+            }
+            for (std::string& method : config.cors.allowed_methods) {
+                if (!valid_cors_method_token(method)) {
+                    return false;
+                }
+                for (char& c : method) {
+                    if (c >= 'a' && c <= 'z') {
+                        c = static_cast<char>(c - 'a' + 'A');
+                    }
+                }
+            }
+            for (std::string& header : config.cors.allowed_headers) {
+                if (!valid_cors_header_token(header)) {
+                    return false;
+                }
+                for (char& c : header) {
+                    if (c >= 'A' && c <= 'Z') {
+                        c = static_cast<char>(c - 'A' + 'a');
+                    }
+                }
             }
         }
         out->push_back(std::move(config));

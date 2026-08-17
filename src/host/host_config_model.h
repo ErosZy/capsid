@@ -38,6 +38,25 @@ struct ListenerLimitsConfig {
     std::uint64_t stream_idle_timeout_ms = 0; // 0 = no ceiling
 };
 
+// Listener-level CORS (edge/trust boundary, like `trusted`): the listener
+// answers browser preflights itself — before routing — so clients that
+// must preflight (custom headers, e.g. header-routing's Capsid-App) work
+// without the App ever seeing an OPTIONS. Actual responses get the
+// matching Access-Control-Allow-Origin stamped at the listener when the
+// request's Origin is allowed. Absent (configured=false) = the current
+// behavior: the App owns CORS entirely.
+struct ListenerCorsConfig {
+    bool configured = false;
+    // "*" = any origin; otherwise exact origins ("http(s)://host[:port]").
+    std::vector<std::string> allowed_origins;
+    // Uppercase HTTP method tokens the preflight may ask for.
+    std::vector<std::string> allowed_methods;
+    // Lowercase header names the preflight may declare.
+    std::vector<std::string> allowed_headers;
+    // Access-Control-Max-Age seconds; 0 = omit the header.
+    std::uint64_t max_age_ms = 0;
+};
+
 struct ListenerConfig {
     std::string name;
     std::string tcp;             // "host" or "host:port"
@@ -50,6 +69,7 @@ struct ListenerConfig {
     bool trusted = false;
     ListenerRoutingConfig routing;
     ListenerLimitsConfig limits;
+    ListenerCorsConfig cors;
 };
 
 // ---- tiers -------------------------------------------------------------

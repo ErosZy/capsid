@@ -55,6 +55,12 @@ constexpr std::string_view kFullDocument = R"json({
       "headerTimeout": "5s",
       "bodyIdleTimeout": "30s",
       "streamIdleTimeout": "60s"
+    },
+    "cors": {
+      "allowedOrigins": ["*"],
+      "allowedMethods": ["get", "POST"],
+      "allowedHeaders": ["Content-Type", "x-request-id"],
+      "maxAge": "86400s"
     }
   }],
   "permissions": {
@@ -163,6 +169,20 @@ void test_full_document_maps_every_field() {
             "limits.headerTimeout did not convert to ms");
     require(listener.limits.body_idle_timeout_ms == 30000,
             "limits.bodyIdleTimeout did not convert to ms");
+    require(listener.cors.configured, "cors did not map");
+    require(listener.cors.allowed_origins.size() == 1 &&
+                listener.cors.allowed_origins[0] == "*",
+            "cors.allowedOrigins did not map");
+    require(listener.cors.allowed_methods.size() == 2 &&
+                listener.cors.allowed_methods[0] == "GET" &&
+                listener.cors.allowed_methods[1] == "POST",
+            "cors.allowedMethods did not normalize to uppercase");
+    require(listener.cors.allowed_headers.size() == 2 &&
+                listener.cors.allowed_headers[0] == "content-type" &&
+                listener.cors.allowed_headers[1] == "x-request-id",
+            "cors.allowedHeaders did not normalize to lowercase");
+    require(listener.cors.max_age_ms == 86400000,
+            "cors.maxAge did not convert to ms");
     require(listener.limits.stream_idle_timeout_ms == 60000,
             "limits.streamIdleTimeout did not convert to ms");
 
@@ -469,6 +489,51 @@ void test_grammar_gates() {
           "listeners": [{"limits": {"headerTimeout": "5"}}]
         })json";
     require_parse_error(bad_listener_duration, "headerTimeout without unit");
+
+    std::string bad_cors_origin =
+        R"json({
+          "apiVersion": "capsid/host-v1",
+          "applicationsRoot": "/srv/apps",
+          "stateRoot": "/var/lib/capsid",
+          "secretRootTemplate": "/secrets/{application}",
+          "admin": {"unix": "/run/capsid/admin.sock"},
+          "listeners": [{"cors": {
+            "allowedOrigins": ["http://"],
+            "allowedMethods": ["GET"],
+            "allowedHeaders": ["x"]
+          }}]
+        })json";
+    require_parse_error(bad_cors_origin, "cors origin without an authority");
+
+    std::string bad_cors_method =
+        R"json({
+          "apiVersion": "capsid/host-v1",
+          "applicationsRoot": "/srv/apps",
+          "stateRoot": "/var/lib/capsid",
+          "secretRootTemplate": "/secrets/{application}",
+          "admin": {"unix": "/run/capsid/admin.sock"},
+          "listeners": [{"cors": {
+            "allowedOrigins": ["*"],
+            "allowedMethods": ["GE T"],
+            "allowedHeaders": ["x"]
+          }}]
+        })json";
+    require_parse_error(bad_cors_method, "cors method with a space");
+
+    std::string empty_cors_origins =
+        R"json({
+          "apiVersion": "capsid/host-v1",
+          "applicationsRoot": "/srv/apps",
+          "stateRoot": "/var/lib/capsid",
+          "secretRootTemplate": "/secrets/{application}",
+          "admin": {"unix": "/run/capsid/admin.sock"},
+          "listeners": [{"cors": {
+            "allowedOrigins": [],
+            "allowedMethods": ["GET"],
+            "allowedHeaders": ["x"]
+          }}]
+        })json";
+    require_parse_error(empty_cors_origins, "cors with an empty origin list");
 }
 
 void test_error_is_stable_and_safe() {

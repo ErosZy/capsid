@@ -331,6 +331,12 @@ private:
     void read_head();
     void read_body();
     void handle_request(http::request<http::string_body> request);
+    // Listener-level CORS: answers a browser preflight (returns false) or
+    // records the matched origin for response stamping (returns true).
+    bool prepare_cors(const http::request<http::string_body>& request);
+    void send_cors_preflight(const http::request<http::string_body>& request,
+                             const std::string& origin,
+                             bool allowed);
     void arm_read_timer(bool head_phase);
     void on_read_timeout();
     void start_disconnect_probe();
@@ -343,6 +349,9 @@ private:
     std::optional<const WorkerExecutor*> current_executor_;
     std::optional<std::uint64_t> current_request_id_;
     asio::steady_timer read_timer_;
+    // The matched request Origin when the listener CORS config allows it;
+    // empty = no Access-Control-Allow-Origin stamp on the responses.
+    std::string cors_allow_origin_;
     bool closed_ = false;
     bool probe_active_ = false;
 };
@@ -498,6 +507,15 @@ void ListenerSession::read_body() {
 
 void ListenerSession::handle_request(
     http::request<http::string_body> request) {
+    // Listener-level CORS runs before routing: a browser preflight can
+    // never carry header-routing's control header (the custom header is
+    // exactly what the preflight asks about), so the listener answers it
+    // itself; every other request records whether its Origin is allowed
+    // so both response paths stamp the matching ACAO.
+    if (impl_->options_.config.cors.configured &&
+        !prepare_cors(request)) {
+        return;  // preflight answered (allowed or rejected)
+    }
     RequestRoutingPolicy policy = impl_->policy_;
     std::vector<PublicRequestHeaderView> views;
     views.reserve(16);
@@ -557,6 +575,138 @@ void ListenerSession::handle_request(
     impl_->begin_request(executor, request_id, shared_from_this(), request,
                          normalized.request);
     start_disconnect_probe();
+}
+
+bool ListenerSession::prepare_cors(
+    const http::request<http::string_body>& request) {
+    const ListenerCorsConfig& cors = impl_->options_.config.cors;
+    std::string origin;
+    for (const auto& field : request.base()) {
+        if (field.name() == http::field::origin) {
+            origin = std::string(field.value());
+            break;
+        }
+    }
+    const bool wildcard = cors.allowed_origins.size() == 1 &&
+                          cors.allowed_origins[0] == "*";
+    const bool origin_allowed =
+        !origin.empty() &&
+        (wildcard ||
+         std::find(cors.allowed_origins.begin(), cors.allowed_origins.end(),
+                   origin) != cors.allowed_origins.end());
+    const std::string_view requested_method =
+        request[http::field::access_control_request_method];
+    if (request.method() == http::verb::options && !origin.empty() &&
+        !requested_method.empty()) {
+        // Preflight: match the requested method and each requested header
+        // against the config. A reject is 403 WITHOUT any
+        // Access-Control-Allow-* field — the browser reports the CORS
+        // failure, and no CORS decision leaks into the response.
+        bool allowed = origin_allowed;
+        if (allowed) {
+            std::string upper(requested_method);
+            for (char& c : upper) {
+                if (c >= 'a' && c <= 'z') {
+                    c = static_cast<char>(c - 'a' + 'A');
+                }
+            }
+            allowed = std::find(cors.allowed_methods.begin(),
+                                cors.allowed_methods.end(),
+                                upper) != cors.allowed_methods.end();
+        }
+        if (allowed) {
+            const std::string_view requested_headers =
+                request[http::field::access_control_request_headers];
+            std::size_t start = 0;
+            while (start <= requested_headers.size()) {
+                const std::size_t comma = requested_headers.find(',', start);
+                const std::size_t end =
+                    comma == std::string_view::npos
+                        ? requested_headers.size()
+                        : comma;
+                std::string name(requested_headers.substr(start, end - start));
+                name.erase(name.find_last_not_of(" \t") == std::string::npos
+                               ? 0
+                               : name.find_last_not_of(" \t") + 1);
+                name.erase(0, name.find_first_not_of(" \t") == std::string::npos
+                                  ? name.size()
+                                  : name.find_first_not_of(" \t"));
+                for (char& c : name) {
+                    if (c >= 'A' && c <= 'Z') {
+                        c = static_cast<char>(c - 'A' + 'a');
+                    }
+                }
+                if (!name.empty() &&
+                    std::find(cors.allowed_headers.begin(),
+                              cors.allowed_headers.end(),
+                              name) == cors.allowed_headers.end()) {
+                    allowed = false;
+                    break;
+                }
+                if (comma == std::string_view::npos) {
+                    break;
+                }
+                start = comma + 1;
+            }
+        }
+        send_cors_preflight(request, origin, allowed);
+        return false;
+    }
+    cors_allow_origin_ = origin_allowed ? origin : std::string();
+    return true;
+}
+
+void ListenerSession::send_cors_preflight(
+    const http::request<http::string_body>& request,
+    const std::string& origin,
+    bool allowed) {
+    auto response = std::make_shared<http::response<http::string_body>>();
+    response->result(allowed ? http::status::no_content
+                             : http::status::forbidden);
+    response->version(request.version());
+    response->keep_alive(request.keep_alive());
+    if (allowed) {
+        const ListenerCorsConfig& cors = impl_->options_.config.cors;
+        response->set(http::field::access_control_allow_origin, origin);
+        response->set(http::field::vary, "Origin");
+        std::string methods;
+        for (const std::string& method : cors.allowed_methods) {
+            if (!methods.empty()) {
+                methods += ", ";
+            }
+            methods += method;
+        }
+        response->set(http::field::access_control_allow_methods, methods);
+        std::string headers;
+        for (const std::string& header : cors.allowed_headers) {
+            if (!headers.empty()) {
+                headers += ", ";
+            }
+            headers += header;
+        }
+        response->set(http::field::access_control_allow_headers, headers);
+        if (cors.max_age_ms > 0) {
+            response->set(http::field::access_control_max_age,
+                          std::to_string(cors.max_age_ms / 1000));
+        }
+        response->body() = std::string();
+    } else {
+        response->set(http::field::content_type, "text/plain");
+        response->body() = "CORS preflight rejected";
+    }
+    response->prepare_payload();
+    http::async_write(
+        stream_, *response,
+        [self = shared_from_this(), response, request](
+            beast::error_code ec, std::size_t) {
+            (void)response;
+            (void)request;
+            if (!ec && request.keep_alive() && !self->closed_) {
+                self->read_head();
+            } else {
+                self->close();
+            }
+        });
 }
 
 void ListenerSession::arm_read_timer(bool head_phase) {
@@ -649,6 +799,11 @@ void ListenerSession::send_simple(http::status status,
     response->version(version);
     response->keep_alive(keep_alive);
     response->set(http::field::content_type, "text/plain");
+    if (!cors_allow_origin_.empty()) {
+        response->set(http::field::access_control_allow_origin,
+                      cors_allow_origin_);
+        response->set(http::field::vary, "Origin");
+    }
     response->body() = std::string(body);
     response->prepare_payload();
     http::async_write(
@@ -989,6 +1144,30 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
             reject_response_head(executor, event.request_id,
                                  "invalid worker response status");
             return;
+        }
+        // Listener-level CORS stamp: the request's matched Origin rides
+        // on the session; the App owns its own CORS headers when it sets
+        // them, and the listener never duplicates a field.
+        if (pending.session && !pending.session->cors_allow_origin_.empty()) {
+            bool has_allow_origin = false;
+            bool has_vary_origin = false;
+            for (const auto& [name, value] : event.headers) {
+                (void)value;
+                const std::string lower = ascii_lower(name);
+                if (lower == "access-control-allow-origin") {
+                    has_allow_origin = true;
+                } else if (lower == "vary") {
+                    has_vary_origin = true;
+                }
+            }
+            if (!has_allow_origin) {
+                event.headers.push_back(
+                    {"access-control-allow-origin",
+                     pending.session->cors_allow_origin_});
+            }
+            if (!has_vary_origin) {
+                event.headers.push_back({"vary", "Origin"});
+            }
         }
         if (!sanitize_response_headers(&event.headers)) {
             reject_response_head(executor, event.request_id,
