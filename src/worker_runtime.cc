@@ -195,6 +195,10 @@ void resolver_warm_timer_closed(uv_handle_t *handle) {
     ResolverWarmState *state =
         static_cast<ResolverWarmState *>(handle->data);
     state->timer_closed = true;
+    // The resolve completed and its timer handle is now closed: the libuv
+    // threadpool threads that uv_getaddrinfo needs have been created, so
+    // the strict-sandbox caller may proceed.
+    state->done = true;
     uv_stop(&state->loop);
 }
 
@@ -264,8 +268,14 @@ bool warm_resolver_pool_once() {
     }
     std::thread thread(resolver_warm_thread, state);
     thread.detach();
+    // Wait for the resolve to finish (or the 5s safety timeout to fire).
+    // The pre-sandbox warm-up must not return while libuv may still create
+    // threadpool threads: the strict sandbox denies clone, and a late
+    // threadpool spawn aborts the worker. A 1s bound proved too short under
+    // ASAN, where resolution can take longer than the old blocking loop's
+    // immediate completion on non-instrumented builds.
     const std::chrono::steady_clock::time_point deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!state->done.load(std::memory_order_acquire) &&
            std::chrono::steady_clock::now() < deadline) {
         std::this_thread::yield();
