@@ -1,9 +1,10 @@
 // Local capsid.json permissions for the single-worker / static-pool data
 // planes (v0.1.3). See local_capsid_policy.h for the application boundary;
 // this file is the loader: read (1 MiB cap) -> frozen schema validation ->
-// reject not-applicable sections -> parse -> reject valueFrom -> compile
-// App permissions and Binding Manifest ∩ App grants through the same
-// authoritative compilers -> build immutable runtime descriptors.
+// extract the honored runtime settings (worker/request/pool/healthCheck/
+// entry) -> parse -> reject valueFrom -> compile App permissions and
+// Binding Manifest ∩ App grants through the same authoritative compilers
+// -> build immutable runtime descriptors.
 
 #include "host/local_capsid_policy.h"
 
@@ -288,12 +289,11 @@ bool load_local_capsid_policy(const std::string& path,
         return false;
     }
 
-    // 2. Sections this path cannot honor must fail loudly, not silently
-    // skip: worker.* / request.* / healthCheck / entry and pool.queue* are
-    // CLI-owned in the single-worker and static-pool modes. (pool itself is
-    // schema-required but its worker count is inert here — the worker count
-    // is CLI-decided; pool.queue* would be silently ignored and are
-    // therefore rejected too.)
+    // 2. Non-permission fields this path now honors (v0.2.x): entry and
+    // request.timeout live outside AppRequest and are read here; the
+    // worker/request/pool/healthCheck sections are extracted from the
+    // shared AppRequest parse in step 3. An un-honored shape still fails
+    // loudly instead of being silently ignored.
     {
         json_error_t parse_error;
         json_t* root = json_loadb(
@@ -306,32 +306,44 @@ bool load_local_capsid_policy(const std::string& path,
             *error = path + ": invalid capsid.json";
             return false;
         }
-        const char* sections[] = {"worker", "request", "healthCheck", "entry"};
-        for (const char* section : sections) {
-            if (json_object_get(root, section) != nullptr) {
-                *error = path + ": \"" + section +
-                         "\" is not applicable in local mode (capacity, "
-                         "resources, the request window and the source "
-                         "entry stay CLI-owned; remove the section)";
+        json_t* entry = json_object_get(root, "entry");
+        if (json_is_string(entry)) {
+            const std::string value = json_string_value(entry);
+            if (value.empty()) {
+                *error = path + ": entry must be a non-empty file name";
                 json_decref(root);
                 return false;
             }
+            out->settings.has_entry = true;
+            out->settings.entry = value;
         }
-        json_t* pool = json_object_get(root, "pool");
-        if (pool != nullptr && json_is_object(pool)) {
-            const char* queue_fields[] = {
-                "queueRequests", "queueHeaderBytes", "queueTimeout",
-            };
-            for (const char* field : queue_fields) {
-                if (json_object_get(pool, field) != nullptr) {
-                    *error = path + ": pool." + std::string(field) +
-                             " is not applicable in local mode (the "
-                             "admission queue is CLI-owned; remove the "
-                             "field)";
+        json_t* request = json_object_get(root, "request");
+        if (request != nullptr && json_is_object(request)) {
+            json_t* timeout = json_object_get(request, "timeout");
+            if (json_is_string(timeout)) {
+                std::uint64_t timeout_ms = 0;
+                if (!parse_duration_ms(json_string_value(timeout),
+                                       &timeout_ms) ||
+                    timeout_ms == 0) {
+                    *error = path + ": invalid capsid.json request.timeout";
                     json_decref(root);
                     return false;
                 }
+                out->settings.has_request_timeout_ms = true;
+                out->settings.request_timeout_ms = timeout_ms;
             }
+        }
+        // Queue presence: 0 is a meaningful value ("queueing disabled")
+        // for the queue fields, so the document presence decides whether
+        // the CLI or the document owns the knob.
+        json_t* pool = json_object_get(root, "pool");
+        if (pool != nullptr && json_is_object(pool)) {
+            out->settings.has_queue_requests =
+                json_object_get(pool, "queueRequests") != nullptr;
+            out->settings.has_queue_header_bytes =
+                json_object_get(pool, "queueHeaderBytes") != nullptr;
+            out->settings.has_queue_timeout_ms =
+                json_object_get(pool, "queueTimeout") != nullptr;
         }
         json_decref(root);
     }
@@ -343,6 +355,32 @@ bool load_local_capsid_policy(const std::string& path,
     if (!parse_app_request(bytes, &app, &parse_error)) {
         *error = path + ": " + parse_error;
         return false;
+    }
+
+    // 3b. Extract the honored runtime settings from the shared parse. The
+    // request-window fields use the schema's 0-unset convention; the queue
+    // fields carry their presence from step 2 because 0 means "queueing
+    // disabled" there.
+    {
+        out->settings.max_inflight_per_worker = app.requests_per_worker;
+        out->settings.has_max_inflight = app.requests_per_worker > 0;
+        out->settings.max_streaming_inflight_per_worker =
+            app.max_streaming_inflight_per_worker;
+        out->settings.has_max_streaming_inflight =
+            app.max_streaming_inflight_per_worker > 0;
+        out->settings.stream_idle_timeout_ms = app.stream_idle_timeout_ms;
+        out->settings.has_stream_idle_timeout_ms =
+            app.stream_idle_timeout_ms > 0;
+        out->settings.write_timeout_ms = app.write_timeout_ms;
+        out->settings.has_write_timeout_ms = app.write_timeout_ms > 0;
+        out->settings.queue_requests = app.queue_requests;
+        out->settings.queue_header_bytes = app.queue_header_bytes;
+        out->settings.queue_timeout_ms = app.queue_timeout_ms;
+        out->settings.js_heap_bytes = app.js_heap_bytes;
+        out->settings.process_address_bytes = app.process_address_bytes;
+        out->settings.memory_bytes = app.memory_bytes;
+        out->settings.file_descriptors = app.file_descriptors;
+        out->settings.health_check = app.health_check;
     }
 
     // 4. valueFrom has no store on this path: the worker's env comes only

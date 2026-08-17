@@ -48,6 +48,7 @@
 #if defined(_WIN32)
 #else
 #include <poll.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -82,6 +83,174 @@ void emit_log(StructuredLog* log, LogLane lane, LogFields fields) {
     if (log != nullptr) {
         log->log(lane, std::move(fields));
     }
+}
+
+// M2 item 6 local reduction: the capsid.json healthCheck startup probe.
+// One HTTP/1.1 GET through the real listener path (self-connect to the
+// just-bound endpoint), routing-mode aware: the caller composes the target
+// and the Host/Capsid-App fields exactly like an external client would.
+// The verdict is the response status: any 2xx passes, everything else —
+// including a deadline, a connection drop or a malformed status line —
+// fails the startup with *error set.
+bool probe_health_once(const std::string& address,
+                       std::uint16_t port,
+                       const std::string& target,
+                       const std::string& host_header,
+                       const std::string& capsid_app,
+                       std::uint64_t timeout_ms,
+                       std::string* error) {
+    boost::system::error_code ec;
+    const asio::ip::address probe_address =
+        asio::ip::make_address(address, ec);
+    if (ec) {
+        if (error != nullptr) {
+            *error = "invalid probe address: " + address;
+        }
+        return false;
+    }
+    asio::io_context probe_io;
+    asio::ip::tcp::socket socket(probe_io);
+    socket.open(probe_address.is_v4() ? asio::ip::tcp::v4()
+                                      : asio::ip::tcp::v6(),
+                ec);
+    if (ec) {
+        if (error != nullptr) {
+            *error = "probe socket open failed";
+        }
+        return false;
+    }
+    socket.non_blocking(true, ec);
+    const asio::ip::tcp::endpoint endpoint(probe_address, port);
+    socket.connect(endpoint, ec);
+    if (ec && ec != asio::error::in_progress &&
+        ec != asio::error::would_block) {
+        if (error != nullptr) {
+            *error = "probe connect failed";
+        }
+        return false;
+    }
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(timeout_ms);
+    const auto remaining_ms = [&deadline]() -> long {
+        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now());
+        return left.count() > 0 ? static_cast<long>(left.count()) : 0;
+    };
+    if (ec) {
+        // Wait for the connect to complete or the deadline, whichever
+        // comes first.
+        fd_set write_fds;
+        FD_ZERO(&write_fds);
+        FD_SET(socket.native_handle(), &write_fds);
+        timeval timeout = {};
+        timeout.tv_sec = static_cast<long>(remaining_ms() / 1000);
+        timeout.tv_usec = static_cast<long>((remaining_ms() % 1000) * 1000);
+        const int select_result =
+            select(static_cast<int>(socket.native_handle()) + 1, nullptr,
+                   &write_fds, nullptr, &timeout);
+        if (select_result <= 0) {
+            if (error != nullptr) {
+                *error = select_result == 0
+                             ? "probe connect timed out"
+                             : "probe connect select failed";
+            }
+            return false;
+        }
+        // A second connect() reports the pending connect's verdict:
+        // already_connected on success, the real error otherwise.
+        socket.connect(endpoint, ec);
+        if (ec && ec != asio::error::already_connected) {
+            if (error != nullptr) {
+                *error = "probe connect failed";
+            }
+            return false;
+        }
+    }
+    std::string request = "GET " + target + " HTTP/1.1\r\n";
+    request += "Host: " + host_header + "\r\n";
+    request += "Connection: close\r\n";
+    if (!capsid_app.empty()) {
+        request += "Capsid-App: " + capsid_app + "\r\n";
+    }
+    request += "\r\n";
+    // Blocking send on a connected local socket; the whole request is a
+    // handful of bytes far below any socket buffer.
+    socket.non_blocking(false, ec);
+    boost::asio::write(socket, asio::buffer(request), ec);
+    if (ec) {
+        if (error != nullptr) {
+            *error = "probe request write failed";
+        }
+        return false;
+    }
+    // Read until the status line completes (or the deadline).
+    std::string received;
+    char buffer[512];
+    while (received.find("\r\n") == std::string::npos) {
+        const long left = remaining_ms();
+        if (left <= 0) {
+            if (error != nullptr) {
+                *error = "probe response timed out";
+            }
+            return false;
+        }
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(socket.native_handle(), &read_fds);
+        timeval timeout = {};
+        timeout.tv_sec = static_cast<long>(left / 1000);
+        timeout.tv_usec = static_cast<long>((left % 1000) * 1000);
+        const int select_result =
+            select(static_cast<int>(socket.native_handle()) + 1, &read_fds,
+                   nullptr, nullptr, &timeout);
+        if (select_result <= 0) {
+            if (error != nullptr) {
+                *error = select_result == 0
+                             ? "probe response timed out"
+                             : "probe response select failed";
+            }
+            return false;
+        }
+        boost::system::error_code read_result;
+        const std::size_t received_bytes =
+            socket.read_some(asio::buffer(buffer, sizeof(buffer)),
+                             read_result);
+        if (read_result == asio::error::eof) {
+            break;
+        }
+        if (read_result) {
+            if (error != nullptr) {
+                *error = "probe response read failed";
+            }
+            return false;
+        }
+        received.append(buffer, received_bytes);
+    }
+    // "HTTP/1.1 200 OK": the status code is the verdict. A closed
+    // connection before the status line (e.g. the request was rejected at
+    // framing) reads as a non-2xx.
+    const std::string::size_type first_space = received.find(' ');
+    if (first_space == std::string::npos) {
+        if (error != nullptr) {
+            *error = "probe response has no status line";
+        }
+        return false;
+    }
+    const std::string::size_type second_space =
+        received.find(' ', first_space + 1);
+    const std::string status_text = received.substr(
+        first_space + 1,
+        second_space == std::string::npos
+            ? std::string::npos
+            : second_space - first_space - 1);
+    if (status_text.size() != 3 || status_text[0] != '2') {
+        if (error != nullptr) {
+            *error = "health check returned " + status_text;
+        }
+        return false;
+    }
+    return true;
 }
 
 }  // namespace
@@ -946,6 +1115,50 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     // place of the deny-all defaults.
     if (local_policy->present) {
         local_policy->policy.apply(&config);
+        // worker.* resources from the document (no CLI equivalent; the
+        // same mapping as the managed spawn): jsHeap bounds the QuickJS
+        // heap, processAddressSpace bounds the address space, and
+        // fileDescriptors bounds open descriptors. memoryMax stays budget
+        // accounting and never impersonates a worker field. Sanitizer
+        // builds skip the address-space limit — ASan/TSan shadow memory
+        // exhausts any finite RLIMIT_AS before READY.
+        const LocalCapsidPolicy::RuntimeSettings& settings =
+            local_policy->settings;
+        if (settings.js_heap_bytes > 0) {
+            config.js_heap_limit = settings.js_heap_bytes;
+        }
+#if defined(CAPSID_ASAN_BUILD) || defined(CAPSID_TSAN_BUILD) || \
+    defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+        const bool forward_address_space_limit = false;
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
+        const bool forward_address_space_limit = false;
+#else
+        const bool forward_address_space_limit = true;
+#endif
+#else
+        const bool forward_address_space_limit = true;
+#endif
+        if (forward_address_space_limit &&
+            settings.process_address_bytes > 0) {
+            config.process_memory_limit = settings.process_address_bytes;
+        }
+        if (settings.file_descriptors > 0) {
+            if (settings.file_descriptors >
+                std::numeric_limits<std::uint32_t>::max()) {
+                if (error != nullptr) {
+                    *error = "file descriptor limit exceeds the worker "
+                             "window";
+                }
+                return false;
+            }
+            capsid_resource_limits limits;
+            capsid_resource_limits_init(&limits);
+            limits.enabled_fields |= CAPSID_RESOURCE_LIMIT_FILE_DESCRIPTORS;
+            limits.file_descriptors =
+                static_cast<std::uint32_t>(settings.file_descriptors);
+            config.resource_limits = &limits;
+        }
     }
 
     // Diagnostic IPC metrics: CAPSID_HOST_IPC_METRICS=1 enables counters
@@ -1064,18 +1277,6 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
             }
             return false;
         }
-        if (!write_ready_line()) {
-            // The listener was fully bound when the READY record failed: the
-            // port must be released BEFORE start() returns, so a caller that
-            // keeps the object alive (StaticPoolServer retry) can rebind.
-            worker_available_ = false;
-            close_listener();
-            executor_->stop_and_join();
-            if (error != nullptr) {
-                *error = "failed to write the READY record";
-            }
-            return false;
-        }
     }
 
     // ---- 2. signals + accept loop, then the event-loop thread. The
@@ -1115,6 +1316,72 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         ioc_.run();
         io_running_ = false;
     });
+    // M2 item 6 local reduction: an armed capsid.json healthCheck gates
+    // the READY record on one startup probe through the real listener
+    // path — the same routing construction an external client would use.
+    // The probe runs after the accept loop is live (a bound-but-unaccepted
+    // listener would only time out); pool shards skip it (defer_accept /
+    // external_accept own no accepting listener).
+    if (options_.health_check.configured && !options_.external_accept &&
+        !options_.defer_accept) {
+        std::string probe_target = options_.health_check.path;
+        std::string probe_host = options_.public_authority;
+        std::string probe_capsid_app;
+        switch (options_.routing_mode) {
+        case RequestRoutingMode::kPath:
+            probe_target = "/@capsid/" + options_.application +
+                           options_.health_check.path;
+            break;
+        case RequestRoutingMode::kSubdomain:
+            probe_host = options_.application + options_.routing_suffix;
+            break;
+        case RequestRoutingMode::kHeader:
+            probe_capsid_app = options_.application;
+            break;
+        }
+        std::string probe_error;
+        const bool probe_ok = probe_health_once(
+            options_.listen_address, bound_port_, probe_target, probe_host,
+            probe_capsid_app, options_.health_check.timeout_ms,
+            &probe_error);
+        if (!probe_ok) {
+            // Mirror on_signal's teardown: the signal wait must be
+            // cancelled or the io thread never drains, and the acceptor
+            // close must race-free against the pending accept.
+            shutting_down_ = true;
+            worker_available_ = false;
+            close_listener();
+            beast::error_code ignored;
+            signals_.cancel(ignored);
+            executor_->stop_and_join();
+            if (io_thread_.joinable()) {
+                io_thread_.join();
+            }
+            if (error != nullptr) {
+                *error = "health check failed: " + probe_error;
+            }
+            return false;
+        }
+    }
+    if (!write_ready_line()) {
+        // The listener was fully bound when the READY record failed: the
+        // port must be released BEFORE start() returns, so a caller that
+        // keeps the object alive (StaticPoolServer retry) can rebind.
+        // Same teardown as the probe failure above.
+        shutting_down_ = true;
+        worker_available_ = false;
+        close_listener();
+        beast::error_code ignored;
+        signals_.cancel(ignored);
+        executor_->stop_and_join();
+        if (io_thread_.joinable()) {
+            io_thread_.join();
+        }
+        if (error != nullptr) {
+            *error = "failed to write the READY record";
+        }
+        return false;
+    }
     if (stop_requested_.load(std::memory_order_acquire)) {
         io_post([weak = weak_from_this()] {
             if (const std::shared_ptr<Impl> alive = weak.lock()) {
@@ -1285,7 +1552,10 @@ bool Impl::wait(std::string* error) {
 
 
 void Impl::do_accept() {
-    if (shutting_down_ || !acceptor_->is_open()) {
+    // close_listener() resets the acceptor while a pending async_accept may
+    // still be in flight; the handler re-enters do_accept() after the reset
+    // (operation_aborted) and must not dereference a null acceptor.
+    if (shutting_down_ || !acceptor_ || !acceptor_->is_open()) {
         return;
     }
     // Weak capture: an idle accept must not keep the Impl alive after the

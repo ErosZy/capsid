@@ -80,6 +80,12 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
                        AppRequest* app,
                        std::string* error);
 
+// Shared byte-size and duration grammars (worker.memoryMax, request
+// timeouts, pool.queueTimeout). Exported for the local-capsid.json data
+// planes so both modes reject the same malformed values.
+bool parse_size_bytes(const std::string& text, std::uint64_t* out);
+bool parse_duration_ms(const std::string& text, std::uint64_t* out);
+
 }  // namespace capsid::host
 
 #endif

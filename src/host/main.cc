@@ -22,6 +22,7 @@
 #include "host/generation_pool.h"
 #if !defined(_WIN32)
 #include "host/host_config_model.h"
+#include "host/local_capsid_policy.h"
 #include "host/managed_admin_backend.h"
 #include "host/managed_listener.h"
 #endif
@@ -1232,9 +1233,15 @@ int main(int argc, char** argv) {
             fail(routing_error.message);
         }
     }
-    options.request_timeout_ms =
-        parse_positive_integer(require("request-timeout-ms"),
-                               "request-timeout-ms");
+    // Required below unless the local capsid.json supplies request.timeout:
+    // the policy load resolves the document value into the options when
+    // the CLI flag is absent.
+    const auto request_timeout_it = values.find("request-timeout-ms");
+    if (request_timeout_it != values.end()) {
+        options.request_timeout_ms =
+            parse_positive_integer(request_timeout_it->second,
+                                   "request-timeout-ms");
+    }
     // Default 64 KiB: the four-stack matrix (2026-08-13, 64K vs 16K) showed
     // the response window must cover a full 64 KiB response without a
     // mid-stream credit round trip; larger windows show no further gain
@@ -1434,7 +1441,7 @@ int main(int argc, char** argv) {
                     ch = '/';
                 }
             }
-            options.source_name = "file://" +
+            options.source_name = std::string("file://") +
                                   (url_path.rfind('/', 0) == 0 ? "" : "/") +
                                   url_path;
         }
@@ -1443,6 +1450,10 @@ int main(int argc, char** argv) {
         if (!values.count("request-timeout-ms") &&
             settings.has_request_timeout_ms) {
             options.request_timeout_ms = settings.request_timeout_ms;
+        }
+        if (options.request_timeout_ms == 0) {
+            fail("--request-timeout-ms is required unless capsid.json "
+                 "provides request.timeout");
         }
         if (!values.count("max-inflight-per-worker") &&
             settings.has_max_inflight) {

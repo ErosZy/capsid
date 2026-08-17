@@ -3,6 +3,7 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
+#include "policy_compiler.h"
 #include "request_normalization.h"
 
 #include <cstdint>
@@ -42,6 +43,11 @@ struct SingleWorkerServerOptions {
     RequestRoutingMode routing_mode = RequestRoutingMode::kPath;
     std::string routing_suffix;
     bool routing_trusted = false;
+    // Local capsid.json healthCheck (v0.2.x): configured=true arms one
+    // startup probe that gates the READY record — the worker must answer
+    // the path before the server publishes READY (the managed warm gate,
+    // reduced to a single probe).
+    HealthCheckConfig health_check;
     std::uint64_t request_timeout_ms = 0;
     std::uint32_t initial_stream_window = 0;
     bool strict_sandbox = false;

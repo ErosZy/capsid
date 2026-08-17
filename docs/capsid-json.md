@@ -347,13 +347,24 @@ capsid-host --mode single-worker --source-bundle bundle.mjs \
   compilation pipeline as managed mode (rule ids, digests, canonicalization all
   included); every earlier section of this tutorial applies;
 - `pool` is still a schema-required field (`minReady` == `maxWorkers`), but the
-  values are lazy — the worker count is decided by the CLI (`--workers`);
-- Sections that local mode cannot honor **reject startup directly**, never
-  silently skip:
-  - `worker` / `request` / `healthCheck` / `entry`: capacity, resources, request
-    window, and bundle entry are controlled by the CLI;
-  - `pool.queueRequests` / `queueHeaderBytes` / `queueTimeout`: the admission
-    queue is controlled by the CLI;
+  worker-count values are lazy — the worker count is decided by the CLI
+  (`--workers`);
+- The runtime sections are honored locally (v0.2.x), with the CLI as the
+  override — an explicit CLI flag always wins over the document:
+  - `entry` names the bundle file inside the capsid.json directory; with no
+    `--source-bundle`/`--source-name` the Host derives both from it, so a
+    production capsid.json runs unchanged;
+  - `worker.jsHeap` / `processAddressSpace` / `fileDescriptors` map onto the
+    same worker spawn fields as the managed spawn (`memoryMax` stays budget
+    accounting);
+  - `request.timeout` / `maxInflightPerWorker` / `maxStreamingInflightPerWorker`
+    / `streamIdleTimeoutMs` / `writeTimeoutMs` fill the request window;
+  - `pool.queueRequests` / `queueHeaderBytes` / `queueTimeout` arm the bounded
+    admission queue (document presence decides; 0 = queueing disabled);
+  - an armed `healthCheck` gates the READY record on one startup probe
+    through the real listener path (non-2xx fails startup);
+- What local mode still cannot honor **rejects startup directly**, never
+  silently skips:
   - env `valueFrom`: there is no managed-mode secret store; environment
     variables can only use literal `{"value": "..."}`;
 - `capsid/app-v2` Binding declarations are supported for Binding development.
@@ -388,7 +399,7 @@ Binding set, and if any shard fails to load, the whole pool fails startup.
 | Any unlisted field (such as `"cpu": 2`) | Rejected: unknown configuration field |
 | Request exceeds host.json `maximums` | Deployment rejected |
 | Bundle directory has only `bundle.qjsb` without a signature | Rejected: bytecode must be all-or-nothing |
-| Local mode with `worker` / `request` / `healthCheck` / `entry` sections | Rejected at startup: not applicable in local mode (CLI-owned) |
+| Local mode with `worker` / `request` / `healthCheck` / `entry` sections | Applied locally (v0.2.x); an explicit CLI flag wins over the document |
 | Local mode with `pool.queue*` | Rejected at startup: admission queue is CLI-owned |
 | Local mode env with `valueFrom` | Rejected at startup: valueFrom is unavailable in local mode |
 | `--capsid-json` points to a symlink / directory / file not owned by the user | Rejected at startup: not a regular file / not owned |

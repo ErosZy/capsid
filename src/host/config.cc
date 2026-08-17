@@ -1447,11 +1447,15 @@ ConfigValidationResult validate_binding_manifest(std::string_view json) {
 
 namespace {
 
+}  // namespace
+
 // Size grammar for worker.memoryMax: a decimal number with an explicit
 // upper-case IEC/SI suffix (KiB, MiB, GiB, KB, MB, GB). A bare number is
 // rejected: an ambiguous "1" must not silently mean 1 byte when the
 // operator meant 1 MiB, and the limit is forwarded to the worker's
 // js_heap_limit. Rejects overflow, fractional values and unknown suffixes.
+// Kept outside the anonymous namespace and declared in config.h: the
+// local-capsid.json data planes reuse the same grammars.
 bool parse_size_bytes(const std::string& text, std::uint64_t* out) {
     if (text.empty()) {
         return false;
@@ -1518,6 +1522,8 @@ bool parse_duration_ms(const std::string& text, std::uint64_t* out) {
     *out = static_cast<std::uint64_t>(base) * multiplier;
     return true;
 }
+
+namespace {
 
 // "host" / "host:443" / "host:443,8443". A bare host covers any port;
 // an empty or malformed port list is rejected.

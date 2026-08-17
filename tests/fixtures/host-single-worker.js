@@ -46,6 +46,9 @@ export default {
                 headers: { 'content-type': 'application/octet-stream' },
             });
         }
+        if (url.pathname === '/health') {
+            return new Response('ok', { status: 200 });
+        }
         if (url.pathname === '/fixed-string') {
             return new Response('x'.repeat(1024), {
                 headers: { 'content-type': 'text/plain' },

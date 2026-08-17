@@ -710,6 +710,7 @@ try {
         apiVersion: 'capsid/app-v1',
         entry: 'host-single-worker.js',
         pool: { minReady: 1, maxWorkers: 1 },
+        request: { timeout: '10s' },
         healthCheck: { path: '/nope', timeout: '3s' },
     }));
     const child = spawn(args.get('host'), [
@@ -725,7 +726,9 @@ try {
         '--ready-fd', '3',
     ], {
         cwd: dir,
-        stdio: [ 'ignore', 'pipe', 'pipe', 'ignore' ],
+        // fd 3 must be OPEN ('ignore' would close it for fds >= 3):
+        // the CLI validates the descriptor before spawn.
+        stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
     });
     let stderr = '';
     child.stderr.setEncoding('utf8');
