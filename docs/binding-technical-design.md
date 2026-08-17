@@ -542,7 +542,7 @@ policies remain separate. Startup proceeds in this order:
    User Runtime for a zero-Binding worker) and load code;
 8. return READY with the sandbox proof.
 
-READY v4 adds:
+READY v3 adds:
 
 ```text
 sandbox_profile_digest
@@ -659,7 +659,7 @@ capsid_result capsid_worker_load_binding(
 The API copies descriptors, source, config, secrets, and policy before return.
 `capsid_worker_load_binding()` is valid only before the App bundle.
 
-Worker protocol v4:
+Worker protocol v3:
 
 ```text
 HELLO

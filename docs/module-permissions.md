@@ -271,8 +271,11 @@ config.capability_policy = &descriptor;
 ```
 
 When both policies exist, the intersection applies. Every request checks the
-initial hostname, DNS-resolved addresses, and redirects. Protected addresses
-such as loopback, private, and link-local also need explicit IP/CIDR allows.
+initial hostname, every DNS-resolved address, and every redirect. Once a
+domain and port are allowed at the host stage, the addresses that domain
+resolves to — including private, loopback, and link-local — are authorized
+by that domain rule; explicit IP/CIDR deny still wins, and direct numeric
+protected addresses still require explicit IP/CIDR allows.
 
 ## JavaScript permission query
 

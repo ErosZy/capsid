@@ -1,4 +1,4 @@
-﻿# Linux strict sandbox
+# Linux strict sandbox
 
 > For a cross-platform capability overview and selection guidance, see [Platform Support Overview](platform-support.md).
 
@@ -65,7 +65,7 @@ The runtime validates the fd type, compares the inode after entering the namespa
 
 Deny always takes precedence. Even when `default_action` is allow, protected addresses such as loopback, link-local, private/unique-local, metadata-adjacent, multicast, unspecified, and documentation still require an explicit CIDR allow.
 
-The policy checks the original hostname, the actual connect address chosen after DNS, and every redirect. A hostname allow cannot bypass DNS rebinding protection. If the capability policy also provides `net_policy`, both must allow.
+The policy checks the original hostname, every DNS-resolved address, and every redirect. Once a domain and port are allowed at the host stage, the addresses that domain actually resolves to — including private, loopback, link-local, and other protected ranges — are authorized as part of the domain allow (the authoritative resolved-address path). Explicit IP/CIDR deny rules still take precedence, and requests made directly to a numeric protected address still require an explicit IP/CIDR allow. Deployers running untrusted code should not rely on a hostname allowlist alone as a DNS-rebinding boundary; combine it with explicit CIDR deny, network namespace isolation, and host firewall policy. If the capability policy also provides `net_policy`, both must allow.
 
 CA bundle and request/response body limits are host configuration and are not exposed to JavaScript. Certificate chain and hostname verification are not disabled by a custom CA.
 
