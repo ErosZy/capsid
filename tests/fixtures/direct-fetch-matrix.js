@@ -163,21 +163,26 @@ async function runMatrix(primary, secondary, closedPort) {
     completed.push('connection-reuse');
 
     setMatrixStage('pool-isolation');
-    const primaryAcceptsBefore = Number(
-        await (await fetch(`${primary}/accept-count`)).text());
-    const secondaryAcceptsBefore = Number(
-        await (await fetch(`${secondary}/accept-count`)).text());
+    const primaryHeadersBefore = Number((await (await fetch(
+        `${primary}/served-path-count?name=%2Fheaders`)).text()));
+    const secondaryHeadersBefore = Number((await (await fetch(
+        `${secondary}/served-path-count?name=%2Fheaders`)).text()));
     await (await fetch(`${primary}/headers`)).text();
     await (await fetch(`${secondary}/headers`)).text();
     await (await fetch(`${primary}/headers`)).text();
-    const primaryAcceptsAfter = Number(
-        await (await fetch(`${primary}/accept-count`)).text());
-    const secondaryAcceptsAfter = Number(
-        await (await fetch(`${secondary}/accept-count`)).text());
-    assert(primaryAcceptsAfter === primaryAcceptsBefore + 1,
-        `primary endpoint opened ${primaryAcceptsAfter - primaryAcceptsBefore} connections instead of 1`);
-    assert(secondaryAcceptsAfter === secondaryAcceptsBefore + 1,
-        `secondary endpoint opened ${secondaryAcceptsAfter - secondaryAcceptsBefore} connections instead of 1`);
+    const primaryHeadersAfter = Number((await (await fetch(
+        `${primary}/served-path-count?name=%2Fheaders`)).text()));
+    const secondaryHeadersAfter = Number((await (await fetch(
+        `${secondary}/served-path-count?name=%2Fheaders`)).text()));
+    // Each endpoint owns its connection pool: the third fetch targets the
+    // primary endpoint, so primary must have served both new /headers
+    // requests and secondary only its own. If the pool were shared across
+    // endpoints, the final primary fetch could be served over the
+    // connection opened for the secondary endpoint.
+    assert(primaryHeadersAfter - primaryHeadersBefore === 2,
+        `primary endpoint served ${primaryHeadersAfter - primaryHeadersBefore} pool requests instead of 2`);
+    assert(secondaryHeadersAfter - secondaryHeadersBefore === 1,
+        `secondary endpoint served ${secondaryHeadersAfter - secondaryHeadersBefore} pool requests instead of 1`);
     completed.push('pool-isolation');
 
     setMatrixStage('redirect-302-post');

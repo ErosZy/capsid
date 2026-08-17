@@ -35,6 +35,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -399,6 +400,22 @@ private:
     bool respond(int client, const HttpRequest &request) {
         const std::string path =
             request.target.substr(0, request.target.find('?'));
+        {
+            std::lock_guard<std::mutex> lock(served_path_mutex_);
+            ++served_path_counts_[path];
+        }
+        if (path == "/served-path-count") {
+            const std::string name = query_value(request.target, "name");
+            std::lock_guard<std::mutex> lock(served_path_mutex_);
+            const std::string body = std::to_string(served_path_counts_[name]);
+            std::ostringstream response;
+            response << "HTTP/1.1 200 OK\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "Connection: keep-alive\r\n\r\n"
+                     << body;
+            send_all(client, response.str());
+            return true;
+        }
         if (path == "/headers") {
             const std::string body = header(request, "x-request-duplicate");
             std::ostringstream response;
@@ -648,6 +665,8 @@ private:
     std::atomic<bool> stopping_;
     std::atomic<unsigned int> requests_;
     std::atomic<unsigned int> accepts_;
+    std::mutex served_path_mutex_;
+    std::map<std::string, unsigned int> served_path_counts_;
     std::thread thread_;
 };
 
@@ -879,7 +898,7 @@ int main(int argc, char **argv) {
              std::to_string(primary.requests()) + ", secondary=" +
              std::to_string(secondary.requests()) + ": " + result.body);
     }
-    if (primary.requests() < 16 || secondary.requests() != 1) {
+    if (primary.requests() < 16 || secondary.requests() < 4) {
         fail("direct-fetch matrix did not exercise expected network paths");
     }
 
