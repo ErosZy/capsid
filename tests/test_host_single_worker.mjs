@@ -860,6 +860,31 @@ try {
             child.kill('SIGTERM');
             await waitForExit(child, 3000);
         }
+
+        // NUL and oversized values must fail the CLI phase with the same
+        // value contract as the managed secret provider (no silent c_str
+        // truncation, no unlimited operator file into the worker env).
+        for (const [label, value] of [
+            [ 'nul', 'postgres://\0secret' ],
+            [ 'oversized', 'x'.repeat(16385) ],
+        ]) {
+            fs.writeFileSync(path.join(dir, 'secrets', 'db-url'), value);
+            const bad = spawnSecret([ '--secrets-root', path.join(dir, 'secrets') ]);
+            let badStderr = '';
+            bad.stderr.setEncoding('utf8');
+            bad.stderr.on('data', (chunk) => { badStderr += chunk; });
+            const badExit = await waitForExit(bad, 5000);
+            assert.equal(
+                badExit.code,
+                2,
+                `${label} secret value must fail the CLI phase`,
+            );
+            assert.match(
+                badStderr,
+                /NUL-free UTF-8 text/,
+                `${label} secret rejection must name the value contract`,
+            );
+        }
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }

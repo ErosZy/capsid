@@ -25,6 +25,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace capsid::host {
@@ -53,6 +54,65 @@ bool valid_local_secret_key_id(const std::string& key_id) {
         }
     }
     return key_id.find("..") == std::string::npos;
+}
+
+// Same value contract as the managed secret-file provider: at most 16 KiB,
+// no embedded NUL, and strict UTF-8 (overlongs/surrogates/out-of-range
+// code points reject). The local data plane reads operator files through
+// this loader, so the same grammar must apply on every platform.
+constexpr std::size_t kMaxLocalSecretBytes = 16U * 1024U;
+bool valid_local_secret_value(const std::vector<std::uint8_t>& value) {
+    if (value.size() > kMaxLocalSecretBytes) {
+        return false;
+    }
+    const std::string_view bytes(
+        reinterpret_cast<const char*>(value.data()), value.size());
+    if (bytes.find('\0') != std::string_view::npos) {
+        return false;
+    }
+    std::size_t index = 0;
+    while (index < bytes.size()) {
+        const unsigned char lead = static_cast<unsigned char>(bytes[index]);
+        if (lead < 0x80) {
+            ++index;
+            continue;
+        }
+        std::size_t continuation = 0;
+        std::uint32_t code_point = 0;
+        if (lead >= 0xc2 && lead <= 0xdf) {
+            continuation = 1;
+            code_point = lead & 0x1f;
+        } else if (lead >= 0xe0 && lead <= 0xef) {
+            continuation = 2;
+            code_point = lead & 0x0f;
+        } else if (lead >= 0xf0 && lead <= 0xf4) {
+            continuation = 3;
+            code_point = lead & 0x07;
+        } else {
+            return false;
+        }
+        if (index + continuation >= bytes.size()) {
+            return false;
+        }
+        for (std::size_t step = 1; step <= continuation; ++step) {
+            const unsigned char ch =
+                static_cast<unsigned char>(bytes[index + step]);
+            if ((ch & 0xc0) != 0x80) {
+                return false;
+            }
+            code_point = (code_point << 6) | (ch & 0x3f);
+        }
+        const bool overlong =
+            (continuation == 1 && code_point < 0x80) ||
+            (continuation == 2 && code_point < 0x800) ||
+            (continuation == 3 && code_point < 0x10000);
+        if (overlong || code_point > 0x10ffff ||
+            (code_point >= 0xd800 && code_point <= 0xdfff)) {
+            return false;
+        }
+        index += continuation + 1;
+    }
+    return true;
 }
 
 // `entry` names one bundle file inside the capsid.json directory. It can
@@ -448,6 +508,13 @@ bool load_local_capsid_policy(const std::string& path,
             if (secret_outcome != ReadOutcome::kOk) {
                 *error = path + ": env valueFrom \"" +
                          request.secret_key_id + "\": " + *error;
+                return false;
+            }
+            if (!valid_local_secret_value(secret_bytes)) {
+                *error = path + ": env valueFrom \"" +
+                         request.secret_key_id +
+                         "\": value must be at most 16384 bytes of NUL-free "
+                         "UTF-8 text";
                 return false;
             }
             request.literal.assign(
