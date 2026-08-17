@@ -55,6 +55,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -103,6 +104,25 @@ void fail(const std::string& message) {
                  escaped.c_str());
     std::exit(2);
 }
+
+#if defined(_WIN32)
+// `_get_osfhandle` treats a descriptor whose CRT slot is not FOPEN as an
+// invalid parameter; with the default handler that terminates the process
+// (Node's `stdio: 'ignore'` for an extra fd leaves exactly such a slot).
+// Install a no-op invalid-parameter handler just for this lookup so an
+// unusable --ready-fd reports "not an open descriptor" instead of crashing.
+void windows_invalid_parameter_noop(const wchar_t*, const wchar_t*,
+                                    const wchar_t*, unsigned int,
+                                    std::uintptr_t) {}
+
+bool ready_fd_is_open(int fd) {
+    const _invalid_parameter_handler previous =
+        _set_invalid_parameter_handler(windows_invalid_parameter_noop);
+    const bool open = _get_osfhandle(fd) != -1;
+    _set_invalid_parameter_handler(previous);
+    return open;
+}
+#endif
 
 bool valid_application_id(const std::string& application) {
     capsid::host::ActiveStateDocument probe;
@@ -1279,17 +1299,6 @@ int main(int argc, char** argv) {
         fail("--ready-fd must be a positive descriptor number");
     }
     options.ready_fd = static_cast<int>(ready_fd);
-    // The READY record must be deliverable; verify the descriptor is open
-    // before spawning the worker.
-#if defined(_WIN32)
-    if (_get_osfhandle(options.ready_fd) < 0) {
-        fail("--ready-fd is not an open descriptor");
-    }
-#else
-    if (fcntl(options.ready_fd, F_GETFD) == -1) {
-        fail("--ready-fd is not an open descriptor");
-    }
-#endif
 
     // Benchmark-only static pool (NOT a managed production path): a fixed
     // 1/2/4-worker pool sharing one SO_REUSEPORT listener, driven by the
@@ -1436,7 +1445,7 @@ int main(int argc, char** argv) {
             }
             const std::string cwd(cwd_buffer);
             const std::string absolute =
-                bundle_path.rfind("/", 0) == 0
+                std::filesystem::path(bundle_path).is_absolute()
                     ? bundle_path
                     : cwd + "/" + bundle_path;
             options.source_bundle_path = absolute;
@@ -1493,6 +1502,21 @@ int main(int argc, char** argv) {
         options.prepared_local_policy = std::move(local_policy);
     }
 
+    // The READY record must be deliverable; verify the descriptor is open
+    // before the source bundle is read or the worker is spawned. It runs
+    // after capsid.json validation so policy failures (for example a
+    // traversal `entry`) report their own diagnostic first, matching the
+    // local-data-plane CLI phase.
+#if defined(_WIN32)
+    if (!ready_fd_is_open(options.ready_fd)) {
+        fail("--ready-fd is not an open descriptor");
+    }
+#else
+    if (fcntl(options.ready_fd, F_GETFD) == -1) {
+        fail("--ready-fd is not an open descriptor");
+    }
+#endif
+
     const std::vector<std::uint8_t> bundle =
         read_bundle(options.source_bundle_path);
 
@@ -1524,6 +1548,10 @@ int main(int argc, char** argv) {
     if (mode == "static-pool") {
         capsid::host::StaticPoolServerOptions pool_options;
         pool_options.workers = workers;
+        // The pool-level control log must ride the same process-wide
+        // StructuredLog as the shards; worker_options owns the template
+        // copy after the move below.
+        pool_options.log = options.log;
         // The admission values ride in the shard template (options above);
         // the pool-level StaticPoolServerOptions admission fields exist for
         // the production config route (effective tier → pool options, M2
