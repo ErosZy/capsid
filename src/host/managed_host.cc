@@ -38,6 +38,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <poll.h>
 #include <set>
 #include <sstream>
@@ -48,6 +49,21 @@ namespace capsid::host {
 namespace {
 
 constexpr const char* kCompleteMarker = "COMPLETE";
+
+// File-descriptor slots are process-wide and can be reused the instant a
+// close lands. The deploy thread closes its state-root fd while the worker
+// supervisor concurrently opens/reads health-check files beneath the same
+// root; without a common serialization point those two operations can race
+// on one fd slot (TSan: close vs fstat on the reused descriptor). All
+// state-root closes and bounded reads therefore take this mutex.
+std::mutex g_managed_fd_mutex;
+
+void close_managed_state_fd(int fd) {
+    std::lock_guard<std::mutex> guard(g_managed_fd_mutex);
+    if (fd >= 0) {
+        close(fd);
+    }
+}
 
 // M2 item 7 (design §12.2): single write path for coordinator events.
 // Null log (unit fixtures without the process-wide instance) is a no-op.
@@ -1100,6 +1116,7 @@ enum class ReadFileStatus {
 //     concurrent swap is rejected instead of returning mixed content.
 ReadFileStatus read_file_at(int dir_fd, const char* name,
                             std::size_t max_bytes, std::string* content) {
+    std::lock_guard<std::mutex> fd_guard(g_managed_fd_mutex);
     const int fd = openat(dir_fd, name,
                           O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (fd < 0) {
@@ -2784,7 +2801,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     const int mapping =
         check_version_mapping(app_state_fd, version, generation_digest);
     if (mapping == -2) {
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         close(state_fd);
         outcome.error = "cannot read version mapping";
         status->state = OperationState::kFailed;
@@ -2793,7 +2810,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     if (mapping == 1) {
         // Same Version ID, different immutable content: reject and leave
         // the old active state untouched.
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         close(state_fd);
         outcome.error =
             "version id already published with different content";
@@ -2811,7 +2828,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         const ValidatedGeneration validated = validate_committed_generation(
             app_state_fd, *options, generation_digest);
         if (!validated.ok) {
-            close(app_state_fd);
+            close_managed_state_fd(app_state_fd);
             close(state_fd);
             status->state = OperationState::kFailed;
             status->error = validated.error;
@@ -2837,7 +2854,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
                     : options->ledger->reserve_fresh(
                           options->application, validated.effective.workers);
             if (!reserved) {
-                close(app_state_fd);
+                close_managed_state_fd(app_state_fd);
                 close(state_fd);
                 status->state = OperationState::kFailed;
                 status->error = "worker capacity exceeded";
@@ -2857,7 +2874,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
                     options->application, validated.effective.workers,
                     replacement);
             }
-            close(app_state_fd);
+            close_managed_state_fd(app_state_fd);
             close(state_fd);
             status->state = OperationState::kFailed;
             status->error = warm.error;
@@ -2877,12 +2894,12 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         finish_activation(options, &outcome, warm.workers, version,
                           generation_digest, app_state_fd, replacement,
                           status);
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         return outcome;
     }
     // mapping == -1: first publish of this Version ID; stage it.
     if (!make_dir_at(state_fd, "staging")) {
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         close(state_fd);
         outcome.error = "cannot prepare state directories";
         status->state = OperationState::kFailed;
@@ -2893,7 +2910,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     // followed), then the per-operation directory is created inside it.
     const int staging_root_fd = prepare_subdir_at(state_fd, "staging");
     if (staging_root_fd < 0) {
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         close(state_fd);
         outcome.error = "staging directory is not a verified directory";
         status->state = OperationState::kFailed;
@@ -2901,7 +2918,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     }
     if (mkdirat(staging_root_fd, outcome.operation_id.c_str(), 0700) != 0) {
         close(staging_root_fd);
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         close(state_fd);
         outcome.error = "cannot create exclusive staging directory";
         status->state = OperationState::kFailed;
@@ -2913,7 +2930,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         open_verified_subdir(staging_root_fd, outcome.operation_id.c_str());
     if (staging_fd < 0) {
         close(staging_root_fd);
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         close(state_fd);
         outcome.error = "cannot open staging directory";
         status->state = OperationState::kFailed;
@@ -3036,7 +3053,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         // of stateRoot.
         remove_tree_at(staging_root_fd, outcome.operation_id.c_str());
         close(staging_root_fd);
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         close(state_fd);
         outcome.error = error.empty() ? "staging failed" : error;
         status->state = OperationState::kFailed;
@@ -3057,7 +3074,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     // Only a successfully published generation may freeze a Version ID.
     if (!write_version_mapping(app_state_fd, version, generation_digest,
                                &error)) {
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         close(state_fd);
         outcome.error = error.empty() ? "cannot record version mapping"
                                       : error;
@@ -3084,7 +3101,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
                 : options->ledger->reserve_fresh(options->application,
                                                  effective.workers);
         if (!reserved) {
-            close(app_state_fd);
+            close_managed_state_fd(app_state_fd);
             status->state = OperationState::kFailed;
             status->error = "worker capacity exceeded";
             outcome.error = status->error;
@@ -3102,7 +3119,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             options->ledger->abort_reserve(options->application,
                                            effective.workers, replacement);
         }
-        close(app_state_fd);
+        close_managed_state_fd(app_state_fd);
         status->state = OperationState::kFailed;
         status->error = warm.error;
         outcome.error = warm.error;
@@ -3119,7 +3136,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     finish_activation(options, &outcome, warm.workers, version,
                       generation_digest, app_state_fd, replacement,
                       status);
-    close(app_state_fd);
+    close_managed_state_fd(app_state_fd);
     return outcome;
 }
 
@@ -3429,7 +3446,7 @@ HealthCheckConfig managed_read_health_check(ManagedHostOptions* options,
     }
     const int generations_fd =
         prepare_subdir_at(app_state_fd, "generations");
-    close(app_state_fd);
+    close_managed_state_fd(app_state_fd);
     if (generations_fd < 0) {
         return result;
     }
