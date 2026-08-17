@@ -571,6 +571,10 @@ jobs:
             -E '^(wpt_conformance_not_configured|worker_package_.*)$' `
             2>&1 | Tee-Object -FilePath $ctest_log
           if ($LASTEXITCODE -ne 0) {
+            Get-Content $ctest_log -Tail 60 | ForEach-Object { "::error::$_" }
+            exit 1
+          }
+          if ($LASTEXITCODE -ne 0) {
             # ctest output-on-failure already prints each failing test's
             # diagnostic block; promote its FAIL lines into workflow
             # annotations so the run page names the failure without a login.
