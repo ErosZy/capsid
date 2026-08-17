@@ -403,10 +403,18 @@ Semantics:
   `403` with **no** `Access-Control-Allow-*` field — the browser reports the
   CORS failure and no CORS decision leaks.
 - Any other request records whether its `Origin` is allowed; both response
-  paths (Host-synthesized and worker responses) stamp
-  `Access-Control-Allow-Origin` + `Vary: Origin` for allowed origins. An App
-  that sets its own CORS headers keeps them (the listener never duplicates a
-  field).
+  paths (Host-synthesized and worker responses) are then normalized by the
+  listener. When `cors` is configured the listener owns the
+  `Access-Control-Allow-Origin` field: an App-supplied value is removed and
+  replaced with the matched Origin (allowed requests) or removed entirely
+  (disallowed requests), so the Host allow-list cannot be bypassed by App
+  headers. `Access-Control-Allow-Credentials` survives only for an exact
+  allowed origin; wildcard `"*"` and disallowed/absent origins strip it, so
+  wildcard can never become any-origin credentialed CORS. `Vary` is merged
+  token-wise with `Origin`; an App-supplied `Vary: Accept-Encoding` cannot
+  suppress the required `Vary: Origin`.
+- A duplicate `Origin` header is malformed control input and is rejected
+  with `400` before routing.
 - An `OPTIONS` without the preflight fields is not a preflight and routes
   normally (the App may handle it).
 - Absent `cors`, nothing changes: the App owns CORS entirely.

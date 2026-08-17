@@ -74,6 +74,12 @@ const char* kBundleBig =
     "export default { async fetch(request) {"
     " const body = new Uint8Array(512 * 1024).fill(0x53);"
     " return new Response(body); } };\n";
+const char* kBundleCors =
+    "export default { async fetch(request) {"
+    " return new Response('cors-app', { headers: {"
+    "  'Access-Control-Allow-Origin': 'http://evil.example',"
+    "  'Access-Control-Allow-Credentials': 'true',"
+    "  'Vary': 'Accept-Encoding' } }); } };\n";
 
 // Spawn/load/flush (NOT yet READY) — the executor factory contract. The
 // per-test request timeout lets the 504 gate run fast.
@@ -655,13 +661,17 @@ void test_trusted_header_gate(const std::string& worker_path) {
 }
 
 // Listener-level CORS: the listener answers browser preflights before
-// routing (a preflight can never carry the header-routing control header)
-// and stamps the matched Origin on every response path.
+// routing, stamps the matched Origin on every response path, and — when
+// configured — owns the Access-Control-* fields on actual responses so the
+// App cannot bypass the Host allow-list.
 void test_cors_preflight(const std::string& worker_path) {
     std::shared_ptr<GenerationPool> pool_a =
         make_pool(worker_path, "app-a", kBundleA, 2000);
+    std::shared_ptr<GenerationPool> pool_cors =
+        make_pool(worker_path, "app-cors", kBundleCors, 2000);
     std::shared_ptr<RoutingTable> routing = std::make_shared<RoutingTable>();
-    routing->publish(RoutingSnapshot::build({{"app-a", pool_a}}));
+    routing->publish(RoutingSnapshot::build(
+        {{"app-a", pool_a}, {"app-cors", pool_cors}}));
 
     const auto head_has = [](const std::string& head,
                              const std::string& name) {
@@ -730,29 +740,127 @@ void test_cors_preflight(const std::string& worker_path) {
                 "rejected preflight leaked Allow-Origin");
         close(fd);
     }
-    // The actual request (with Capsid-App) is routed normally and the
-    // worker response carries the stamped Allow-Origin.
+    // The actual request is routed normally and the worker response carries
+    // the listener-owned Allow-Origin. App-owned CORS headers are replaced,
+    // not merged; exact allowed origins may keep App credentials.
     {
         const int fd = connect_listener(listener.bound_port());
         const HttpResponse actual = http_exchange(
             fd, "GET /private/ HTTP/1.1\r\n"
                 "Host: localhost\r\n"
                 "Origin: http://localhost:57694\r\n"
-                "Capsid-App: app-a\r\n"
+                "Capsid-App: app-cors\r\n"
                 "Connection: close\r\n\r\n");
-        require(actual.status == 200 && actual.body == "hello-app-a",
-                "CORS-stamped request did not reach app-a (" +
+        require(actual.status == 200 && actual.body == "cors-app",
+                "CORS-stamped request did not reach app-cors (" +
                     std::to_string(actual.status) + ")");
         require(
             head_has(actual.head, "access-control-allow-origin: http://localhost:57694"),
-            "worker response missed the stamped Allow-Origin");
+            "listener-owned Allow-Origin was not stamped");
+        require(!head_has(actual.head, "access-control-allow-origin: http://evil.example"),
+                "App-owned Allow-Origin bypassed the Host allow-list");
+        require(head_has(actual.head, "access-control-allow-credentials: true"),
+                "exact allowed origin lost App-owned credentials");
+        require(head_has(actual.head, "vary: accept-encoding, origin"),
+                "Vary must merge Origin with the App's tokens");
+        close(fd);
+    }
+    // A disallowed Origin on an actual response: the request still routes,
+    // but both App-owned Allow-Origin and credentials are stripped.
+    {
+        const int fd = connect_listener(listener.bound_port());
+        const HttpResponse denied = http_exchange(
+            fd, "GET /private/ HTTP/1.1\r\n"
+                "Host: localhost\r\n"
+                "Origin: http://evil.example\r\n"
+                "Capsid-App: app-cors\r\n"
+                "Connection: close\r\n\r\n");
+        require(denied.status == 200 && denied.body == "cors-app",
+                "disallowed-Origin actual request did not route normally");
+        require(!head_has(denied.head, "access-control-allow-origin:"),
+                "disallowed actual response leaked Allow-Origin");
+        require(!head_has(denied.head, "access-control-allow-credentials:"),
+                "disallowed actual response leaked Allow-Credentials");
+        close(fd);
+    }
+    // Duplicate Origin is malformed control input and fails 400 before
+    // routing.
+    {
+        const int fd = connect_listener(listener.bound_port());
+        const HttpResponse duplicate = http_exchange(
+            fd, "GET /private/ HTTP/1.1\r\n"
+                "Host: localhost\r\n"
+                "Origin: http://localhost:57694\r\n"
+                "Origin: http://evil.example\r\n"
+                "Capsid-App: app-a\r\n"
+                "Connection: close\r\n\r\n");
+        require(duplicate.status == 400,
+                "duplicate Origin was not rejected (" +
+                    std::to_string(duplicate.status) + ")");
         close(fd);
     }
 
     listener.request_stop();
     listener.wait(&error);
     pool_a->stop_and_join();
+    pool_cors->stop_and_join();
     std::cout << "PASS: listener-level CORS preflight and stamping" << std::endl;
+}
+
+// Wildcard CORS can never combine with credentials: the listener reflects
+// the Origin for "*" but strips App-owned Allow-Credentials.
+void test_cors_wildcard_credentials(const std::string& worker_path) {
+    std::shared_ptr<GenerationPool> pool_cors =
+        make_pool(worker_path, "app-cors", kBundleCors, 2000);
+    std::shared_ptr<RoutingTable> routing = std::make_shared<RoutingTable>();
+    routing->publish(RoutingSnapshot::build({{"app-cors", pool_cors}}));
+
+    const auto head_has = [](const std::string& head,
+                             const std::string& name) {
+        std::string lower;
+        lower.reserve(head.size());
+        for (const unsigned char c : head) {
+            lower.push_back(static_cast<char>(
+                (c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c));
+        }
+        return lower.find(name) != std::string::npos;
+    };
+
+    ManagedListenerOptions options;
+    options.config = path_listener("wildcard");
+    options.config.routing.mode = "header";
+    options.config.trusted = true;
+    options.config.cors.configured = true;
+    options.config.cors.allowed_origins = {"*"};
+    options.config.cors.allowed_methods = {"GET"};
+    options.config.cors.allowed_headers = {"capsid-app"};
+    options.routing = routing;
+    ManagedListener listener(options);
+    std::string error;
+    require(listener.start(&error), "wildcard cors listener start failed: " +
+                                        error);
+
+    const int fd = connect_listener(listener.bound_port());
+    const HttpResponse actual = http_exchange(
+        fd, "GET /private/ HTTP/1.1\r\n"
+            "Host: localhost\r\n"
+            "Origin: https://any.example\r\n"
+            "Capsid-App: app-cors\r\n"
+            "Connection: close\r\n\r\n");
+    require(actual.status == 200,
+            "wildcard CORS request did not reach the app (" +
+                std::to_string(actual.status) + ")");
+    require(head_has(actual.head,
+                     "access-control-allow-origin: https://any.example"),
+            "wildcard CORS did not reflect the Origin");
+    require(!head_has(actual.head, "access-control-allow-credentials:"),
+            "wildcard CORS leaked Allow-Credentials");
+    close(fd);
+
+    listener.request_stop();
+    listener.wait(&error);
+    pool_cors->stop_and_join();
+    std::cout << "PASS: wildcard CORS never carries credentials" << std::endl;
 }
 
 }  // namespace
@@ -768,6 +876,7 @@ int main(int argc, char** argv) {
     test_big_response_credit(worker_path);
     test_trusted_header_gate(worker_path);
     test_cors_preflight(worker_path);
+    test_cors_wildcard_credentials(worker_path);
     std::cout << "PASS: Managed listener data plane (WP-05 §9.2)" << std::endl;
     return 0;
 }

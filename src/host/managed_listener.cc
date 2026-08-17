@@ -98,6 +98,63 @@ std::string ascii_lower(std::string_view text) {
     return lower;
 }
 
+// Merges a `Vary: Origin` token into the response's Vary set. When the
+// listener owns CORS, the final Access-Control-* fields depend on the
+// request Origin, so any shared cache must partition on it; an App-supplied
+// `Vary: Accept-Encoding` must not be mistaken for an Origin token and
+// suppress that partition (cache-poisoning risk otherwise).
+void merge_vary_origin(
+    std::vector<std::pair<std::string, std::string>>* headers) {
+    std::vector<std::string> tokens;
+    std::vector<std::pair<std::string, std::string>> filtered;
+    filtered.reserve(headers->size() + 1);
+    for (const auto& [name, value] : *headers) {
+        if (ascii_lower(name) != "vary") {
+            filtered.push_back({name, value});
+            continue;
+        }
+        std::size_t begin = 0;
+        while (begin <= value.size()) {
+            while (begin < value.size() &&
+                   (value[begin] == ' ' || value[begin] == '\t')) {
+                ++begin;
+            }
+            const std::size_t end = value.find(',', begin);
+            const std::size_t token_end =
+                end == std::string::npos ? value.size() : end;
+            std::size_t trimmed = token_end;
+            while (trimmed > begin &&
+                   (value[trimmed - 1] == ' ' || value[trimmed - 1] == '\t')) {
+                --trimmed;
+            }
+            if (trimmed > begin) {
+                tokens.push_back(
+                    ascii_lower(value.substr(begin, trimmed - begin)));
+            }
+            if (end == std::string::npos) {
+                break;
+            }
+            begin = end + 1;
+        }
+    }
+    bool has_origin = false;
+    for (const std::string& token : tokens) {
+        has_origin = has_origin || token == "origin";
+    }
+    if (!has_origin) {
+        tokens.push_back("origin");
+    }
+    std::string joined;
+    for (const std::string& token : tokens) {
+        if (!joined.empty()) {
+            joined += ", ";
+        }
+        joined += token;
+    }
+    filtered.push_back({"Vary", joined});
+    *headers = std::move(filtered);
+}
+
 // Parses the comma-separated token list of a Connection header and collects
 // the (lowercased) nominated names. Returns false on an empty or non-token
 // nomination, which fails the response closed (RFC 7230 §6.1).
@@ -352,6 +409,12 @@ private:
     // The matched request Origin when the listener CORS config allows it;
     // empty = no Access-Control-Allow-Origin stamp on the responses.
     std::string cors_allow_origin_;
+    // Whether the listener owns CORS for this session, whether the current
+    // request carried an Origin, and whether the configured allow-list is
+    // the wildcard "*". These drive the authoritative response-header pass.
+    bool cors_configured_ = false;
+    bool cors_origin_seen_ = false;
+    bool cors_wildcard_ = false;
     bool closed_ = false;
     bool probe_active_ = false;
 };
@@ -580,15 +643,29 @@ void ListenerSession::handle_request(
 bool ListenerSession::prepare_cors(
     const http::request<http::string_body>& request) {
     const ListenerCorsConfig& cors = impl_->options_.config.cors;
+    cors_configured_ = true;
+    cors_allow_origin_.clear();
+    cors_origin_seen_ = false;
+    cors_wildcard_ = cors.allowed_origins.size() == 1 &&
+                      cors.allowed_origins[0] == "*";
+
     std::string origin;
+    unsigned origin_count = 0;
     for (const auto& field : request.base()) {
         if (field.name() == http::field::origin) {
-            origin = std::string(field.value());
-            break;
+            ++origin_count;
+            if (origin.empty()) {
+                origin = std::string(field.value());
+            }
         }
     }
-    const bool wildcard = cors.allowed_origins.size() == 1 &&
-                          cors.allowed_origins[0] == "*";
+    if (origin_count > 1) {
+        send_simple(http::status::bad_request, "duplicate Origin header",
+                    request.keep_alive(), request.version());
+        return false;
+    }
+    cors_origin_seen_ = !origin.empty();
+    const bool wildcard = cors_wildcard_;
     const bool origin_allowed =
         !origin.empty() &&
         (wildcard ||
@@ -1145,29 +1222,39 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
                                  "invalid worker response status");
             return;
         }
-        // Listener-level CORS stamp: the request's matched Origin rides
-        // on the session; the App owns its own CORS headers when it sets
-        // them, and the listener never duplicates a field.
-        if (pending.session && !pending.session->cors_allow_origin_.empty()) {
-            bool has_allow_origin = false;
-            bool has_vary_origin = false;
+        // Listener-level CORS is authoritative when configured: the App
+        // cannot write its own Access-Control-Allow-Origin (that would
+        // bypass the Host allow-list), and credentials survive only for an
+        // exact allowed origin. A wildcard or a disallowed/absent Origin
+        // strips App-owned credentials so wildcard never becomes any-origin
+        // credentialed CORS. Vary is merged token-wise so `Vary:
+        // Accept-Encoding` cannot suppress the required `Vary: Origin`.
+        if (pending.session && pending.session->cors_configured_) {
+            const bool origin_allowed =
+                !pending.session->cors_allow_origin_.empty();
+            const bool exact_origin =
+                origin_allowed && pending.session->cors_origin_seen_ &&
+                !pending.session->cors_wildcard_;
+            std::vector<std::pair<std::string, std::string>> cors_filtered;
+            cors_filtered.reserve(event.headers.size() + 2);
             for (const auto& [name, value] : event.headers) {
-                (void)value;
                 const std::string lower = ascii_lower(name);
                 if (lower == "access-control-allow-origin") {
-                    has_allow_origin = true;
-                } else if (lower == "vary") {
-                    has_vary_origin = true;
+                    continue;  // Host decides this field
                 }
+                if (lower == "access-control-allow-credentials" &&
+                    !exact_origin) {
+                    continue;  // wildcard/disallowed origins never get it
+                }
+                cors_filtered.push_back({name, value});
             }
-            if (!has_allow_origin) {
-                event.headers.push_back(
+            if (origin_allowed) {
+                cors_filtered.push_back(
                     {"access-control-allow-origin",
                      pending.session->cors_allow_origin_});
             }
-            if (!has_vary_origin) {
-                event.headers.push_back({"vary", "Origin"});
-            }
+            merge_vary_origin(&cors_filtered);
+            event.headers = std::move(cors_filtered);
         }
         if (!sanitize_response_headers(&event.headers)) {
             reject_response_head(executor, event.request_id,
