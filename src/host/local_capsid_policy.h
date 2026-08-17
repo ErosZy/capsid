@@ -4,6 +4,7 @@
 #include "host/binding_compile.h"
 #include "host/policy_compiler.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -23,8 +24,9 @@ namespace capsid::host {
 //   - permissions.* is applied: modules, env literals, fs read (including
 //     fs.read.deny, which wins over allow), fetch, storage namespaces and
 //     stdio streams;
-//   - env valueFrom is rejected — the managed secret store does not exist
-//     on this path;
+//   - env valueFrom resolves against an explicit --secrets-root directory
+//     (the managed secret layout: one regular file per key id); without
+//     one it is rejected — there is no implicit secret store on this path;
 //   - worker.* / request.* / pool.queue* / healthCheck / entry are parsed
 //     and applied locally (v0.2.x): entry names the bundle file inside the
 //     capsid.json directory when --source-bundle is absent, the resource
@@ -78,12 +80,16 @@ struct LocalCapsidPolicy {
 
 // Loads and compiles <path>. required=true fails on a missing file (the
 // operator explicitly passed --capsid-json); required=false (the default
-// ./capsid.json) treats a missing file as no policy. Every other failure —
-// unreadable, oversized, schema-invalid, a rejected section, valueFrom —
-// fails closed with *error set.
+// ./capsid.json) treats a missing file as no policy. secrets_root names the
+// explicit local secret store for env valueFrom (empty = valueFrom is
+// rejected; the file layout is one regular file per key id, the managed
+// contract). Every other failure — unreadable, oversized, schema-invalid,
+// a rejected section, a valueFrom without a store — fails closed with
+// *error set.
 bool load_local_capsid_policy(const std::string& path,
                               bool required,
                               const BindingRegistrySnapshot* binding_registry,
+                              const std::string& secrets_root,
                               LocalCapsidPolicy* out,
                               std::string* error);
 

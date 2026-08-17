@@ -48,6 +48,10 @@ struct SingleWorkerServerOptions {
     // the path before the server publishes READY (the managed warm gate,
     // reduced to a single probe).
     HealthCheckConfig health_check;
+    // Explicit local secret store for capsid.json env valueFrom
+    // (--secrets-root): one regular file per key id. Empty = valueFrom
+    // is rejected (no implicit secret store).
+    std::string secrets_root;
     std::uint64_t request_timeout_ms = 0;
     std::uint32_t initial_stream_window = 0;
     bool strict_sandbox = false;

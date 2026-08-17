@@ -106,6 +106,7 @@ public:
                     options_.worker_options.capsid_json_path,
                     options_.worker_options.capsid_json_required,
                     options_.worker_options.binding_registry.get(),
+                    options_.worker_options.secrets_root,
                     loaded_policy.get(), &policy_error)) {
                 if (error != nullptr) {
                     *error = policy_error;

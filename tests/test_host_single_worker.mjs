@@ -311,11 +311,14 @@ const args = parseArgs(process.argv.slice(2));
             {
                 stdio: [ 'ignore', 'pipe', 'pipe', readOnly ],
             });
+        let brokenStderr = '';
+        brokenReady.stderr.setEncoding('utf8');
+        brokenReady.stderr.on('data', (chunk) => { brokenStderr += chunk; });
         const brokenExit = await waitForExit(brokenReady, 5000);
         assert.equal(
             brokenExit.code,
             1,
-            'READY-fd write failure must exit with code 1',
+            'READY-fd write failure must exit with code 1 (stderr=' + brokenStderr + ')',
         );
     } finally {
         fs.closeSync(readOnly);
@@ -738,6 +741,89 @@ try {
         assert.equal(exited.code, 1, 'failed healthCheck must exit 1');
         assert.match(stderr, /health check failed/,
             'startup failure must name the health probe');
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+// ---- Local env valueFrom (--secrets-root): one regular file per key id,
+// the managed layout; without the root the document is rejected.
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-local-secret-'));
+    fs.writeFileSync(path.join(dir, 'secret-bundle.js'), `
+        import { env } from 'capsid:env';
+        export default {
+            async fetch(request) {
+                const url = new URL(request.url);
+                if (url.pathname === '/secret') {
+                    return new Response(env.get('DB_URL'), { status: 200 });
+                }
+                return new Response('no route', { status: 404 });
+            },
+        };
+    `);
+    fs.mkdirSync(path.join(dir, 'secrets'));
+    fs.writeFileSync(path.join(dir, 'secrets', 'db-url'), 'postgres://secret');
+    const capsidJson = path.join(dir, 'capsid.json');
+    fs.writeFileSync(capsidJson, JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'secret-bundle.js',
+        pool: { minReady: 1, maxWorkers: 1 },
+        request: { timeout: '10s' },
+        permissions: {
+            modules: [ 'capsid:env' ],
+            env: { DB_URL: { valueFrom: 'db-url' } },
+        },
+    }));
+    const spawnSecret = (extraArgs) => spawn(args.get('host'), [
+        '--mode', 'single-worker',
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', capsidJson,
+        ...extraArgs,
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+    ], {
+        cwd: dir,
+        stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+    });
+    try {
+        // Without --secrets-root the same document fails the CLI phase
+        // (exit 2), never a silent empty env value. Runs first: the dir
+        // is both the spawn cwd and the artifact source and must survive.
+        const rejected = spawnSecret([]);
+        const rejectedExit = await waitForExit(rejected, 5000);
+        assert.equal(
+            rejectedExit.code,
+            2,
+            'valueFrom without --secrets-root must fail the CLI phase',
+        );
+
+        const child = spawnSecret([ '--secrets-root', path.join(dir, 'secrets') ]);
+        let stderr = '';
+        child.stderr.setEncoding('utf8');
+        child.stderr.on('data', (chunk) => { stderr += chunk; });
+        try {
+            const readyLine = await readLine(child.stdio[3], child, 10000, () => stderr);
+            const ready = JSON.parse(readyLine);
+            const secret = await request(ready.port, {
+                target: '/@capsid/orders/secret',
+                timeoutMs: 3000,
+            });
+            assert.equal(secret.status, 200, 'valueFrom must resolve through --secrets-root');
+            assert.equal(
+                secret.body.toString('utf8'),
+                'postgres://secret',
+                'the worker must see the resolved secret value',
+            );
+        } finally {
+            child.kill('SIGTERM');
+            await waitForExit(child, 3000);
+        }
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }

@@ -10,6 +10,7 @@
 
 #include "host/config.h"
 #include "host/policy_compiler.h"
+#include "host/secret_file_provider.h"
 #include "win32_compat.h"
 
 #if defined(_WIN32)
@@ -254,6 +255,7 @@ HostPolicy permissive_host(const AppRequest& app) {
 bool load_local_capsid_policy(const std::string& path,
                               bool required,
                               const BindingRegistrySnapshot* binding_registry,
+                              const std::string& secrets_root,
                               LocalCapsidPolicy* out,
                               std::string* error) {
     if (out == nullptr || error == nullptr) {
@@ -383,13 +385,39 @@ bool load_local_capsid_policy(const std::string& path,
         out->settings.health_check = app.health_check;
     }
 
-    // 4. valueFrom has no store on this path: the worker's env comes only
-    // from literal entries here.
-    for (const AppRequest::EnvRequest& request : app.env) {
-        if (request.from_secret) {
-            *error = path + ": env valueFrom is unavailable in local mode "
-                            "(no managed secret store)";
-            return false;
+    // 4. env valueFrom resolves against an explicit --secrets-root: one
+    // regular file per key id (the managed layout). Without a root the
+    // entry is rejected — there is no implicit secret store on this path.
+    if (!secrets_root.empty()) {
+        for (AppRequest::EnvRequest& request : app.env) {
+            if (!request.from_secret) {
+                continue;
+            }
+            if (!valid_secret_key_id(request.secret_key_id)) {
+                *error = path + ": invalid env valueFrom key id";
+                return false;
+            }
+            std::vector<std::uint8_t> secret_bytes;
+            const ReadOutcome outcome = read_local_config_file(
+                secrets_root + "/" + request.secret_key_id, &secret_bytes,
+                error);
+            if (outcome != ReadOutcome::kOk) {
+                *error = path + ": env valueFrom \"" +
+                         request.secret_key_id + "\": " + *error;
+                return false;
+            }
+            request.literal.assign(
+                reinterpret_cast<const char*>(secret_bytes.data()),
+                secret_bytes.size());
+            request.from_secret = false;
+        }
+    } else {
+        for (const AppRequest::EnvRequest& request : app.env) {
+            if (request.from_secret) {
+                *error = path + ": env valueFrom is unavailable in local "
+                                "mode without --secrets-root";
+                return false;
+            }
         }
     }
 

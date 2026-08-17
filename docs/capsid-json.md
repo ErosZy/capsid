@@ -363,10 +363,10 @@ capsid-host --mode single-worker --source-bundle bundle.mjs \
     admission queue (document presence decides; 0 = queueing disabled);
   - an armed `healthCheck` gates the READY record on one startup probe
     through the real listener path (non-2xx fails startup);
-- What local mode still cannot honor **rejects startup directly**, never
-  silently skips:
-  - env `valueFrom`: there is no managed-mode secret store; environment
-    variables can only use literal `{"value": "..."}`;
+- env `valueFrom` resolves against an explicit `--secrets-root` directory
+  (one regular file per key id, the managed layout); without the root the
+  document is rejected at the CLI phase — there is no implicit secret
+  store on this path, and a value is never silently empty;
 - `capsid/app-v2` Binding declarations are supported for Binding development.
   They use the managed path's Registry scan, Manifest ∩ App permission
   proof, pre-bundle load ordering and READY proof. A declaration without an

@@ -1375,6 +1375,12 @@ int main(int argc, char** argv) {
         options.capsid_json_path = *capsid_json_text;
         options.capsid_json_required = true;
     }
+    // Explicit local secret store (env valueFrom): empty keeps the
+    // fail-closed rejection of valueFrom in the document.
+    const std::string* secrets_root_text = optional_value("secrets-root");
+    if (secrets_root_text != nullptr) {
+        options.secrets_root = *secrets_root_text;
+    }
     // Binding development for local data-plane modes is explicit: the Host
     // scans one immutable Registry snapshot up front and capsid.json may
     // only request packages from it. Without Binding declarations this is
@@ -1402,8 +1408,8 @@ int main(int argc, char** argv) {
         std::string policy_error;
         if (!capsid::host::load_local_capsid_policy(
                 options.capsid_json_path, options.capsid_json_required,
-                options.binding_registry.get(), local_policy.get(),
-                &policy_error)) {
+                options.binding_registry.get(), options.secrets_root,
+                local_policy.get(), &policy_error)) {
             fail(policy_error);
         }
         const capsid::host::LocalCapsidPolicy::RuntimeSettings& settings =

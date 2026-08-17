@@ -1086,6 +1086,7 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         if (!load_local_capsid_policy(options_.capsid_json_path,
                                       options_.capsid_json_required,
                                       options_.binding_registry.get(),
+                                      options_.secrets_root,
                                       loaded_policy.get(), &policy_error)) {
             if (error != nullptr) {
                 *error = policy_error;
