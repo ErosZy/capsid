@@ -634,6 +634,38 @@ bool win_current_user_sid(PSID *out, std::string *error) {
     return true;
 }
 
+// An owner is trusted when it is the process identity or one of the
+// process token's enabled groups. Windows runners and production services
+// routinely create files owned by the Administrators group while running
+// under a member account; rejecting those as "foreign" would make the
+// scanner unusable there, while accepting any arbitrary owner would break
+// the trust boundary.
+bool win_token_contains_sid(PSID candidate) {
+    HANDLE token = INVALID_HANDLE_VALUE;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return false;
+    }
+    DWORD needed = 0;
+    GetTokenInformation(token, TokenGroups, NULL, 0, &needed);
+    bool contains = false;
+    if (needed != 0) {
+        std::vector<unsigned char> buffer(needed);
+        if (GetTokenInformation(
+                token, TokenGroups, buffer.data(), needed, &needed)) {
+            const TOKEN_GROUPS *groups =
+                reinterpret_cast<const TOKEN_GROUPS *>(buffer.data());
+            for (DWORD index = 0; index < groups->GroupCount; ++index) {
+                if (EqualSid(groups->Groups[index].Sid, candidate)) {
+                    contains = true;
+                    break;
+                }
+            }
+        }
+    }
+    CloseHandle(token);
+    return contains;
+}
+
 constexpr DWORD kWinPublicWritableMask =
     FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA |
     FILE_WRITE_ATTRIBUTES | WRITE_DAC | WRITE_OWNER | DELETE;
@@ -671,7 +703,10 @@ bool win_validate_security(HANDLE handle,
         return false;
     }
     bool ok = false;
-    if (owner == NULL || !EqualSid(owner, current_user)) {
+    if (owner == NULL) {
+        *error = path + " has no owner";
+    } else if (!EqualSid(owner, current_user) &&
+               !win_token_contains_sid(owner)) {
         *error = path + " has a disallowed owner";
     } else if (dacl == NULL) {
         *error = path + " has no DACL (everyone has full access)";
