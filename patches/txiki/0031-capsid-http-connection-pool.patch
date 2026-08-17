@@ -1,5 +1,5 @@
-diff --git a/src/httpclient.c b/src/httpclient.c
-index 768fe3f..fc8e033 100644
+diff --git a/src/httpclient.c b/b/src/httpclient.c
+index 44a1ff0..a10acfb 100644
 --- a/src/httpclient.c
 +++ b/src/httpclient.c
 @@ -82,6 +82,7 @@ typedef struct {
@@ -102,7 +102,7 @@ index 768fe3f..fc8e033 100644
      cci.method = h->method;
      cci.local_protocol_name = TJS_LWS_HTTP_PROTOCOL_NAME;
      cci.userdata = h;
-@@ -728,6 +805,15 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+@@ -736,6 +813,15 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
              h->http_established = true;
              int status = (int) lws_http_client_http_response(wsi);
  
@@ -118,7 +118,7 @@ index 768fe3f..fc8e033 100644
              /* Detect Content-Encoding before firing headers. */
              const char *encoding = detect_content_encoding(wsi);
              if (encoding) {
-@@ -858,7 +944,17 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+@@ -866,7 +952,17 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
                  maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
                  tjs_httpclient_done(h);
              }
@@ -137,7 +137,7 @@ index 768fe3f..fc8e033 100644
          }
  
          case LWS_CALLBACK_TIMER: {
-@@ -868,6 +964,9 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+@@ -876,6 +972,9 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
                  maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
                  tjs_httpclient_done(h);
              }
@@ -147,7 +147,7 @@ index 768fe3f..fc8e033 100644
              return -1;
          }
  
-@@ -878,18 +977,19 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+@@ -886,18 +985,23 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
  
          case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
          case LWS_CALLBACK_CLIENT_CONNECTION_ERROR: {
@@ -156,13 +156,20 @@ index 768fe3f..fc8e033 100644
 -            h->wsi = NULL;
 -
              /* A pre-resolved target that failed before reaching HTTP
-              * retries the next resolved address.  Egress denials are
-              * terminal — the deny reason must surface, not trigger a
+-             * retries the next resolved address.  Egress denials are
+-             * terminal — the deny reason must surface, not trigger a
 -             * retry. */
-+             * retry.  The retry path detaches from the failed connection
-+             * and re-refs through connect_next; it must not run teardown,
-+             * because the request is still in flight. */
-             if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR &&
+-            if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR &&
++             * retries the next resolved address.  The failure arrives as
++             * CONNECTION_ERROR when lws reports the connect failure
++             * directly, and as CLOSED ("closed before established") when
++             * the wsi is torn down while still connecting — both retry.
++             * Egress denials are terminal — the deny reason must surface,
++             * not trigger a retry.  The retry path detaches from the
++             * failed connection and re-refs through connect_next; it must
++             * not run teardown, because the request is still in flight. */
++            if ((reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR ||
++                 reason == LWS_CALLBACK_CLOSED_CLIENT_HTTP) &&
                  !h->completed && !h->http_established &&
                  h->egress_deny_reason[0] == '\0' &&
                  h->dns_next && h->dns_next->ai_next) {
@@ -172,7 +179,7 @@ index 768fe3f..fc8e033 100644
                  h->dns_next = h->dns_next->ai_next;
                  if (!tjs_httpclient_connect_next(h)) {
                      break;
-@@ -898,12 +998,6 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+@@ -906,12 +1010,6 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
                   * fall through and report the failure */
              }
  
@@ -185,7 +192,22 @@ index 768fe3f..fc8e033 100644
              if (!h->completed) {
                  h->completed = true;
                  if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR) {
-@@ -922,12 +1016,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+@@ -923,6 +1021,14 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+                         args[1] = JS_NewString(h->ctx, in ? (const char *) in : "Connection error");
+                     }
+                     maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 2, args);
++                } else if (h->egress_deny_reason[0]) {
++                    /* A later address in the retry chain was denied; the
++                     * close itself carries no reason string, so attach
++                     * the deny reason explicitly. */
++                    JSValue args[2];
++                    args[0] = JS_NewString(h->ctx, "CONNECTION_CLOSED");
++                    args[1] = JS_NewString(h->ctx, h->egress_deny_reason);
++                    maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 2, args);
+                 } else {
+                     JSValue error = JS_NewString(h->ctx, "CONNECTION_CLOSED");
+                     maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+@@ -930,12 +1036,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
                  tjs_httpclient_done(h);
              }
  
@@ -199,7 +221,7 @@ index 768fe3f..fc8e033 100644
              break;
          }
  
-diff --git a/src/lws-evlib.c b/src/lws-evlib.c
+diff --git a/src/lws-evlib.c b/b/src/lws-evlib.c
 index c07397b..6746b98 100644
 --- a/src/lws-evlib.c
 +++ b/src/lws-evlib.c
@@ -285,7 +307,7 @@ index c07397b..6746b98 100644
  
      return tjs__evlib_watcher_create(evpt, wsi, true);
  }
-diff --git a/deps/libwebsockets/lib/core-net/wsi.c b/deps/libwebsockets/lib/core-net/wsi.c
+diff --git a/deps/libwebsockets/lib/core-net/wsi.c b/b/deps/libwebsockets/lib/core-net/wsi.c
 index a9c4eba..aa8149d 100644
 --- a/deps/libwebsockets/lib/core-net/wsi.c
 +++ b/deps/libwebsockets/lib/core-net/wsi.c
@@ -302,7 +324,7 @@ index a9c4eba..aa8149d 100644
  
  	/* point the fd table entry to new guy */
  
-diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/deps/libwebsockets/lib/roles/http/client/client-http.c
+diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/b/deps/libwebsockets/lib/roles/http/client/client-http.c
 index 1216fd6..fdc981a 100644
 --- a/deps/libwebsockets/lib/roles/http/client/client-http.c
 +++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
@@ -340,7 +362,7 @@ index 1216fd6..fdc981a 100644
  		if (wsi->http.conn_type == HTTP_CONNECTION_KEEP_ALIVE)
  			wsi->keepalive_active = 1;
  		else {
-diff --git a/deps/libwebsockets/lib/core-net/client/connect2.c b/deps/libwebsockets/lib/core-net/client/connect2.c
+diff --git a/deps/libwebsockets/lib/core-net/client/connect2.c b/b/deps/libwebsockets/lib/core-net/client/connect2.c
 index ed38609..901ed83 100644
 --- a/deps/libwebsockets/lib/core-net/client/connect2.c
 +++ b/deps/libwebsockets/lib/core-net/client/connect2.c
@@ -387,7 +409,7 @@ index ed38609..901ed83 100644
  	/*
  	 * The first job is figure out if we want to pipeline on or just join
  	 * an existing "active connection" to the same place
-diff --git a/deps/libwebsockets/lib/core-net/vhost.c b/deps/libwebsockets/lib/core-net/vhost.c
+diff --git a/deps/libwebsockets/lib/core-net/vhost.c b/b/deps/libwebsockets/lib/core-net/vhost.c
 index 35466e9..a52b129 100644
 --- a/deps/libwebsockets/lib/core-net/vhost.c
 +++ b/deps/libwebsockets/lib/core-net/vhost.c

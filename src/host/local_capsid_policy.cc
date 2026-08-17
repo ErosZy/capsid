@@ -383,6 +383,15 @@ bool load_local_capsid_policy(const std::string& path,
         out->settings.memory_bytes = app.memory_bytes;
         out->settings.file_descriptors = app.file_descriptors;
         out->settings.health_check = app.health_check;
+        // worker.memoryMax is budget accounting on the managed path; the
+        // local data plane has no per-worker cgroup budget to apply it
+        // to, so accepting it would silently drop the capacity the
+        // operator asked for.  Fail closed instead.
+        if (app.memory_bytes > 0) {
+            *error = path +
+                     ": worker.memoryMax is not applicable in local mode";
+            return false;
+        }
     }
 
     // 4. env valueFrom resolves against an explicit --secrets-root: one

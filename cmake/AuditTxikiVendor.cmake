@@ -3,7 +3,7 @@
 # This audit verifies:
 #   1. Vendor checkout is clean (no untracked or modified files).
 #   2. Vendor HEAD matches the expected tag (if configured).
-#   3. All 30 patches apply in sequence to a fresh vendor copy, using the
+#   3. All 32 patches apply in sequence to a fresh vendor copy, using the
 #      same tool and flags as the build (git apply -p1 --ignore-whitespace
 #      — PrepareTxiki.cmake).
 #   4. The overlay stamp matches the key computed from the shared function.
@@ -150,9 +150,9 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # gates; 0022 SQLite gates; 0023 fd-adoption gates; 0024 immutable native
 # resource owners; 0025 safe Date slot clone access; 0029 WebSocket Binding
 # owner/egress gates (all audited with the overlay key/manifest bump).
-if(NOT CAPSID_PATCH_COUNT EQUAL 30)
+if(NOT CAPSID_PATCH_COUNT EQUAL 32)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 30 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 32 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------
@@ -256,7 +256,7 @@ endif()
 #
 # Sparse probe: git apply only ever reads the files named in its own
 # +++ b/ headers, so the probe copies exactly those pristine files
-# (derived from the patches themselves) and applies all 30 in order —
+# (derived from the patches themselves) and applies all 32 in order —
 # the same result as probing the full 402MB vendor tree in under a
 # second. Every touched path is a real file (never a symlink), so
 # patch writes stay inside the probe. Runs after stamp verification so

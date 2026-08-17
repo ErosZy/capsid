@@ -641,6 +641,11 @@ try {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-local-capsid-'));
     const bundleFile = path.join(dir, 'host-single-worker.js');
     fs.copyFileSync(args.get('bundle'), bundleFile);
+    // processAddressSpace is unsupported on Darwin (the worker rejects it
+    // fail-closed, same as the managed compile path): omit it there.
+    const worker = process.platform === 'darwin'
+        ? { jsHeap: '64MiB', fileDescriptors: 64 }
+        : { jsHeap: '64MiB', processAddressSpace: '256MiB', fileDescriptors: 64 };
     fs.writeFileSync(path.join(dir, 'capsid.json'), JSON.stringify({
         apiVersion: 'capsid/app-v1',
         entry: 'host-single-worker.js',
@@ -651,11 +656,7 @@ try {
             queueHeaderBytes: '64KiB',
             queueTimeout: '1s',
         },
-        worker: {
-            jsHeap: '64MiB',
-            processAddressSpace: '256MiB',
-            fileDescriptors: 64,
-        },
+        worker,
         request: {
             timeout: '10s',
             maxInflightPerWorker: 16,

@@ -1,5 +1,5 @@
-diff --git a/src/httpclient.c b/src/httpclient.c
-index 541e31f..b41c2ef 100644
+diff --git a/src/httpclient.c b/b/src/httpclient.c
+index 9c566c6..44a1ff0 100644
 --- a/src/httpclient.c
 +++ b/src/httpclient.c
 @@ -70,6 +70,26 @@ typedef struct {
@@ -29,7 +29,7 @@ index 541e31f..b41c2ef 100644
      /* Response decompression. */
      TJSDecompressor *decompressor;
  } TJSHttpClient;
-@@ -98,6 +118,11 @@ static void tjs_httpclient_finalizer(JSRuntime *rt, JSValue val) {
+@@ -100,6 +120,11 @@ static void tjs_httpclient_finalizer(JSRuntime *rt, JSValue val) {
          if (h->decompressor) {
              tjs__decompressor_destroy(h->decompressor, rt);
          }
@@ -41,7 +41,7 @@ index 541e31f..b41c2ef 100644
          tbuf_free(&h->req_headers);
          tbuf_free(&h->send_buf);
          js_free_rt(rt, h);
-@@ -333,6 +358,227 @@ static int tjs_httpclient_egress_allowed(TJSHttpClient *h, const char *host, uin
+@@ -343,6 +368,235 @@ static int tjs_httpclient_egress_allowed(TJSHttpClient *h, const char *host, uin
  }
  #endif
  
@@ -161,10 +161,10 @@ index 541e31f..b41c2ef 100644
 +        return -1;
 +    }
 +
-+    uv_freeaddrinfo(h->dns_results);
-+    h->dns_results = NULL;
-+    h->dns_next = NULL;
-+
++    /* The addrinfo list stays alive: a connect that fails before HTTP
++     * retries the next entry from the CONNECTION_ERROR/CLOSED callback,
++     * and only an established connection (terminal teardown) releases
++     * the list. */
 +    return 0;
 +}
 +
@@ -194,7 +194,15 @@ index 541e31f..b41c2ef 100644
 +    h->dns_results_pending = NULL;
 +
 +    if (tjs_httpclient_connect_next(h)) {
-+        tjs_httpclient_fail_async(h, "Connection failed");
++        /* An egress denial can end the connect attempt synchronously:
++         * the CONNECTING deny gate aborts the wsi inside
++         * lws_client_connect_via_info, which then returns NULL, so no
++         * error callback ever fires.  Surface the deny reason instead
++         * of the generic connect failure. */
++        tjs_httpclient_fail_async(h,
++                                  h->egress_deny_reason[0]
++                                      ? h->egress_deny_reason
++                                      : "Connection failed");
 +    }
 +}
 +
@@ -269,7 +277,7 @@ index 541e31f..b41c2ef 100644
  static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
      TJSHttpClient *h = (TJSHttpClient *) user;
  
-@@ -469,6 +715,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+@@ -479,6 +733,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
          }
  
          case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP: {
@@ -277,7 +285,7 @@ index 541e31f..b41c2ef 100644
              int status = (int) lws_http_client_http_response(wsi);
  
              /* Detect Content-Encoding before firing headers. */
-@@ -625,6 +872,28 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+@@ -635,6 +890,28 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
              lws_set_wsi_user(h->wsi, NULL);
              h->wsi = NULL;
  
@@ -306,7 +314,7 @@ index 541e31f..b41c2ef 100644
              if (!h->completed) {
                  h->completed = true;
                  if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR) {
-@@ -804,8 +1073,12 @@ static int tjs_httpclient_buffer_data(TJSHttpClient *h, JSValue arg) {
+@@ -822,8 +1099,12 @@ static int tjs_httpclient_buffer_data(TJSHttpClient *h, JSValue arg) {
      return 0;
  }
  
@@ -321,7 +329,7 @@ index 541e31f..b41c2ef 100644
      JSContext *ctx = h->ctx;
  
      lws_parse_uri_t *uri = lws_parse_uri_create(h->url_str);
-@@ -832,50 +1105,32 @@ static int tjs_httpclient_connect(TJSHttpClient *h) {
+@@ -850,50 +1131,32 @@ static int tjs_httpclient_connect(TJSHttpClient *h) {
      }
  #endif
  
@@ -387,7 +395,7 @@ index 541e31f..b41c2ef 100644
  }
  
  static JSValue tjs_httpclient_open(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
-@@ -917,7 +1172,7 @@ static JSValue tjs_httpclient_open(JSContext *ctx, JSValue this_val, int argc, J
+@@ -935,7 +1198,7 @@ static JSValue tjs_httpclient_open(JSContext *ctx, JSValue this_val, int argc, J
      h->this_val = JS_DupValue(ctx, this_val);
      h->sent = true;
  
@@ -396,7 +404,7 @@ index 541e31f..b41c2ef 100644
      if (connect_result) {
          char egress_reason[TJS_EGRESS_REASON_MAX];
          const bool has_reason = h->egress_deny_reason[0] != '\0';
-@@ -1017,24 +1272,36 @@ static JSValue tjs_httpclient_abort(JSContext *ctx, JSValue this_val, int argc,
+@@ -1035,24 +1298,36 @@ static JSValue tjs_httpclient_abort(JSContext *ctx, JSValue this_val, int argc,
          return JS_EXCEPTION;
      }
  
@@ -451,8 +459,8 @@ index 541e31f..b41c2ef 100644
      }
  
      return JS_UNDEFINED;
-diff --git a/src/lws-utils.c b/src/lws-utils.c
-index 936901b..b47039b 100644
+diff --git a/src/lws-utils.c b/b/src/lws-utils.c
+index 5e53d30..44eced1 100644
 --- a/src/lws-utils.c
 +++ b/src/lws-utils.c
 @@ -559,6 +559,15 @@ struct lws_vhost *tjs__lws_select_vhost(JSContext *ctx, const char *scheme, cons
@@ -471,11 +479,11 @@ index 936901b..b47039b 100644
  static int tjs__lws_load_http_once(TJSRuntime *qrt, TJSHttpLoadCtx *load_ctx, const char *url) {
      load_ctx->status = -1;
      load_ctx->done = false;
-diff --git a/src/private.h b/src/private.h
-index b1822f7..e13dcf1 100644
+diff --git a/src/private.h b/b/src/private.h
+index feb48e4..259cfbc 100644
 --- a/src/private.h
 +++ b/src/private.h
-@@ -206,6 +206,7 @@ void tjs__lws_setup(void);
+@@ -228,6 +228,7 @@ void tjs__lws_setup(void);
  void tjs__lws_conn_ref(JSContext *ctx);
  void tjs__lws_conn_unref(JSContext *ctx);
  struct lws_vhost *tjs__lws_select_vhost(JSContext *ctx, const char *scheme, const char *hostname, int port);

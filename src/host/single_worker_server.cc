@@ -1103,6 +1103,12 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
     // reaper thread.
     capsid_worker_config config;
     capsid_worker_config_init(&config);
+    // File-descriptor limits are optional; the struct must outlive this
+    // function because the factory stores a pointer to it and spawns the
+    // worker later (ASan/UBSan: a block-scoped struct dies here and the
+    // spawn reads poisoned/reused stack).
+    capsid_resource_limits limits;
+    capsid_resource_limits_init(&limits);
     config.worker_path = options_.worker_path.c_str();
     config.request_timeout_ms = options_.request_timeout_ms;
     config.initial_stream_window = options_.initial_stream_window;
@@ -1153,8 +1159,6 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
                 }
                 return false;
             }
-            capsid_resource_limits limits;
-            capsid_resource_limits_init(&limits);
             limits.enabled_fields |= CAPSID_RESOURCE_LIMIT_FILE_DESCRIPTORS;
             limits.file_descriptors =
                 static_cast<std::uint32_t>(settings.file_descriptors);
