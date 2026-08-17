@@ -759,7 +759,7 @@ public:
         const int generation_fd =
             openat(generations_fd, generation_path.c_str(),
                    O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
-        close(generations_fd);
+        close_managed_state_fd(generations_fd);
         if (generation_fd < 0) {
             return errno == ENOENT ? GenerationCompleteness::kMissing
                                    : GenerationCompleteness::kError;
@@ -768,7 +768,7 @@ public:
         const int marker_fd =
             openat(generation_fd, kCompleteMarker,
                    O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
-        close(generation_fd);
+        close_managed_state_fd(generation_fd);
         if (marker_fd < 0) {
             return errno == ENOENT ? GenerationCompleteness::kMissing
                                    : GenerationCompleteness::kError;
@@ -992,7 +992,7 @@ int open_verified_state_root(const std::string& state_root) {
     struct stat st = {};
     if (fstat(state_fd, &st) != 0 || !S_ISDIR(st.st_mode) ||
         st.st_uid != geteuid() || (st.st_mode & 0077) != 0) {
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         return -1;
     }
     return state_fd;
@@ -1215,7 +1215,7 @@ bool generation_is_complete(int app_fd, const std::string& generation) {
     }
     const int gen_fd = openat(generations_fd, generation.c_str(),
                               O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
-    close(generations_fd);
+    close_managed_state_fd(generations_fd);
     if (gen_fd < 0) {
         return false;
     }
@@ -2277,7 +2277,7 @@ ValidatedGeneration validate_committed_generation(
         }
         const int generation_fd =
             open_verified_subdir(generations_fd, generation.c_str());
-        close(generations_fd);
+        close_managed_state_fd(generations_fd);
         if (generation_fd < 0) {
             fail("cannot open committed generation");
             return validated;
@@ -2324,7 +2324,7 @@ ValidatedGeneration validate_committed_generation(
         const ReadFileStatus signature_status = read_file_at(
             generation_fd, "bytecode.sig", kBytecodeSignatureBytes,
             &signature_bytes);
-        close(generation_fd);
+        close_managed_state_fd(generation_fd);
         const bool complete_snapshot =
             bundle_status == ReadFileStatus::kOk &&
             source_status == ReadFileStatus::kOk &&
@@ -2788,7 +2788,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     const int app_state_fd = open_verified_app_state_dir(
         state_fd, options->application, /*create=*/true);
     if (app_state_fd < 0) {
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error = "cannot prepare state directories";
         status->state = OperationState::kFailed;
         return outcome;
@@ -2802,7 +2802,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         check_version_mapping(app_state_fd, version, generation_digest);
     if (mapping == -2) {
         close_managed_state_fd(app_state_fd);
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error = "cannot read version mapping";
         status->state = OperationState::kFailed;
         return outcome;
@@ -2811,7 +2811,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         // Same Version ID, different immutable content: reject and leave
         // the old active state untouched.
         close_managed_state_fd(app_state_fd);
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error =
             "version id already published with different content";
         status->state = OperationState::kFailed;
@@ -2829,7 +2829,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             app_state_fd, *options, generation_digest);
         if (!validated.ok) {
             close_managed_state_fd(app_state_fd);
-            close(state_fd);
+            close_managed_state_fd(state_fd);
             status->state = OperationState::kFailed;
             status->error = validated.error;
             outcome.error = validated.error;
@@ -2855,7 +2855,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
                           options->application, validated.effective.workers);
             if (!reserved) {
                 close_managed_state_fd(app_state_fd);
-                close(state_fd);
+                close_managed_state_fd(state_fd);
                 status->state = OperationState::kFailed;
                 status->error = "worker capacity exceeded";
                 outcome.error = status->error;
@@ -2875,13 +2875,13 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
                     replacement);
             }
             close_managed_state_fd(app_state_fd);
-            close(state_fd);
+            close_managed_state_fd(state_fd);
             status->state = OperationState::kFailed;
             status->error = warm.error;
             outcome.error = warm.error;
             return outcome;
         }
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         // PR-09c: the generation identity + replacement factory travel with
         // the outcome so the data plane can adopt a pool in place.
         outcome.version = version;
@@ -2900,7 +2900,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     // mapping == -1: first publish of this Version ID; stage it.
     if (!make_dir_at(state_fd, "staging")) {
         close_managed_state_fd(app_state_fd);
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error = "cannot prepare state directories";
         status->state = OperationState::kFailed;
         return outcome;
@@ -2911,7 +2911,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     const int staging_root_fd = prepare_subdir_at(state_fd, "staging");
     if (staging_root_fd < 0) {
         close_managed_state_fd(app_state_fd);
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error = "staging directory is not a verified directory";
         status->state = OperationState::kFailed;
         return outcome;
@@ -2919,7 +2919,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     if (mkdirat(staging_root_fd, outcome.operation_id.c_str(), 0700) != 0) {
         close(staging_root_fd);
         close_managed_state_fd(app_state_fd);
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error = "cannot create exclusive staging directory";
         status->state = OperationState::kFailed;
         return outcome;
@@ -2931,7 +2931,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     if (staging_fd < 0) {
         close(staging_root_fd);
         close_managed_state_fd(app_state_fd);
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error = "cannot open staging directory";
         status->state = OperationState::kFailed;
         return outcome;
@@ -3041,7 +3041,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
             }
         }
         if (generations_fd >= 0) {
-            close(generations_fd);
+            close_managed_state_fd(generations_fd);
         }
     }
     close(staging_fd);
@@ -3054,7 +3054,7 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
         remove_tree_at(staging_root_fd, outcome.operation_id.c_str());
         close(staging_root_fd);
         close_managed_state_fd(app_state_fd);
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error = error.empty() ? "staging failed" : error;
         status->state = OperationState::kFailed;
         status->error = outcome.error;
@@ -3075,13 +3075,13 @@ DeployOutcome run_deploy_operation(ManagedHostOptions* options,
     if (!write_version_mapping(app_state_fd, version, generation_digest,
                                &error)) {
         close_managed_state_fd(app_state_fd);
-        close(state_fd);
+        close_managed_state_fd(state_fd);
         outcome.error = error.empty() ? "cannot record version mapping"
                                       : error;
         status->state = OperationState::kFailed;
         return outcome;
     }
-    close(state_fd);
+    close_managed_state_fd(state_fd);
 
     // ---- 10-12. worker warm-up: the whole fixed pool must be READY.
     // NO Active is reported before the ENTIRE pool succeeds.
@@ -3183,7 +3183,7 @@ DeployOutcome run_retire_operation(ManagedHostOptions* options,
     }
     const int app_state_fd = open_verified_app_state_dir(
         state_fd, options->application, /*create=*/false);
-    close(state_fd);
+    close_managed_state_fd(state_fd);
     if (app_state_fd < 0) {
         outcome.error = "cannot open app state directory";
         status->state = OperationState::kFailed;
@@ -3300,7 +3300,7 @@ DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
     }
     const int app_state_fd = open_verified_app_state_dir(
         state_fd, options->application, /*create=*/false);
-    close(state_fd);
+    close_managed_state_fd(state_fd);
     if (app_state_fd < 0) {
         outcome.error = "cannot open app state directory";
         status->state = OperationState::kFailed;
@@ -3386,7 +3386,7 @@ ManagedLifecycleSnapshot managed_read_lifecycle(ManagedHostOptions* options) {
     }
     const int app_state_fd = open_verified_app_state_dir(
         state_fd, options->application, /*create=*/false);
-    close(state_fd);
+    close_managed_state_fd(state_fd);
     if (app_state_fd < 0) {
         return snapshot;
     }
@@ -3440,7 +3440,7 @@ HealthCheckConfig managed_read_health_check(ManagedHostOptions* options,
     }
     const int app_state_fd = open_verified_app_state_dir(
         state_fd, options->application, /*create=*/false);
-    close(state_fd);
+    close_managed_state_fd(state_fd);
     if (app_state_fd < 0) {
         return result;
     }
@@ -3452,14 +3452,14 @@ HealthCheckConfig managed_read_health_check(ManagedHostOptions* options,
     }
     const int generation_fd =
         open_verified_subdir(generations_fd, generation.c_str());
-    close(generations_fd);
+    close_managed_state_fd(generations_fd);
     if (generation_fd < 0) {
         return result;
     }
     std::string capsid_json;
     const ReadFileStatus status = read_file_at(
         generation_fd, "capsid.json", kMaxConfigFileBytes, &capsid_json);
-    close(generation_fd);
+    close_managed_state_fd(generation_fd);
     if (status != ReadFileStatus::kOk) {
         // M2 item 7: §12.2 control-plane event — a committed health check
         // that cannot be read means the App is silently passive; never
@@ -3531,7 +3531,7 @@ DeployOutcome run_recover_operation(ManagedHostOptions* options,
     }
     const int app_state_fd = open_verified_app_state_dir(
         state_fd, options->application, /*create=*/false);
-    close(state_fd);
+    close_managed_state_fd(state_fd);
     if (app_state_fd < 0) {
         if (errno == ENOENT) {
             // No App state directory at all: no active App; never scan
@@ -3674,7 +3674,7 @@ std::string managed_app_status(const ManagedHostOptions& options) {
     }
     const int app_state_fd = open_verified_app_state_dir(
         state_fd, options.application, /*create=*/false);
-    close(state_fd);
+    close_managed_state_fd(state_fd);
     if (app_state_fd < 0) {
         return inactive;
     }
