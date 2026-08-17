@@ -1,0 +1,485 @@
+diff --git a/src/httpclient.c b/src/httpclient.c
+index 541e31f..b41c2ef 100644
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -70,6 +70,26 @@ typedef struct {
+     /* Set by tjs_httpclient_egress_allowed on deny; reported by the
+      * CONNECTION_ERROR path and the synchronous connect failure. */
+     char egress_deny_reason[TJS_EGRESS_REASON_MAX];
++    /* System-resolver pre-resolution: hostname targets are resolved with
++     * uv_getaddrinfo (the OS resolver — Windows DNS Client, nsswitch,
++     * /etc/hosts) and connected by address, keeping the original hostname
++     * for the Host header and SNI.  This bypasses lws's own raw-DNS
++     * client, which cannot see the platform resolver's full behavior
++     * (per-interface servers, split DNS, hosts entries). */
++    uv_getaddrinfo_t dns_req;
++    uv_timer_t dns_timer;
++    bool dns_timer_init;
++    bool resolving;
++    bool resolve_cancelled;
++    bool http_established;
++    int dns_status;
++    struct addrinfo *dns_results_pending; /* set by the resolve callback */
++    struct addrinfo *dns_results;         /* owned list; head kept for free */
++    struct addrinfo *dns_next;            /* current entry (retry cursor) */
++    char *connect_host; /* original hostname: Host header and SNI */
++    char *connect_path; /* request path (uri parse result is transient) */
++    int connect_port;
++    bool connect_ssl;
+     /* Response decompression. */
+     TJSDecompressor *decompressor;
+ } TJSHttpClient;
+@@ -98,6 +118,11 @@ static void tjs_httpclient_finalizer(JSRuntime *rt, JSValue val) {
+         if (h->decompressor) {
+             tjs__decompressor_destroy(h->decompressor, rt);
+         }
++        if (h->dns_results) {
++            uv_freeaddrinfo(h->dns_results);
++        }
++        js_free_rt(rt, h->connect_host);
++        js_free_rt(rt, h->connect_path);
+         tbuf_free(&h->req_headers);
+         tbuf_free(&h->send_buf);
+         js_free_rt(rt, h);
+@@ -333,6 +358,227 @@ static int tjs_httpclient_egress_allowed(TJSHttpClient *h, const char *host, uin
+ }
+ #endif
+ 
++/* Terminate a request that never reached the lws connection machinery
++ * (resolution-phase failures and the last-address connect failure). */
++static void tjs_httpclient_fail_async(TJSHttpClient *h, const char *message) {
++    if (h->dns_results_pending) {
++        uv_freeaddrinfo(h->dns_results_pending);
++        h->dns_results_pending = NULL;
++    }
++    if (h->dns_results) {
++        uv_freeaddrinfo(h->dns_results);
++        h->dns_results = NULL;
++        h->dns_next = NULL;
++    }
++    if (!h->completed) {
++        h->completed = true;
++        JSValue args[2];
++        args[0] = JS_NewString(h->ctx, "CONNECTION_ERROR");
++        args[1] = JS_NewString(h->ctx, message);
++        maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 2, args);
++        tjs_httpclient_done(h);
++    }
++    CHECK(!JS_IsUndefined(h->this_val));
++    JSValue val = h->this_val;
++    h->this_val = JS_UNDEFINED;
++    JS_FreeValue(h->ctx, val);
++}
++
++/* Release the prevent-GC reference held through a cancelled (aborted or
++ * timed-out) resolution.  The uv_getaddrinfo request cannot be cancelled,
++ * so the reference lives until its callback observes the cancel. */
++static void tjs_httpclient_release_after_resolve(TJSHttpClient *h) {
++    if (h->dns_results_pending) {
++        uv_freeaddrinfo(h->dns_results_pending);
++        h->dns_results_pending = NULL;
++    }
++    if (h->dns_results) {
++        uv_freeaddrinfo(h->dns_results);
++        h->dns_results = NULL;
++        h->dns_next = NULL;
++    }
++    CHECK(!JS_IsUndefined(h->this_val));
++    JSValue val = h->this_val;
++    h->this_val = JS_UNDEFINED;
++    JS_FreeValue(h->ctx, val);
++}
++
++/* Establish an lws connection to `address`.  For pre-resolved targets it
++ * is a numeric address and h->connect_host keeps the Host header and SNI;
++ * for numeric-direct and proxied targets both are the hostname lws hands
++ * over unchanged. */
++static int tjs_httpclient_connect_addr(TJSHttpClient *h, const char *address) {
++    JSContext *ctx = h->ctx;
++
++    struct lws_context *lws_ctx = tjs__lws_get_context(ctx);
++    if (!lws_ctx) {
++        return -1;
++    }
++
++    struct lws_client_connect_info cci;
++    memset(&cci, 0, sizeof(cci));
++
++    cci.context = lws_ctx;
++    cci.address = address;
++    cci.port = h->connect_port;
++    cci.path = h->connect_path;
++    cci.host = h->connect_host;
++    cci.origin = h->connect_host;
++    cci.ssl_connection = (h->connect_ssl ? LCCSCF_USE_SSL : 0) | h->ssl_flags | LCCSCF_HTTP_NO_FOLLOW_REDIRECT;
++    cci.method = h->method;
++    cci.local_protocol_name = TJS_LWS_HTTP_PROTOCOL_NAME;
++    cci.userdata = h;
++    cci.pwsi = &h->wsi;
++    cci.vhost = tjs__lws_select_vhost(ctx, h->connect_ssl ? "https" : "http", h->connect_host, h->connect_port);
++
++    tjs__lws_conn_ref(ctx);
++
++    struct lws *wsi = lws_client_connect_via_info(&cci);
++    if (!wsi) {
++        tjs__lws_conn_unref(ctx);
++        h->wsi = NULL;
++        return -1;
++    }
++
++    lws_cancel_service(lws_ctx);
++
++    if (h->timeout > 0) {
++        lws_set_timer_usecs(wsi, (lws_usec_t) h->timeout * LWS_USEC_PER_SEC / 1000);
++    }
++
++    return 0;
++}
++
++/* Connect to the current address in the pre-resolved list.  On success the
++ * list is consumed; a later CONNECTION_ERROR retries the next entry. */
++static int tjs_httpclient_connect_next(TJSHttpClient *h) {
++    const char *address = NULL;
++    char ip_str[INET6_ADDRSTRLEN];
++
++    if (h->dns_next) {
++        struct addrinfo *ai = h->dns_next;
++        if (ai->ai_family == AF_INET6) {
++            struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *) ai->ai_addr;
++            if (uv_inet_ntop(AF_INET6, &sa6->sin6_addr, ip_str, sizeof(ip_str)) == 0) {
++                address = ip_str;
++            }
++        } else {
++            struct sockaddr_in *sa = (struct sockaddr_in *) ai->ai_addr;
++            if (uv_inet_ntop(AF_INET, &sa->sin_addr, ip_str, sizeof(ip_str)) == 0) {
++                address = ip_str;
++            }
++        }
++    }
++
++    if (!address || tjs_httpclient_connect_addr(h, address)) {
++        return -1;
++    }
++
++    uv_freeaddrinfo(h->dns_results);
++    h->dns_results = NULL;
++    h->dns_next = NULL;
++
++    return 0;
++}
++
++/* Finish the resolution phase once both the uv_getaddrinfo request and the
++ * deadline-timer handle have settled (the timer handle cannot be closed
++ * synchronously, and the request cannot be cancelled). */
++static void tjs_httpclient_continue_resolve(TJSHttpClient *h) {
++    if (h->resolving) {
++        /* the deadline fired first; the still-pending uv_getaddrinfo
++         * callback re-enters here and performs the teardown */
++        return;
++    }
++
++    if (h->resolve_cancelled) {
++        /* abort() or the deadline already reported the terminal state */
++        tjs_httpclient_release_after_resolve(h);
++        return;
++    }
++
++    if (h->dns_status != 0 || !h->dns_results_pending) {
++        tjs_httpclient_fail_async(h, "DNS resolution failed");
++        return;
++    }
++
++    h->dns_results = h->dns_results_pending;
++    h->dns_next = h->dns_results_pending;
++    h->dns_results_pending = NULL;
++
++    if (tjs_httpclient_connect_next(h)) {
++        tjs_httpclient_fail_async(h, "Connection failed");
++    }
++}
++
++static void tjs_httpclient_dns_timer_closed(uv_handle_t *handle) {
++    TJSHttpClient *h = handle->data;
++    tjs_httpclient_continue_resolve(h);
++}
++
++static void tjs_httpclient_dns_timeout(uv_timer_t *timer) {
++    TJSHttpClient *h = timer->data;
++    if (h->resolving) {
++        /* uv_getaddrinfo cannot be cancelled; mark the request terminal and
++         * let the resolve callback release the prevent-GC reference */
++        h->resolve_cancelled = true;
++        if (!h->completed) {
++            h->completed = true;
++            JSValue error = JS_NewString(h->ctx, "TIMED_OUT");
++            maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++            tjs_httpclient_done(h);
++        }
++    }
++    if (h->dns_timer_init) {
++        h->dns_timer_init = false;
++        uv_timer_stop(timer);
++        uv_close((uv_handle_t *) timer, tjs_httpclient_dns_timer_closed);
++    }
++}
++
++static void tjs_httpclient_dns_resolved(uv_getaddrinfo_t *req, int status, struct addrinfo *res) {
++    TJSHttpClient *h = req->data;
++    h->resolving = false;
++    h->dns_status = status;
++    h->dns_results_pending = res;
++
++    if (h->dns_timer_init) {
++        h->dns_timer_init = false;
++        uv_timer_stop(&h->dns_timer);
++        uv_close((uv_handle_t *) &h->dns_timer, tjs_httpclient_dns_timer_closed);
++    } else {
++        tjs_httpclient_continue_resolve(h);
++    }
++}
++
++/* Begin system-resolver pre-resolution for the target hostname. */
++static int tjs_httpclient_resolve(TJSHttpClient *h) {
++    struct addrinfo hints;
++    memset(&hints, 0, sizeof(hints));
++    hints.ai_family = AF_UNSPEC;
++    hints.ai_socktype = SOCK_STREAM;
++    hints.ai_flags = AI_ADDRCONFIG | AI_V4MAPPED;
++
++    h->resolving = true;
++    h->dns_req.data = h;
++    h->dns_timer.data = h;
++    uv_loop_t *loop = TJS_GetLoop(h->qrt);
++    int r = uv_getaddrinfo(loop, &h->dns_req, tjs_httpclient_dns_resolved, h->connect_host, NULL, &hints);
++    if (r) {
++        /* validation failure: no callback will ever fire */
++        h->resolving = false;
++        return -1;
++    }
++
++    if (h->timeout > 0) {
++        uv_timer_init(loop, &h->dns_timer);
++        h->dns_timer_init = true;
++        uv_timer_start(&h->dns_timer, tjs_httpclient_dns_timeout, h->timeout, 0);
++    }
++
++    return 0;
++}
++
+ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
+     TJSHttpClient *h = (TJSHttpClient *) user;
+ 
+@@ -469,6 +715,7 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+         }
+ 
+         case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP: {
++            h->http_established = true;
+             int status = (int) lws_http_client_http_response(wsi);
+ 
+             /* Detect Content-Encoding before firing headers. */
+@@ -625,6 +872,28 @@ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reas
+             lws_set_wsi_user(h->wsi, NULL);
+             h->wsi = NULL;
+ 
++            /* A pre-resolved target that failed before reaching HTTP
++             * retries the next resolved address.  Egress denials are
++             * terminal — the deny reason must surface, not trigger a
++             * retry. */
++            if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR &&
++                !h->completed && !h->http_established &&
++                h->egress_deny_reason[0] == '\0' &&
++                h->dns_next && h->dns_next->ai_next) {
++                h->dns_next = h->dns_next->ai_next;
++                if (!tjs_httpclient_connect_next(h)) {
++                    break;
++                }
++                /* no address left (or the connect failed to start):
++                 * fall through and report the failure */
++            }
++
++            if (h->dns_results) {
++                uv_freeaddrinfo(h->dns_results);
++                h->dns_results = NULL;
++                h->dns_next = NULL;
++            }
++
+             if (!h->completed) {
+                 h->completed = true;
+                 if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR) {
+@@ -804,8 +1073,12 @@ static int tjs_httpclient_buffer_data(TJSHttpClient *h, JSValue arg) {
+     return 0;
+ }
+ 
+-/* Parse URL and initiate an lws client connection.  Returns 0 on success. */
+-static int tjs_httpclient_connect(TJSHttpClient *h) {
++/* Parse URL, run the host-stage egress gate, and either start an lws
++ * connection directly (numeric and proxied targets) or begin system-
++ * resolver pre-resolution.  Returns 0 when the request is underway
++ * (connected or resolving), -1 on synchronous failure, -2 on egress
++ * denial. */
++static int tjs_httpclient_start(TJSHttpClient *h) {
+     JSContext *ctx = h->ctx;
+ 
+     lws_parse_uri_t *uri = lws_parse_uri_create(h->url_str);
+@@ -832,50 +1105,32 @@ static int tjs_httpclient_connect(TJSHttpClient *h) {
+     }
+ #endif
+ 
++    /* The parse result is transient; copy what the resolution phase and
++     * the connection still need (the path keeps its leading '/'). */
+     char full_path[TJS_PATH_MAX];
+     snprintf(full_path, sizeof(full_path), "/%s", uri->path);
+-
+-    struct lws_context *lws_ctx = tjs__lws_get_context(ctx);
+-    if (!lws_ctx) {
++    h->connect_host = js_strdup(ctx, uri->host);
++    h->connect_path = js_strdup(ctx, full_path);
++    h->connect_port = uri->port;
++    h->connect_ssl = use_ssl;
++    if (!h->connect_host || !h->connect_path) {
+         lws_parse_uri_destroy(&uri);
+         return -1;
+     }
+ 
+-    struct lws_client_connect_info cci;
+-    memset(&cci, 0, sizeof(cci));
+-
+-    cci.context = lws_ctx;
+-    cci.address = uri->host;
+-    cci.port = uri->port;
+-    cci.path = full_path;
+-    cci.host = uri->host;
+-    cci.origin = uri->host;
+-    cci.ssl_connection = (use_ssl ? LCCSCF_USE_SSL : 0) | h->ssl_flags | LCCSCF_HTTP_NO_FOLLOW_REDIRECT;
+-    cci.method = h->method;
+-    cci.local_protocol_name = TJS_LWS_HTTP_PROTOCOL_NAME;
+-    cci.userdata = h;
+-    cci.pwsi = &h->wsi;
+-    cci.vhost = tjs__lws_select_vhost(ctx, uri->scheme, uri->host, uri->port);
+-
+-    tjs__lws_conn_ref(ctx);
+-
+-    struct lws *wsi = lws_client_connect_via_info(&cci);
++    lws_sockaddr46 sa46;
++    bool numeric = !lws_sa46_parse_numeric_address(uri->host, &sa46);
++    bool via_proxy = tjs__lws_uses_proxy(ctx, uri->scheme, uri->host, uri->port);
+ 
+     lws_parse_uri_destroy(&uri);
+ 
+-    if (!wsi) {
+-        tjs__lws_conn_unref(ctx);
+-        h->wsi = NULL;
+-        return -1;
+-    }
+-
+-    lws_cancel_service(lws_ctx);
+-
+-    if (h->timeout > 0) {
+-        lws_set_timer_usecs(wsi, (lws_usec_t) h->timeout * LWS_USEC_PER_SEC / 1000);
++    /* Numeric targets connect directly, and a proxy owns name resolution
++     * for proxied targets — only direct hostname targets pre-resolve. */
++    if (numeric || via_proxy) {
++        return tjs_httpclient_connect_addr(h, h->connect_host);
+     }
+ 
+-    return 0;
++    return tjs_httpclient_resolve(h);
+ }
+ 
+ static JSValue tjs_httpclient_open(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+@@ -917,7 +1172,7 @@ static JSValue tjs_httpclient_open(JSContext *ctx, JSValue this_val, int argc, J
+     h->this_val = JS_DupValue(ctx, this_val);
+     h->sent = true;
+ 
+-    int connect_result = tjs_httpclient_connect(h);
++    int connect_result = tjs_httpclient_start(h);
+     if (connect_result) {
+         char egress_reason[TJS_EGRESS_REASON_MAX];
+         const bool has_reason = h->egress_deny_reason[0] != '\0';
+@@ -1017,24 +1272,36 @@ static JSValue tjs_httpclient_abort(JSContext *ctx, JSValue this_val, int argc,
+         return JS_EXCEPTION;
+     }
+ 
+-    if (h->wsi && !h->completed) {
+-        h->completed = true;
+-
+-        struct lws *wsi = h->wsi;
+-
+-        lws_set_timer_usecs(wsi, LWS_SET_TIMER_USEC_CANCEL);
+-
+-        JSValue error = JS_NewString(ctx, "ABORTED");
+-        maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+-        tjs_httpclient_done(h);
+-
+-        /* Mark the wsi to be killed at the next timeout check.  abort()
+-         * is reachable from inside a lws callback for this very wsi (JS
+-         * reads the response body, which runs under
+-         * RECEIVE_CLIENT_HTTP_READ, and aborts from there).  A synchronous
+-         * kill frees the wsi while lws is still servicing it, and lws
+-         * touches wsi again after the callback returns. */
+-        lws_set_timeout(wsi, PENDING_TIMEOUT_USER_OK, LWS_TO_KILL_ASYNC);
++    if (!h->completed) {
++        if (h->resolving || h->dns_timer_init || h->dns_results_pending) {
++            /* uv_getaddrinfo cannot be cancelled; the resolve callback
++             * observes resolve_cancelled and releases the prevent-GC
++             * reference instead of connecting */
++            h->resolve_cancelled = true;
++            h->completed = true;
++
++            JSValue error = JS_NewString(ctx, "ABORTED");
++            maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++            tjs_httpclient_done(h);
++        } else if (h->wsi) {
++            h->completed = true;
++
++            struct lws *wsi = h->wsi;
++
++            lws_set_timer_usecs(wsi, LWS_SET_TIMER_USEC_CANCEL);
++
++            JSValue error = JS_NewString(ctx, "ABORTED");
++            maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++            tjs_httpclient_done(h);
++
++            /* Mark the wsi to be killed at the next timeout check.  abort()
++             * is reachable from inside a lws callback for this very wsi (JS
++             * reads the response body, which runs under
++             * RECEIVE_CLIENT_HTTP_READ, and aborts from there).  A synchronous
++             * kill frees the wsi while lws is still servicing it, and lws
++             * touches wsi again after the callback returns. */
++            lws_set_timeout(wsi, PENDING_TIMEOUT_USER_OK, LWS_TO_KILL_ASYNC);
++        }
+     }
+ 
+     return JS_UNDEFINED;
+diff --git a/src/lws-utils.c b/src/lws-utils.c
+index 936901b..b47039b 100644
+--- a/src/lws-utils.c
++++ b/src/lws-utils.c
+@@ -559,6 +559,15 @@ struct lws_vhost *tjs__lws_select_vhost(JSContext *ctx, const char *scheme, cons
+     return qrt->lws.vh_direct;
+ }
+ 
++/* Capsid: true when the selected client vhost for this URL is a proxy
++ * vhost.  A proxy owns name resolution, so the fetch engine must not
++ * pre-resolve the target when one applies. */
++bool tjs__lws_uses_proxy(JSContext *ctx, const char *scheme, const char *hostname, int port) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    CHECK_NOT_NULL(qrt);
++    return tjs__lws_select_vhost(ctx, scheme, hostname, port) != qrt->lws.vh_direct;
++}
++
+ static int tjs__lws_load_http_once(TJSRuntime *qrt, TJSHttpLoadCtx *load_ctx, const char *url) {
+     load_ctx->status = -1;
+     load_ctx->done = false;
+diff --git a/src/private.h b/src/private.h
+index b1822f7..e13dcf1 100644
+--- a/src/private.h
++++ b/src/private.h
+@@ -206,6 +206,7 @@ void tjs__lws_setup(void);
+ void tjs__lws_conn_ref(JSContext *ctx);
+ void tjs__lws_conn_unref(JSContext *ctx);
+ struct lws_vhost *tjs__lws_select_vhost(JSContext *ctx, const char *scheme, const char *hostname, int port);
++bool tjs__lws_uses_proxy(JSContext *ctx, const char *scheme, const char *hostname, int port);
+ int tjs__lws_load_http(TJSRuntime *qrt, TBuf *dbuf, const char *url);
+ 
+ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);

@@ -180,10 +180,11 @@ function(capsid_compute_txiki_overlay_key)
     # 0019 Binding fs module gate; 0020 grantable module surface;
     # 0021 WASI FS/stdio native gates; 0022 SQLite gates;
     # 0023 fd-adoption gates; 0024 immutable native-resource owners;
-    # 0025 side-effect-free Date slot access; 0029 WebSocket Binding gates.
-    if(NOT CTOK_PATCH_COUNT EQUAL 30)
+    # 0025 side-effect-free Date slot access; 0029 WebSocket Binding gates;
+    # 0030 fetch system-resolver pre-resolution (bypasses lws raw DNS).
+    if(NOT CTOK_PATCH_COUNT EQUAL 31)
         message(FATAL_ERROR
-            "expected 30 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 31 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")
