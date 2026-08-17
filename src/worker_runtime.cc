@@ -85,7 +85,6 @@ void tjs__execute_jobs(JSContext *ctx);
 #endif
 
 #include <algorithm>
-#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -97,7 +96,6 @@ void tjs__execute_jobs(JSContext *ctx);
 #include <optional>
 #include <set>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -173,114 +171,16 @@ struct BindingAsyncContext {
 // Pre-sandbox resolver pool warm-up. Strict sandboxes deny clone, while
 // uv_getaddrinfo creates its process-global libuv worker threads on first
 // submission; the first fetch would otherwise abort the process after the
-// sandbox is installed. This submits one "localhost" lookup on a dedicated
-// loop/thread and waits at most one second: the thread keeps running if the
-// system resolver is slow, but startup never blocks on it.
-struct ResolverWarmState {
-    uv_loop_t loop;
-    uv_getaddrinfo_t request;
-    uv_timer_t timer;
-    bool timer_initialized = false;
-    bool timer_closed = false;
-    std::atomic<bool> done{false};
-
-    ResolverWarmState() {
-        memset(&loop, 0, sizeof(loop));
-        memset(&request, 0, sizeof(request));
-        memset(&timer, 0, sizeof(timer));
-    }
-};
-
-void resolver_warm_timer_closed(uv_handle_t *handle) {
-    ResolverWarmState *state =
-        static_cast<ResolverWarmState *>(handle->data);
-    state->timer_closed = true;
-    // The resolve completed and its timer handle is now closed: the libuv
-    // threadpool threads that uv_getaddrinfo needs have been created, so
-    // the strict-sandbox caller may proceed.
-    state->done = true;
-    uv_stop(&state->loop);
-}
-
-void resolver_warm_timeout(uv_timer_t *timer) {
-    ResolverWarmState *state =
-        static_cast<ResolverWarmState *>(timer->data);
-    // Signal the starter that it may proceed; the resolve thread stays
-    // alive until uv_getaddrinfo completes because its request cannot be
-    // cancelled.
-    state->done = true;
-}
-
-void resolver_warm_resolved(uv_getaddrinfo_t *request,
-                            int status,
-                            struct addrinfo *result) {
+// sandbox is installed. This blocks until one "localhost" lookup completes,
+// so the pool threads are guaranteed to exist before apply_sandbox() runs.
+void warm_resolve_callback(uv_getaddrinfo_t *request,
+                           int status,
+                           struct addrinfo *result) {
     (void)status;
-    ResolverWarmState *state =
-        static_cast<ResolverWarmState *>(request->data);
+    *static_cast<int *>(request->data) = 1;
     if (result != NULL) {
         uv_freeaddrinfo(result);
     }
-    if (state->timer_initialized) {
-        state->timer_initialized = false;
-        uv_timer_stop(&state->timer);
-        uv_close(reinterpret_cast<uv_handle_t *>(&state->timer),
-                 resolver_warm_timer_closed);
-    } else {
-        state->done = true;
-        uv_stop(&state->loop);
-    }
-}
-
-void resolver_warm_thread(ResolverWarmState *state) {
-    uv_run(&state->loop, UV_RUN_DEFAULT);
-    // The timer close callback stops the loop; when no timer was ever
-    // initialized the loop was already stopped by the resolve callback.
-    uv_loop_close(&state->loop);
-    delete state;
-}
-
-bool warm_resolver_pool_once() {
-    ResolverWarmState *state = new (std::nothrow) ResolverWarmState();
-    if (state == NULL) {
-        return false;
-    }
-    if (uv_loop_init(&state->loop) != 0) {
-        delete state;
-        return false;
-    }
-    state->request.data = state;
-    state->timer.data = state;
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_ADDRCONFIG | AI_V4MAPPED;
-    if (uv_getaddrinfo(&state->loop, &state->request,
-                       resolver_warm_resolved, "localhost", NULL,
-                       &hints) != 0) {
-        uv_loop_close(&state->loop);
-        delete state;
-        return false;
-    }
-    if (uv_timer_init(&state->loop, &state->timer) == 0) {
-        state->timer_initialized = true;
-        uv_timer_start(&state->timer, resolver_warm_timeout, 1000, 0);
-    }
-    std::thread thread(resolver_warm_thread, state);
-    thread.detach();
-    // Wait for the resolve to finish (or the 5s safety timeout to fire).
-    // The pre-sandbox warm-up must not return while libuv may still create
-    // threadpool threads: the strict sandbox denies clone, and a late
-    // threadpool spawn aborts the worker. A 1s bound proved too short under
-    // ASAN, where resolution can take longer than the old blocking loop's
-    // immediate completion on non-instrumented builds.
-    const std::chrono::steady_clock::time_point deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!state->done.load(std::memory_order_acquire) &&
-           std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::yield();
-    }
-    return true;
 }
 
 typedef capsid::WorkerStartupConfig WorkerConfig;
@@ -1041,9 +941,28 @@ public:
         // first submission, and libuv aborts the process when creation
         // fails; the strict sandbox denies clone, so warm the pool —
         // and prime the system resolver — before the kernel sandbox
-        // installs. The warm-up is non-blocking beyond one second.
+        // installs. The loop is driven on the calling thread: the warm-up
+        // must not return while the resolver work is still pending.
         if (config_.strict_sandbox) {
-            (void)warm_resolver_pool_once();
+            uv_loop_t warm_loop;
+            uv_getaddrinfo_t warm_req;
+            int warm_done = 0;
+            struct addrinfo hints;
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_family = AF_UNSPEC;
+            hints.ai_socktype = SOCK_STREAM;
+            hints.ai_flags = AI_ADDRCONFIG | AI_V4MAPPED;
+            if (uv_loop_init(&warm_loop) == 0) {
+                warm_req.data = &warm_done;
+                if (uv_getaddrinfo(&warm_loop, &warm_req,
+                                   warm_resolve_callback, "localhost",
+                                   NULL, &hints) == 0) {
+                    while (warm_done == 0 &&
+                           uv_run(&warm_loop, UV_RUN_ONCE) != 0) {
+                    }
+                }
+                uv_loop_close(&warm_loop);
+            }
         }
         std::string sandbox_error;
         if (!capsid::apply_sandbox(
