@@ -51,7 +51,7 @@ For consistent cross-platform behavior, rely only on the ✅ list; before using 
 - single-worker and static-pool (single / multi shard) are part of the three-platform unified contract; multi shard uses `SO_REUSEPORT`;
 - `capsid:fs` is degraded but usable: readText/stat/list behave consistently with Linux, implemented as a component-by-component `openat(O_NOFOLLOW)` dirfd walk; symlinks are always rejected;
 - There is no API equivalent to `sched_setaffinity`; CPU affinity tests are skipped with CTest 77;
-- Requesting strict sandbox fails during the worker startup handshake; `--mode managed` fails directly at the CLI with the message "managed coordinator requires Linux strict sandbox", matching Windows behavior.
+- `--strict-sandbox on` fails directly at the CLI ("requires Linux strict sandbox"); `--mode managed` fails directly at the CLI with the message "managed coordinator requires Linux strict sandbox", matching Windows behavior. A programmatic spawn that still requests strict sandbox fails during the worker startup handshake (defense in depth).
 
 ### Windows
 

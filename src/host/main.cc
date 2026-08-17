@@ -1140,10 +1140,18 @@ int main(int argc, char** argv) {
     }
     capsid::host::SingleWorkerServerOptions options;
     options.worker_path = require("worker");
-    options.source_bundle_path = require("source-bundle");
-    options.source_name = require("source-name");
-    if (options.source_name.rfind("file://", 0) != 0) {
-        fail("--source-name must be an absolute file URL");
+    // The source bundle is either the explicit --source-bundle (with its
+    // --source-name URL) or the capsid.json entry resolved after the local
+    // policy is loaded below: the document names the bundle file inside
+    // its own directory, so a production capsid.json runs unchanged.
+    const auto source_bundle_it = values.find("source-bundle");
+    const bool explicit_source_bundle = source_bundle_it != values.end();
+    if (explicit_source_bundle) {
+        options.source_bundle_path = source_bundle_it->second;
+        options.source_name = require("source-name");
+        if (options.source_name.rfind("file://", 0) != 0) {
+            fail("--source-name must be an absolute file URL");
+        }
     }
     options.application = require("application");
     if (!valid_application_id(options.application)) {
@@ -1245,6 +1253,18 @@ int main(int argc, char** argv) {
         fail("--strict-sandbox must be on or off");
     }
     options.strict_sandbox = sandbox == "on";
+#if !defined(__linux__)
+    // Fail at the argument phase, not after spawn: the worker would
+    // otherwise start and asynchronously exit at the startup handshake
+    // ("strict sandbox is unavailable on this platform/build") — the
+    // same fail-fast philosophy as --mode managed on non-Linux. The
+    // worker-side refusal stays as defense in depth for programmatic
+    // spawns.
+    if (options.strict_sandbox) {
+        fail("--strict-sandbox on requires Linux strict sandbox (see "
+             "docs/platform-support.md)");
+    }
+#endif
     const std::uint64_t ready_fd =
         parse_positive_integer(require("ready-fd"), "ready-fd");
     if (ready_fd > static_cast<std::uint64_t>(
@@ -1340,10 +1360,9 @@ int main(int argc, char** argv) {
             *write_timeout_text, "write-timeout");
     }
     // v0.1.3 local capsid.json permissions. The default ./capsid.json is
-    // tried whenever it exists; an explicit --capsid-json must exist (the
-    // missing-file failure happens inside the server start, not here, so
-    // the default no-policy case and the explicit error case share one
-    // code path).
+    // tried whenever it exists; an explicit --capsid-json must exist. The
+    // policy is loaded here — before spawn — so a malformed document fails
+    // the CLI phase, not the post-spawn startup.
     const std::string* capsid_json_text = optional_value("capsid-json");
     if (capsid_json_text != nullptr) {
         options.capsid_json_path = *capsid_json_text;
@@ -1370,6 +1389,91 @@ int main(int argc, char** argv) {
             fail("--bindings-root rejected: " + scan_error);
         }
         options.binding_registry = std::move(registry);
+    }
+    {
+        auto local_policy = std::make_shared<capsid::host::LocalCapsidPolicy>();
+        std::string policy_error;
+        if (!capsid::host::load_local_capsid_policy(
+                options.capsid_json_path, options.capsid_json_required,
+                options.binding_registry.get(), local_policy.get(),
+                &policy_error)) {
+            fail(policy_error);
+        }
+        const capsid::host::LocalCapsidPolicy::RuntimeSettings& settings =
+            local_policy->settings;
+        if (!explicit_source_bundle) {
+            if (!local_policy->present || !settings.has_entry) {
+                fail("--source-bundle is required unless capsid.json "
+                     "provides an entry");
+            }
+            // The capsid.json directory is the app version directory; the
+            // entry names the bundle file inside it (the managed layout).
+            std::string directory = options.capsid_json_path;
+            const std::string::size_type slash = directory.find_last_of(
+                "/\\");
+            directory = slash == std::string::npos
+                            ? std::string()
+                            : directory.substr(0, slash);
+            std::string bundle_path =
+                directory.empty() ? settings.entry
+                                  : directory + "/" + settings.entry;
+            char cwd_buffer[4096];
+            if (getcwd(cwd_buffer, sizeof(cwd_buffer)) == nullptr) {
+                fail("cannot resolve the working directory");
+            }
+            const std::string cwd(cwd_buffer);
+            const std::string absolute =
+                bundle_path.rfind("/", 0) == 0
+                    ? bundle_path
+                    : cwd + "/" + bundle_path;
+            options.source_bundle_path = absolute;
+            // file:// URL identity: forward slashes, RFC 8089 local form.
+            std::string url_path = absolute;
+            for (char& ch : url_path) {
+                if (ch == '\\') {
+                    ch = '/';
+                }
+            }
+            options.source_name = "file://" +
+                                  (url_path.rfind('/', 0) == 0 ? "" : "/") +
+                                  url_path;
+        }
+        // The document fills the knobs the CLI left unset; an explicit CLI
+        // flag always wins over the document (the CLI is the override).
+        if (!values.count("request-timeout-ms") &&
+            settings.has_request_timeout_ms) {
+            options.request_timeout_ms = settings.request_timeout_ms;
+        }
+        if (!values.count("max-inflight-per-worker") &&
+            settings.has_max_inflight) {
+            options.max_inflight_per_worker =
+                settings.max_inflight_per_worker;
+        }
+        if (!values.count("max-streaming-inflight") &&
+            settings.has_max_streaming_inflight) {
+            options.max_streaming_inflight_per_worker =
+                settings.max_streaming_inflight_per_worker;
+        }
+        if (!values.count("stream-idle-timeout") &&
+            settings.has_stream_idle_timeout_ms) {
+            options.stream_idle_timeout_ms =
+                settings.stream_idle_timeout_ms;
+        }
+        if (!values.count("write-timeout") && settings.has_write_timeout_ms) {
+            options.write_timeout_ms = settings.write_timeout_ms;
+        }
+        if (!values.count("queue-requests") && settings.has_queue_requests) {
+            options.queue_requests = settings.queue_requests;
+        }
+        if (!values.count("queue-header-bytes") &&
+            settings.has_queue_header_bytes) {
+            options.queue_header_bytes = settings.queue_header_bytes;
+        }
+        if (!values.count("queue-timeout") && settings.has_queue_timeout_ms) {
+            options.queue_timeout_ms = settings.queue_timeout_ms;
+        }
+        options.health_check = settings.health_check;
+        options.prepared_local_policy = std::move(local_policy);
     }
 
     const std::vector<std::uint8_t> bundle =

@@ -272,6 +272,33 @@ const args = parseArgs(process.argv.slice(2));
             `CLI must reject routing arguments: ${extra.join(' ')}`,
         );
     }
+    // Strict sandbox is a Linux-only capability: the CLI fails at the
+    // argument phase on every other platform (fail fast, matching
+    // --mode managed), never after spawn.
+    if (process.platform !== 'linux') {
+        const strictChild = spawn(args.get('host'), [
+            '--mode', 'single-worker',
+            '--worker', path.resolve(args.get('worker')),
+            '--source-bundle', bundle,
+            '--source-name', pathToFileURL(bundle).href,
+            '--application', 'orders',
+            '--listen', '127.0.0.1:0',
+            '--routing', 'path',
+            '--public-scheme', 'http',
+            '--public-authority', 'public.example',
+            '--request-timeout-ms', '10000',
+            '--strict-sandbox', 'on',
+            '--ready-fd', '3',
+        ], {
+            stdio: [ 'ignore', 'pipe', 'pipe', 'ignore' ],
+        });
+        const strictExit = await waitForExit(strictChild, 5000);
+        assert.equal(
+            strictExit.code,
+            2,
+            '--strict-sandbox on must fail the CLI phase on non-Linux',
+        );
+    }
 }
 {
     // fd 3 is a read-only descriptor: the READY record write fails after
@@ -601,6 +628,115 @@ try {
         assert.equal(duplicate.status, 400, 'duplicate Capsid-App must be 400');
     } finally {
         await stopHost(header);
+    }
+}
+
+// ---- Local capsid.json runtime settings (v0.2.x): a production-shaped
+// document supplies entry, worker/request/pool knobs and a healthCheck;
+// --source-bundle/--source-name are absent and derived from the entry.
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-local-capsid-'));
+    const bundleFile = path.join(dir, 'host-single-worker.js');
+    fs.copyFileSync(args.get('bundle'), bundleFile);
+    fs.writeFileSync(path.join(dir, 'capsid.json'), JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'host-single-worker.js',
+        pool: {
+            minReady: 1,
+            maxWorkers: 1,
+            queueRequests: 2,
+            queueHeaderBytes: '64KiB',
+            queueTimeout: '1s',
+        },
+        worker: {
+            jsHeap: '64MiB',
+            processAddressSpace: '256MiB',
+            fileDescriptors: 64,
+        },
+        request: {
+            timeout: '10s',
+            maxInflightPerWorker: 16,
+            maxStreamingInflightPerWorker: 1,
+            streamIdleTimeoutMs: 30000,
+            writeTimeoutMs: 5000,
+        },
+        healthCheck: { path: '/health', timeout: '5s' },
+    }));
+    const child = spawn(args.get('host'), [
+        '--mode', 'single-worker',
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', path.join(dir, 'capsid.json'),
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+    ], {
+        cwd: dir,
+        stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    try {
+        const readyLine = await readLine(child.stdio[3], child, 10000, () => stderr);
+        const ready = JSON.parse(readyLine);
+        assert.equal(ready.app, 'orders', 'entry-derived bundle must serve the app');
+        const healthy = await request(ready.port, {
+            target: '/@capsid/orders/health',
+            timeoutMs: 3000,
+        });
+        assert.equal(healthy.status, 200, 'healthCheck path must serve 200');
+        const fixed = await request(ready.port, {
+            target: '/@capsid/orders/fixed',
+            timeoutMs: 3000,
+        });
+        assert.equal(fixed.status, 200);
+        assert.equal(fixed.body.length, 1024);
+    } finally {
+        child.kill('SIGTERM');
+        await waitForExit(child, 3000);
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+{
+    // A healthCheck whose path the app does not serve fails the startup:
+    // no READY record, exit 1, and the failure names the probe.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-local-health-'));
+    fs.copyFileSync(args.get('bundle'), path.join(dir, 'host-single-worker.js'));
+    fs.writeFileSync(path.join(dir, 'capsid.json'), JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'host-single-worker.js',
+        pool: { minReady: 1, maxWorkers: 1 },
+        healthCheck: { path: '/nope', timeout: '3s' },
+    }));
+    const child = spawn(args.get('host'), [
+        '--mode', 'single-worker',
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', path.join(dir, 'capsid.json'),
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+    ], {
+        cwd: dir,
+        stdio: [ 'ignore', 'pipe', 'pipe', 'ignore' ],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const exited = await waitForExit(child, 10000);
+    try {
+        assert.equal(exited.code, 1, 'failed healthCheck must exit 1');
+        assert.match(stderr, /health check failed/,
+            'startup failure must name the health probe');
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
     }
 }
 
