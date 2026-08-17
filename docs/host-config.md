@@ -6,6 +6,78 @@ fields, invalid enums, and out-of-range values cause startup or deployment to fa
 instead of silently passing through with defaults. This document follows the current
 implementation in `src/host/config.cc`, `host_config_model.cc`, and `managed_host.cc`.
 
+## Host modes
+
+`capsid-host` has three startup modes. `single-worker` and `static-pool` share one
+CLI surface and read at most one local `capsid.json`; `managed` is a separate machine
+with its own config file, directory layout, and lifecycle. All three fail closed at
+argument time: unknown flags, missing required flags, and invalid values exit before
+anything is spawned or bound.
+
+| | `--mode single-worker` | `--mode static-pool` | `--mode managed` |
+| --- | --- | --- | --- |
+| What it is | One worker serving one app version from a local bundle; the process *is* the service | A fixed-size worker pool (1/2/4/6/8) sharing one listener over the same bundle — local scale-out | A coordinator machine: many apps and versions, blue-green deployment, Admin API, crash budgets, recovery |
+| Config inputs | CLI + optional local `--capsid-json` (the document is the permission authority; there is no host.json) | same as `single-worker` | `--host-config` host.json + per-version capsid.json under `applicationsRoot` (Host ∩ App intersection) |
+| Worker count | 1 | `--workers` — exactly 1, 2, 4, 6 or 8 | per-version capsid.json `pool` (`minReady` / `maxWorkers`) |
+| Listener | one `--listen` | one `--listen`, sharded by `SO_REUSEPORT` (Linux/macOS) or a pool-level shared acceptor (Windows) | host.json `listeners` (with CORS per listener) |
+| Lifecycle | process lifetime; SIGTERM-bounded shutdown | pool keeps the pool-level READY contract; SIGTERM-bounded shutdown | coordinator + supervised workers; `active.json` generations, retirement, quarantine, crash budgets |
+| Deployment | none — direct local run | none — direct local run | staged blue-green: Registry scan → config/artifact snapshot → warm-up/health → atomic switch |
+| Production path | no (development/benchmark) | no (benchmark) | yes, Linux only: the managed coordinator requires the strict sandbox |
+| Platform | Linux / macOS / Windows | Linux / macOS / Windows | Linux only — macOS and Windows exit at the CLI with a message |
+
+### `single-worker` / `static-pool` CLI
+
+Required:
+
+| Flag | Meaning |
+| --- | --- |
+| `--mode single-worker` or `--mode static-pool` | mode selection (managed is not valid here) |
+| `--worker <path>` | the `capsid-worker` binary |
+| `--source-bundle <file>` | the ESM bundle, or with no `--source-bundle` the entry named by the local capsid.json (a production capsid.json runs unchanged) |
+| `--source-name <absolute-file-URL>` | module name for `--source-bundle`; required exactly when the flag is given |
+| `--application <id>` | App ID (routing + policy); `[a-z0-9._-]`, ≤63 |
+| `--listen <host:port>` | listener address |
+| `--routing path` \| `subdomain` \| `header` | how a request selects the App |
+| `--routing-suffix <suffix>` | required exactly with `--routing subdomain` |
+| `--routing-trusted on` | required exactly with `--routing header` |
+| `--public-scheme http` \| `https` | the external URL scheme the listener advertises |
+| `--public-authority host[:port]` | the external authority |
+| `--strict-sandbox on` \| `off` | worker sandbox profile |
+| `--ready-fd <fd>` | readiness descriptor the Host writes the READY record to |
+| `--workers 1`\|`2`\|`4`\|`6`\|`8` | `static-pool` only, required |
+
+Optional (each keeps the data-plane default when omitted):
+
+| Flag | Meaning |
+| --- | --- |
+| `--capsid-json <file>` | local permission policy. Default: `./capsid.json` is read when it exists; an explicit path must exist. Absent document = the no-permission baseline (all denied). See [capsid-json.md](capsid-json.md) |
+| `--secrets-root <dir>` | local secret store for `env.valueFrom`: one regular file per key id. Without it, `valueFrom` is rejected at policy compile time |
+| `--bindings-root <dir>` | scanned immutable Binding registry for local Binding development; capsid.json may only request packages from this snapshot |
+| `--request-timeout-ms <ms>` | per-request deadline |
+| `--max-inflight-per-worker <n>` | in-flight request cap (0 = unlimited) |
+| `--queue-requests <n>` | request queue depth |
+| `--queue-header-bytes <size>` | header queue budget (e.g. `2MiB`) |
+| `--queue-timeout <duration>` | queued request deadline |
+| `--max-streaming-inflight <n>` | concurrent streaming requests per worker (0 = unlimited) |
+| `--stream-idle-timeout <ms>` | idle stream deadline |
+| `--write-timeout <ms>` | slow-client write deadline (0 = unlimited) |
+| `--initial-stream-window <bytes>` | streaming response window (default 64 KiB) |
+
+The same listener/routing validation the managed listeners apply before bind also
+runs here: the routing policy (suffix grammar, header-mode trust requirement) is
+validated before anything is spawned.
+
+### `managed` CLI
+
+`--mode managed` accepts **only** `--mode`, `--host-config <file>`, and
+`--worker <path>`; any other flag is rejected at argument time. Everything else
+(applications, listeners, CORS, limits, recovery policy) comes from host.json and
+the per-version capsid.json documents described below. On macOS and Windows the
+mode exits at the CLI with a message — the managed coordinator requires the Linux
+strict sandbox.
+
+## Responsibilities of the two configuration layers
+
 ## Responsibilities of the two configuration layers
 
 | File | Location | Responsibility |

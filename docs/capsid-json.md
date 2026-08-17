@@ -318,7 +318,7 @@ At deployment time, if the bundle directory also contains `bundle.qjsb`,
 `bytecode.json`, and `bytecode.sig`, the trusted bytecode path is used — these
 three files are **all-or-nothing**; missing any one rejects deployment.
 
-## Local mode (v0.1.3, `--capsid-json`): run directly without deploying
+## Local mode (`--capsid-json`, since v0.1.3): run directly without deploying
 
 `capsid-host --mode single-worker` (and `static-pool`) is the
 benchmark/local-development data plane: no blue-green deployment and no Admin
