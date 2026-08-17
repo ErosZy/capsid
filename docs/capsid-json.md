@@ -400,7 +400,7 @@ Binding set, and if any shard fails to load, the whole pool fails startup.
 | Request exceeds host.json `maximums` | Deployment rejected |
 | Bundle directory has only `bundle.qjsb` without a signature | Rejected: bytecode must be all-or-nothing |
 | Local mode with `worker` / `request` / `healthCheck` / `entry` sections | Applied locally (v0.2.x); an explicit CLI flag wins over the document |
-| Local mode with `pool.queue*` | Rejected at startup: admission queue is CLI-owned |
+| Local mode with `pool.queue*` | Applied locally (v0.2.x): document presence arms the bounded admission queue; 0 = queueing disabled |
 | Local mode env with `valueFrom` | Rejected at startup: valueFrom is unavailable in local mode |
 | `--capsid-json` points to a symlink / directory / file not owned by the user | Rejected at startup: not a regular file / not owned |
 | `--capsid-json` points to a nonexistent file | Rejected at startup: cannot find … (except a missing default `./capsid.json`, which is the no-permission baseline) |

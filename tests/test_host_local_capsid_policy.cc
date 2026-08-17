@@ -461,24 +461,26 @@ int main(int argc, char** argv) {
         "\"notAField\":true," + pool + "}",
         false, "rejected at");
 
-    // 9. `entry` is managed-only (the bundle entry is the CLI source
-    //    bundle): an operator setting it must hear about it, not have it
-    //    silently ignored.
-    run_failure_scenario(
-        argv[1], "entry-rejected",
+    // 9. `entry` is honored locally (v0.2.x) when no explicit source is
+    //    given; with an explicit bundle the CLI wins over the document
+    //    (entry-derivation itself is covered by the host_single_worker
+    //    integration fixture, which runs without --source-bundle).
+    run_success_scenario(
+        argv[1], "entry-overridden-by-explicit-bundle",
         "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
         "\"permissions\":{}," + pool + "}",
-        false, "not applicable in local mode");
+        kPlainWorkerSource, 0, "/@capsid/orders/env", "plain-ok");
 
-    // 10. pool.queue* is CLI-owned on this path too: a document that sets
-    //     a queue depth must fail loudly instead of pretending the queue
-    //     exists.
-    run_failure_scenario(
-        argv[1], "pool-queue-rejected",
+    // 10. pool.queue* arms the bounded admission queue locally (v0.2.x);
+    //     document presence decides, 0 means queueing disabled.  The
+    //     admission behavior itself is covered by the host_single_worker
+    //     integration fixture.
+    run_success_scenario(
+        argv[1], "pool-queue-armed",
         "{\"apiVersion\":\"capsid/app-v1\",\"permissions\":{},"
         "\"pool\":{\"minReady\":1,\"maxWorkers\":1,"
         "\"queueRequests\":8}}",
-        false, "not applicable in local mode");
+        kPlainWorkerSource, 0, "/@capsid/orders/env", "plain-ok");
 
     // 11. Binding development uses the same app-v2 declaration and
     //     capsid:binding/<id> facade as managed mode. The explicit Host
