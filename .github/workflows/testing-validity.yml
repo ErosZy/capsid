@@ -544,11 +544,23 @@ jobs:
         shell: pwsh
 
       - name: Build Windows Host and worker contracts
+        shell: pwsh
         run: |
-          cmake --build build-windows --parallel 2
+          # On failure, replay the build tail as ::error:: annotations so
+          # the actual compiler diagnostic is visible in the run summary
+          # (raw step logs need a signed-in viewer).
+          cmake --build build-windows --parallel 2 2>&1 | Tee-Object build-windows\build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build-windows\build.log -Tail 60 | ForEach-Object { "::error::$_" }
+            exit 1
+          }
           # The named gate mirrors the macOS job: a quietly skipped
           # Boost-backed Host surface would fail this step explicitly.
-          cmake --build build-windows --parallel 2 --target capsid-host
+          cmake --build build-windows --parallel 2 --target capsid-host 2>&1 | Tee-Object build-windows\build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build-windows\build.log -Tail 60 | ForEach-Object { "::error::$_" }
+            exit 1
+          }
 
       - name: Run Windows host-side matrix
         run: |
