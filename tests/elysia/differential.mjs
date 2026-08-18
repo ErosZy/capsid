@@ -162,7 +162,11 @@ const normalize = (status, headerEntries, body, vector) => {
     if (vector.ignoreBodyJsonFields?.length) {
         const parsed = JSON.parse(new TextDecoder().decode(body));
         for (const field of vector.ignoreBodyJsonFields) {
-            parsed[field] = '<normalized>';
+            // Only normalize fields that are actually present: error bodies
+            // must not gain phantom keys from the normalization itself.
+            if (field in parsed) {
+                parsed[field] = '<normalized>';
+            }
         }
         normalizedBody = JSON.stringify(parsed);
     }

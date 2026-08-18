@@ -321,6 +321,21 @@ app.use(cors({
 app.get('/cors/echo', () => 'cors-ok');
 
 /*
+ * Everything from the bearer plugin on is scoped through a guard declaring
+ * an empty query schema. The plugin registers a GLOBAL derive whose lazy
+ * `bearer` getter reads context.query, and AOT compose merges derive results
+ * with Object.assign — which copies VALUES, so the getter is evaluated on
+ * every route. hasQuery is inference-driven (sucrose scans source text), and
+ * minified destructure aliases like `{query:i, ...}` defeat the parameter
+ * parser (removeColonAlias leaves the map key as "query:i"), so inference
+ * never sees the query binding and compose skips query parsing entirely —
+ * the getter then reads an undefined query and every route 500s. An empty
+ * query schema forces query parsing regardless of inference, in both the
+ * source reference and the minified worker bundle.
+ */
+app.guard({ query: t.Object({}) }, (guard) => {
+
+/*
  * Bearer — plugin derives a lazy `bearer` getter (query access_token or
  * Authorization header). Header value is stripped of the scheme prefix.
  *
@@ -329,28 +344,28 @@ app.get('/cors/echo', () => 'cors-ok');
  * and the derive's query access would read undefined — the dynamic-handle
  * path always parses query, so Node would not catch the difference.
  */
-app.use(bearer());
-app.get('/bearer/echo', (context) => ({
-    bearer: context.bearer ?? null,
-}), {
-    query: t.Object({
-        access_token: t.Optional(t.String()),
-    }),
-});
+    guard.use(bearer());
+    guard.get('/bearer/echo', (context) => ({
+        bearer: context.bearer ?? null,
+    }), {
+        query: t.Object({
+            access_token: t.Optional(t.String()),
+        }),
+    });
 
 /*
  * JWT — plugin decorates `context.jwt` with sign/verify backed by jose's
  * webapi entry (crypto.subtle only, no Node primitives). The payload is
  * echoed back on verify so differential can pin both directions.
  */
-app.use(jwt({
+guard.use(jwt({
     name: 'jwt',
     secret: 'capsid-elysia-jwt-secret',
 }));
-app.get('/jwt/sign', async (context) => ({
+guard.get('/jwt/sign', async (context) => ({
     token: await context.jwt.sign({ sub: 'capsid-test-user' }),
 }));
-app.get('/jwt/verify', async (context) => {
+guard.get('/jwt/verify', async (context) => {
     const header = context.request.headers.get('authorization') ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : header;
     const payload = await context.jwt.verify(token);
@@ -364,7 +379,7 @@ app.get('/jwt/verify', async (context) => {
  * lines only. (Stream is deprecated in favor of generator returns; both
  * shapes are covered — generator route below.)
  */
-app.get('/stream/sse', (context) => {
+guard.get('/stream/sse', (context) => {
     const stream = new Stream((stream) => {
         stream.send('sse-one');
         stream.send({ count: 2 });
@@ -374,7 +389,7 @@ app.get('/stream/sse', (context) => {
         headers: { 'content-type': 'text/event-stream' },
     });
 });
-app.get('/stream/sse-generator', async function* (context) {
+guard.get('/stream/sse-generator', async function* (context) {
     context.set.headers['content-type'] = 'text/event-stream';
     yield textEncoder.encode('data: gen-one\n\n');
     yield textEncoder.encode('data: gen-two\n\n');
@@ -386,7 +401,7 @@ app.get('/stream/sse-generator', async function* (context) {
  * guard — scoped hooks: routes registered through the guard inherit its
  * beforeHandle; a returned Response short-circuits the chain.
  */
-app.guard({
+guard.guard({
     beforeHandle: (context) => {
         if (context.headers['x-guard-pass'] !== '1') {
             return new Response('guard-denied', { status: 403 });
@@ -394,21 +409,21 @@ app.guard({
     },
 // The guard callback must return the scoped instance (expression body),
 // not a bare block — Elysia merges the callback's return value back.
-}, (guard) => guard.get('/guard/protected', () => 'guard-ok'));
+}, (inner) => inner.get('/guard/protected', () => 'guard-ok'));
 
 /* derive — synchronous per-request augmentation injected into context. */
-app.derive((context) => ({
+guard.derive((context) => ({
     derivedFrom: context.request.headers.get('x-derived') ?? 'none',
 }));
-app.get('/derive/echo', (context) => ({
+guard.get('/derive/echo', (context) => ({
     derivedFrom: context.derivedFrom,
 }));
 
 /* resolve — async per-request augmentation (awaited before the handler). */
-app.resolve(async (context) => ({
+guard.resolve(async (context) => ({
     resolvedPath: new URL(context.request.url).pathname,
 }));
-app.get('/resolve/echo', (context) => ({
+guard.get('/resolve/echo', (context) => ({
     resolvedPath: context.resolvedPath,
 }));
 
@@ -419,7 +434,7 @@ app.get('/resolve/echo', (context) => ({
  * second position is the handler itself, so a schema there gets treated as
  * a plain object return value.
  */
-app.post('/schema/body', (context) => ({
+guard.post('/schema/body', (context) => ({
     name: context.body.name,
     age: context.body.age ?? null,
 }), {
@@ -428,8 +443,11 @@ app.post('/schema/body', (context) => ({
         age: t.Optional(t.Number()),
     }),
 });
-app.get('/schema/params/:id', (context) => ({ id: context.params.id }), {
+guard.get('/schema/params/:id', (context) => ({ id: context.params.id }), {
     params: t.Object({ id: t.String() }),
+});
+
+    return guard;
 });
 
 export { app };
