@@ -15,6 +15,7 @@
 #include "win32_compat.h"
 #if defined(_WIN32)
 #else
+#include <poll.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/socket.h>
@@ -2713,6 +2714,23 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
                 worker->ipc_metrics.socket_write_eagain.fetch_add(
                     1, std::memory_order_relaxed);
             }
+#if !defined(_WIN32)
+            // A bundle larger than the socket send buffer blocks the first
+            // flush: the peer drains asynchronously, so retry on writability
+            // for a bounded window instead of failing the spawn outright.
+            // The worker never stops reading until it dies; only a dead peer
+            // (or a flush stuck for the whole window) reaches WOULD_BLOCK.
+            static constexpr int kFlushPollTimeoutMs = 5000;
+            struct pollfd writable = { worker->fd, POLLOUT, 0 };
+            int poll_result;
+            do {
+                poll_result = poll(&writable, 1, kFlushPollTimeoutMs);
+            } while (poll_result < 0 && errno == EINTR);
+            if (poll_result > 0 &&
+                (writable.revents & (POLLOUT | POLLERR | POLLHUP))) {
+                continue;
+            }
+#endif
             return CAPSID_WOULD_BLOCK;
         }
         worker->closed = true;
