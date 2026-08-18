@@ -2690,6 +2690,12 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
         worker->ipc_metrics.flush_calls.fetch_add(
                     1, std::memory_order_relaxed);
     }
+    // Total EAGAIN retry window for this flush call: once the first
+    // WOULD_BLOCK appears, all subsequent EAGAIN waits share one deadline
+    // instead of resetting a fresh per-poll timeout each time.
+#if !defined(_WIN32)
+    std::chrono::steady_clock::time_point eagain_poll_deadline{};
+#endif
     while (worker->write_offset < worker->write_buffer.size()) {
         const uint8_t *data = &worker->write_buffer[worker->write_offset];
         const size_t size = worker->write_buffer.size() - worker->write_offset;
@@ -2722,12 +2728,16 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
             // dead peer (or a flush stuck for the whole window) reaches
             // WOULD_BLOCK.
             static constexpr int kFlushPollTotalTimeoutMs = 5000;
-            const auto poll_deadline = std::chrono::steady_clock::now() +
-                std::chrono::milliseconds(kFlushPollTotalTimeoutMs);
+            if (eagain_poll_deadline ==
+                std::chrono::steady_clock::time_point{}) {
+                eagain_poll_deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(kFlushPollTotalTimeoutMs);
+            }
+            bool writable_ready = false;
             for (;;) {
                 const auto remaining_ms =
                     std::chrono::duration_cast<std::chrono::milliseconds>(
-                        poll_deadline - std::chrono::steady_clock::now())
+                        eagain_poll_deadline - std::chrono::steady_clock::now())
                         .count();
                 if (remaining_ms <= 0) {
                     break;
@@ -2741,17 +2751,25 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
                 if (poll_result <= 0) {
                     break;
                 }
-                // POLLOUT retries the write; POLLERR/POLLHUP also retry so
-                // write() observes the dead peer (EPIPE/ECONNRESET) and the
+                // POLLOUT means the outer write loop may retry the write;
+                // POLLERR/POLLHUP also fall through to write() so it
+                // observes the dead peer (EPIPE/ECONNRESET) and the
                 // closed-path below records the real failure instead of a
                 // misleading WOULD_BLOCK.
                 if (writable.revents & (POLLOUT | POLLERR | POLLHUP)) {
-                    continue;
+                    writable_ready = true;
+                    break;
                 }
-                break;
+            }
+            if (!writable_ready) {
+                return CAPSID_WOULD_BLOCK;
             }
 #endif
+#if defined(_WIN32)
             return CAPSID_WOULD_BLOCK;
+#else
+            continue;
+#endif
         }
         worker->closed = true;
         close(worker->fd);
