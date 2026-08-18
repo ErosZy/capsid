@@ -3,6 +3,7 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
+#include "host/host_config_model.h"
 #include "policy_compiler.h"
 #include "request_normalization.h"
 
@@ -52,6 +53,12 @@ struct SingleWorkerServerOptions {
     // (--secrets-root): one regular file per key id. Empty = valueFrom
     // is rejected (no implicit secret store).
     std::string secrets_root;
+    // Listener-level CORS (--cors-origins/--cors-methods/--cors-headers/
+    // --cors-max-age): configured=false keeps the App the sole owner of
+    // CORS; configured=true answers preflights before routing and stamps
+    // the Host allow-list on responses (shared engine with the managed
+    // listener, see listener_cors.h).
+    ListenerCorsConfig cors;
     std::uint64_t request_timeout_ms = 0;
     std::uint32_t initial_stream_window = 0;
     bool strict_sandbox = false;

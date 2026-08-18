@@ -21,6 +21,7 @@
 #include "host/binding_registry.h"
 #include "host/generation_pool.h"
 #include "host/local_capsid_policy.h"
+#include "host/listener_cors.h"
 #if !defined(_WIN32)
 #include "host/host_config_model.h"
 #include "host/managed_admin_backend.h"
@@ -1297,6 +1298,104 @@ int main(int argc, char** argv) {
     if (ready_fd > static_cast<std::uint64_t>(
                        std::numeric_limits<short>::max())) {
         fail("--ready-fd must be a positive descriptor number");
+    }
+
+    // Listener-level CORS mirrors the managed host.json grammar:
+    // --cors-origins and --cors-methods are required together,
+    // --cors-headers / --cors-max-age optional. Every token is validated
+    // at argument time with the same grammars the host.json parser
+    // applies (methods uppercased, headers lowercased, origins "*" or an
+    // exact http(s):// authority). Absent = the App owns CORS entirely.
+    const auto cors_origins_it = values.find("cors-origins");
+    const auto cors_methods_it = values.find("cors-methods");
+    const auto cors_headers_it = values.find("cors-headers");
+    const auto cors_max_age_it = values.find("cors-max-age");
+    if (cors_origins_it != values.end() ||
+        cors_methods_it != values.end() ||
+        cors_headers_it != values.end() ||
+        cors_max_age_it != values.end()) {
+        if (cors_origins_it == values.end()) {
+            fail("--cors-origins is required when any --cors-* flag "
+                 "is given");
+        }
+        if (cors_methods_it == values.end()) {
+            fail("--cors-methods is required with --cors-origins");
+        }
+        const auto split_list = [](const std::string& text,
+                                   const char* flag) {
+            std::vector<std::string> items;
+            std::size_t start = 0;
+            while (start <= text.size()) {
+                const std::size_t comma = text.find(',', start);
+                const std::size_t end = comma == std::string::npos
+                                            ? text.size()
+                                            : comma;
+                std::string item = text.substr(start, end - start);
+                item.erase(0, item.find_first_not_of(" \t") ==
+                                      std::string::npos
+                                  ? item.size()
+                                  : item.find_first_not_of(" \t"));
+                item.erase(item.find_last_not_of(" \t") ==
+                                   std::string::npos
+                               ? 0
+                               : item.find_last_not_of(" \t") + 1);
+                if (item.empty()) {
+                    fail(std::string(flag) + " contains an empty entry");
+                }
+                items.push_back(std::move(item));
+                if (comma == std::string::npos) {
+                    break;
+                }
+                start = comma + 1;
+            }
+            return items;
+        };
+        options.cors.configured = true;
+        options.cors.allowed_origins =
+            split_list(cors_origins_it->second, "--cors-origins");
+        for (const std::string& origin : options.cors.allowed_origins) {
+            if (!capsid::host::valid_cors_origin(origin)) {
+                fail("--cors-origins entry is not \"*\" or an http(s):// "
+                     "origin: " + origin);
+            }
+        }
+        options.cors.allowed_methods =
+            split_list(cors_methods_it->second, "--cors-methods");
+        for (std::string& method : options.cors.allowed_methods) {
+            if (!capsid::host::valid_cors_method_token(method)) {
+                fail("--cors-methods entry is not an HTTP method token: " +
+                     method);
+            }
+            for (char& c : method) {
+                if (c >= 'a' && c <= 'z') {
+                    c = static_cast<char>(c - 'a' + 'A');
+                }
+            }
+        }
+        if (cors_headers_it != values.end()) {
+            options.cors.allowed_headers =
+                split_list(cors_headers_it->second, "--cors-headers");
+            for (std::string& header : options.cors.allowed_headers) {
+                if (!capsid::host::valid_cors_header_token(header)) {
+                    fail("--cors-headers entry is not an HTTP field name: " +
+                         header);
+                }
+                for (char& c : header) {
+                    if (c >= 'A' && c <= 'Z') {
+                        c = static_cast<char>(c - 'A' + 'a');
+                    }
+                }
+            }
+        }
+        if (cors_max_age_it != values.end()) {
+            const std::uint64_t seconds = parse_positive_integer(
+                cors_max_age_it->second, "cors-max-age");
+            if (seconds >
+                std::numeric_limits<std::uint64_t>::max() / 1000) {
+                fail("--cors-max-age exceeds the millisecond range");
+            }
+            options.cors.max_age_ms = seconds * 1000;
+        }
     }
     options.ready_fd = static_cast<int>(ready_fd);
 

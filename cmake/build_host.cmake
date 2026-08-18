@@ -34,6 +34,7 @@ if(CAPSID_BUILD_HOST)
         src/host/config.cc
         src/host/generation_identity.cc
         src/host/generation_pool.cc
+        src/host/listener_cors.cc
         src/host/local_capsid_policy.cc
         src/host/metrics.cc
         src/host/policy_compiler.cc

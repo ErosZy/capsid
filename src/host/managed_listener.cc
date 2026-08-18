@@ -8,6 +8,7 @@
 
 #include "host/managed_listener.h"
 
+#include "host/listener_cors.h"
 #include "host/request_normalization.h"
 #include "host/response_body_batch.h"
 #include "host/structured_log.h"
@@ -96,63 +97,6 @@ std::string ascii_lower(std::string_view text) {
         }
     }
     return lower;
-}
-
-// Merges a `Vary: Origin` token into the response's Vary set. When the
-// listener owns CORS, the final Access-Control-* fields depend on the
-// request Origin, so any shared cache must partition on it; an App-supplied
-// `Vary: Accept-Encoding` must not be mistaken for an Origin token and
-// suppress that partition (cache-poisoning risk otherwise).
-void merge_vary_origin(
-    std::vector<std::pair<std::string, std::string>>* headers) {
-    std::vector<std::string> tokens;
-    std::vector<std::pair<std::string, std::string>> filtered;
-    filtered.reserve(headers->size() + 1);
-    for (const auto& [name, value] : *headers) {
-        if (ascii_lower(name) != "vary") {
-            filtered.push_back({name, value});
-            continue;
-        }
-        std::size_t begin = 0;
-        while (begin <= value.size()) {
-            while (begin < value.size() &&
-                   (value[begin] == ' ' || value[begin] == '\t')) {
-                ++begin;
-            }
-            const std::size_t end = value.find(',', begin);
-            const std::size_t token_end =
-                end == std::string::npos ? value.size() : end;
-            std::size_t trimmed = token_end;
-            while (trimmed > begin &&
-                   (value[trimmed - 1] == ' ' || value[trimmed - 1] == '\t')) {
-                --trimmed;
-            }
-            if (trimmed > begin) {
-                tokens.push_back(
-                    ascii_lower(value.substr(begin, trimmed - begin)));
-            }
-            if (end == std::string::npos) {
-                break;
-            }
-            begin = end + 1;
-        }
-    }
-    bool has_origin = false;
-    for (const std::string& token : tokens) {
-        has_origin = has_origin || token == "origin";
-    }
-    if (!has_origin) {
-        tokens.push_back("origin");
-    }
-    std::string joined;
-    for (const std::string& token : tokens) {
-        if (!joined.empty()) {
-            joined += ", ";
-        }
-        joined += token;
-    }
-    filtered.push_back({"Vary", joined});
-    *headers = std::move(filtered);
 }
 
 // Parses the comma-separated token list of a Connection header and collects
@@ -391,9 +335,7 @@ private:
     // Listener-level CORS: answers a browser preflight (returns false) or
     // records the matched origin for response stamping (returns true).
     bool prepare_cors(const http::request<http::string_body>& request);
-    void send_cors_preflight(const http::request<http::string_body>& request,
-                             const std::string& origin,
-                             bool allowed);
+    void send_cors_preflight(const http::request<http::string_body>& request);
     void arm_read_timer(bool head_phase);
     void on_read_timeout();
     void start_disconnect_probe();
@@ -406,15 +348,10 @@ private:
     std::optional<const WorkerExecutor*> current_executor_;
     std::optional<std::uint64_t> current_request_id_;
     asio::steady_timer read_timer_;
-    // The matched request Origin when the listener CORS config allows it;
-    // empty = no Access-Control-Allow-Origin stamp on the responses.
-    std::string cors_allow_origin_;
-    // Whether the listener owns CORS for this session, whether the current
-    // request carried an Origin, and whether the configured allow-list is
-    // the wildcard "*". These drive the authoritative response-header pass.
-    bool cors_configured_ = false;
-    bool cors_origin_seen_ = false;
-    bool cors_wildcard_ = false;
+    // The shared listener-CORS decision engine, engaged only while the
+    // listener owns CORS (config.configured). One request is in flight per
+    // session at a time, so a single per-session instance is exact.
+    std::optional<ListenerCors> cors_;
     bool closed_ = false;
     bool probe_active_ = false;
 };
@@ -642,135 +579,27 @@ void ListenerSession::handle_request(
 
 bool ListenerSession::prepare_cors(
     const http::request<http::string_body>& request) {
-    const ListenerCorsConfig& cors = impl_->options_.config.cors;
-    cors_configured_ = true;
-    cors_allow_origin_.clear();
-    cors_origin_seen_ = false;
-    cors_wildcard_ = cors.allowed_origins.size() == 1 &&
-                      cors.allowed_origins[0] == "*";
-
-    std::string origin;
-    unsigned origin_count = 0;
-    for (const auto& field : request.base()) {
-        if (field.name() == http::field::origin) {
-            ++origin_count;
-            if (origin.empty()) {
-                origin = std::string(field.value());
-            }
-        }
-    }
-    if (origin_count > 1) {
+    cors_.emplace(impl_->options_.config.cors);
+    const CorsDecision decision = cors_->prepare(request);
+    if (decision == CorsDecision::kBadRequest) {
         send_simple(http::status::bad_request, "duplicate Origin header",
                     request.keep_alive(), request.version());
         return false;
     }
-    cors_origin_seen_ = !origin.empty();
-    const bool wildcard = cors_wildcard_;
-    const bool origin_allowed =
-        !origin.empty() &&
-        (wildcard ||
-         std::find(cors.allowed_origins.begin(), cors.allowed_origins.end(),
-                   origin) != cors.allowed_origins.end());
-    const std::string_view requested_method =
-        request[http::field::access_control_request_method];
-    if (request.method() == http::verb::options && !origin.empty() &&
-        !requested_method.empty()) {
-        // Preflight: match the requested method and each requested header
-        // against the config. A reject is 403 WITHOUT any
-        // Access-Control-Allow-* field — the browser reports the CORS
-        // failure, and no CORS decision leaks into the response.
-        bool allowed = origin_allowed;
-        if (allowed) {
-            std::string upper(requested_method);
-            for (char& c : upper) {
-                if (c >= 'a' && c <= 'z') {
-                    c = static_cast<char>(c - 'a' + 'A');
-                }
-            }
-            allowed = std::find(cors.allowed_methods.begin(),
-                                cors.allowed_methods.end(),
-                                upper) != cors.allowed_methods.end();
-        }
-        if (allowed) {
-            const std::string_view requested_headers =
-                request[http::field::access_control_request_headers];
-            std::size_t start = 0;
-            while (start <= requested_headers.size()) {
-                const std::size_t comma = requested_headers.find(',', start);
-                const std::size_t end =
-                    comma == std::string_view::npos
-                        ? requested_headers.size()
-                        : comma;
-                std::string name(requested_headers.substr(start, end - start));
-                name.erase(name.find_last_not_of(" \t") == std::string::npos
-                               ? 0
-                               : name.find_last_not_of(" \t") + 1);
-                name.erase(0, name.find_first_not_of(" \t") == std::string::npos
-                                  ? name.size()
-                                  : name.find_first_not_of(" \t"));
-                for (char& c : name) {
-                    if (c >= 'A' && c <= 'Z') {
-                        c = static_cast<char>(c - 'A' + 'a');
-                    }
-                }
-                if (!name.empty() &&
-                    std::find(cors.allowed_headers.begin(),
-                              cors.allowed_headers.end(),
-                              name) == cors.allowed_headers.end()) {
-                    allowed = false;
-                    break;
-                }
-                if (comma == std::string_view::npos) {
-                    break;
-                }
-                start = comma + 1;
-            }
-        }
-        send_cors_preflight(request, origin, allowed);
+    if (decision == CorsDecision::kPreflightAllowed ||
+        decision == CorsDecision::kPreflightRejected) {
+        send_cors_preflight(request);
         return false;
     }
-    cors_allow_origin_ = origin_allowed ? origin : std::string();
     return true;
 }
 
 void ListenerSession::send_cors_preflight(
-    const http::request<http::string_body>& request,
-    const std::string& origin,
-    bool allowed) {
+    const http::request<http::string_body>& request) {
     auto response = std::make_shared<http::response<http::string_body>>();
-    response->result(allowed ? http::status::no_content
-                             : http::status::forbidden);
     response->version(request.version());
     response->keep_alive(request.keep_alive());
-    if (allowed) {
-        const ListenerCorsConfig& cors = impl_->options_.config.cors;
-        response->set(http::field::access_control_allow_origin, origin);
-        response->set(http::field::vary, "Origin");
-        std::string methods;
-        for (const std::string& method : cors.allowed_methods) {
-            if (!methods.empty()) {
-                methods += ", ";
-            }
-            methods += method;
-        }
-        response->set(http::field::access_control_allow_methods, methods);
-        std::string headers;
-        for (const std::string& header : cors.allowed_headers) {
-            if (!headers.empty()) {
-                headers += ", ";
-            }
-            headers += header;
-        }
-        response->set(http::field::access_control_allow_headers, headers);
-        if (cors.max_age_ms > 0) {
-            response->set(http::field::access_control_max_age,
-                          std::to_string(cors.max_age_ms / 1000));
-        }
-        response->body() = std::string();
-    } else {
-        response->set(http::field::content_type, "text/plain");
-        response->body() = "CORS preflight rejected";
-    }
+    cors_->build_preflight(*response);
     response->prepare_payload();
     http::async_write(
         stream_, *response,
@@ -876,10 +705,8 @@ void ListenerSession::send_simple(http::status status,
     response->version(version);
     response->keep_alive(keep_alive);
     response->set(http::field::content_type, "text/plain");
-    if (!cors_allow_origin_.empty()) {
-        response->set(http::field::access_control_allow_origin,
-                      cors_allow_origin_);
-        response->set(http::field::vary, "Origin");
+    if (cors_) {
+        cors_->stamp(*response);
     }
     response->body() = std::string(body);
     response->prepare_payload();
@@ -1229,32 +1056,8 @@ void ManagedListenerImpl::handle_worker_event(const WorkerExecutor* executor,
         // strips App-owned credentials so wildcard never becomes any-origin
         // credentialed CORS. Vary is merged token-wise so `Vary:
         // Accept-Encoding` cannot suppress the required `Vary: Origin`.
-        if (pending.session && pending.session->cors_configured_) {
-            const bool origin_allowed =
-                !pending.session->cors_allow_origin_.empty();
-            const bool exact_origin =
-                origin_allowed && pending.session->cors_origin_seen_ &&
-                !pending.session->cors_wildcard_;
-            std::vector<std::pair<std::string, std::string>> cors_filtered;
-            cors_filtered.reserve(event.headers.size() + 2);
-            for (const auto& [name, value] : event.headers) {
-                const std::string lower = ascii_lower(name);
-                if (lower == "access-control-allow-origin") {
-                    continue;  // Host decides this field
-                }
-                if (lower == "access-control-allow-credentials" &&
-                    !exact_origin) {
-                    continue;  // wildcard/disallowed origins never get it
-                }
-                cors_filtered.push_back({name, value});
-            }
-            if (origin_allowed) {
-                cors_filtered.push_back(
-                    {"access-control-allow-origin",
-                     pending.session->cors_allow_origin_});
-            }
-            merge_vary_origin(&cors_filtered);
-            event.headers = std::move(cors_filtered);
+        if (pending.session && pending.session->cors_) {
+            pending.session->cors_->filter_headers(&event.headers);
         }
         if (!sanitize_response_headers(&event.headers)) {
             reject_response_head(executor, event.request_id,

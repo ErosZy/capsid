@@ -9,6 +9,7 @@
 
 #include "host/host_config_model.h"
 
+#include "host/listener_cors.h"
 #include "host/request_normalization.h"
 
 #include <jansson.h>
@@ -24,61 +25,6 @@
 namespace capsid::host {
 
 namespace {
-
-// ---- jansson helpers ------------------------------------------------------
-
-// Listener CORS value grammars. An allowed origin is "*" or an exact
-// "scheme://host[:port]" (http/https only, portless = the default port);
-// method tokens are uppercased; header names are lowercased HTTP field
-// names. Rejects empty lists — a cors object with no origins can never
-// match a browser preflight and is a misconfiguration, not a decision.
-bool valid_cors_origin(const std::string& value) {
-    if (value == "*") {
-        return true;
-    }
-    const std::string::size_type scheme_end = value.find("://");
-    if (scheme_end == std::string::npos) {
-        return false;
-    }
-    const std::string scheme = value.substr(0, scheme_end);
-    if (scheme != "http" && scheme != "https") {
-        return false;
-    }
-    return is_valid_public_authority(
-        std::string_view(value).substr(scheme_end + 3));
-}
-
-bool valid_cors_method_token(const std::string& value) {
-    if (value.empty()) {
-        return false;
-    }
-    for (const unsigned char c : value) {
-        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                        (c >= '0' && c <= '9') || c == '-' || c == '_' ||
-                        c == '.' || c == '!' || c == '*' || c == '\'' ||
-                        c == '(' || c == ')' || c == '+' || c == ',' ||
-                        c == ':' || c == '=' || c == '@' || c == '[' ||
-                        c == ']' || c == '~';
-        if (!ok) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool valid_cors_header_token(const std::string& value) {
-    if (value.empty()) {
-        return false;
-    }
-    for (const unsigned char c : value) {
-        const bool alnum = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                           (c >= '0' && c <= '9');
-        if (!alnum && c != '-' && c != '_') {
-            return false;
-        }
-    }
-    return true;
-}
 
 // ---- jansson helpers ------------------------------------------------------
 

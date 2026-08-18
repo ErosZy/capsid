@@ -21,6 +21,7 @@
 
 #include "host/single_worker_server.h"
 
+#include "host/listener_cors.h"
 #include "host/local_capsid_policy.h"
 
 #include <boost/asio.hpp>
@@ -526,6 +527,7 @@ public:
 private:
     void read_request();
     void handle_request(http::request<http::string_body> request);
+    void send_cors_preflight(const http::request<http::string_body>& request);
 
     std::shared_ptr<Impl> impl_;
     beast::tcp_stream stream_;
@@ -534,6 +536,10 @@ private:
     bool probe_active_ = false;
     bool nodelay_disabled_ = false;
     std::optional<std::uint64_t> current_id_;
+    // The shared listener-CORS decision engine, engaged only while the
+    // listener owns CORS. One request is parsed per session at a time
+    // (queued requests park further reads), so one instance is exact.
+    std::optional<ListenerCors> cors_;
 };
 
 class Impl : public std::enable_shared_from_this<Impl> {
@@ -892,6 +898,27 @@ void Session::read_request() {
 }
 
 void Session::handle_request(http::request<http::string_body> request) {
+    // Listener-level CORS runs before routing (and before the admission
+    // gates below): a browser preflight can never carry header-routing's
+    // control header, so the listener answers it itself; every other
+    // request records whether its Origin is allowed so both response
+    // paths (worker responses and Host-synthesized errors) stamp the
+    // matching ACAO. Same engine as the managed listener.
+    if (impl_->options_.cors.configured) {
+        cors_.emplace(impl_->options_.cors);
+        const CorsDecision decision = cors_->prepare(request);
+        if (decision == CorsDecision::kBadRequest) {
+            send_simple(http::status::bad_request,
+                        "duplicate Origin header",
+                        request.keep_alive(), request.version());
+            return;
+        }
+        if (decision == CorsDecision::kPreflightAllowed ||
+            decision == CorsDecision::kPreflightRejected) {
+            send_cors_preflight(request);
+            return;
+        }
+    }
     // E-1 admission gate chain (§10.3), v1 fixed-pool form:
     //   ① listener/header gate — the request head has been parsed; the v1
     //     listener accepts into the shard and admits here.
@@ -996,6 +1023,9 @@ void Session::send_simple(http::status status,
     response->version(version);
     response->keep_alive(keep_alive);
     response->set(http::field::content_type, "text/plain");
+    if (cors_) {
+        cors_->stamp(*response);
+    }
     response->body() = std::string(body);
     response->prepare_payload();
     http::async_write(
@@ -1005,6 +1035,27 @@ void Session::send_simple(http::status status,
             beast::error_code ec, std::size_t) {
             // response is captured so the write operation never touches a
             // freed message.
+            (void)response;
+            if (!ec && keep_alive && !self->closed_) {
+                self->read_request();
+            } else {
+                self->close();
+            }
+        });
+}
+
+void Session::send_cors_preflight(
+    const http::request<http::string_body>& request) {
+    auto response = std::make_shared<http::response<http::string_body>>();
+    response->version(request.version());
+    response->keep_alive(request.keep_alive());
+    cors_->build_preflight(*response);
+    response->prepare_payload();
+    http::async_write(
+        stream_,
+        *response,
+        [self = shared_from_this(), response, keep_alive = request.keep_alive()](
+            beast::error_code ec, std::size_t) {
             (void)response;
             if (!ec && keep_alive && !self->closed_) {
                 self->read_request();
@@ -1831,6 +1882,12 @@ void Impl::handle_worker_event(WorkerEvent event) {
             reject_response_head(event.request_id,
                                  "invalid worker response status");
             return;
+        }
+        // Listener-level CORS is authoritative when configured (same
+        // engine and pass order as the managed listener): the App's own
+        // Access-Control-* fields are filtered before sanitization.
+        if (pending.session && pending.session->cors_) {
+            pending.session->cors_->filter_headers(&event.headers);
         }
         if (!sanitize_response_headers(&event.headers)) {
             reject_response_head(event.request_id,
