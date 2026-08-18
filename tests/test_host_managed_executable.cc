@@ -759,6 +759,25 @@ long current_worker_pid() {
     return live[0];
 }
 
+// The single live managed worker's pid, polled: the active-state write
+// and the replacement's /proc entry do not commit atomically, and a
+// crash-looping replacement can die a moment after the state flips — a
+// one-shot scan races both windows. Returns the pid or fails with the
+// Host diagnostics once the deadline passes.
+long wait_current_worker(const Fixture& fixture) {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(10 * kTestWaitScale);
+    while (std::chrono::steady_clock::now() < deadline) {
+        const long pid = current_worker_pid();
+        if (pid > 0) {
+            return pid;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    fail("no live managed worker: " + fixture.diagnostics());
+    return -1;  // unreachable
+}
+
 // Waits for the Host to spawn a replacement worker after `exited` was
 // SIGKILLed — the first LIVE child whose pid differs. Dies with the Host
 // diagnostics if no replacement arrives (the item-5a wiring is absent).
@@ -854,8 +873,7 @@ void require_quarantined(const Fixture& fixture) {
 // was active when the loop started.
 std::string crash_to_quarantine(const Fixture& fixture) {
     const std::string generation = active_generation(fixture);
-    long worker = current_worker_pid();
-    require(worker > 0, "no live worker before the crash loop");
+    long worker = wait_current_worker(fixture);
     for (int event = 1; event <= 2; ++event) {
         require(kill(worker, SIGKILL) == 0,
                 "cannot SIGKILL the managed worker");
@@ -1811,16 +1829,14 @@ int main(int argc, char** argv) {
         // Drive orders into a crash loop; the last grant is orders', so
         // the queue's fairness state prefers another App next.
         for (int cycle = 0; cycle < 2; ++cycle) {
-            const long pid = current_worker_pid();
-            require(pid > 0, "no orders worker to kill");
+            const long pid = wait_current_worker(fixture);
             require(kill(pid, SIGKILL) == 0,
                     "cannot SIGKILL the orders worker");
             wait_replacement(fixture, pid);
         }
         // The third crash's replacement is still in backoff when the
         // invoices deploy is issued; both join the shared queue.
-        const long orders_worker = current_worker_pid();
-        require(orders_worker > 0, "no orders worker for the third kill");
+        const long orders_worker = wait_current_worker(fixture);
         require(kill(orders_worker, SIGKILL) == 0,
                 "cannot SIGKILL the orders worker");
         const std::string invoices_operation =
