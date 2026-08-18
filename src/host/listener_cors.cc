@@ -11,6 +11,9 @@
 
 namespace capsid::host {
 
+namespace beast = boost::beast;
+namespace http = beast::http;
+
 namespace {
 
 std::string ascii_lower(std::string_view text) {

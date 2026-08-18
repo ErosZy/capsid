@@ -19,7 +19,7 @@ anything is spawned or bound.
 | What it is | One worker serving one app version from a local bundle; the process *is* the service | An arbitrary-size worker pool (each worker owns one shard) sharing one listener over the same bundle — local scale-out | A coordinator machine: many apps and versions, blue-green deployment, Admin API, crash budgets, recovery |
 | Config inputs | CLI + optional local `--capsid-json` (the document is the permission authority; there is no host.json) | same as `single-worker` | `--host-config` host.json + per-version capsid.json under `applicationsRoot` (Host ∩ App intersection) |
 | Worker count | 1 | `--workers` — any positive integer; each shard costs one worker process plus an Asio loop | per-version capsid.json `pool` (`minReady` / `maxWorkers`) |
-| Listener | one `--listen` | one `--listen`, sharded by `SO_REUSEPORT` (Linux/macOS) or a pool-level shared acceptor (Windows) | host.json `listeners` (with CORS per listener) |
+| Listener | one `--listen`, listener-level CORS via `--cors-*` | one `--listen` (each shard answers CORS itself), sharded by `SO_REUSEPORT` (Linux/macOS) or a pool-level shared acceptor (Windows) | host.json `listeners` (with CORS per listener) |
 | Lifecycle | process lifetime; SIGTERM-bounded shutdown | pool keeps the pool-level READY contract; SIGTERM-bounded shutdown | coordinator + supervised workers; `active.json` generations, retirement, quarantine, crash budgets |
 | Deployment | none — direct local run | none — direct local run | staged blue-green: Registry scan → config/artifact snapshot → warm-up/health → atomic switch |
 | Production path | no (development/benchmark) | no (benchmark) | yes, Linux only: the managed coordinator requires the strict sandbox |
@@ -62,6 +62,15 @@ Optional (each keeps the data-plane default when omitted):
 | `--stream-idle-timeout <ms>` | idle stream deadline |
 | `--write-timeout <ms>` | slow-client write deadline (0 = unlimited) |
 | `--initial-stream-window <bytes>` | streaming response window (default 64 KiB) |
+| `--cors-origins <csv>` | listener-level CORS: allowed origins (`*` or exact `http(s)://host[:port]`, comma-separated). Required with `--cors-methods`; together they engage the listener CORS engine |
+| `--cors-methods <csv>` | allowed preflight methods (comma-separated, uppercased at parse). Required with `--cors-origins` |
+| `--cors-headers <csv>` | allowed preflight headers (comma-separated, lowercased at parse); optional, empty = none allowed |
+| `--cors-max-age <seconds>` | `Access-Control-Max-Age` seconds; optional, 0 = header omitted |
+
+The `--cors-*` flags mirror the managed host.json `listeners[].cors` grammar and
+semantics exactly (same validation, same preflight/response behavior). Absent =
+the App owns CORS entirely — the listener passes `Access-Control-*` through
+untouched.
 
 The same listener/routing validation the managed listeners apply before bind also
 runs here: the routing policy (suffix grammar, header-mode trust requirement) is

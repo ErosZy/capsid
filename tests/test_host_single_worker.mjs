@@ -1056,6 +1056,51 @@ try {
             assert.match(badStderr, /cors/i,
                 `${bad.join(' ')} must name the failure`);
         }
+        // static-pool: every shard answers CORS independently through the
+        // shared port (the pool reuses the same per-shard Session engine).
+        const pool = spawn(args.get('host'), [
+            '--mode', 'static-pool',
+            '--workers', '2',
+            '--worker', path.resolve(args.get('worker')),
+            '--capsid-json', path.join(dir, 'capsid.json'),
+            '--application', 'orders',
+            '--listen', '127.0.0.1:0',
+            '--routing', 'path',
+            '--public-scheme', 'http',
+            '--public-authority', 'public.example',
+            '--strict-sandbox', 'off',
+            '--ready-fd', '3',
+            '--cors-origins', 'http://allowed.test',
+            '--cors-methods', 'GET,POST',
+        ], {
+            cwd: dir,
+            stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+        });
+        let poolStderr = '';
+        pool.stderr.setEncoding('utf8');
+        pool.stderr.on('data', (chunk) => { poolStderr += chunk; });
+        try {
+            const poolReadyLine = await readLine(
+                pool.stdio[3], pool, 15000, () => poolStderr);
+            const poolReady = JSON.parse(poolReadyLine);
+            const poolPreflight = await request(poolReady.port, {
+                method: 'OPTIONS',
+                target: '/@capsid/orders/health',
+                headers: {
+                    origin: 'http://allowed.test',
+                    'access-control-request-method': 'POST',
+                },
+                timeoutMs: 3000,
+            });
+            assert.equal(poolPreflight.status, 204,
+                'static-pool shard must answer the preflight');
+            assert.equal(
+                poolPreflight.headers['access-control-allow-origin'],
+                'http://allowed.test');
+        } finally {
+            pool.kill('SIGTERM');
+            await waitForExit(pool, 3000);
+        }
     } finally {
         await removeTreeRetry(dir);
     }

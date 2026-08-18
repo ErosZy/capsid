@@ -12,8 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include <boost/beast/http/message.hpp>
-#include <boost/beast/http/string_body.hpp>
+#include <boost/beast/http.hpp>
 
 #include "host/host_config_model.h"
 
@@ -48,14 +47,16 @@ class ListenerCors {
     // stamp()/filter_headers(). kBadRequest/kPreflight* short-circuit the
     // request: the caller must answer without routing.
     CorsDecision prepare(
-        const http::request<http::string_body>& request);
+        const boost::beast::http::request<
+            boost::beast::http::string_body>& request);
 
     // Fills the short-circuit response for a kPreflight* decision: 204
     // with the full allow set for an allowed preflight, 403 text/plain
     // with NO Access-Control-Allow-* fields for a rejected one. The
     // caller sets version/keep_alive and writes the response.
     void build_preflight(
-        http::response<http::string_body>& response) const;
+        boost::beast::http::response<
+            boost::beast::http::string_body>& response) const;
 
     // Applies Host-authoritative CORS to the worker's response headers:
     // strips App-owned Access-Control-Allow-Origin, gates
@@ -66,7 +67,8 @@ class ListenerCors {
 
     // Stamps the recorded ACAO (+ Vary: Origin) on a Host-synthesized
     // response (send_simple paths) when the Origin was allowed.
-    void stamp(http::response<http::string_body>& response) const;
+    void stamp(boost::beast::http::response<
+                   boost::beast::http::string_body>& response) const;
 
   private:
     const ListenerCorsConfig& config_;
