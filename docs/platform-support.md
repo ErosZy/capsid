@@ -18,6 +18,8 @@ Unified commitments:
 - `capsid-bytecode-compile` (trusted bytecode) ✅
 - Host `--mode single-worker` ✅
 - Host `--mode static-pool` (single / multi shard) ✅
+- Listener-level CORS (`--cors-*` on single-worker/static-pool; the same
+  shared engine backs the managed host.json listeners) ✅
 - Egress network policy (egress host/address rules) ✅
 - Capability policy (modules/permissions/environment snapshot) ✅
 

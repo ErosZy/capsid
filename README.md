@@ -115,8 +115,13 @@ curl http://127.0.0.1:8080/@capsid/orders/
 # {"message":"hello from Capsid","path":"/"}
 ```
 
-`capsid-host` supports `single-worker`, `static-pool`, and `managed`;
-step-by-step permission field configuration is in the
+`capsid-host` supports `single-worker`, `static-pool`, and `managed`.
+`static-pool` takes any positive `--workers` count (each worker owns one
+shard sharing the listener port), and listener-level CORS is available in
+every mode: `--cors-*` flags on the local modes, per-listener `cors` in
+managed `host.json` — both driven by the same engine. See the
+[host modes and CLI reference](docs/host-config.md); step-by-step
+permission field configuration is in the
 [capsid.json tutorial](docs/capsid-json.md).
 
 ## Configuration Guide
