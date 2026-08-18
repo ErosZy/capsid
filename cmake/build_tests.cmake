@@ -2469,7 +2469,7 @@ if(BUILD_TESTING)
 
         # Elysia-specific esbuild flags: --main-fields=main,module because
         # cookie ships a CJS main and the neutral platform ignores it; and
-        # --external=file-type because Elysia imports it dynamically behind a
+        # --external:file-type because Elysia imports it dynamically behind a
         # runtime catch, so leaving it external keeps the bundle self-contained.
         function(capsid_add_elysia_fixture name entry)
             set(output
@@ -2487,7 +2487,7 @@ if(BUILD_TESTING)
                     --platform=neutral
                     --format=esm
                     --main-fields=main,module
-                    --external=file-type
+                    --external:file-type
                     "--metafile=${metafile}"
                     "--outfile=${output}"
                 COMMAND "${CAPSID_NODE_EXECUTABLE}"
