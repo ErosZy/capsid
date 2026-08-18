@@ -3,7 +3,14 @@ import { Elysia } from 'elysia';
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 
-const app = new Elysia();
+// Elysia 1.4's route inference (sucrose) schedules a ~5-minute module-global
+// GC timer on cache misses and reschedules it on every inference. Under
+// capsid's async-context hooks a timer created inside a request captures that
+// request's token, so the last inference's timer holds the final token open
+// and the worker is poisoned as a terminal continuation leak. gcTime: null
+// makes clearSucroseCache skip the timer entirely (the cache still flushes on
+// the next inference; only the lazy GC is disabled).
+const app = new Elysia({ sucrose: { gcTime: null } });
 
 /*
  * Entry / fixed / lifecycle primitives, mirroring the hono reference app so
@@ -51,16 +58,27 @@ app.post('/body/json', async (context) => {
     const value = await context.request.json();
     return { name: value?.name ?? null };
 });
-app.post('/body/form', async (context) => {
-    const form = await context.request.formData();
-    return {
-        field: form.get('field'),
-        files: form.getAll('upload').map(file => ({
-            name: file.name,
-            size: file.size,
-        })),
-    };
-});
+// Multipart parsing lives in a module-scope helper, not the route handler.
+// Elysia 1.4's sucrose inference scans handler.toString() with
+// /\w\((?:.*?)?<param>(?:.*?)?\)/ and reads a `<param>,`/`<param>)` hit as
+// "context passed to a function", which enables body pre-parse. Under esbuild
+// minification the handler param becomes `e`, and a closure like
+// `map(r => ({ name: r.name, size: r.size }))` puts an `e` inside parens
+// right before `)` — the exactParameter regex fires, body:true is inferred,
+// compose pre-parses the multipart body, and the handler's own formData()
+// then throws "Already read" (Node reproduces the 500 on the minified
+// bundle; it is not capsid-specific). Keeping the parsing in a helper leaves
+// the handler as `e => parseForm(e.request)`, which no longer matches, so
+// the multipart body is read exactly once.
+const parseForm = async (request) => {
+    const form = await request.formData();
+    const files = [];
+    for (const file of form.getAll('upload')) {
+        files.push({ name: file.name, size: file.size });
+    }
+    return { field: form.get('field'), files };
+};
+app.post('/body/form', (context) => parseForm(context.request));
 
 /* --- headers / cookies --- */
 app.get('/headers/echo', (context) => ({
