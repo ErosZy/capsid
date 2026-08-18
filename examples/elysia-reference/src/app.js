@@ -1,4 +1,8 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
+import { bearer } from '@elysiajs/bearer';
+import { cors } from '@elysiajs/cors';
+import { jwt } from '@elysiajs/jwt';
+import { Stream } from '@elysiajs/stream';
 
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
@@ -128,6 +132,17 @@ app.onError(({ code, set, error }) => {
     if (code === 'NOT_FOUND') {
         return new Response(`elysia-not-found:${error?.message ?? ''}`, {
             status: 404,
+        });
+    }
+    // Schema validation failures must keep their 422 status instead of
+    // falling through to the generic 500 handler below.
+    if (code === 'VALIDATION') {
+        return new Response(JSON.stringify({
+            code,
+            message: error?.message ?? String(error),
+        }), {
+            status: 422,
+            headers: { 'content-type': 'application/json' },
         });
     }
     return new Response(JSON.stringify({
@@ -289,6 +304,123 @@ app.get('/runtime/fetch', async (context) => {
         text: await response.text(),
         header: response.headers.get('x-elysia-upstream'),
     };
+});
+
+/* ================= @elysiajs plugin coverage ================= */
+
+/*
+ * CORS — plugin hooks onRequest to answer preflight and stamp
+ * access-control-* headers. The origin is pinned so only matching
+ * origins get allow-origin back (origin: true would echo anything).
+ */
+app.use(cors({
+    origin: 'https://capsid.test',
+    methods: [ 'GET', 'POST' ],
+    allowedHeaders: [ 'x-elysia-send', 'content-type' ],
+}));
+app.get('/cors/echo', () => 'cors-ok');
+
+/*
+ * Bearer — plugin derives a lazy `bearer` getter (query access_token or
+ * Authorization header). Header value is stripped of the scheme prefix.
+ */
+app.use(bearer());
+app.get('/bearer/echo', (context) => ({
+    bearer: context.bearer ?? null,
+}));
+
+/*
+ * JWT — plugin decorates `context.jwt` with sign/verify backed by jose's
+ * webapi entry (crypto.subtle only, no Node primitives). The payload is
+ * echoed back on verify so differential can pin both directions.
+ */
+app.use(jwt({
+    name: 'jwt',
+    secret: 'capsid-elysia-jwt-secret',
+}));
+app.get('/jwt/sign', async (context) => ({
+    token: await context.jwt.sign({ sub: 'capsid-test-user' }),
+}));
+app.get('/jwt/verify', async (context) => {
+    const header = context.request.headers.get('authorization') ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : header;
+    const payload = await context.jwt.verify(token);
+    return { valid: payload !== false, payload: payload === false ? null : payload };
+});
+
+/*
+ * SSE — the plugin's Stream class formats id/data frames and the response
+ * is served with an explicit text/event-stream content-type. Stream.send
+ * assigns a random nanoid id per frame, so differentials assert the data
+ * lines only. (Stream is deprecated in favor of generator returns; both
+ * shapes are covered — generator route below.)
+ */
+app.get('/stream/sse', (context) => {
+    const stream = new Stream((stream) => {
+        stream.send('sse-one');
+        stream.send({ count: 2 });
+        stream.close();
+    });
+    return new Response(stream.toResponse(), {
+        headers: { 'content-type': 'text/event-stream' },
+    });
+});
+app.get('/stream/sse-generator', async function* (context) {
+    context.set.headers['content-type'] = 'text/event-stream';
+    yield textEncoder.encode('data: gen-one\n\n');
+    yield textEncoder.encode('data: gen-two\n\n');
+});
+
+/* ================= core capabilities ================= */
+
+/*
+ * guard — scoped hooks: routes registered through the guard inherit its
+ * beforeHandle; a returned Response short-circuits the chain.
+ */
+app.guard({
+    beforeHandle: (context) => {
+        if (context.headers['x-guard-pass'] !== '1') {
+            return new Response('guard-denied', { status: 403 });
+        }
+    },
+// The guard callback must return the scoped instance (expression body),
+// not a bare block — Elysia merges the callback's return value back.
+}, (guard) => guard.get('/guard/protected', () => 'guard-ok'));
+
+/* derive — synchronous per-request augmentation injected into context. */
+app.derive((context) => ({
+    derivedFrom: context.request.headers.get('x-derived') ?? 'none',
+}));
+app.get('/derive/echo', (context) => ({
+    derivedFrom: context.derivedFrom,
+}));
+
+/* resolve — async per-request augmentation (awaited before the handler). */
+app.resolve(async (context) => ({
+    resolvedPath: new URL(context.request.url).pathname,
+}));
+app.get('/resolve/echo', (context) => ({
+    resolvedPath: context.resolvedPath,
+}));
+
+/*
+ * schema validation — typebox body/params contracts; failures surface as
+ * VALIDATION with 422 via the onError branch above. Note the 1.4 signature
+ * is route(path, handler, hook): the schema is the THIRD argument — the
+ * second position is the handler itself, so a schema there gets treated as
+ * a plain object return value.
+ */
+app.post('/schema/body', (context) => ({
+    name: context.body.name,
+    age: context.body.age ?? null,
+}), {
+    body: t.Object({
+        name: t.String(),
+        age: t.Optional(t.Number()),
+    }),
+});
+app.get('/schema/params/:id', (context) => ({ id: context.params.id }), {
+    params: t.Object({ id: t.String() }),
 });
 
 export { app };
