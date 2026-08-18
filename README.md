@@ -242,8 +242,9 @@ Frameworks that compile to a single self-contained ESM exporting a standard
 Node/server adapters, listeners, and filesystem static serving. External
 services can be exposed through Host-authored Capsid Bindings. The compatibility
 suite pins and continuously verifies **Hono 4.12.32**,
-**itty-router 5.0.24**, and **H3 v2 2.0.1-rc.26**; other Web-standard frameworks
-can be evaluated against the same rules, but only pinned versions carry evidence.
+**itty-router 5.0.24**, **H3 v2 2.0.1-rc.26**, and **Elysia 1.4.29**; other
+Web-standard frameworks can be evaluated against the same rules, but only
+pinned versions carry evidence.
 See [framework compatibility](docs/framework-compatibility/README.md).
 
 ## Performance
@@ -305,7 +306,7 @@ The full task index is in [docs/README.md](docs/README.md).
 ## Development and Validation
 
 ```sh
-for d in examples/hono-reference examples/itty-router-reference examples/h3-v2-reference; do
+for d in examples/hono-reference examples/itty-router-reference examples/h3-v2-reference examples/elysia-reference; do
   npm ci --ignore-scripts --prefix "$d"
 done
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
