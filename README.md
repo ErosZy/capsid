@@ -247,7 +247,7 @@ See [framework compatibility](docs/framework-compatibility/README.md).
 
 ## Performance
 
-4-core benchmark (Ryzen 3300X, Alpine v3.24/WSL2):
+4-core conclusion-level benchmark (Ryzen 3300X, Alpine v3.24/WSL2):
 
 | Dimension | Capsid | Comparison |
 | --- | ---: | ---: |
@@ -256,7 +256,11 @@ See [framework compatibility](docs/framework-compatibility/README.md).
 | 1 MB trusted bytecode cold start | **42 ms** | Node 149 ms · Deno 53 ms |
 | Host + 2 workers idle PSS | **12.3 MB** | Python 3 stack 62.6 MB |
 
-Full methodology, 12 workloads, and evidence rules are in
+An observed-sample rerun (2026-08-18, 6C/12T WSL, no profiles; not a
+conclusion-level checkpoint) measured JSON 1 KiB at **13,838 QPS** (Flask
+7,030 · Slim 4,037) and 10 KiB cold start at **5.1 ms** source / **4.9 ms**
+trusted bytecode. Full methodology, the 12 conclusion-level workloads, the
+18-workload observed rerun, and evidence rules are in
 [performance-benchmarks.md](docs/performance-benchmarks.md).
 
 ## Platform Support

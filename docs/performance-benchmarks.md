@@ -1,6 +1,6 @@
 # Performance: Evidence Rules and Current State
 
-This document is the single maintained document for performance topics; it keeps only evidence rules and the latest (2026-08-14) conclusions. Historical optimization process (M1P, E1-E14, Host optimization loop) lives in git history and the raw artifacts in `bench/results/`, and is not maintained here.
+This document is the single maintained document for performance topics; it keeps evidence rules, the latest conclusion-level checkpoints (2026-08-14), and clearly labeled observed-sample reruns. Historical optimization process (M1P, E1-E14, Host optimization loop) lives in git history and the raw artifacts in `bench/results/`, and is not maintained here.
 
 ## 1. Evidence Rules
 
@@ -36,9 +36,30 @@ Each run must save at least the manifest (commit, identity, environment, command
 
 The early M1 baseline is only used to freeze the magnitude of the minimal common data plane: the first round does not wait for request body, streaming, cancel, or timeout to be implemented, and cannot be extrapolated into conclusions about the full data plane. Once those contracts land, they must be benchmarked on the same runner, and the new checkpoint must be recorded while keeping rather than overwriting the first-round samples.
 
-## 2. Test Environment (2026-08-18)
+## 2. Test Environment (2026-08-14, conclusion-level)
 
-All latest conclusions share the following environment:
+All conclusion-level checkpoints share the following environment:
+
+| Item | Value |
+|---|---|
+| CPU | AMD Ryzen 3 3300X (4C/8T) |
+| OS | Alpine Linux v3.24 (WSL2, kernel 6.6.87.2-microsoft-standard-WSL2) |
+| Memory | 8 GB |
+| Process protocol | SUT taskset 0-3 / loadgen 4-7; two-process model |
+| Load protocol | conns=64, 12 workloads × 3 rounds (warmup 3s + measured 8s), correctness checked each round |
+
+The stack under test (versions recorded in each manifest):
+
+| Stack | Component and version |
+|---|---|
+| capsid + hono | capsid commit 9bde135 (build-m1d) + hono bundle (sha256 in manifest); static-pool 2 workers |
+| PHP 8 + Slim | PHP 8.5.8 + Slim 4.15.2 + nginx 1.26.3 + php-fpm (pm.max_children=2) |
+| Python 3 + Flask | Python 3.14.5 + Flask 3.1.3 + Gunicorn 26.0.0 (2 workers) |
+| Cold-start extras | Node v24.18.0, Deno 2.9.3 |
+
+## 2b. Observed Rerun Environment (2026-08-18, 6C/12T)
+
+The observed-sample reruns in §3b/§4b share the following environment:
 
 | Item | Value |
 |---|---|
@@ -80,7 +101,7 @@ Payloads are byte-aligned, 0 errors/0 timeouts, **33/36 cells at conclusion leve
 
 ## 3b. Observed WSL Rerun (6C/12T, 2026-08-18, c64, 2 rounds)
 
-The rerun uses the same workloads plus 4k/64k cells (18 workloads), 2 rounds per cell. This is an **observed samples** run — profiles were not collected — so it does not replace the conclusion-level table above and no default capacities are frozen from it. All three stacks were pinned to CPUs 0-5, loadgen to 6-11. Raw samples are kept with the run manifest next to the observed-run artifacts.
+The rerun keeps the 12 conclusion-level cells and adds the missing 4k/64k cells for a 6-size × 3-kind matrix (18 workloads), 2 rounds per cell. This is an **observed samples** run — profiles were not collected — so it does not replace the conclusion-level table above and no default capacities are frozen from it. All three stacks were pinned to CPUs 0-5, loadgen to 6-11. Raw samples and manifests: `build-win/bench-obs/results-20260818T102517/` and the 8k supplement `build-win/bench-obs/results-20260818T104504/` (local, git-ignored).
 
 | workload | capsid + hono | PHP 8 + Slim | Python 3 + Flask |
 |---|---:|---:|---:|
@@ -147,7 +168,7 @@ READY times (same samples): capsid source 9.1/19.2/141.0, bytecode 7.8/10.1/41.4
 
 ## 4b. Observed Cold-Start Rerun (6C/12T, 2026-08-18, median ms, 5 rounds)
 
-Same fixture generator and measurement protocol as §4, on the 2026-08-18 WSL environment (SUT taskset 0-5). capsid side built from commit `b39acee`; Node v24.3.0, Deno 2.9.3.
+Same fixture generator and measurement protocol as §4, on the 2026-08-18 WSL environment (SUT taskset 0-5). capsid side built from commit `b39acee`; Node v24.3.0, Deno 2.9.3. Raw samples: `build-win/bench-obs/cold-start-20260818T105257/` (local, git-ignored).
 
 | Size | capsid source | capsid trusted bytecode | Node 24 source | Deno 2.9 source |
 |---:|---:|---:|---:|---:|
