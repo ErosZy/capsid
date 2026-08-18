@@ -29,6 +29,25 @@ Elysia, while the runtime side runs through a real `capsid-worker`, FetchRPC,
 and the same application logic. The reference app uses Elysia's default
 AOT (compose) mode, which is what a real application gets out of the box.
 
+## Plugin coverage
+
+Beyond Elysia core, the pinned app exercises the official `@elysiajs`
+plugins and core capabilities, all version-pinned in
+`examples/elysia-reference/package.json`:
+
+| Surface | Coverage |
+| --- | --- |
+| @elysiajs/cors 1.4.2 | allowed-origin echo, preflight 204, rejected origin |
+| @elysiajs/bearer 1.4.4 | header, query (`access_token`), missing |
+| @elysiajs/jwt 1.4.2 | HS256 sign/verify (jose webapi entry), bad token |
+| @elysiajs/stream 1.1.0 | `Stream` class SSE frames, generator SSE |
+| schema validation | typebox body (valid/invalid/optional), params |
+| guard / derive / resolve | scoped beforeHandle, sync/async context augmentation |
+
+The worker bundle keeps each plugin's real npm dist (jose's webapi entry,
+nanoid's browser entry via esbuild alias) inside the single self-contained
+ESM; the audit enforces that nothing else enters the graph.
+
 ## Verified
 
 - `app.fetch()`, default `{ fetch }`, and named `fetch` entries;
@@ -38,12 +57,14 @@ AOT (compose) mode, which is what a real application gets out of the box.
 - request body, multipart FormData, AbortSignal, worker reuse;
 - async timeout, sync CPU timeout, concurrency isolation, cancellation;
 - txiki.js direct `fetch()` controlled by the normal egress policy;
-- Node/Deno/Bun/txiki/platform globals remain absent.
+- Node/Deno/Bun/txiki/platform globals remain absent;
+- @elysiajs cors/bearer/jwt/stream plugins, typebox schema validation,
+  guard/derive/resolve scoping (see the plugin table above).
 
 ## Pinned compatibility notes
 
-Two Elysia 1.4.29 behaviors are pinned as deliberate application-level
-configuration in the reference app; both are required for the runtime
+Three Elysia 1.4.29 behaviors are pinned as deliberate application-level
+configuration in the reference app; all three are required for the runtime
 lifecycle and differential suites to pass.
 
 ### `sucrose: { gcTime: null }` is required
@@ -77,6 +98,29 @@ handler reads `e => parseForm(e.request)`, which no longer matches, and the
 body is read exactly once. Future handlers that call `formData()` inline
 should be checked against this inference interaction before bundling.
 
+### Lazy getters in global derives need an empty query schema
+
+`@elysiajs/bearer` registers a *global* derive whose result is a lazy
+`bearer` getter that reads `context.query`. AOT compose merges derive
+results into the context with `Object.assign`, which copies VALUES — the
+getter is therefore evaluated on **every** route the derive reaches.
+Whether `context.query` exists at all is inference-driven (`hasQuery`),
+and sucrose's parameter parser (`removeColonAlias`) is defeated by
+minified destructure aliases: `function({ query: i, ... })` leaves the
+parameter-map key as `"query:i"` instead of `"query"`, so inference never
+sees the query binding, compose skips query parsing, and the getter throws
+"cannot read property 'access_token' of undefined". Node reproduces the
+500 on the minified bundle; it is not Capsid-specific. The unminified
+reference works because `{ query, ... }` parses cleanly.
+
+The reference app scopes everything after `use(bearer())` through
+`app.guard({ query: t.Object({}) }, ...)`: the empty schema forces
+`hasQuery` regardless of inference, so source and minified builds parse
+query identically and the lazy getter always finds a defined object.
+Any plugin with lazy accessors reading query (or any route that dereferences
+`context.query`) needs an equivalent declared schema once bundling and
+minification are involved.
+
 ## Support boundaries
 
 Applications can bundle the Web-standard Elysia paths above into an ESM and
@@ -101,5 +145,6 @@ compatibility statement.
 3. Rebuild and audit all bundles;
 4. Run the differential, lifecycle, excluded-import, global-surface, and
    sanitizer matrices;
-5. Review the two pinned notes above — `gcTime` behavior and the multipart
-   inference interaction may change across versions.
+5. Review the three pinned notes above — `gcTime` behavior, the multipart
+   inference interaction, and the derive-getter/query-schema interaction
+   may change across versions.

@@ -19,7 +19,7 @@ differential vectors and independent absolute assertions:
 | [Hono](hono.md) | 4.12.32 | 68 vectors | Core routing, middleware, streaming, and lifecycle |
 | [itty-router](itty-router.md) | 5.0.24 | 96 vectors × 3 variants | AutoRouter, Router, IttyRouter |
 | [H3 v2](h3-v2.md) | 2.0.1-rc.26 | 129 vectors | Core, middleware/hooks, some Web-standard utilities |
-| [Elysia](elysia.md) | 1.4.29 | 30 vectors | AOT compose, hooks, multipart; two pinned app-level notes |
+| [Elysia](elysia.md) | 1.4.29 | 49 vectors | AOT compose, hooks, multipart, @elysiajs plugins, schema validation; three pinned app-level notes |
 
 ## Using other frameworks
 
