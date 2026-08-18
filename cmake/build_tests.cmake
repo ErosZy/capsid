@@ -2418,6 +2418,96 @@ if(BUILD_TESTING)
         capsid_add_h3_v2_fixture(MALFORMED entry-malformed.js)
         capsid_add_h3_v2_fixture(DEBUG entry-debug.js)
 
+        set(CAPSID_ELYSIA_REFERENCE_ROOT
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/elysia-reference")
+        set(CAPSID_ELYSIA_VERSION "1.4.29")
+        if(NOT EXISTS
+           "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/elysia/package.json")
+            message(FATAL_ERROR
+                "Elysia ${CAPSID_ELYSIA_VERSION} is missing; run "
+                "npm ci --ignore-scripts --prefix examples/elysia-reference")
+        endif()
+        file(READ
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/package.json"
+            CAPSID_ELYSIA_REFERENCE_PACKAGE)
+        file(READ
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/package-lock.json"
+            CAPSID_ELYSIA_REFERENCE_LOCK)
+        file(READ
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/elysia/package.json"
+            CAPSID_ELYSIA_INSTALLED_PACKAGE)
+        string(FIND
+            "${CAPSID_ELYSIA_REFERENCE_PACKAGE}"
+            "\"elysia\": \"${CAPSID_ELYSIA_VERSION}\""
+            CAPSID_ELYSIA_PACKAGE_VERSION_OFFSET)
+        string(FIND
+            "${CAPSID_ELYSIA_REFERENCE_LOCK}"
+            "\"elysia\": \"${CAPSID_ELYSIA_VERSION}\""
+            CAPSID_ELYSIA_LOCK_VERSION_OFFSET)
+        string(FIND
+            "${CAPSID_ELYSIA_INSTALLED_PACKAGE}"
+            "\"version\": \"${CAPSID_ELYSIA_VERSION}\""
+            CAPSID_ELYSIA_INSTALLED_VERSION_OFFSET)
+        if(CAPSID_ELYSIA_PACKAGE_VERSION_OFFSET EQUAL -1 OR
+           CAPSID_ELYSIA_LOCK_VERSION_OFFSET EQUAL -1 OR
+           CAPSID_ELYSIA_INSTALLED_VERSION_OFFSET EQUAL -1)
+            message(FATAL_ERROR
+                "examples/elysia-reference package, lockfile and install "
+                "must all pin exactly Elysia ${CAPSID_ELYSIA_VERSION}")
+        endif()
+        file(GLOB_RECURSE CAPSID_ELYSIA_BUNDLE_DEPS CONFIGURE_DEPENDS
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/src/*.js"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/elysia/dist/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/cookie/dist/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/memoirist/dist/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/exact-mirror/dist/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/fast-decode-uri-component/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/@sinclair/typebox/build/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/package.json"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/package-lock.json"
+        )
+
+        # Elysia-specific esbuild flags: --main-fields=main,module because
+        # cookie ships a CJS main and the neutral platform ignores it; and
+        # --external=file-type because Elysia imports it dynamically behind a
+        # runtime catch, so leaving it external keeps the bundle self-contained.
+        function(capsid_add_elysia_fixture name entry)
+            set(output
+                "${CAPSID_GENERATED_DIR}/test-elysia-${name}.js")
+            set(metafile "${output}.meta.json")
+            add_custom_command(
+                OUTPUT "${output}" "${metafile}"
+                COMMAND "${CAPSID_ESBUILD}"
+                    "${CAPSID_ELYSIA_REFERENCE_ROOT}/src/${entry}"
+                    --bundle
+                    --minify
+                    --keep-names
+                    --tree-shaking=true
+                    --target=esnext
+                    --platform=neutral
+                    --format=esm
+                    --main-fields=main,module
+                    --external=file-type
+                    "--metafile=${metafile}"
+                    "--outfile=${output}"
+                COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/elysia/audit-bundle.mjs"
+                    "${output}"
+                    "${metafile}"
+                DEPENDS
+                    ${CAPSID_ELYSIA_BUNDLE_DEPS}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/elysia/audit-bundle.mjs"
+                VERBATIM
+            )
+            add_custom_target("test-elysia-${name}-fixture"
+                DEPENDS "${output}" "${metafile}")
+            set("CAPSID_ELYSIA_${name}_FIXTURE"
+                "${output}" PARENT_SCOPE)
+        endfunction()
+
+        capsid_add_elysia_fixture(DEFAULT entry-default.js)
+        capsid_add_elysia_fixture(NAMED entry-named.js)
+
         if(CAPSID_WPT_ROOT)
             file(READ
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/manifest.json"
@@ -4322,6 +4412,56 @@ if(BUILD_TESTING)
         set_tests_properties(
             worker_h3_v2_permissions
             PROPERTIES TIMEOUT 45 LABELS "framework;h3-v2;permissions"
+        )
+
+        add_executable(
+            test-elysia-worker-driver
+            tests/test_framework_worker_driver.cc
+        )
+        target_link_libraries(
+            test-elysia-worker-driver PRIVATE capsid_runtime
+        )
+        add_dependencies(
+            test-elysia-worker-driver
+            test-elysia-DEFAULT-fixture
+            test-elysia-NAMED-fixture
+        )
+        add_test(
+            NAME worker_elysia_compatibility
+            COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/elysia/differential.mjs"
+                --driver $<TARGET_FILE:test-elysia-worker-driver>
+                --worker $<TARGET_FILE:capsid-worker>
+                --bundle "${CAPSID_ELYSIA_DEFAULT_FIXTURE}"
+        )
+        add_test(
+            NAME worker_elysia_entry_named
+            COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/elysia/differential.mjs"
+                --driver $<TARGET_FILE:test-elysia-worker-driver>
+                --worker $<TARGET_FILE:capsid-worker>
+                --bundle "${CAPSID_ELYSIA_NAMED_FIXTURE}"
+                --smoke true
+        )
+        add_test(
+            NAME worker_elysia_lifecycle
+            COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/elysia/lifecycle.mjs"
+                --driver $<TARGET_FILE:test-elysia-worker-driver>
+                --worker $<TARGET_FILE:capsid-worker>
+                --bundle "${CAPSID_ELYSIA_DEFAULT_FIXTURE}"
+        )
+        set_tests_properties(
+            worker_elysia_compatibility
+            PROPERTIES TIMEOUT 180 LABELS "framework;elysia;differential"
+        )
+        set_tests_properties(
+            worker_elysia_entry_named
+            PROPERTIES TIMEOUT 30 LABELS "framework;elysia;entry"
+        )
+        set_tests_properties(
+            worker_elysia_lifecycle
+            PROPERTIES TIMEOUT 60 LABELS "framework;elysia;lifecycle"
         )
 
         add_executable(test-p0-boundaries tests/test_p0_boundaries.cc)
