@@ -63,7 +63,7 @@ Workload matrix: json / bytes / stream at 1k, 4k, 16k, 32k (4k cells use the loa
 
 ## 3. Four-Stack Matrix (2026-08-18, c64, 3 rounds)
 
-12 workloads × 4 stacks × 3 rounds, warmup 3s + measured 8s, correctness checked every round — **all 144 rounds OK**. This run meets the conclusion threshold: raw samples, correctness verdicts, per-process resource samples, and capsid host/worker perf profiles are all saved. Raw data: `bench/results/four-qps-final-20260818T131300/` (merged: `four-qps-20260818T124403` capsid/php/flask + `four-qps-20260818T130505` 4k matrix + `four-qps-20260818T131156` fastapi full rerun), profiles: `bench/results/four-qps-profile-20260818T134336/`.
+12 workloads × 4 stacks × 3 rounds, warmup 3s + measured 8s, correctness checked every round — **all 144 rounds OK**. This run meets the conclusion threshold: raw samples, correctness verdicts, per-process resource samples, and capsid host/worker perf profiles are all saved. Raw data: `bench/results/four-qps-final-20260818T131300/` (self-contained: 144 samples + 144 correctness files), profiles: `bench/results/four-qps-profile-20260818T132600/`.
 
 Median QPS over 3 rounds (winner per row in bold):
 
@@ -110,11 +110,11 @@ capsid's full serving path (host + 2 workers) stays at ≈5.7 MB PSS for the hos
 
 ### Profiles (capsid host and worker, json16k, 30s, `perf record -F 99`)
 
-`bench/results/four-qps-profile-20260818T134336/` — perf data + full `perf report` text + correctness (158,348 responses checked, 0 mismatches during the profile session). Only capsid is profiled: it is the stack under test; the PHP/Flask/FastAPI stacks serve as comparison references and are not profiled.
+`bench/results/four-qps-profile-20260818T132600/` — perf data + full `perf report` text + correctness (183,505 responses checked, 0 mismatches during the profile session). Only capsid is profiled: it is the stack under test; the PHP/Flask/FastAPI stacks serve as comparison references and are not profiled.
 
-capsid **host** (790 samples): 6.1% `memcpy`, 5.1% `__libc_malloc_impl`, 3.5% `alloc_slot` (all in `ld-musl`) — the host's share is dominated by request/response buffer copying and allocation on the scheduling path.
+capsid **host** (844 samples): 6.4% `memcpy`, 6.8% `__libc_malloc_impl`, 3.4% `alloc_slot` (all in `ld-musl`) — the host's share is dominated by request/response buffer copying and allocation on the scheduling path.
 
-capsid **worker** (3,807 samples): 21.8% `JS_CallInternal` (QuickJS entry into the Hono handler), 9.0% `malloc_usable_size`, 6.1% `lre_exec_backtrack` (regexp execution) — the worker's time is dominated by JS handler execution itself, i.e. the application code the framework runs, not by the framework's dispatch.
+capsid **worker** (3,886 samples): 20.5% `JS_CallInternal` (QuickJS entry into the Hono handler), 9.8% `malloc_usable_size`, 6.5% `lre_exec_backtrack` (regexp execution) — the worker's time is dominated by JS handler execution itself, i.e. the application code the framework runs, not by the framework's dispatch.
 
 ### Reading the matrix
 
