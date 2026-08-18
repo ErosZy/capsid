@@ -33,11 +33,12 @@ and ambient process APIs. In return, the Host gets a non-blocking C ABI/C++11
 data plane with streaming, credit backpressure, explicit lifecycle control,
 and a capability boundary designed for hostile code.
 
-The implementation is small and measurable: the published 4-core baseline
-reaches about **6,800 QPS**, starts small bundles in **8–10 ms**, and uses about
-**12.3 MB** idle PSS for the Host plus two workers. Claims are backed by pinned
-WPT, framework differentials, sanitizers, fuzzing, privileged sandbox probes,
-and identity-linked performance evidence.
+The implementation is small and measurable: on a 6C/12T WSL runner the
+observed 2026-08-18 samples reach about **13,838 QPS** on JSON 1 KiB, start a
+10 KiB bundle in **5.1 ms** source / **4.9 ms** trusted bytecode, and use about
+**34.1 MB** SUT PSS median. Claims are backed by pinned WPT, framework
+differentials, sanitizers, fuzzing, privileged sandbox probes, and
+identity-linked performance evidence.
 
 ## Quick Start
 
@@ -247,20 +248,16 @@ See [framework compatibility](docs/framework-compatibility/README.md).
 
 ## Performance
 
-4-core conclusion-level benchmark (Ryzen 3300X, Alpine v3.24/WSL2):
+Observed samples (2026-08-18, Intel i5-12400F 6C/12T, Ubuntu 24.04/WSL2, conns=64; no profiles):
 
 | Dimension | Capsid | Comparison |
 | --- | ---: | ---: |
-| JSON 1 KiB throughput | **6,820 QPS** | Flask 4,625 · Slim 1,826 |
-| Small bundle cold start | **8–10 ms** | Node 110 ms · Deno 39 ms |
-| 1 MB trusted bytecode cold start | **42 ms** | Node 149 ms · Deno 53 ms |
-| Host + 2 workers idle PSS | **12.3 MB** | Python 3 stack 62.6 MB |
+| JSON 1 KiB throughput | **13,838 QPS** | Flask 7,030 · Slim 4,037 |
+| Small bundle cold start (10 KiB) | **5.1 ms** source / **4.9 ms** bytecode | Node 47 ms · Deno 32 ms |
+| 1 MB trusted bytecode cold start | **15.1 ms** | Node 71 ms · Deno 33 ms |
+| SUT PSS median (whole run) | **34.1 MB** | Python 3 stack 54.4 MB |
 
-An observed-sample rerun (2026-08-18, 6C/12T WSL, no profiles; not a
-conclusion-level checkpoint) measured JSON 1 KiB at **13,838 QPS** (Flask
-7,030 · Slim 4,037) and 10 KiB cold start at **5.1 ms** source / **4.9 ms**
-trusted bytecode. Full methodology, the 12 conclusion-level workloads, the
-18-workload observed rerun, and evidence rules are in
+Full methodology, the 18-workload matrix (1k-64k × json/bytes/stream), and evidence rules are in
 [performance-benchmarks.md](docs/performance-benchmarks.md).
 
 ## Platform Support
