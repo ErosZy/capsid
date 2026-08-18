@@ -936,6 +936,131 @@ try {
     }
 }
 
+// ---- Listener-level CORS on the single-worker CLI: --cors-origins and
+// --cors-methods are both required (mirroring the host.json grammar),
+// --cors-headers / --cors-max-age optional. The listener answers browser
+// preflights before routing; simple responses get the matching
+// Access-Control-Allow-Origin stamped, disallowed origins get nothing.
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-cors-'));
+    fs.copyFileSync(args.get('bundle'), path.join(dir, 'host-single-worker.js'));
+    fs.writeFileSync(path.join(dir, 'capsid.json'), JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'host-single-worker.js',
+        pool: { minReady: 1, maxWorkers: 1 },
+        request: { timeout: '10s' },
+    }));
+    const spawnCors = (extraArgs) => spawn(args.get('host'), [
+        '--mode', 'single-worker',
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', path.join(dir, 'capsid.json'),
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+        ...extraArgs,
+    ], {
+        cwd: dir,
+        stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+    });
+    try {
+        const child = spawnCors([
+            '--cors-origins', 'http://allowed.test',
+            '--cors-methods', 'GET,POST',
+            '--cors-headers', 'content-type',
+            '--cors-max-age', '600',
+        ]);
+        let stderr = '';
+        child.stderr.setEncoding('utf8');
+        child.stderr.on('data', (chunk) => { stderr += chunk; });
+        try {
+            const readyLine = await readLine(
+                child.stdio[3], child, 10000, () => stderr);
+            const ready = JSON.parse(readyLine);
+            const corsGet = (headers) => request(ready.port, {
+                target: '/@capsid/orders/health',
+                headers,
+                timeoutMs: 3000,
+            });
+            // Simple request with an allowed Origin: ACAO echoes it.
+            const allowed = await corsGet({ origin: 'http://allowed.test' });
+            assert.equal(allowed.status, 200);
+            assert.equal(allowed.headers['access-control-allow-origin'],
+                'http://allowed.test');
+            // Disallowed origin: served, but no ACAO leaks.
+            const denied = await corsGet({ origin: 'http://evil.test' });
+            assert.equal(denied.status, 200);
+            assert.equal(denied.headers['access-control-allow-origin'],
+                undefined);
+            // Allowed preflight: 204 with the full allow set + max-age.
+            const preflight = await request(ready.port, {
+                method: 'OPTIONS',
+                target: '/@capsid/orders/health',
+                headers: {
+                    origin: 'http://allowed.test',
+                    'access-control-request-method': 'POST',
+                    'access-control-request-headers': 'content-type',
+                },
+                timeoutMs: 3000,
+            });
+            assert.equal(preflight.status, 204);
+            assert.equal(preflight.headers['access-control-allow-origin'],
+                'http://allowed.test');
+            assert.equal(preflight.headers['access-control-allow-methods'],
+                'GET, POST');
+            assert.equal(preflight.headers['access-control-allow-headers'],
+                'content-type');
+            assert.equal(preflight.headers['access-control-max-age'], '600');
+            // Disallowed preflight: 403 without any allow-* field.
+            const badPreflight = await request(ready.port, {
+                method: 'OPTIONS',
+                target: '/@capsid/orders/health',
+                headers: {
+                    origin: 'http://evil.test',
+                    'access-control-request-method': 'POST',
+                },
+                timeoutMs: 3000,
+            });
+            assert.equal(badPreflight.status, 403);
+            assert.equal(badPreflight.headers['access-control-allow-origin'],
+                undefined);
+            assert.equal(badPreflight.headers['access-control-allow-methods'],
+                undefined);
+            // Duplicate Origin header is 400.
+            const duplicate = await request(ready.port, {
+                target: '/@capsid/orders/health',
+                headers: { origin: [ 'http://allowed.test', 'http://evil.test' ] },
+                timeoutMs: 3000,
+            });
+            assert.equal(duplicate.status, 400);
+        } finally {
+            child.kill('SIGTERM');
+            await waitForExit(child, 3000);
+        }
+        // CLI validation mirrors host.json: methods are required with
+        // origins, and malformed origins fail at argument time.
+        for (const bad of [
+            [ '--cors-origins', 'http://allowed.test' ],
+            [ '--cors-origins', 'not-an-origin', '--cors-methods', 'GET' ],
+            [ '--cors-methods', 'GET' ],
+        ]) {
+            const badChild = spawnCors(bad);
+            let badStderr = '';
+            badChild.stderr.setEncoding('utf8');
+            badChild.stderr.on('data', (chunk) => { badStderr += chunk; });
+            const exit = await waitForExit(badChild, 10000);
+            assert.equal(exit.code, 2, `${bad.join(' ')} must exit 2`);
+            assert.match(badStderr, /cors/i,
+                `${bad.join(' ')} must name the failure`);
+        }
+    } finally {
+        await removeTreeRetry(dir);
+    }
+}
+
 // ---- Local admission queue behavior: maxInflightPerWorker=1 plus
 // queueRequests=2 means two requests park while the worker is busy and the
 // third concurrent request is rejected with 429 (not silently unlimited).
