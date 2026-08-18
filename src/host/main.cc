@@ -1300,11 +1300,12 @@ int main(int argc, char** argv) {
     }
     options.ready_fd = static_cast<int>(ready_fd);
 
-    // Benchmark-only static pool (NOT a managed production path): a fixed
-    // 1/2/4-worker pool sharing one SO_REUSEPORT listener, driven by the
-    // same worker/bundle/ready-fd parameters as the single-worker mode.
-    // The pool keeps the pool-level READY contract and SIGTERM-bounded
-    // shutdown; single-worker mode is unchanged.
+    // Static pool: an arbitrary positive worker count, each worker owning
+    // one shard (its own process and event loop) sharing one SO_REUSEPORT
+    // listener. The pool keeps the pool-level READY contract and
+    // SIGTERM-bounded shutdown; single-worker mode is unchanged. Sizing is
+    // the deployer's call — every shard costs one worker process plus an
+    // Asio loop, so very large pools are memory-bound, not rejected.
     std::uint32_t workers = 1;
     if (mode == "static-pool") {
         const std::string workers_text = require("workers");
@@ -1314,12 +1315,6 @@ int main(int argc, char** argv) {
             fail("--workers exceeds uint32");
         }
         workers = static_cast<std::uint32_t>(parsed_workers);
-        // M2 pool sizing scans {1,2,4,6,8}; the benchmark-only entry
-        // accepts exactly this set (admission-sized pools come later).
-        if (workers != 1 && workers != 2 && workers != 4 &&
-            workers != 6 && workers != 8) {
-            fail("--workers must be 1, 2, 4, 6 or 8 in static-pool mode");
-        }
     }
 
     // M2 E-1 admission (§10.3): the benchmark CLI mirrors the effective

@@ -870,6 +870,72 @@ try {
     }
 }
 
+// ---- Static-pool arbitrary worker counts: --workers accepts any positive
+// integer, not just the benchmark whitelist {1,2,4,6,8}. A non-whitelist
+// pool must come READY and serve through the shared port; zero, negative,
+// and beyond-uint32 values must still fail closed at the CLI.
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-pool-size-'));
+    fs.copyFileSync(args.get('bundle'), path.join(dir, 'host-single-worker.js'));
+    fs.writeFileSync(path.join(dir, 'capsid.json'), JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'host-single-worker.js',
+        // Local schema requires minReady == maxWorkers; the actual
+        // static-pool sizing comes from --workers on the CLI.
+        pool: { minReady: 2, maxWorkers: 2 },
+        request: { timeout: '10s' },
+    }));
+    const spawnPool = (workers) => spawn(args.get('host'), [
+        '--mode', 'static-pool',
+        '--workers', String(workers),
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', path.join(dir, 'capsid.json'),
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+    ], {
+        cwd: dir,
+        stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+    });
+    try {
+        const three = spawnPool(3);
+        let threeStderr = '';
+        three.stderr.setEncoding('utf8');
+        three.stderr.on('data', (chunk) => { threeStderr += chunk; });
+        try {
+            const readyLine = await readLine(
+                three.stdio[3], three, 15000, () => threeStderr);
+            const ready = JSON.parse(readyLine);
+            const response = await request(ready.port, {
+                target: '/@capsid/orders/health',
+                timeoutMs: 3000,
+            });
+            assert.equal(response.status, 200,
+                'three-worker pool must serve through the shared port');
+        } finally {
+            three.kill('SIGTERM');
+            await waitForExit(three, 3000);
+        }
+        for (const bad of [ 0, -3, 4294967296 ]) {
+            const child = spawnPool(bad);
+            let stderr = '';
+            child.stderr.setEncoding('utf8');
+            child.stderr.on('data', (chunk) => { stderr += chunk; });
+            const exit = await waitForExit(child, 10000);
+            // CLI usage failures exit 2 (runtime failures exit 1).
+            assert.equal(exit.code, 2, `--workers ${bad} must exit 2`);
+            assert.match(stderr, /workers/,
+                `--workers ${bad} must name the failure`);
+        }
+    } finally {
+        await removeTreeRetry(dir);
+    }
+}
+
 // ---- Local admission queue behavior: maxInflightPerWorker=1 plus
 // queueRequests=2 means two requests park while the worker is busy and the
 // third concurrent request is rejected with 429 (not silently unlimited).

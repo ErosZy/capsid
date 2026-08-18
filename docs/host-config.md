@@ -16,9 +16,9 @@ anything is spawned or bound.
 
 | | `--mode single-worker` | `--mode static-pool` | `--mode managed` |
 | --- | --- | --- | --- |
-| What it is | One worker serving one app version from a local bundle; the process *is* the service | A fixed-size worker pool (1/2/4/6/8) sharing one listener over the same bundle — local scale-out | A coordinator machine: many apps and versions, blue-green deployment, Admin API, crash budgets, recovery |
+| What it is | One worker serving one app version from a local bundle; the process *is* the service | An arbitrary-size worker pool (each worker owns one shard) sharing one listener over the same bundle — local scale-out | A coordinator machine: many apps and versions, blue-green deployment, Admin API, crash budgets, recovery |
 | Config inputs | CLI + optional local `--capsid-json` (the document is the permission authority; there is no host.json) | same as `single-worker` | `--host-config` host.json + per-version capsid.json under `applicationsRoot` (Host ∩ App intersection) |
-| Worker count | 1 | `--workers` — exactly 1, 2, 4, 6 or 8 | per-version capsid.json `pool` (`minReady` / `maxWorkers`) |
+| Worker count | 1 | `--workers` — any positive integer; each shard costs one worker process plus an Asio loop | per-version capsid.json `pool` (`minReady` / `maxWorkers`) |
 | Listener | one `--listen` | one `--listen`, sharded by `SO_REUSEPORT` (Linux/macOS) or a pool-level shared acceptor (Windows) | host.json `listeners` (with CORS per listener) |
 | Lifecycle | process lifetime; SIGTERM-bounded shutdown | pool keeps the pool-level READY contract; SIGTERM-bounded shutdown | coordinator + supervised workers; `active.json` generations, retirement, quarantine, crash budgets |
 | Deployment | none — direct local run | none — direct local run | staged blue-green: Registry scan → config/artifact snapshot → warm-up/health → atomic switch |
@@ -44,7 +44,7 @@ Required:
 | `--public-authority host[:port]` | the external authority |
 | `--strict-sandbox on` \| `off` | worker sandbox profile |
 | `--ready-fd <fd>` | readiness descriptor the Host writes the READY record to |
-| `--workers 1`\|`2`\|`4`\|`6`\|`8` | `static-pool` only, required |
+| `--workers <positive-integer>` | `static-pool` only, required; any positive count ≤ uint32, each shard is one worker process |
 
 Optional (each keeps the data-plane default when omitted):
 
