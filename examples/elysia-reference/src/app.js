@@ -323,11 +323,20 @@ app.get('/cors/echo', () => 'cors-ok');
 /*
  * Bearer — plugin derives a lazy `bearer` getter (query access_token or
  * Authorization header). Header value is stripped of the scheme prefix.
+ *
+ * The route declares an optional access_token query schema. Without it,
+ * AOT compose skips query parsing entirely (hasQuery is inference-driven)
+ * and the derive's query access would read undefined — the dynamic-handle
+ * path always parses query, so Node would not catch the difference.
  */
 app.use(bearer());
 app.get('/bearer/echo', (context) => ({
     bearer: context.bearer ?? null,
-}));
+}), {
+    query: t.Object({
+        access_token: t.Optional(t.String()),
+    }),
+});
 
 /*
  * JWT — plugin decorates `context.jwt` with sign/verify backed by jose's
