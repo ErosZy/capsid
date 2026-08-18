@@ -28,7 +28,7 @@ B16K = "a" * 16384
 B32K = "a" * 32768
 FIXED = "x" * 1024  # loadgen fixed-1k expects 0x78
 
-MATRIX_SIZES = {"1k": 1024, "4k": 4096, "16k": 16384, "32k": 32768, "64k": 65536}
+MATRIX_SIZES = {"1k": 1024, "4k": 4096, "8k": 8192, "16k": 16384, "32k": 32768, "64k": 65536}
 MATRIX_PADS = {label: "x" * (size - 11) for label, size in MATRIX_SIZES.items()}
 MATRIX_BYTES = {label: b"b" * size for label, size in MATRIX_SIZES.items()}
 

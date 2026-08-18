@@ -26,7 +26,7 @@ $FIXED = str_repeat('x', 1024);  // loadgen fixed-1k expects 0x78
 $B8K  = str_repeat('a', 8192);
 $B16K = str_repeat('a', 16384);
 $B32K = str_repeat('a', 32768);
-$MATRIX_SIZES = ['1k' => 1024, '4k' => 4096, '16k' => 16384, '32k' => 32768, '64k' => 65536];
+$MATRIX_SIZES = ['1k' => 1024, '4k' => 4096, '8k' => 8192, '16k' => 16384, '32k' => 32768, '64k' => 65536];
 $MATRIX_PADS = [];
 $MATRIX_BYTES = [];
 foreach ($MATRIX_SIZES as $label => $size) {

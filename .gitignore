@@ -21,6 +21,10 @@
 /.pytest_cache/
 /.coverage
 
+# PHP benchmark app: composer artifacts are reproducible from composer.json.
+/bench/bench-apps/php-slim/vendor/
+/bench/bench-apps/php-slim/composer.lock
+
 # Patch/editor leftovers.
 *.bak
 *.orig

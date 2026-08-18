@@ -117,7 +117,7 @@ func main() {
 	matrixKind := ""
 	matrixParts := strings.Split(workload, "-")
 	matrixSizes := map[string]int{
-		"1k": 1024, "4k": 4096, "16k": 16384,
+		"1k": 1024, "4k": 4096, "8k": 8192, "16k": 16384,
 		"32k": 32768, "64k": 65536,
 	}
 	if len(matrixParts) == 3 && matrixParts[0] == "matrix" {
