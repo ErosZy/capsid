@@ -33,12 +33,12 @@ and ambient process APIs. In return, the Host gets a non-blocking C ABI/C++11
 data plane with streaming, credit backpressure, explicit lifecycle control,
 and a capability boundary designed for hostile code.
 
-The implementation is small and measurable: on a 6C/12T WSL runner the
-observed 2026-08-18 samples reach about **13,838 QPS** on JSON 1 KiB, start a
-10 KiB bundle in **5.1 ms** source / **4.9 ms** trusted bytecode, and use about
-**34.1 MB** SUT PSS median. Claims are backed by pinned WPT, framework
-differentials, sanitizers, fuzzing, privileged sandbox probes, and
-identity-linked performance evidence.
+The implementation is small and measurable: on a 4C/8T WSL runner the
+2026-08-18 conclusion-level samples reach about **6,881 QPS** on JSON 1 KiB,
+start a 10 KiB bundle in **9.1 ms** source / **8.2 ms** trusted bytecode, and
+serve from about **5.7 MB PSS** (host) plus **6.0 MB** per worker. Claims are
+backed by pinned WPT, framework differentials, sanitizers, fuzzing, privileged
+sandbox probes, and identity-linked performance evidence.
 
 ## Quick Start
 
@@ -248,16 +248,22 @@ See [framework compatibility](docs/framework-compatibility/README.md).
 
 ## Performance
 
-Observed samples (2026-08-18, Intel i5-12400F 6C/12T, Ubuntu 24.04/WSL2, conns=64; no profiles):
+Conclusion-level samples (2026-08-18, AMD Ryzen 3 3300X 4C/8T, Ubuntu 24.04/WSL2,
+conns=64, 3 rounds; correctness checked every round — all 144 rounds OK, capsid
+host/worker perf profiles collected):
 
 | Dimension | Capsid | Comparison |
 | --- | ---: | ---: |
-| JSON 1 KiB throughput | **13,838 QPS** | Flask 7,030 · Slim 4,037 |
-| Small bundle cold start (10 KiB) | **5.1 ms** source / **4.9 ms** bytecode | Node 47 ms · Deno 32 ms |
-| 1 MB trusted bytecode cold start | **15.1 ms** | Node 71 ms · Deno 33 ms |
-| SUT PSS median (whole run) | **34.1 MB** | Python 3 stack 54.4 MB |
+| JSON 1 KiB throughput | **6,881 QPS** | FastAPI 6,214 · Flask 5,007 · Slim 1,788 |
+| JSON 16 KiB throughput | 5,054 QPS | FastAPI **5,557** |
+| Static bytes (1k-32k) | 3,459-5,209 QPS | FastAPI 4,868-6,047 QPS (leads) |
+| Stream 1 KiB throughput | **4,709 QPS** | Flask 4,691 · FastAPI 2,261 |
+| Serving path memory (host + 2 workers) | **5.7 MB PSS host, 6.0 MB per worker** | gunicorn worker 22.2 MB PSS · php-fpm child 14.8 MB RSS |
+| Small bundle cold start (10 KiB) | **9.1 ms** source / **8.2 ms** bytecode | Node 110 ms · Deno 38 ms |
+| 1 MB trusted bytecode cold start | **39.2 ms** | Node 152 ms · Deno 53 ms |
 
-Full methodology, the 18-workload matrix (1k-64k × json/bytes/stream), and evidence rules are in
+Full methodology, the 12-workload matrix (1k-32k × json/bytes/stream), per-process
+resource breakdown, and evidence rules are in
 [performance-benchmarks.md](docs/performance-benchmarks.md).
 
 ## Platform Support
