@@ -254,13 +254,13 @@ host/worker perf profiles collected):
 
 | Dimension | Capsid | Comparison |
 | --- | ---: | ---: |
-| JSON 1 KiB throughput | **6,881 QPS** | FastAPI 6,214 · Flask 5,007 · Slim 1,788 |
+| JSON 1 KiB throughput | **6,881 QPS** | FastAPI 6,214<br>Flask 5,007<br>Slim 1,788 |
 | JSON 16 KiB throughput | 5,054 QPS | FastAPI **5,557** |
 | Static bytes (1k-32k) | 3,459-5,209 QPS | FastAPI 4,868-6,047 QPS (leads) |
-| Stream 1 KiB throughput | **4,709 QPS** | Flask 4,691 · FastAPI 2,261 |
-| Serving path memory (host + 2 workers) | **5.7 MB PSS host, 6.0 MB per worker** | gunicorn worker 22.2 MB PSS · php-fpm child 14.8 MB RSS |
-| Small bundle cold start (10 KiB) | **9.1 ms** source / **8.2 ms** bytecode | Node 110 ms · Deno 38 ms |
-| 1 MB trusted bytecode cold start | **39.2 ms** | Node 152 ms · Deno 53 ms |
+| Stream 1 KiB throughput | **4,709 QPS** | Flask 4,691<br>FastAPI 2,261 |
+| Serving path memory (host + 2 workers) | **5.7 MB PSS host, 6.0 MB per worker** | gunicorn worker 22.2 MB PSS<br>php-fpm child 14.8 MB RSS |
+| Small bundle cold start (10 KiB) | **9.1 ms** source / **8.2 ms** bytecode | Node 110 ms<br>Deno 38 ms |
+| 1 MB trusted bytecode cold start | **39.2 ms** | Node 152 ms<br>Deno 53 ms |
 
 Full methodology, the 12-workload matrix (1k-32k × json/bytes/stream), per-process
 resource breakdown, and evidence rules are in
