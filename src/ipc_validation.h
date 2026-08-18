@@ -117,7 +117,7 @@ bool decode_worker_request_head(const protocol::Frame &frame,
 
 // --- Binding v1 READY proof (docs/binding-technical-design.md §4.3) ------
 
-// The READY v4 proof carried after the 71-byte compatibility id. Workers
+// The READY v3 proof carried after the 71-byte compatibility id. Workers
 // with at least one binding extend the payload; zero-binding workers keep
 // the exact 71-byte baseline.
 struct WorkerReadyProof {
