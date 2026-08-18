@@ -18,10 +18,17 @@ LOADGEN=${LOADGEN:-bench/bin/loadgen}
 SUT_CPUSET=${SUT_CPUSET:-0-3}
 LOADGEN_CPUSET=${LOADGEN_CPUSET:-4-7}
 PROFILE_S=${PROFILE_S:-30}
+PERF=${PERF:-$(command -v perf || true)}
+
+if [ -z "$PERF" ] || [ ! -x "$PERF" ]; then
+    echo "profile-four-stacks: perf is required but not found on PATH" >&2
+    exit 2
+fi
 
 {
     echo "profile_s: $PROFILE_S workload: json16k"
-    sha256sum "$HOST_BIN" "$WORKER" "$BUNDLE" "$LOADGEN" "$(command -v perf)"
+    echo "perf: $PERF"
+    sha256sum "$HOST_BIN" "$WORKER" "$BUNDLE" "$LOADGEN" "$PERF"
 } | tee "$OUT/manifest.txt"
 
 profile_loadgen() {
@@ -33,21 +40,6 @@ profile_loadgen() {
         CAPSID_BENCH_SIDE=profile CAPSID_BENCH_ROUND=0 \
         CAPSID_BENCH_SAMPLES_OUT="$2" CAPSID_BENCH_CORRECTNESS_OUT="$3" \
         taskset -c "$LOADGEN_CPUSET" "$LOADGEN" >/dev/null 2>&1
-}
-
-profile_run() {
-    local side="$1"; shift
-    # pids: remaining args; sleep 4s so the load reaches steady state
-    ( sleep 4; taskset -c "$LOADGEN_CPUSET" \
-        perf record -o "$OUT/perf.$side.data" -F 99 \
-        -p "$(echo "$@" | tr ' ' ',')" -- sleep "$PROFILE_S" ) &
-    local rec=$!
-    sleep 1
-    profile_loadgen "http://127.0.0.1:$PORT" "$OUT/samples.$side.jsonl" "$OUT/correctness.$side.json" || true
-    wait "$rec" 2>/dev/null || true
-    perf report -i "$OUT/perf.$side.data" --stdio --no-children 2>/dev/null \
-        > "$OUT/profile.$side.txt"
-    echo "$side profile -> $OUT/profile.$side.txt"
 }
 
 # --- capsid: host + 2 workers profiled separately ---
@@ -68,16 +60,29 @@ sleep 1
 WORKER_PIDS=$(pgrep -f "^${WORKER#"$PWD/"}" 2>/dev/null | tr '\n' ' ' || true)
 # fallback: any capsid-worker child of the host
 [ -n "$WORKER_PIDS" ] || WORKER_PIDS=$(pgrep -P "$HP" | tr '\n' ' ')
+[ -n "$WORKER_PIDS" ] || {
+    echo "profile-four-stacks: cannot find capsid worker pids" >&2
+    kill "$HP" 2>/dev/null || true
+    wait "$HP" 2>/dev/null || true
+    exit 2
+}
 echo "capsid host=$HP workers=$WORKER_PIDS" | tee -a "$OUT/manifest.txt"
-( sleep 4; perf record -o "$OUT/perf.capsid-host.data" -F 99 -p "$HP" -- sleep "$PROFILE_S" ) &
+
+( sleep 4; "$PERF" record -o "$OUT/perf.capsid-host.data" -F 99 -p "$HP" -- sleep "$PROFILE_S" ) \
+    >/dev/null 2>"$OUT/perf.capsid-host.record.err" &
 R1=$!
-( sleep 4; perf record -o "$OUT/perf.capsid-worker.data" -F 99 -p "$(echo "$WORKER_PIDS" | tr ' ' ',')" -- sleep "$PROFILE_S" ) &
+( sleep 4; "$PERF" record -o "$OUT/perf.capsid-worker.data" -F 99 \
+    -p "$(echo "$WORKER_PIDS" | tr ' ' ',')" -- sleep "$PROFILE_S" ) \
+    >/dev/null 2>"$OUT/perf.capsid-worker.record.err" &
 R2=$!
 sleep 1
 profile_loadgen "http://127.0.0.1:18102" "$OUT/samples.capsid.jsonl" "$OUT/correctness.capsid.json" || true
-wait "$R1" "$R2" 2>/dev/null || true
-perf report -i "$OUT/perf.capsid-host.data" --stdio --no-children 2>/dev/null > "$OUT/profile.capsid-host.txt"
-perf report -i "$OUT/perf.capsid-worker.data" --stdio --no-children 2>/dev/null > "$OUT/profile.capsid-worker.txt"
+wait "$R1"
+wait "$R2"
+"$PERF" report -i "$OUT/perf.capsid-host.data" --stdio --no-children \
+    > "$OUT/profile.capsid-host.txt"
+"$PERF" report -i "$OUT/perf.capsid-worker.data" --stdio --no-children \
+    > "$OUT/profile.capsid-worker.txt"
 kill "$HP" 2>/dev/null || true
 wait "$HP" 2>/dev/null || true
 echo "capsid profiles done"

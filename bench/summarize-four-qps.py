@@ -46,9 +46,9 @@ def main(out):
         print("no measured samples found in " + out)
         return 1
 
-    width = 34
+    width = 40
     hdr = "stack".ljust(10) + "workload".ljust(16) + "QPS".rjust(9) + \
-          "p50_ms".rjust(9) + "p95_ms".rjust(9) + "p99_ms".rjust(9) + "err".rjust(5)
+          "CV%".rjust(7) + "p50_ms".rjust(9) + "p95_ms".rjust(9) + "p99_ms".rjust(9) + "err".rjust(5)
     print(hdr)
     print("-" * len(hdr))
     ranking = {}
@@ -57,9 +57,11 @@ def main(out):
         for side in sides:
             rows = samples.get((side, workload), [])
             if not rows:
-                print(f"{side:<10}{workload:<16}{'n/a':>9}{'':>9}{'':>9}{'':>9}{'':>5}")
+                print(f"{side:<10}{workload:<16}{'n/a':>9}{'':>7}{'':>9}{'':>9}{'':>9}{'':>5}")
                 continue
             qps = median(r["qps"] for r in rows)
+            cv = (statistics.pstdev(r["qps"] for r in rows) /
+                  statistics.fmean(r["qps"] for r in rows) * 100) if len(rows) > 1 else 0.0
             p50 = median(r["p50_ms"] for r in rows)
             p95 = median(r["p95_ms"] for r in rows)
             p99 = median(r["p99_ms"] for r in rows)
@@ -67,7 +69,7 @@ def main(out):
             if best is None or qps > best[0]:
                 best = (qps, side)
             marker = ""
-            print(f"{side:<10}{workload:<16}{qps:>9.0f}{p50:>9.2f}{p95:>9.2f}{p99:>9.2f}{errs:>5}")
+            print(f"{side:<10}{workload:<16}{qps:>9.0f}{cv:>7.1f}{p50:>9.2f}{p95:>9.2f}{p99:>9.2f}{errs:>5}")
         if best:
             ranking.setdefault(workload, []).append(best)
 

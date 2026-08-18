@@ -133,7 +133,7 @@ NSTACKS=${#STACK_ORDER[@]}
 for workload in $WORKLOADS; do
     for round in $(seq 1 "$ROUNDS"); do
         for offset in $(seq 0 $((NSTACKS - 1))); do
-            side="${STACK_ORDER[$(((workload_i + offset) % NSTACKS))]}"
+            side="${STACK_ORDER[$(((workload_i + round - 1 + offset) % NSTACKS))]}"
             run_loadgen "${TARGET[$side]}" "$workload" "$side" "$round" "$CONNS"
         done
     done

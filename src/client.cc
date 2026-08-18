@@ -2717,18 +2717,38 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
 #if !defined(_WIN32)
             // A bundle larger than the socket send buffer blocks the first
             // flush: the peer drains asynchronously, so retry on writability
-            // for a bounded window instead of failing the spawn outright.
-            // The worker never stops reading until it dies; only a dead peer
-            // (or a flush stuck for the whole window) reaches WOULD_BLOCK.
-            static constexpr int kFlushPollTimeoutMs = 5000;
-            struct pollfd writable = { worker->fd, POLLOUT, 0 };
-            int poll_result;
-            do {
-                poll_result = poll(&writable, 1, kFlushPollTimeoutMs);
-            } while (poll_result < 0 && errno == EINTR);
-            if (poll_result > 0 &&
-                (writable.revents & (POLLOUT | POLLERR | POLLHUP))) {
-                continue;
+            // for a bounded total window instead of failing the spawn
+            // outright. The worker never stops reading until it dies; only a
+            // dead peer (or a flush stuck for the whole window) reaches
+            // WOULD_BLOCK.
+            static constexpr int kFlushPollTotalTimeoutMs = 5000;
+            const auto poll_deadline = std::chrono::steady_clock::now() +
+                std::chrono::milliseconds(kFlushPollTotalTimeoutMs);
+            for (;;) {
+                const auto remaining_ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        poll_deadline - std::chrono::steady_clock::now())
+                        .count();
+                if (remaining_ms <= 0) {
+                    break;
+                }
+                struct pollfd writable = { worker->fd, POLLOUT, 0 };
+                int poll_result;
+                do {
+                    poll_result = poll(
+                        &writable, 1, static_cast<int>(remaining_ms));
+                } while (poll_result < 0 && errno == EINTR);
+                if (poll_result <= 0) {
+                    break;
+                }
+                // POLLOUT retries the write; POLLERR/POLLHUP also retry so
+                // write() observes the dead peer (EPIPE/ECONNRESET) and the
+                // closed-path below records the real failure instead of a
+                // misleading WOULD_BLOCK.
+                if (writable.revents & (POLLOUT | POLLERR | POLLHUP)) {
+                    continue;
+                }
+                break;
             }
 #endif
             return CAPSID_WOULD_BLOCK;
