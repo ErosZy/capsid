@@ -150,6 +150,15 @@ const normalize = (status, headerEntries, body, vector) => {
     let normalizedBody = vector.runtimeJsonExpected
         ? '<runtime-only-negative-assertion>'
         : hex(vector.decompressBody === 'deflate' ? inflateSync(body) : body);
+    // Text-level normalization for bodies whose framing is nondeterministic
+    // across environments (e.g. SSE id lines carrying a random nanoid).
+    if (vector.bodyTextReplacements?.length) {
+        let text = new TextDecoder().decode(body);
+        for (const [ pattern, replacement ] of vector.bodyTextReplacements) {
+            text = text.replace(pattern, replacement);
+        }
+        normalizedBody = hex(new TextEncoder().encode(text));
+    }
     if (vector.ignoreBodyJsonFields?.length) {
         const parsed = JSON.parse(new TextDecoder().decode(body));
         for (const field of vector.ignoreBodyJsonFields) {

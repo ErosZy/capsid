@@ -52,6 +52,12 @@ export const absoluteExpectations = {
     'error.status': { status: 418 },
     // An uncaught handler error must surface as 500, not 200.
     'error.throw': { status: 500 },
+    // CORS preflight is answered by the plugin with 204, not routed.
+    'cors.preflight': { status: 204 },
+    // A guard beforeHandle returning a Response must short-circuit with 403.
+    'guard.deny': { status: 403 },
+    // A typebox body mismatch must surface as 422, not 500 or 200.
+    'schema.body-invalid': { status: 422 },
 };
 
 export const smokeVector = vector('entry.default', 'GET', '/entry');
@@ -109,6 +115,74 @@ export const vectors = [
 
     vector('error.throw', 'GET', '/error/throw'),
     vector('error.status', 'GET', '/error/status'),
+
+    /* --- @elysiajs plugins --- */
+    vector('cors.echo', 'GET', '/cors/echo', {
+        headers: [[ 'origin', 'https://capsid.test' ]],
+    }),
+    vector('cors.preflight', 'OPTIONS', '/cors/echo', {
+        headers: [
+            [ 'origin', 'https://capsid.test' ],
+            [ 'access-control-request-method', 'POST' ],
+        ],
+    }),
+    // A non-matching origin must not be echoed by the pinned origin policy.
+    vector('cors.rejected-origin', 'GET', '/cors/echo', {
+        headers: [[ 'origin', 'https://evil.test' ]],
+    }),
+    vector('bearer.header', 'GET', '/bearer/echo', {
+        headers: [[ 'authorization', 'Bearer tok-123' ]],
+    }),
+    vector('bearer.query', 'GET', '/bearer/echo?access_token=qtok'),
+    vector('bearer.missing', 'GET', '/bearer/echo'),
+    // sign() stamps iat, so the token text is nondeterministic across the two
+    // environments; the field is normalized and the structure is still
+    // compared. Deterministic signing is covered by verify-good's fixed
+    // pre-signed token (HS256, sub=capsid-test-user, no iat).
+    vector('jwt.sign', 'GET', '/jwt/sign', {
+        ignoreBodyJsonFields: [ 'token' ],
+    }),
+    vector('jwt.verify-good', 'GET', '/jwt/verify', {
+        headers: [[
+            'authorization',
+            'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
+                'eyJzdWIiOiJjYXBzaWQtdGVzdC11c2VyIn0.' +
+                'KgkH3EVFzVV7jcbFj2Hl0UaUi6E_kuyebHsXqIntPPY',
+        ]],
+    }),
+    vector('jwt.verify-bad', 'GET', '/jwt/verify', {
+        headers: [[ 'authorization', 'Bearer junk.token.here' ]],
+    }),
+    // Stream.send assigns a random nanoid id per frame; only the data lines
+    // participate in the differential.
+    vector('stream.sse', 'GET', '/stream/sse', {
+        bodyTextReplacements: [[ /id: [A-Za-z0-9_-]{21}\n/g, 'id: <id>\n' ]],
+    }),
+    vector('stream.sse-generator', 'GET', '/stream/sse-generator'),
+
+    /* --- core capabilities --- */
+    vector('guard.pass', 'GET', '/guard/protected', {
+        headers: [[ 'x-guard-pass', '1' ]],
+    }),
+    vector('guard.deny', 'GET', '/guard/protected'),
+    vector('derive.pass', 'GET', '/derive/echo', {
+        headers: [[ 'x-derived', 'from-here' ]],
+    }),
+    vector('derive.none', 'GET', '/derive/echo'),
+    vector('resolve.path', 'GET', '/resolve/echo'),
+    vector('schema.body-ok', 'POST', '/schema/body', {
+        headers: [[ 'content-type', 'application/json' ]],
+        body: utf8('{"name":"alice","age":30}'),
+    }),
+    vector('schema.body-invalid', 'POST', '/schema/body', {
+        headers: [[ 'content-type', 'application/json' ]],
+        body: utf8('{"name":42}'),
+    }),
+    vector('schema.body-optional', 'POST', '/schema/body', {
+        headers: [[ 'content-type', 'application/json' ]],
+        body: utf8('{"name":"alice"}'),
+    }),
+    vector('schema.params-ok', 'GET', '/schema/params/abc-123'),
 
     vector('runtime.globals-absent', 'GET', '/runtime/globals', {
         runtimeJsonExpected: {

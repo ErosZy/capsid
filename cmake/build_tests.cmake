@@ -2463,6 +2463,9 @@ if(BUILD_TESTING)
             "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/exact-mirror/dist/*"
             "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/fast-decode-uri-component/*"
             "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/@sinclair/typebox/build/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/@elysiajs/*/dist/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/jose/dist/*"
+            "${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/nanoid/*"
             "${CAPSID_ELYSIA_REFERENCE_ROOT}/package.json"
             "${CAPSID_ELYSIA_REFERENCE_ROOT}/package-lock.json"
         )
@@ -2488,6 +2491,7 @@ if(BUILD_TESTING)
                     --format=esm
                     --main-fields=main,module
                     --external:file-type
+                    "--alias:nanoid=${CAPSID_ELYSIA_REFERENCE_ROOT}/node_modules/nanoid/index.browser.js"
                     "--metafile=${metafile}"
                     "--outfile=${output}"
                 COMMAND "${CAPSID_NODE_EXECUTABLE}"

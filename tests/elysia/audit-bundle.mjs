@@ -52,6 +52,9 @@ const allowedInputs = [
     'examples/elysia-reference/node_modules/exact-mirror/',
     'examples/elysia-reference/node_modules/fast-decode-uri-component/',
     'examples/elysia-reference/node_modules/@sinclair/typebox/',
+    'examples/elysia-reference/node_modules/@elysiajs/',
+    'examples/elysia-reference/node_modules/jose/',
+    'examples/elysia-reference/node_modules/nanoid/',
 ];
 for (const input of inputPaths) {
     assert.ok(
