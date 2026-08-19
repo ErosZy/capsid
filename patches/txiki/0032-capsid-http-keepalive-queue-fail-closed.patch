@@ -1,0 +1,46 @@
+diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/deps/libwebsockets/lib/roles/http/client/client-http.c
+--- a/deps/libwebsockets/lib/roles/http/client/client-http.c
++++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
+@@ -1425,33 +1425,25 @@ lws_client_interpret_server_handshake(struct lws *wsi)
+ 			lws_start_foreach_dll_safe(struct lws_dll2 *,
+ 						   d, d1,
+ 			  wsi->dll2_cli_txn_queue_owner.head) {
+ 				struct lws *ww = lws_container_of(d,
+ 					struct lws,
+ 					dll2_cli_txn_queue);
+ 
+ 				/* remove him from our queue */
+ 				lws_dll2_remove(&ww->dll2_cli_txn_queue);
+ 				/* give up on pipelining */
+ 				ww->client_pipeline = 0;
+ 
+-				/* go back to "trying to connect" state */
+-				lws_role_transition(ww, LWSIFR_CLIENT,
+-						    LRS_UNCONNECTED,
+-#if defined(LWS_ROLE_H1)
+-						    &role_ops_h1);
+-#else
+-#if defined (LWS_ROLE_H2)
+-						    &role_ops_h2);
+-#else
+-#if defined (LWS_ROLE_H3)
+-						    &role_ops_h3);
+-#else
+-						    NULL);
+-#endif
+-#endif
+-#endif
+-				ww->user_space = NULL;
++				/* Capsid: the peer cannot keep this connection
++				 * alive, so queued transactions fail closed
++				 * instead of being silently detached.  Keep the
++				 * child's user_space (the txiki HttpClient
++				 * owner) intact and close asynchronously: the
++				 * close path reaches the protocol callback
++				 * with the real owner, which rejects the fetch
++				 * and releases the captured request context. */
++				lws_set_timeout(ww, 1, LWS_TO_KILL_ASYNC);
+ 			} lws_end_foreach_dll_safe(d, d1);
+ 			lws_vhost_unlock(wsi->a.vhost);
+ 		}
+ 	}
