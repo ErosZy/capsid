@@ -1,16 +1,6 @@
-diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/deps/libwebsockets/lib/roles/http/client/client-http.c
 --- a/deps/libwebsockets/lib/roles/http/client/client-http.c
 +++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
-@@ -1425,33 +1425,25 @@ lws_client_interpret_server_handshake(struct lws *wsi)
- 			lws_start_foreach_dll_safe(struct lws_dll2 *,
- 						   d, d1,
- 			  wsi->dll2_cli_txn_queue_owner.head) {
- 				struct lws *ww = lws_container_of(d,
- 					struct lws,
- 					dll2_cli_txn_queue);
- 
- 				/* remove him from our queue */
- 				lws_dll2_remove(&ww->dll2_cli_txn_queue);
+@@ -1467,23 +1467,15 @@
  				/* give up on pipelining */
  				ww->client_pipeline = 0;
  
@@ -43,4 +33,3 @@ diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/deps/libwe
  			} lws_end_foreach_dll_safe(d, d1);
  			lws_vhost_unlock(wsi->a.vhost);
  		}
- 	}
