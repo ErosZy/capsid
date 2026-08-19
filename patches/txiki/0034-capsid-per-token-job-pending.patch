@@ -1,0 +1,35 @@
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -1162,6 +1162,10 @@
+ } JSJobContextHooks;
+ 
+ JS_EXTERN void JS_SetJobContextHooks(JSRuntime *rt, const JSJobContextHooks *hooks, void *opaque);
++/* Capsid: true when at least one pending job carries exactly job_context.
++ * Unlike JS_IsJobPending, this is per-request so an unrelated request's
++ * jobs cannot defer another request's poison decision. */
++JS_EXTERN bool JS_IsJobPendingWithContext(JSRuntime *rt, void *job_context);
+ JS_EXTERN void JS_SetCanBlock(JSRuntime *rt, bool can_block);
+ /* set the [IsHTMLDDA] internal slot */
+ JS_EXTERN void JS_SetIsHTMLDDA(JSContext *ctx, JSValueConst obj);
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -2202,6 +2202,19 @@
+     return !list_empty(&rt->job_list);
+ }
+ 
++bool JS_IsJobPendingWithContext(JSRuntime *rt, void *job_context)
++{
++    struct list_head *el;
++
++    if (!job_context)
++        return false;
++    list_for_each(el, &rt->job_list) {
++        if (list_entry(el, JSJobEntry, link)->job_ctx == job_context)
++            return true;
++    }
++    return false;
++}
++
+ JSContext *JS_GetPendingJobContext(JSRuntime *rt)
+ {
+     if (JS_IsJobPending(rt)) {
