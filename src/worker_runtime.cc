@@ -551,6 +551,7 @@ struct RequestToken {
     uint64_t deadline_ns;
     bool terminal;
     int refs;
+    int async_refs;
     // §7.4: refs observed by the previous reclaim round. A chain that is
     // still unwinding after a cancel drops refs round over round; the
     // reclaim judges a candidate token against this baseline so it never
@@ -571,6 +572,7 @@ struct RequestToken {
           deadline_ns(deadline),
           terminal(false),
           refs(1),
+          async_refs(0),
           last_reclaim_refs_(0),
           reclaim_grace(false) {}
 };
@@ -1004,10 +1006,10 @@ public:
         // owning token across libuv callbacks and re-enter it when their
         // callbacks fire.
         TJSAsyncContextHooks async_ctx_hooks;
-        async_ctx_hooks.capture = job_capture_hook;
+        async_ctx_hooks.capture = async_capture_hook;
         async_ctx_hooks.enter = job_enter_hook;
         async_ctx_hooks.leave = job_leave_hook;
-        async_ctx_hooks.release = job_release_hook;
+        async_ctx_hooks.release = async_release_hook;
         tjs_set_async_context_hooks(ctx_, &async_ctx_hooks, this);
         std::string bridge_error;
         if (!load_bridge_functions(&bridge_error)) {
@@ -1215,6 +1217,30 @@ private:
         }
     }
 
+    // txiki native async resources (timers, HttpClient, webcrypto) capture
+    // the owning request separately from QuickJS jobs. Keeping this count
+    // lets the cancel reclaim distinguish a promise-finalizer grace case
+    // from a still-live native timer that must be poisoned immediately.
+    static int async_capture_hook(JSContext *,
+                                  void *opaque,
+                                  void **out_job_context) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        *out_job_context = NULL;
+        if (self && self->current_token_ != NULL) {
+            self->retain_token_async(self->current_token_);
+            *out_job_context = self->current_token_;
+        }
+        return 0;
+    }
+
+    static void async_release_hook(void *job_context, void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        if (self) {
+            self->release_token_async(
+                static_cast<RequestToken *>(job_context));
+        }
+    }
+
     // Binding v1 §5.1: the Binding Runtime's job/async hooks propagate
     // the binding id across async continuations — a timer, connection-pool
     // reconnection or DNS callback re-enters with the same BindingToken
@@ -1363,6 +1389,24 @@ private:
             token_registry_.erase(token->generation);
             delete token;
         }
+    }
+
+    void retain_token_async(RequestToken *token) {
+        if (token) {
+            ++token->refs;
+            ++token->async_refs;
+            retained_refs_ += 1;
+        }
+    }
+
+    void release_token_async(RequestToken *token) {
+        if (!token) {
+            return;
+        }
+        if (token->async_refs > 0) {
+            --token->async_refs;
+        }
+        release_token(token);
     }
 
     uint64_t active_request_id() const {
@@ -1556,7 +1600,7 @@ private:
             } else if (!token->terminal &&
                        (defer_reclaim_while_live() ||
                         token->refs < prev_reclaim_refs ||
-                        token->reclaim_grace)) {
+                        (token->reclaim_grace && token->async_refs == 0))) {
                 if (token->reclaim_grace) {
                     // §7.4: the first reclaim after a cancel defers
                     // unconditionally — the cancel's drain already ran the
