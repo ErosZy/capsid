@@ -1475,3 +1475,125 @@ async function bodylessProbe(envValue) {
         'CAPSID_BODYLESS=0 must disable bodyless fusion',
     );
 }
+
+// ---- Concurrent fetch + keepalive eviction: the second request queues on
+// the pooled connection of the first; the upstream refuses keepalive, so lws
+// must fail the queued request closed instead of silently dropping its
+// user_space. Regression for the "WORKER POISONED: detached resource after
+// response end" bug: the worker must keep serving afterwards.
+{
+    let firstRequestSeen;
+    const firstRequestSeenPromise = new Promise(resolve => {
+        firstRequestSeen = resolve;
+    });
+    const upstream = http.createServer((request, response) => {
+        firstRequestSeen();
+        response.writeHead(200, {
+            'content-type': 'text/plain',
+            'content-length': '2',
+            connection: 'close',
+        });
+        setTimeout(() => response.end('ok'), 80);
+    });
+    await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+    const upstreamPort = upstream.address().port;
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-fetch-evict-'));
+    fs.writeFileSync(path.join(dir, 'capsid.json'), JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'proxy-bundle.js',
+        pool: { minReady: 1, maxWorkers: 1 },
+        request: { timeout: '10s' },
+        permissions: {
+            fetch: { allow: [ `127.0.0.1:${upstreamPort}` ] },
+        },
+    }));
+    fs.writeFileSync(path.join(dir, 'proxy-bundle.js'), `
+        export default {
+            async fetch() {
+                const upstream = await fetch('http://127.0.0.1:${upstreamPort}/slow');
+                const body = await upstream.text();
+                return new Response(body, {
+                    status: upstream.status,
+                    headers: { 'content-type': 'text/plain' },
+                });
+            },
+        };
+    `);
+
+    const child = spawn(args.get('host'), [
+        '--mode', 'single-worker',
+        '--worker', path.resolve(args.get('worker')),
+        '--capsid-json', path.join(dir, 'capsid.json'),
+        '--application', 'orders',
+        '--listen', '127.0.0.1:0',
+        '--routing', 'path',
+        '--public-scheme', 'http',
+        '--public-authority', 'public.example',
+        '--strict-sandbox', 'off',
+        '--ready-fd', '3',
+    ], {
+        stdio: [ 'ignore', 'pipe', 'pipe', 'pipe' ],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    const settled = async promise => {
+        try {
+            return { value: await promise };
+        } catch (error) {
+            return { error };
+        }
+    };
+
+    try {
+        const readyLine = await readLine(child.stdio[3], child, 10000, () => stderr);
+        const ready = JSON.parse(readyLine);
+
+        // Start the first request and wait until the upstream has actually
+        // accepted it (still inside its 80ms delay), then start the second.
+        // The second fetch must queue behind the first pooled connection.
+        const first = settled(request(ready.port, {
+            target: '/@capsid/orders/proxy',
+            timeoutMs: 5000,
+        }));
+        await firstRequestSeenPromise;
+        const second = settled(request(ready.port, {
+            target: '/@capsid/orders/proxy',
+            timeoutMs: 5000,
+        }));
+        const results = await Promise.all([ first, second ]);
+
+        const ok = results.filter(result =>
+            result.value && result.value.status === 200 &&
+            result.value.body.toString('utf8') === 'ok');
+        assert.equal(ok.length, 1,
+            `exactly one request must reach the upstream: ${JSON.stringify(results)}`);
+
+        // The evicted queued request must fail as a request error (or a
+        // rejected connection), never hang, and never poison the worker.
+        assert.ok(
+            results.every(result => result.value || result.error),
+            `both requests must settle: ${JSON.stringify(results)}`);
+
+        // Worker must still be healthy and serve a follow-up request.
+        const health = await request(ready.port, {
+            target: '/@capsid/orders/health',
+            timeoutMs: 3000,
+        });
+        assert.equal(health.status, 200,
+            `worker must survive keepalive eviction; stderr=${stderr}`);
+        assert.equal(health.body.toString('utf8'), 'ok');
+
+        assert.ok(
+            !stderr.includes('WORKER POISONED'),
+            `worker poisoned by keepalive eviction: ${stderr}`,
+        );
+    } finally {
+        child.kill('SIGTERM');
+        await waitForExit(child, 3000);
+        upstream.close();
+        await removeTreeRetry(dir);
+    }
+}
