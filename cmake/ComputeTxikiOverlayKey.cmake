@@ -182,10 +182,12 @@ function(capsid_compute_txiki_overlay_key)
     # 0023 fd-adoption gates; 0024 immutable native-resource owners;
     # 0025 side-effect-free Date slot access; 0029 WebSocket Binding gates;
     # 0030 fetch system-resolver pre-resolution (bypasses lws raw DNS);
-    # 0031 fetch connection reuse (LCCSCF_PIPELINE, per-endpoint warm pool).
-    if(NOT CTOK_PATCH_COUNT EQUAL 32)
+    # 0031 fetch connection reuse (LCCSCF_PIPELINE, per-endpoint warm pool);
+    # 0032 keepalive-evicted queued fetch requests fail closed with their
+    #      user_space intact.
+    if(NOT CTOK_PATCH_COUNT EQUAL 33)
         message(FATAL_ERROR
-            "expected 32 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 33 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")
