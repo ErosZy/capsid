@@ -110,8 +110,8 @@ def vendor_evidence(root: Path, build: Path) -> dict[str, Any]:
     patches = sorted((root / "patches/txiki").glob("*.patch"))
     # Keep in sync with cmake/AuditTxikiVendor.cmake, which applies the
     # same directory in order and freezes the count in its header comment.
-    if len(patches) != 33:
-        raise RuntimeError(f"expected 33 patches, found {len(patches)}")
+    if len(patches) != 34:
+        raise RuntimeError(f"expected 34 patches, found {len(patches)}")
     # Mirror the build's own application semantics (PrepareTxiki.cmake):
     # the patch series is sequential — later patches depend on earlier
     # ones' edits — and applied with patch -p1 --forward --batch on a

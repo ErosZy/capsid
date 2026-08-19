@@ -1,0 +1,14 @@
+--- a/deps/libwebsockets/lib/core-net/vhost.c
++++ b/deps/libwebsockets/lib/core-net/vhost.c
+@@ -2083,6 +2083,11 @@
+ 		     * new request must equal the address the pooled
+ 		     * connection is really connected to */
+ 		    w->client_pipeline &&
++		    w->keepalive_active &&
++		    /* only queue onto a connection whose peer already proved
++		     * keepalive: queueing onto a first-use connection strands
++		     * the child when that peer turns out to be HTTP/1.0 or
++		     * Connection: close */
+ 		    /* the pooled connection itself opted into pooling: a
+ 		     * solo connection (streaming request body) must never
+ 		     * be reused by a later pipelined request */

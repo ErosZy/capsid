@@ -184,10 +184,11 @@ function(capsid_compute_txiki_overlay_key)
     # 0030 fetch system-resolver pre-resolution (bypasses lws raw DNS);
     # 0031 fetch connection reuse (LCCSCF_PIPELINE, per-endpoint warm pool);
     # 0032 keepalive-evicted queued fetch requests fail closed with their
-    #      user_space intact.
-    if(NOT CTOK_PATCH_COUNT EQUAL 33)
+    #      user_space intact; 0033 only pool onto connections whose peer
+    #      already proved keepalive.
+    if(NOT CTOK_PATCH_COUNT EQUAL 34)
         message(FATAL_ERROR
-            "expected 33 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 34 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")
