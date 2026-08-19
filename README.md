@@ -40,6 +40,24 @@ serve from about **5.7 MB PSS** (host) plus **6.0 MB** per worker. Claims are
 backed by pinned WPT, framework differentials, sanitizers, fuzzing, privileged
 sandbox probes, and identity-linked performance evidence.
 
+## Install Prebuilt Release
+
+Every `v*` GitHub Release carries an `install.sh` that downloads the
+archive for your OS/architecture, verifies its SHA-256, and extracts the
+binaries into `$HOME/.local` (override with `PREFIX`):
+
+```sh
+# latest stable release
+curl -fsSL https://github.com/ErosZy/capsid/releases/latest/download/install.sh | bash
+
+# explicit tag (including pre-releases)
+curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.0-rc.04/install.sh \
+  | bash -s -- v0.2.0-rc.04
+```
+
+After installation, add `$HOME/.local/bin` to `PATH` (the script prints the
+exact command when needed).
+
 ## Quick Start
 
 ### 1. Application

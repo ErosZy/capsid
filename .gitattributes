@@ -4,5 +4,9 @@
 # patches fails hunks against an LF vendor tree (the GitHub runner state).
 /patches/txiki/*.patch text eol=lf -whitespace
 
+# The release installer is uploaded verbatim to GitHub Releases; keep it LF
+# so Unix shells can consume it directly.
+/install.sh text eol=lf
+
 # Retained benchmark CSV files use the csv module's RFC-style CRLF records.
 /bench/results/**/*.csv -whitespace

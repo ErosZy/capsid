@@ -245,3 +245,9 @@ jobs:
                 "${archive}.sha256"
             done
           done
+          # Every release carries the same small installer; it resolves the
+          # current OS/arch asset from the release metadata at run time.
+          # Normalize to LF: a Windows checkout could otherwise upload a
+          # CRLF script that breaks Unix shells.
+          sed -i 's/\r$//' install.sh
+          gh release upload --clobber "${tag}" install.sh
