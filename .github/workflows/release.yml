@@ -248,6 +248,8 @@ jobs:
           # Every release carries the same small installer; it resolves the
           # current OS/arch asset from the release metadata at run time.
           # Normalize to LF: a Windows checkout could otherwise upload a
-          # CRLF script that breaks Unix shells.
-          sed -i 's/\r$//' install.sh
+          # CRLF script that breaks Unix shells. Use the portable -i.bak
+          # form (BSD sed on macOS rejects bare -i).
+          sed -i.bak 's/\r$//' install.sh
+          rm -f install.sh.bak
           gh release upload --clobber "${tag}" install.sh
