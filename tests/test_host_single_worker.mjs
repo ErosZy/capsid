@@ -1553,7 +1553,8 @@ async function bodylessProbe(envValue) {
 
         // Start the first request and wait until the upstream has actually
         // accepted it (still inside its 80ms delay), then start the second.
-        // The second fetch must queue behind the first pooled connection.
+        // The first connection has not proven keepalive yet, so the second
+        // fetch must open its own connection rather than queue.
         const first = settled(request(ready.port, {
             target: '/@capsid/orders/proxy',
             timeoutMs: 5000,
@@ -1568,11 +1569,10 @@ async function bodylessProbe(envValue) {
         const ok = results.filter(result =>
             result.value && result.value.status === 200 &&
             result.value.body.toString('utf8') === 'ok');
-        assert.equal(ok.length, 1,
-            `exactly one request must reach the upstream: ${JSON.stringify(results)}`);
+        assert.equal(ok.length, 2,
+            `both requests must reach the upstream independently: ${JSON.stringify(results)}`);
 
-        // The evicted queued request must fail as a request error (or a
-        // rejected connection), never hang, and never poison the worker.
+        // Both requests settle; none may hang or poison the worker.
         assert.ok(
             results.every(result => result.value || result.error),
             `both requests must settle: ${JSON.stringify(results)}`);
