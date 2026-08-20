@@ -16,12 +16,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OUT="bench/results/four-qps-$(date +%Y%m%dT%H%M%S)"
+OUT=${OUT:-bench/results/four-qps-$(date +%Y%m%dT%H%M%S)}
 mkdir -p "$OUT"
 HOST_BIN=${HOST_BIN:-build-m1d/capsid-host}
 WORKER=${WORKER:-build-m1d/capsid-worker}
 BUNDLE=${BUNDLE:-/tmp/hono-bench-bundle.mjs}
 LOADGEN=${LOADGEN:-bench/bin/loadgen}
+PHP_CONTAINER=${PHP_CONTAINER:-capsid-php-bench}
 SUT_CPUSET=${SUT_CPUSET:-0-3}
 LOADGEN_CPUSET=${LOADGEN_CPUSET:-4-7}
 ROUNDS=${ROUNDS:-3}
@@ -34,21 +35,39 @@ WORKLOADS=${WORKLOADS:-json matrix-json-4k json16k json32k bytes matrix-bytes-4k
 # 需要全 6 尺寸时覆盖 WORKLOADS。4k 档必须用 matrix-* 前缀（loadgen 命名）。
 
 CAPSID_TARGET=http://127.0.0.1:18102
-PHP_TARGET=http://127.0.0.1:8080
+PHP_TARGET=${PHP_TARGET:-http://127.0.0.1:8080}
 PY_TARGET=http://127.0.0.1:8000
 FASTAPI_TARGET=http://127.0.0.1:8001
 
 echo "targets: capsid=$CAPSID_TARGET php=$PHP_TARGET flask=$PY_TARGET fastapi=$FASTAPI_TARGET"
 {
+    echo "generated_at: $(date --iso-8601=seconds)"
+    echo "commit: $(git rev-parse HEAD)"
+    echo "tag: $(git describe --exact-match --tags HEAD)"
+    echo "runner_sha256: $(sha256sum bench/compare-four-qps.sh | cut -d' ' -f1)"
+    echo "runner_diff_sha256: $(git diff --no-ext-diff --binary -- bench/compare-four-qps.sh | sha256sum | cut -d' ' -f1)"
+    echo "sampler_sha256: $(sha256sum bench/sample-resources.py | cut -d' ' -f1)"
+    echo "sampler_diff_sha256: $(git diff --no-ext-diff --binary -- bench/sample-resources.py | sha256sum | cut -d' ' -f1)"
+    echo "command: OUT=$OUT PHP_CONTAINER=$PHP_CONTAINER PHP_TARGET=$PHP_TARGET bash bench/compare-four-qps.sh"
+    echo "uname: $(uname -a)"
+    echo "cpu: $(lscpu | sed -n 's/^Model name:[[:space:]]*//p')"
+    echo "nproc: $(nproc)"
+    echo "mem_total: $(sed -n 's/^MemTotal:[[:space:]]*//p' /proc/meminfo)"
+    echo "perf_event_paranoid: $(cat /proc/sys/kernel/perf_event_paranoid)"
+    echo "php_container: $PHP_CONTAINER"
+    echo "php_image: $(docker inspect "$PHP_CONTAINER" --format '{{.Image}}')"
     echo "workloads: $WORKLOADS"
     echo "rounds: $ROUNDS conns: $CONNS warmup: 3s measured: 8s"
     echo "sut_cpuset: $SUT_CPUSET loadgen_cpuset: $LOADGEN_CPUSET"
     echo "capsid_workers: $CAPSID_WORKERS"
     echo "capsid_initial_stream_window: $CAPSID_WINDOW"
     sha256sum "$HOST_BIN" "$WORKER" "$BUNDLE" "$LOADGEN"
-    echo "php: $(docker exec capsid-php-bench php -v 2>/dev/null | head -1)"
-    echo "nginx: $(docker exec capsid-php-bench nginx -v 2>&1)"
-    echo "slim: $(docker exec capsid-php-bench bash -c 'cd /app && composer show slim/slim --no-ansi 2>/dev/null | grep versions | head -1')"
+    echo "build_info_begin"
+    sed -n '1,45p' build-m1d/generated/build-info.txt
+    echo "build_info_end"
+    echo "php: $(docker exec "$PHP_CONTAINER" php -v 2>/dev/null | head -1)"
+    echo "nginx: $(docker exec "$PHP_CONTAINER" nginx -v 2>&1)"
+    echo "slim: $(docker exec "$PHP_CONTAINER" sh -c 'cd /app && composer show slim/slim --no-ansi 2>/dev/null | grep versions | head -1')"
     echo "python: $(/tmp/capsid-bench-venv/bin/python -c 'import sys; print(sys.version.split()[0])')"
     echo "flask: $(/tmp/capsid-bench-venv/bin/pip show flask 2>/dev/null | grep Version)"
     echo "gunicorn: $(/tmp/capsid-bench-venv/bin/pip show gunicorn 2>/dev/null | grep Version)"
@@ -98,10 +117,15 @@ for _ in $(seq 1 30); do
     curl -s -o /dev/null -m 2 "$PHP_TARGET/@capsid/orders/fixed" && break
     sleep 0.2
 done
+PHP_INIT_PID=$(docker inspect "$PHP_CONTAINER" --format '{{.State.Pid}}')
+echo "php container init pid=$PHP_INIT_PID" | tee -a "$OUT/manifest.txt"
 
 # --- 每进程资源采样（5s 窗口，host/worker 分开） ---
 python3 bench/sample-resources.py --out "$OUT/resources.jsonl" \
-    --interval "$RESAMPLE" --pid "$HOST_PID" >/dev/null 2>"$OUT/resources.err" &
+    --interval "$RESAMPLE" --root "capsid=$HOST_PID" \
+    --root "gunicorn=$GUNI_PID" --root "uvicorn=$UVI_PID" \
+    --root "container=$PHP_INIT_PID" \
+    >/dev/null 2>"$OUT/resources.err" &
 SAMPLE_PID=$!
 
 declare -A TARGET=(
@@ -148,4 +172,6 @@ wait "$HOST_PID" "$GUNI_PID" "$UVI_PID" 2>/dev/null || true
 echo "=== progress ===" | tee -a "$OUT/progress.log"
 python3 bench/summarize-four-qps.py "$OUT" 2>/dev/null | tee "$OUT/summary.txt" || \
     python3 bench/summarize4.py "$OUT" | tee "$OUT/summary.txt"
+find "$OUT" -maxdepth 1 -type f ! -name sha256sums.txt -print0 | \
+    sort -z | xargs -0 sha256sum > "$OUT/sha256sums.txt"
 echo "results in $OUT"

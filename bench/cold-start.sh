@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OUT="bench/results/cold-start-$(date +%Y%m%dT%H%M%S)"
+OUT=${OUT:-bench/results/cold-start-$(date +%Y%m%dT%H%M%S)}
 mkdir -p "$OUT"
 HOST_BIN=${HOST_BIN:-build-m1d/capsid-host}
 WORKER=${WORKER:-build-m1d/capsid-worker}
@@ -22,10 +22,24 @@ SIZES=${SIZES:-10k 100k 1m}
 
 echo "rounds: $ROUNDS sut_cpuset: $SUT_CPUSET" | tee "$OUT/manifest.txt"
 {
+    echo "generated_at: $(date --iso-8601=seconds)"
+    echo "commit: $(git rev-parse HEAD)"
+    echo "tag: $(git describe --exact-match --tags HEAD)"
+    echo "runner_sha256: $(sha256sum bench/cold-start.sh | cut -d' ' -f1)"
+    echo "runner_diff_sha256: $(git diff --no-ext-diff --binary -- bench/cold-start.sh | sha256sum | cut -d' ' -f1)"
+    echo "command: OUT=$OUT HOST_BIN=$HOST_BIN WORKER=$WORKER COLD=$COLD COMPILE=$COMPILE APPS=$APPS bash bench/cold-start.sh"
+    echo "uname: $(uname -a)"
+    echo "cpu: $(lscpu | sed -n 's/^Model name:[[:space:]]*//p')"
+    echo "nproc: $(nproc)"
+    echo "mem_total: $(sed -n 's/^MemTotal:[[:space:]]*//p' /proc/meminfo)"
     sha256sum "$WORKER" "$COLD" "$COMPILE" "$(command -v node)" "$(command -v deno)"
+    find "$APPS" -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum
     echo "node: $(node --version)"
     echo "deno: $(deno --version | head -1)"
     echo "worker: $WORKER"
+    echo "build_info_begin"
+    sed -n '1,45p' build-m1d/generated/build-info.txt
+    echo "build_info_end"
 } >> "$OUT/manifest.txt"
 
 median() {
@@ -59,6 +73,7 @@ measure_vm() {
     shift 3
     local cmd=("$@")
     local vals ready_vals=()
+    local raw="$OUT/raw.$name.$label.jsonl"
     for round in $(seq 1 "$((ROUNDS + 1))"); do
         local outfile=$(mktemp)
         local start_ns end_ns total_ms ready_ms
@@ -77,7 +92,20 @@ measure_vm() {
         if [ "$ready_seen" = 1 ]; then
             ready_ms=$(( ($(date +%s%N) - start_ns) / 1000000 ))
             ready_vals+=("$ready_ms")
-            curl -s -o /dev/null -m 5 "http://127.0.0.1:$port/" || true
+            if ! curl --fail --silent --output /dev/null --max-time 5 \
+                    "http://127.0.0.1:$port/"; then
+                kill "$pid" 2>/dev/null || true
+                wait "$pid" 2>/dev/null || true
+                rm -f "$outfile"
+                echo "$name $label failed first-response validation" >&2
+                return 1
+            fi
+        else
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            rm -f "$outfile"
+            echo "$name $label did not become ready" >&2
+            return 1
         fi
         end_ns=$(date +%s%N)
         total_ms=$(( (end_ns - start_ns) / 1000000 ))
@@ -86,6 +114,8 @@ measure_vm() {
         rm -f "$outfile"
         if [ "$round" -gt 1 ]; then
             vals+=("$total_ms")
+            printf '{"round":%d,"ready_ms":%d,"total_ms":%d,"ok":true}\n' \
+                "$((round - 1))" "$ready_ms" "$total_ms" >> "$raw"
         fi
     done
     local med=$(printf '%s\n' "${vals[@]}" | median)
@@ -99,4 +129,6 @@ for label in $SIZES; do
     measure_vm 18991 "$label" deno "$(command -v deno)" run --allow-net "$APPS/app-deno-$label.mjs"
 done
 
+find "$OUT" -maxdepth 1 -type f ! -name sha256sums.txt -print0 | \
+    sort -z | xargs -0 sha256sum > "$OUT/sha256sums.txt"
 echo "results in $OUT"

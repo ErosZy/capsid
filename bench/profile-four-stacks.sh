@@ -50,9 +50,23 @@ if [ -z "$PERF" ] || [ ! -x "$PERF" ]; then
 fi
 
 {
+    echo "generated_at: $(date --iso-8601=seconds)"
+    echo "commit: $(git rev-parse HEAD)"
+    echo "tag: $(git describe --exact-match --tags HEAD)"
+    echo "runner_sha256: $(sha256sum bench/profile-four-stacks.sh | cut -d' ' -f1)"
+    echo "runner_diff_sha256: $(git diff --no-ext-diff --binary -- bench/profile-four-stacks.sh | sha256sum | cut -d' ' -f1)"
+    echo "command: HOST_BIN=$HOST_BIN WORKER=$WORKER BUNDLE=$BUNDLE LOADGEN=$LOADGEN bash bench/profile-four-stacks.sh $OUT"
+    echo "uname: $(uname -a)"
+    echo "cpu: $(lscpu | sed -n 's/^Model name:[[:space:]]*//p')"
+    echo "nproc: $(nproc)"
+    echo "mem_total: $(sed -n 's/^MemTotal:[[:space:]]*//p' /proc/meminfo)"
+    echo "perf_event_paranoid: $(cat /proc/sys/kernel/perf_event_paranoid)"
     echo "profile_s: $PROFILE_S warmup_s: $PROFILE_WARMUP_S workload: json16k"
     echo "perf: $PERF"
     sha256sum "$HOST_BIN" "$WORKER" "$BUNDLE" "$LOADGEN" "$PERF"
+    echo "build_info_begin"
+    sed -n '1,45p' build-m1d/generated/build-info.txt
+    echo "build_info_end"
 } | tee "$OUT/manifest.txt"
 
 profile_loadgen() {
@@ -127,5 +141,7 @@ R2=
     > "$OUT/profile.capsid-worker.txt"
 cleanup_components
 trap - EXIT INT TERM
+find "$OUT" -maxdepth 1 -type f ! -name sha256sums.txt -print0 | \
+    sort -z | xargs -0 sha256sum > "$OUT/sha256sums.txt"
 echo "capsid profiles done"
 echo "results in $OUT"
