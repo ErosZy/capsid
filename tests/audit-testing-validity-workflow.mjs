@@ -8,6 +8,10 @@ const workflowPath = path.join(
   ".github/workflows/testing-validity.yml",
 );
 const workflow = await readFile(workflowPath, "utf8");
+const releaseWorkflow = await readFile(
+  path.join(root, ".github/workflows/release.yml"),
+  "utf8",
+);
 
 const expectedActions = new Map([
   ["actions/checkout", "11d5960a326750d5838078e36cf38b85af677262"],
@@ -98,6 +102,18 @@ assert.doesNotMatch(
   /--output-junit\s+(?:"?)build-/g,
   "CTest --test-dir already roots relative JUnit output inside the build tree",
 );
+
+assert.doesNotMatch(
+  releaseWorkflow,
+  /release_flags=\(\)/,
+  "release workflow uses an empty array that fails under macOS Bash 3.2 nounset",
+);
+for (const fragment of ["create_release()", "edit_release()", "--prerelease"]) {
+  assert.ok(
+    releaseWorkflow.includes(fragment),
+    `release workflow lost the stable/prerelease branch: ${fragment}`,
+  );
+}
 
 console.log(
   `testing-validity workflow: ${uses.length} action uses and ` +

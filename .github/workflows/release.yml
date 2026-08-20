@@ -228,29 +228,44 @@ jobs:
           # is exactly what happens for every concurrent job that arrives
           # after the first one. Tolerate that specific race; upload is the
           # real gate and fails loudly on anything else.
-          release_flags=()
-          if [[ "${tag}" == *-* ]]; then
-            release_flags+=(--prerelease)
-          fi
           notes_flags=(--notes "capsid ${tag} — runtime, first-party host, bytecode compiler, C ABI headers and SBOM.")
           notes_file="release-notes/${tag}.md"
           if [[ -f "${notes_file}" ]]; then
             notes_flags=(--notes-file "${notes_file}")
           fi
-          if ! gh release create "${tag}" \
-              --title "capsid ${tag}" \
-              "${notes_flags[@]}" \
-              "${release_flags[@]}" \
-              --verify-tag; then
+          create_release() {
+            if [[ "${tag}" == *-* ]]; then
+              gh release create "${tag}" \
+                --title "capsid ${tag}" \
+                "${notes_flags[@]}" \
+                --prerelease \
+                --verify-tag
+            else
+              gh release create "${tag}" \
+                --title "capsid ${tag}" \
+                "${notes_flags[@]}" \
+                --verify-tag
+            fi
+          }
+          edit_release() {
+            if [[ "${tag}" == *-* ]]; then
+              gh release edit "${tag}" \
+                --title "capsid ${tag}" \
+                "${notes_flags[@]}" \
+                --prerelease
+            else
+              gh release edit "${tag}" \
+                --title "capsid ${tag}" \
+                "${notes_flags[@]}"
+            fi
+          }
+          if ! create_release; then
             # Concurrent package jobs may race after one creates the Release.
             # Accept only an already-readable Release; auth/API failures still
             # stop the publishing job.
             gh release view "${tag}" >/dev/null
           fi
-          gh release edit "${tag}" \
-            --title "capsid ${tag}" \
-            "${notes_flags[@]}" \
-            "${release_flags[@]}"
+          edit_release
           shopt -s nullglob
           for dir in build build-musl; do
             for archive in "${dir}"/capsid-*.tar.gz "${dir}"/capsid-*.zip; do
