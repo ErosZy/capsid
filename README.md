@@ -10,9 +10,13 @@ Web-standard Fetch handlers. Your Host keeps control of listeners, TLS,
 routing, worker pools, and policy; each worker receives one self-contained ESM
 bundle and only the capabilities the Host approves.
 
-> **Status**: `0.2.0-rc.07`, ABI v7. The first-party `capsid-host` is a
+> **Status**: `0.2.0`, ABI v7. The first-party `capsid-host` is a
 > development/benchmark entry point, not a production deployment interface;
 > production isolation is only promised by the Linux strict sandbox.
+
+Future development, including the protocol-first WebSocket, Binding v2, and
+progressive Cloudflare workerd compatibility work, is tracked in the
+[project roadmap](ROADMAP.md).
 
 Capsid is aimed at AI app builders, multi-tenant automation, and plugin systems
 that need to execute generated code as a service—not as trusted code inside the
@@ -33,8 +37,9 @@ and ambient process APIs. In return, the Host gets a non-blocking C ABI/C++11
 data plane with streaming, credit backpressure, explicit lifecycle control,
 and a capability boundary designed for hostile code.
 
-The implementation is small and measurable: on a 4C/8T WSL runner the
-2026-08-20 rc.07 conclusion-level samples reach about **7,261 QPS** on JSON 1 KiB,
+The implementation is small and measurable: the v0.2.0 release baseline uses
+the conclusion-level samples captured on 2026-08-20 from the final rc.07
+implementation. They reach about **7,261 QPS** on JSON 1 KiB,
 start a 10 KiB bundle in **8.34 ms** source / **7.29 ms** trusted bytecode, and
 serve from about **5.9 MB PSS** (host) plus **6.4 MB** per worker. Claims are
 backed by pinned WPT, framework differentials, sanitizers, fuzzing, privileged
@@ -42,16 +47,16 @@ sandbox probes, and identity-linked performance evidence.
 
 ## Install Prebuilt Release
 
-Releases from `v0.2.0-rc.05` onward carry an `install.sh` that downloads the
+The `v0.2.0` release carries an `install.sh` that downloads the
 archive for your OS/architecture, verifies its SHA-256, and extracts the
 binaries into `$HOME/.local` (override with `PREFIX`):
 
 ```sh
-# current release candidate
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.0-rc.07/install.sh \
-  | bash -s -- v0.2.0-rc.07
+# exact release
+curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.0/install.sh \
+  | bash -s -- v0.2.0
 
-# after v0.2.0 becomes the latest stable release
+# latest stable release
 curl -fsSL https://github.com/ErosZy/capsid/releases/latest/download/install.sh | bash
 ```
 
@@ -272,7 +277,8 @@ See [framework compatibility](docs/framework-compatibility/README.md).
 
 ## Performance
 
-Conclusion-level samples (`v0.2.0-rc.07`, 2026-08-20, AMD Ryzen 3 3300X 4C/8T, Ubuntu 24.04/WSL2,
+Conclusion-level v0.2.0 baseline samples (captured from `v0.2.0-rc.07` on
+2026-08-20, AMD Ryzen 3 3300X 4C/8T, Ubuntu 24.04/WSL2,
 conns=64, 3 rounds; correctness checked every round — all 144 rounds OK, capsid
 host/worker perf profiles collected):
 
@@ -323,6 +329,7 @@ The full matrix and build requirements are in
 | Security & sandbox | [capability-policy.md](docs/capability-policy.md) · [linux-sandbox.md](docs/linux-sandbox.md) |
 | Compatibility | [conformance.md](docs/conformance.md) · [framework-compatibility/](docs/framework-compatibility/README.md) |
 | Quality & performance | [testing.md](docs/testing.md) · [performance-benchmarks.md](docs/performance-benchmarks.md) |
+| Versioned compatibility plan | [ROADMAP.md](ROADMAP.md) |
 
 The full task index is in [docs/README.md](docs/README.md).
 

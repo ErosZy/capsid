@@ -1,6 +1,6 @@
 # Performance: Evidence Rules and Current State
 
-This document is the single maintained document for performance topics; it keeps the evidence rules and the current (2026-08-20) conclusion-level samples. Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, and the superseded 2026-08-18 runs) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
+This document is the single maintained document for performance topics; it keeps the evidence rules and the current (2026-08-20) conclusion-level samples. The `v0.2.0` stable release adopts these final-RC runs as its published performance baseline. Measurements retain their `v0.2.0-rc.07` labels because that is the exact binary identity used to collect them; the stable release changes only documentation and release metadata. Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, and the superseded 2026-08-18 runs) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
 
 ## 1. Evidence Rules
 
