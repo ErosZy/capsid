@@ -2799,14 +2799,17 @@ bool Impl::response_may_complete_early(std::uint64_t request_id) const {
         // client has every byte it will ever get from this response.
         return pending.writing || pending.head_sent;
     }
+    if (pending.cl_known) {
+        // The last body block is submitted when cl_remaining reaches zero.
+        // A Content-Length response cannot legally grow after that point,
+        // so the client can receive every byte and send the next request
+        // before the worker's RESPONSE_END has even reached the Host —
+        // exactly what a proxied fetch does on a slow single core. Do not
+        // wait for end_seen here.
+        return pending.cl_remaining == 0;
+    }
     if (!pending.end_seen) {
         return false;
-    }
-    if (pending.cl_known) {
-        // The last body block is submitted when cl_remaining reaches zero;
-        // after that the client can receive the full body and send the next
-        // request before the write completion runs.
-        return pending.cl_remaining == 0;
     }
     // Chunked (or otherwise delimited): the end block is submitted with
     // body().more=false; the client can only know the response is complete

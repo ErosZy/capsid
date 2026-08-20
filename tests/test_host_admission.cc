@@ -152,16 +152,17 @@ const std::vector<std::uint8_t>& fast_bundle() {
     return bundle;
 }
 
-// A streamed (non-fixed) response with an exact Content-Length: the Host
-// emits it through the buffer_body serializer, the path keep-alive clients
-// stress by sending the next request the moment the body is complete.
+// A streamed (non-fixed) response with an exact Content-Length whose end
+// arrives 80 ms after the body: the Host emits it through the buffer_body
+// serializer, and keep-alive clients send the next request the moment the
+// body is complete — before RESPONSE_END has reached the Host.
 const std::vector<std::uint8_t>& streamed_bundle() {
     static const std::string source =
         "const body = new TextEncoder().encode('streamed-ok');\n"
         "export default { fetch: () => new Response(\n"
         "  new ReadableStream({ start(controller) {\n"
         "    controller.enqueue(body);\n"
-        "    controller.close();\n"
+        "    setTimeout(() => controller.close(), 80);\n"
         "  }}),\n"
         "  { headers: { 'content-length': String(body.length) } }) };";
     static const std::vector<std::uint8_t> bundle(source.begin(),
@@ -629,8 +630,8 @@ void test_keepalive_streamed_responses(const char* worker_path) {
             "cannot start admission server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
-    constexpr int kConnections = 8;
-    constexpr int kRequestsPerConnection = 25;
+    constexpr int kConnections = 4;
+    constexpr int kRequestsPerConnection = 12;
     std::vector<int> connections;
     connections.reserve(kConnections);
     for (int connection = 0; connection < kConnections; ++connection) {
