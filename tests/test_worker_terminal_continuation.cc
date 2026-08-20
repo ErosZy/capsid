@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -248,6 +249,12 @@ capsid_worker *spawn(const char *worker_path,
         "    setTimeout(() => emit('after-detach'), 80);\n"
         "    return new Response('detached-ok');\n"
         "  }\n"
+        "  if (name === 'settling') {\n"
+        "    emit('start-settling');\n"
+        "    const late = new Promise(resolve => setTimeout(resolve, 80));\n"
+        "    late.then(() => {});\n"
+        "    return new Response('settling-ok');\n"
+        "  }\n"
         "  emit('start-reuse');\n"
         "  return new Response('reuse-ok');\n"
         "} };\n";
@@ -298,7 +305,27 @@ int main(int argc, char **argv) {
     watch_poison(worker, "after-timeout", "timeout");
     capsid_worker_destroy(worker);
 
-    // Phase 3: a normal response with a detached timer must also poison.
+    // Phase 3: a normally settled request may still hold promise reactions
+    // while its completion chain unwinds; once the reactions settle the
+    // worker must reclaim the token instead of poisoning. The follow-up
+    // request runs while the 80ms reaction is still live, exactly like a
+    // concurrent fetch burst.
+    worker = spawn(argv[1], &capability, 30);
+    begin(worker, 55, "settling");
+    wait_log(worker, "start-settling", 55);
+    bool settling_head = false;
+    complete_response(worker, 55, &settling_head);
+    begin(worker, 56, "reuse");
+    wait_log(worker, "start-reuse", 56);
+    bool settling_reuse_head = false;
+    complete_response(worker, 56, &settling_reuse_head);
+    // Let the 80ms reaction settle and the reclaim tick release the token
+    // before a clean shutdown observes the registry.
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    require_result(capsid_worker_shutdown(worker), "shutdown");
+    capsid_worker_destroy(worker);
+
+    // Phase 4: a normal response with a detached timer must also poison.
     worker = spawn(argv[1], &capability, 30);
     begin(worker, 53, "detached");
     wait_log(worker, "start-detached", 53);
@@ -307,7 +334,7 @@ int main(int argc, char **argv) {
     watch_poison(worker, "after-detach", "detached");
     capsid_worker_destroy(worker);
 
-    // Phase 4: the next request must be served by a fresh realm with no
+    // Phase 5: the next request must be served by a fresh realm with no
     // trace of the old one.
     worker = spawn(argv[1], &capability, 30);
     begin(worker, 54, "reuse");
@@ -318,7 +345,8 @@ int main(int argc, char **argv) {
     capsid_worker_destroy(worker);
 
     std::cout << "PASS: cancel, timeout and detached continuations poison "
-                 "the worker; the next request runs in a fresh realm"
+                 "the worker; settling reactions are reclaimed; the next "
+                 "request runs in a fresh realm"
               << std::endl;
     return 0;
 }
