@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./install.sh [VERSION]                # default: latest stable release
-#   ./install.sh v0.2.0-rc.04             # explicit tag (pre-release too)
+#   ./install.sh v0.2.0-rc.07             # explicit tag (pre-release too)
 #   PREFIX="$HOME/opt" ./install.sh       # install to a custom prefix
 #   ./install.sh --prefix "$HOME/opt" v0.2.0
 #
@@ -85,7 +85,12 @@ os="$(uname -s)"
 arch="$(uname -m)"
 case "$os" in
     Linux)
-        asset_pattern='capsid-.*-linux-musl\.tar\.gz'
+        case "$arch" in
+            x86_64|amd64) ;;
+            *) echo "install.sh: unsupported Linux architecture: ${arch}" >&2; exit 1 ;;
+        esac
+        asset_pattern='capsid-.*-linux-musl\.tar\.gz$'
+        tool_suffix=''
         ;;
     Darwin)
         case "$arch" in
@@ -93,10 +98,16 @@ case "$os" in
             x86_64|amd64) darwin_arch="x86_64" ;;
             *) echo "install.sh: unsupported macOS architecture: ${arch}" >&2; exit 1 ;;
         esac
-        asset_pattern="capsid-.*-darwin-${darwin_arch}\\.tar\\.gz"
+        asset_pattern="capsid-.*-darwin-${darwin_arch}\\.tar\\.gz$"
+        tool_suffix=''
         ;;
     MINGW*|MSYS*|CYGWIN*)
-        asset_pattern='capsid-.*-windows-x86_64\.zip'
+        case "$arch" in
+            x86_64|amd64) ;;
+            *) echo "install.sh: unsupported Windows architecture: ${arch}" >&2; exit 1 ;;
+        esac
+        asset_pattern='capsid-.*-windows-x86_64\.zip$'
+        tool_suffix='.exe'
         ;;
     *)
         echo "install.sh: unsupported operating system: ${os}" >&2
@@ -108,7 +119,7 @@ asset_url="$(printf '%s\n' "$release_json" \
     | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*"' \
     | sed -E 's/.*"([^"]+)"$/\1/' \
     | grep -E "$asset_pattern" \
-    | head -1)"
+    | head -1 || true)"
 
 if [[ -z "$asset_url" ]]; then
     echo "install.sh: no matching release asset for ${os}/${arch} (pattern: ${asset_pattern})" >&2
@@ -147,45 +158,73 @@ if [[ -z "$expected" || "$actual" != "$expected" ]]; then
     exit 1
 fi
 
-echo "==> installing to ${PREFIX}"
+echo "==> staging package for ${PREFIX}"
 mkdir -p "$PREFIX"
+PREFIX="$(cd "$PREFIX" && pwd -P)"
+extract_dir="$tmp/extracted"
+mkdir -p "$extract_dir"
 case "$archive" in
     *.zip)
         if command -v unzip >/dev/null 2>&1; then
-            unzip -q "$archive" -d "$PREFIX"
+            unzip -q "$archive" -d "$extract_dir"
         else
-            tar -xf "$archive" -C "$PREFIX"
+            tar -xf "$archive" -C "$extract_dir"
         fi
         ;;
     *)
-        tar -xzf "$archive" -C "$PREFIX"
+        tar -xzf "$archive" -C "$extract_dir"
         ;;
 esac
 
+# Validate one coherent package root before changing the active command
+# surface. Searching only the fresh staging tree prevents an older install
+# from satisfying a missing-tool check.
+source_host="$(find "$extract_dir" -type f -name "capsid-host${tool_suffix}" \
+    -path "*/bin/capsid-host${tool_suffix}" -print -quit 2>/dev/null || true)"
+if [[ -z "$source_host" ]]; then
+    echo "install.sh: package is missing bin/capsid-host${tool_suffix}" >&2
+    exit 1
+fi
+source_bin="$(dirname "$source_host")"
+package_root="$(dirname "$source_bin")"
+for tool in capsid-host capsid-worker capsid-bytecode-compile; do
+    if [[ ! -f "$source_bin/${tool}${tool_suffix}" ]]; then
+        echo "install.sh: package is missing bin/${tool}${tool_suffix}" >&2
+        exit 1
+    fi
+done
+
+# Keep the full package under an immutable version+digest directory. A
+# reinstall of identical bytes reuses it; another release gets a distinct
+# root, so active commands can be switched only after validation succeeds.
+releases_dir="$PREFIX/releases"
+release_dir="$releases_dir/${VERSION}-${actual}"
+mkdir -p "$releases_dir"
+if [[ ! -d "$release_dir" ]]; then
+    pending_release="$releases_dir/.${VERSION}-${actual}.$$"
+    mv "$package_root" "$pending_release"
+    mv "$pending_release" "$release_dir"
+fi
+
+echo "==> installing to ${PREFIX}"
 bin_dir="$PREFIX/bin"
 mkdir -p "$bin_dir"
-if [[ ! -x "$bin_dir/capsid-host" ]]; then
-    # CPack archives may place the tree under a top-level version directory.
-    # Locate the real bin/ and expose it through <prefix>/bin with symlinks
-    # (copy fallback for hosts without working symlinks).
-    source_bin="$(find "$PREFIX" -type f -name capsid-host -path '*/bin/capsid-host' 2>/dev/null | head -1 || true)"
-    if [[ -n "$source_bin" ]]; then
-        source_bin="$(dirname "$source_bin")"
-        for tool in capsid-host capsid-worker capsid-bytecode-compile; do
-            if [[ -x "$source_bin/$tool" && ! -e "$bin_dir/$tool" ]]; then
-                if ! ln -s "$source_bin/$tool" "$bin_dir/$tool" 2>/dev/null; then
-                    cp -f "$source_bin/$tool" "$bin_dir/$tool"
-                fi
-            fi
-        done
-    fi
-fi
+for tool in capsid-host capsid-worker capsid-bytecode-compile; do
+    active="$bin_dir/${tool}${tool_suffix}"
+    pending="$bin_dir/.${tool}${tool_suffix}.$$"
+    cp -f "$release_dir/bin/${tool}${tool_suffix}" "$pending"
+    chmod +x "$pending" 2>/dev/null || true
+    mv -f "$pending" "$active"
+done
 
 echo "==> installed:"
 for tool in capsid-host capsid-worker capsid-bytecode-compile; do
-    if [[ -x "$bin_dir/$tool" ]]; then
-        echo "  ${bin_dir}/${tool}"
-    fi
+    active="$bin_dir/${tool}${tool_suffix}"
+    [[ -f "$active" ]] || {
+        echo "install.sh: final verification failed for ${active}" >&2
+        exit 1
+    }
+    echo "  ${active}"
 done
 
 case ":$PATH:" in

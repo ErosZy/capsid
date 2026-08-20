@@ -378,6 +378,18 @@ stop_component() {
     COMPONENT_PID[$side]=""
 }
 
+# Every exit path, including READY/identity/correctness failures inside a
+# helper, must stop a component that was already launched. Normal paths clear
+# the PID entry, so the EXIT sweep is idempotent.
+cleanup_components() {
+    local side
+    trap - EXIT
+    for side in "${!COMPONENT_PID[@]}"; do
+        stop_component "$side"
+    done
+}
+trap cleanup_components EXIT
+
 run_loadgen() {
     local side="$1" round="$2"
     local samples="$OUT/samples.$side.$round.$$.jsonl"

@@ -1353,6 +1353,12 @@ int main(int argc, char** argv) {
         options.cors.configured = true;
         options.cors.allowed_origins =
             split_list(cors_origins_it->second, "--cors-origins");
+        if (options.cors.allowed_origins.size() > 1 &&
+            std::find(options.cors.allowed_origins.begin(),
+                      options.cors.allowed_origins.end(),
+                      "*") != options.cors.allowed_origins.end()) {
+            fail("--cors-origins cannot combine * with exact origins");
+        }
         for (const std::string& origin : options.cors.allowed_origins) {
             if (!capsid::host::valid_cors_origin(origin)) {
                 fail("--cors-origins entry is not \"*\" or an http(s):// "
@@ -1399,19 +1405,18 @@ int main(int argc, char** argv) {
     }
     options.ready_fd = static_cast<int>(ready_fd);
 
-    // Static pool: an arbitrary positive worker count, each worker owning
-    // one shard (its own process and event loop) sharing one SO_REUSEPORT
-    // listener. The pool keeps the pool-level READY contract and
-    // SIGTERM-bounded shutdown; single-worker mode is unchanged. Sizing is
-    // the deployer's call — every shard costs one worker process plus an
-    // Asio loop, so very large pools are memory-bound, not rejected.
+    // Static pool: a positive worker count within the fixed practical limit,
+    // each worker owning one shard (its own process and event loop) sharing
+    // one SO_REUSEPORT listener. The pool keeps the pool-level READY contract
+    // and SIGTERM-bounded shutdown; single-worker mode is unchanged.
     std::uint32_t workers = 1;
     if (mode == "static-pool") {
         const std::string workers_text = require("workers");
         const std::uint64_t parsed_workers =
             parse_positive_integer(workers_text, "workers");
-        if (parsed_workers > std::numeric_limits<std::uint32_t>::max()) {
-            fail("--workers exceeds uint32");
+        if (parsed_workers > capsid::host::kMaxStaticPoolWorkers) {
+            fail("--workers exceeds the static-pool worker limit (" +
+                 std::to_string(capsid::host::kMaxStaticPoolWorkers) + ")");
         }
         workers = static_cast<std::uint32_t>(parsed_workers);
     }

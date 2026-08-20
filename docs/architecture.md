@@ -76,7 +76,7 @@ includes:
 
 Formal deviations and resource limits are documented in [standards and conformance](conformance.md). The following are never exposed: txiki.js `globalThis.tjs`, `tjs:internal/*`, process/child process, server, WASI, external module loading, REPL, file execution, and host IPC control.
 
-Frameworks are just ordinary bundles. The current validation covers Hono 4.12.32, itty-router 5.0.24, and H3 2.0.1-rc.26; the runtime source contains no framework detection or special branches.
+Frameworks are just ordinary bundles. The current validation covers Hono 4.12.32, itty-router 5.0.24, H3 2.0.1-rc.26, and Elysia 1.4.29; the runtime source contains no framework detection or special branches.
 
 ## Restricted Build
 

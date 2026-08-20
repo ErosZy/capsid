@@ -1,6 +1,6 @@
 # Contributing Guide
 
-Thank you for contributing to Capsid. The project is currently in the `0.2.0-beta` stage, and the public ABI, security boundary, and behavioral contracts are still evolving quickly; a clearly scoped change with verifiable evidence matters more than the size of the change.
+Thank you for contributing to Capsid. The project is currently in the `0.2.0-rc.07` stage, and the public ABI, security boundary, and behavioral contracts are still evolving quickly; a clearly scoped change with verifiable evidence matters more than the size of the change.
 
 ## Before You Begin
 
@@ -21,7 +21,8 @@ npm ci --ignore-scripts --prefix vendor/txiki.js
 for directory in \
   examples/hono-reference \
   examples/itty-router-reference \
-  examples/h3-v2-reference
+  examples/h3-v2-reference \
+  examples/elysia-reference
 do
   npm ci --ignore-scripts --prefix "$directory"
 done

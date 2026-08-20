@@ -668,6 +668,17 @@ void test_timeout_once_under_saturation(const char *worker_path,
     Collector collector = drive(worker, ids, GrantMode::kImmediate, 15);
     require(!collector.saw_exit, "worker must not exit");
     const auto hang = collector.outcomes.find(157);
+    if (hang == collector.outcomes.end() || !hang->second.errored) {
+        std::fprintf(stderr,
+                     "timeout saturation diagnostics: outcomes=%zu head=%llu "
+                     "body=%llu end=%llu error=%llu hang_terminals=%u\n",
+                     collector.outcomes.size(),
+                     static_cast<unsigned long long>(collector.head_frames),
+                     static_cast<unsigned long long>(collector.body_frames),
+                     static_cast<unsigned long long>(collector.end_frames),
+                     static_cast<unsigned long long>(collector.error_frames),
+                     collector.terminal_counts[157]);
+    }
     require(hang != collector.outcomes.end() && hang->second.errored,
             "hang request errored via deadline");
     // The 64 saturation requests also hit the 300 ms deadline (they are

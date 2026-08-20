@@ -59,9 +59,11 @@ def main(out):
             if not rows:
                 print(f"{side:<10}{workload:<16}{'n/a':>9}{'':>7}{'':>9}{'':>9}{'':>9}{'':>5}")
                 continue
-            qps = median(r["qps"] for r in rows)
-            cv = (statistics.pstdev(r["qps"] for r in rows) /
-                  statistics.fmean(r["qps"] for r in rows) * 100) if len(rows) > 1 else 0.0
+            qps_values = [r["qps"] for r in rows]
+            qps = median(qps_values)
+            qps_mean = statistics.fmean(qps_values)
+            cv = (statistics.pstdev(qps_values) / qps_mean * 100
+                  if len(qps_values) > 1 and qps_mean != 0 else 0.0)
             p50 = median(r["p50_ms"] for r in rows)
             p95 = median(r["p95_ms"] for r in rows)
             p99 = median(r["p99_ms"] for r in rows)

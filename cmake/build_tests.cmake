@@ -33,6 +33,17 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME host_config COMMAND test-host-config)
 
+        if(UNIX)
+            add_test(
+                NAME release_install_script
+                COMMAND bash
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_install_script.sh"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/install.sh")
+            set_tests_properties(release_install_script PROPERTIES
+                LABELS "release;install"
+                TIMEOUT 30)
+        endif()
+
         # host_config_model.cc is part of the managed coordinator and not
         # built on Windows (docs/windows.md); the model test SKIPs by
         # absence there.
@@ -44,6 +55,7 @@ if(BUILD_TESTING)
             test-host-config-model PRIVATE include src)
         target_link_libraries(test-host-config-model PRIVATE
             capsid_host_core
+            Boost::system
             capsid_sanitizers)
         set_target_properties(test-host-config-model PROPERTIES
             CXX_STANDARD 20
@@ -1236,6 +1248,10 @@ if(BUILD_TESTING)
                 COMMAND test-host-static-pool-server atomic-failure
                     $<TARGET_FILE:capsid-worker>)
             add_test(
+                NAME host_static_pool_server_rejects_oversized_pool
+                COMMAND test-host-static-pool-server oversized-pool
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
                 NAME host_static_pool_server_stop_before_start
                 COMMAND test-host-static-pool-server stop-before-start
                     $<TARGET_FILE:capsid-worker>)
@@ -1245,6 +1261,7 @@ if(BUILD_TESTING)
                     $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
                 host_static_pool_server_atomic_start_failure
+                host_static_pool_server_rejects_oversized_pool
                 host_static_pool_server_stop_before_start
                 host_static_pool_server_start_stop_race PROPERTIES
                 LABELS "host;integration;m2"
@@ -1638,6 +1655,20 @@ if(BUILD_TESTING)
                     LABELS "host;benchmark;m1"
                     TIMEOUT 600
                     SKIP_RETURN_CODE 77)
+
+            add_test(
+                NAME benchmark_tool_boundaries
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_tool_boundaries.mjs"
+                    --summarizer
+                        "${CMAKE_CURRENT_SOURCE_DIR}/bench/summarize-four-qps.py"
+                    --profiler
+                        "${CMAKE_CURRENT_SOURCE_DIR}/bench/profile-four-stacks.sh")
+            set_tests_properties(
+                benchmark_tool_boundaries
+                PROPERTIES
+                    LABELS "host;benchmark"
+                    TIMEOUT 30)
         endif()
 
         add_executable(test-build-identity tests/test_build_identity.cc)
@@ -4693,6 +4724,9 @@ if(BUILD_TESTING)
                 "-DCAPSID_REPRO_PARALLEL=${CAPSID_REPRO_PARALLEL}"
                 "-DCAPSID_REPRO_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
                 "-DCAPSID_REPRO_OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
+                "-DCAPSID_REPRO_BOOST_DIR=${Boost_DIR}"
+                "-DCAPSID_REPRO_BOOST_INCLUDE_DIR=${Boost_INCLUDE_DIR}"
+                "-DCAPSID_REPRO_BOOST_SYSTEM_LIBRARY=${Boost_SYSTEM_LIBRARY_RELEASE}"
                 "-DCAPSID_C_COMPILER=${CMAKE_C_COMPILER}"
                 "-DCAPSID_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
                 -DCAPSID_STRICT_WARNINGS=${CAPSID_STRICT_WARNINGS}

@@ -608,6 +608,12 @@ void test_static_pool_is_explicit_positive_and_fixed_size() {
         ConfigDocument::kApplication,
         R"json({"apiVersion":"capsid/app-v1","pool":{"minReady":4,"maxWorkers":4}})json",
         "four-worker static App pool");
+    require_error(
+        ConfigDocument::kApplication,
+        R"json({"apiVersion":"capsid/app-v1","pool":{"minReady":4097,"maxWorkers":4097}})json",
+        ConfigErrorCode::kResourceLimit,
+        "/pool/minReady",
+        "App pool beyond the fixed worker limit");
 }
 
 std::string host_document_with_array_nesting(std::size_t array_count) {

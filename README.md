@@ -10,7 +10,7 @@ Web-standard Fetch handlers. Your Host keeps control of listeners, TLS,
 routing, worker pools, and policy; each worker receives one self-contained ESM
 bundle and only the capabilities the Host approves.
 
-> **Status**: `0.2.0-beta`, ABI v7. The first-party `capsid-host` is a
+> **Status**: `0.2.0-rc.07`, ABI v7. The first-party `capsid-host` is a
 > development/benchmark entry point, not a production deployment interface;
 > production isolation is only promised by the Linux strict sandbox.
 
@@ -42,17 +42,17 @@ sandbox probes, and identity-linked performance evidence.
 
 ## Install Prebuilt Release
 
-Every `v*` GitHub Release carries an `install.sh` that downloads the
+Releases from `v0.2.0-rc.05` onward carry an `install.sh` that downloads the
 archive for your OS/architecture, verifies its SHA-256, and extracts the
 binaries into `$HOME/.local` (override with `PREFIX`):
 
 ```sh
-# latest stable release
-curl -fsSL https://github.com/ErosZy/capsid/releases/latest/download/install.sh | bash
+# current release candidate
+curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.0-rc.07/install.sh \
+  | bash -s -- v0.2.0-rc.07
 
-# explicit tag (including pre-releases)
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.0-rc.04/install.sh \
-  | bash -s -- v0.2.0-rc.04
+# after v0.2.0 becomes the latest stable release
+curl -fsSL https://github.com/ErosZy/capsid/releases/latest/download/install.sh | bash
 ```
 
 After installation, add `$HOME/.local/bin` to `PATH` (the script prints the
@@ -134,8 +134,8 @@ curl http://127.0.0.1:8080/@capsid/orders/
 ```
 
 `capsid-host` supports `single-worker`, `static-pool`, and `managed`.
-`static-pool` takes any positive `--workers` count (each worker owns one
-shard sharing the listener port), and listener-level CORS is available in
+`static-pool` takes any positive `--workers` count up to 4096 (each worker
+owns one shard sharing the listener port), and listener-level CORS is available in
 every mode: `--cors-*` flags on the local modes, per-listener `cors` in
 managed `host.json` — both driven by the same engine. See the
 [host modes and CLI reference](docs/host-config.md); step-by-step

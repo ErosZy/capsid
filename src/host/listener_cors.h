@@ -65,8 +65,8 @@ class ListenerCors {
     void filter_headers(
         std::vector<std::pair<std::string, std::string>>* headers) const;
 
-    // Stamps the recorded ACAO (+ Vary: Origin) on a Host-synthesized
-    // response (send_simple paths) when the Origin was allowed.
+    // Stamps Vary: Origin on a Host-synthesized response when an Origin was
+    // present, plus the recorded ACAO when that Origin was allowed.
     void stamp(boost::beast::http::response<
                    boost::beast::http::string_body>& response) const;
 

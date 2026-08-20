@@ -2,6 +2,7 @@
 
 #include "host/static_pool_server.h"
 
+#include "host/config.h"
 #include "host/local_capsid_policy.h"
 #include "host/static_pool.h"
 #include "host/structured_log.h"
@@ -20,7 +21,9 @@
 #include <cstdio>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -94,6 +97,13 @@ public:
             }
             return false;
         }
+        if (options_.workers > kMaxStaticPoolWorkers) {
+            if (error != nullptr) {
+                *error = "static pool worker limit exceeded (maximum " +
+                         std::to_string(kMaxStaticPoolWorkers) + ")";
+            }
+            return false;
+        }
         // Compile the local App policy and its Binding set once for the
         // whole fixed pool. Every shard gets the same immutable snapshot;
         // neither capsid.json nor bindingsRoot can drift between workers.
@@ -119,9 +129,19 @@ public:
         // which request_stop() reads under shards_mutex_ — a concurrent
         // stop during start would race the lockless reallocation. Every
         // shards_ mutation holds the same mutex as every read.
-        {
+        try {
             std::lock_guard<std::mutex> lock(shards_mutex_);
             shards_.reserve(options_.workers);
+        } catch (const std::bad_alloc&) {
+            if (error != nullptr) {
+                *error = "static pool worker allocation failed";
+            }
+            return false;
+        } catch (const std::length_error&) {
+            if (error != nullptr) {
+                *error = "static pool worker allocation exceeds container limit";
+            }
+            return false;
         }
         // StaticPoolState wiring (E-4): register each worker under its
         // immutable owner shard BEFORE it is spawned, mark READY the

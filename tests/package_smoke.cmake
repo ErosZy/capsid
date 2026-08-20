@@ -493,7 +493,8 @@ endif()
 # otherwise fail to compile ("c+" followed by "+") and the dots would
 # match any character.
 set(CAPSID_SMOKE_DYNAMIC_ALLOWLIST_LINUX
-    "libc[.]so" "libm[.]so" "libpthread[.]so" "libdl[.]so" "librt[.]so"
+    "libc[.]so" "libc[.]musl-.*[.]so[.]1" "ld-musl"
+    "libm[.]so" "libpthread[.]so" "libdl[.]so" "librt[.]so"
     "libgcc_s[.]so" "libstdc[+][+][.]so" "ld-linux" "libresolv[.]so"
     "libutil[.]so" "libmbedtls[.]so" "libmbedcrypto[.]so" "libmbedx509[.]so")
 file(GLOB CAPSID_SMOKE_BINARIES "${CAPSID_PACKAGE_ROOT}/bin/*")

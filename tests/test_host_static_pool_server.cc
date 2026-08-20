@@ -47,6 +47,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <span>
 #include <string>
@@ -580,6 +581,23 @@ void test_atomic_start_failure(const char* worker_path) {
             "zero-worker static pool reported an active shard");
 }
 
+// A syntactically valid uint32 worker count must never reach vector::reserve
+// and terminate the Host with an uncaught std::bad_alloc; impractical pools
+// fail synchronously instead.
+void test_oversized_pool_is_rejected(const char* worker_path) {
+    auto options = make_options(
+        worker_path, -1, std::numeric_limits<std::uint32_t>::max());
+    capsid::host::StaticPoolServer pool(std::move(options));
+    std::string error;
+    require(!pool.start(fixture_bundle(), &error),
+            "oversized static pool was accepted");
+    require(error.find("worker limit") != std::string::npos,
+            "oversized static pool returned no bounded worker-limit error: " +
+                error);
+    require(pool.active_workers() == 0,
+            "rejected oversized pool retained active workers");
+}
+
 // Lifecycle hardening: request_stop() before start() must fail start
 // synchronously with every resource unwound — no listener, no shards, and
 // wait() must still complete without a thread that never started.
@@ -704,6 +722,8 @@ int main(int argc, char** argv) {
         test_binding_local_policy(argv[2]);
     } else if (mode == "atomic-failure") {
         test_atomic_start_failure(argv[2]);
+    } else if (mode == "oversized-pool") {
+        test_oversized_pool_is_rejected(argv[2]);
     } else if (mode == "drain-inflight-completes") {
         test_drain_inflight_completes(argv[2]);
     } else if (mode == "drain-deadline-forces") {

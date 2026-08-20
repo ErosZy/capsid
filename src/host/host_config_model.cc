@@ -9,6 +9,7 @@
 
 #include "host/host_config_model.h"
 
+#include "host/config.h"
 #include "host/listener_cors.h"
 #include "host/request_normalization.h"
 
@@ -312,6 +313,12 @@ bool parse_listeners(json_t* root, std::vector<ListenerConfig>* out) {
             }
             if (config.cors.allowed_origins.empty() ||
                 config.cors.allowed_methods.empty()) {
+                return false;
+            }
+            if (config.cors.allowed_origins.size() > 1 &&
+                std::find(config.cors.allowed_origins.begin(),
+                          config.cors.allowed_origins.end(),
+                          "*") != config.cors.allowed_origins.end()) {
                 return false;
             }
             for (const std::string& origin : config.cors.allowed_origins) {
@@ -687,8 +694,12 @@ bool parse_host_config(std::string_view json, ParsedHostConfig* out,
     if (!parse_capacity(root, &config.capacity)) {
         return reject("invalid host.json capacity");
     }
+    if (config.capacity.workers_total > kMaxStaticPoolWorkers) {
+        return reject("capacity.workersTotal exceeds the static pool worker limit");
+    }
     // capacity.workersTotal is the single worker-count ceiling (see
-    // policy_compiler.h); the parse gate above guarantees it fits int.
+    // policy_compiler.h); the parse gate above and the practical fixed-pool
+    // limit guarantee it fits uint32.
     config.policy.max_workers =
         static_cast<std::uint32_t>(config.capacity.workers_total);
     if (!parse_recovery(root, &config.recovery)) {

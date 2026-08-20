@@ -44,7 +44,7 @@ Required:
 | `--public-authority host[:port]` | the external authority |
 | `--strict-sandbox on` \| `off` | worker sandbox profile |
 | `--ready-fd <fd>` | readiness descriptor the Host writes the READY record to |
-| `--workers <positive-integer>` | `static-pool` only, required; any positive count ≤ uint32, each shard is one worker process |
+| `--workers <positive-integer>` | `static-pool` only, required; 1..4096, each shard is one worker process |
 
 Optional (each keeps the data-plane default when omitted):
 
@@ -397,7 +397,7 @@ header routing is unreachable from any CORS-enforcing browser client.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `allowedOrigins` | ✓ | `"*"` (any origin) or exact `http(s)://host[:port]` origins |
+| `allowedOrigins` | ✓ | `"*"` (any origin) or exact `http(s)://host[:port]` origins; `"*"` cannot be mixed with exact entries; scheme/host matching is ASCII case-insensitive |
 | `allowedMethods` | ✓ | HTTP method tokens; matched case-insensitively |
 | `allowedHeaders` | ✓ | Header names; matched case-insensitively |
 | `maxAge` | | Preflight cache lifetime (`Access-Control-Max-Age`); omitted = no caching hint |

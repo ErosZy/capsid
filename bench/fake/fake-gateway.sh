@@ -29,8 +29,12 @@ worker_count="${CAPSID_BENCH_WORKERS:-1}"
 if [ "${CAPSID_BENCH_FAKE_EXTRA_WORKER:-0}" = "1" ]; then
     worker_count=$((worker_count + 1))
 fi
+worker_pids=()
 for ((worker_index = 0; worker_index < worker_count; worker_index++)); do
-    "${CAPSID_BENCH_WORKER:?}" &
+    # Optional inert argv marker used by the lifecycle test to identify
+    # descendants from one runner invocation.
+    "${CAPSID_BENCH_WORKER:?}" "${CAPSID_BENCH_FAKE_MARKER:-}" &
+    worker_pids+=("$!")
 done
 
 # The runner computes the bundle/worker SHA-256 from the files it hands out and
@@ -77,5 +81,18 @@ if [ "${CAPSID_BENCH_FAKE_METRICS:-0}" = "1" ]; then
     metrics_pid=$!
 fi
 
-trap 'kill "${metrics_pid:-}" 2>/dev/null || true' EXIT
-sleep 600
+sleep_pid=""
+cleanup() {
+    trap - EXIT INT TERM
+    local pid
+    for pid in "${metrics_pid:-}" "${sleep_pid:-}" "${worker_pids[@]}"; do
+        [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+    done
+    for pid in "${metrics_pid:-}" "${sleep_pid:-}" "${worker_pids[@]}"; do
+        [[ -n "$pid" ]] && wait "$pid" 2>/dev/null || true
+    done
+}
+trap cleanup EXIT INT TERM
+sleep 600 &
+sleep_pid=$!
+wait "$sleep_pid" 2>/dev/null || true

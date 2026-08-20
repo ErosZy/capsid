@@ -17,6 +17,10 @@ struct AppRequest;
 // and applies before parsing. JSON nesting counts the root value as depth 1.
 inline constexpr std::size_t kMaxConfigBytes = 1024U * 1024U;
 inline constexpr std::size_t kMaxConfigNesting = 64U;
+// Fixed pools create one process and one reactor per member. Keep out-of-range
+// or impractical configurations from reaching allocation/spawn loops while
+// retaining a wide range for large benchmark and deployment hosts.
+inline constexpr std::uint32_t kMaxStaticPoolWorkers = 4096U;
 
 // Binding v1 artifact limits (docs/binding-technical-design.md §2.1/§2.3):
 // manifest.json, index.js and one binding's opaque config member.

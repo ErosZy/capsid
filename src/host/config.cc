@@ -1358,6 +1358,30 @@ const Schema* select_manifest_root(const json_t* root) {
     return &kBindingManifestSchema;
 }
 
+bool check_app_consistency(json_t* root, ConfigError& error) {
+    const json_t* pool = json_object_get(root, "pool");
+    if (!json_is_object(pool)) {
+        return true;
+    }
+    const json_t* min_ready = json_object_get(pool, "minReady");
+    const json_t* max_workers = json_object_get(pool, "maxWorkers");
+    if (json_is_integer(min_ready) &&
+        json_integer_value(min_ready) > kMaxStaticPoolWorkers) {
+        error.code = ConfigErrorCode::kResourceLimit;
+        error.path = "/pool/minReady";
+        error.message = "static pool worker limit exceeded";
+        return false;
+    }
+    if (json_is_integer(max_workers) &&
+        json_integer_value(max_workers) > kMaxStaticPoolWorkers) {
+        error.code = ConfigErrorCode::kResourceLimit;
+        error.path = "/pool/maxWorkers";
+        error.message = "static pool worker limit exceeded";
+        return false;
+    }
+    return true;
+}
+
 // §4.1: a non-empty resource permission requires its sandbox profile.
 // An empty allow list grants nothing and needs no profile. Types and
 // member shapes were already validated by the schema phases, so the
@@ -1446,7 +1470,9 @@ ConfigValidationResult validate_config_json(ConfigDocument document,
         kMaxConfigBytes, json,
         document == ConfigDocument::kHost ? &select_host_root
                                           : &select_app_root,
-        nullptr);
+        document == ConfigDocument::kApplication
+            ? &check_app_consistency
+            : nullptr);
 }
 
 ConfigValidationResult validate_binding_manifest(std::string_view json) {
@@ -1747,8 +1773,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         if (json_is_integer(min_ready)) {
             const json_int_t value = json_integer_value(min_ready);
             if (value <= 0 ||
-                value > static_cast<json_int_t>(
-                            std::numeric_limits<std::uint32_t>::max())) {
+                value > static_cast<json_int_t>(kMaxStaticPoolWorkers)) {
                 *error = "invalid capsid.json pool.minReady";
                 json_decref(root);
                 return false;
@@ -1758,8 +1783,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         if (json_is_integer(max_workers)) {
             const json_int_t value = json_integer_value(max_workers);
             if (value <= 0 ||
-                value > static_cast<json_int_t>(
-                            std::numeric_limits<std::uint32_t>::max())) {
+                value > static_cast<json_int_t>(kMaxStaticPoolWorkers)) {
                 *error = "invalid capsid.json pool.maxWorkers";
                 json_decref(root);
                 return false;

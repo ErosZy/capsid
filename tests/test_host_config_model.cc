@@ -12,6 +12,7 @@
 
 #include "host/config.h"
 #include "host/host_config_model.h"
+#include "host/listener_cors.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -534,6 +535,61 @@ void test_grammar_gates() {
           }}]
         })json";
     require_parse_error(empty_cors_origins, "cors with an empty origin list");
+
+    std::string mixed_wildcard_origins =
+        R"json({
+          "apiVersion": "capsid/host-v1",
+          "applicationsRoot": "/srv/apps",
+          "stateRoot": "/var/lib/capsid",
+          "secretRootTemplate": "/secrets/{application}",
+          "admin": {"unix": "/run/capsid/admin.sock"},
+          "listeners": [{"cors": {
+            "allowedOrigins": ["*", "https://example.com"],
+            "allowedMethods": ["GET"],
+            "allowedHeaders": ["x"]
+          }}]
+        })json";
+    require_parse_error(mixed_wildcard_origins,
+                        "cors wildcard mixed with exact origins");
+}
+
+void test_cors_tokens_use_the_http_tchar_grammar() {
+    for (const std::string token : {
+             "M#", "M$", "M%", "M&", "M^", "M`", "M|"}) {
+        require(capsid::host::valid_cors_method_token(token),
+                "valid HTTP method tchar was rejected: " + token);
+        require(capsid::host::valid_cors_header_token(token),
+                "valid HTTP field-name tchar was rejected: " + token);
+    }
+    for (const std::string token : {"M,", "M:", "M[", "M]", "M@"}) {
+        require(!capsid::host::valid_cors_method_token(token),
+                "HTTP separator was accepted in method token: " + token);
+        require(!capsid::host::valid_cors_header_token(token),
+                "HTTP separator was accepted in field-name token: " + token);
+    }
+}
+
+void test_cors_preflight_without_requested_headers() {
+    capsid::host::ListenerCorsConfig config;
+    config.configured = true;
+    config.allowed_origins = {"http://allowed.test"};
+    config.allowed_methods = {"POST"};
+    capsid::host::ListenerCors cors(config);
+
+    boost::beast::http::request<boost::beast::http::string_body> request;
+    request.method(boost::beast::http::verb::options);
+    request.set(boost::beast::http::field::origin,
+                "http://allowed.test");
+    request.set(boost::beast::http::field::access_control_request_method,
+                "POST");
+    require(cors.prepare(request) ==
+                capsid::host::CorsDecision::kPreflightAllowed,
+            "headerless CORS preflight was rejected");
+
+    boost::beast::http::response<boost::beast::http::string_body> response;
+    cors.build_preflight(response);
+    require(response.result() == boost::beast::http::status::no_content,
+            "headerless CORS preflight did not produce 204");
 }
 
 void test_error_is_stable_and_safe() {
@@ -563,6 +619,8 @@ int main() {
     test_bindings_root_maps();
     test_semantic_gates();
     test_grammar_gates();
+    test_cors_tokens_use_the_http_tchar_grammar();
+    test_cors_preflight_without_requested_headers();
     test_error_is_stable_and_safe();
     std::cout << "test-host-config-model: all tests passed" << std::endl;
     return 0;

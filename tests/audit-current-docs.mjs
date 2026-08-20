@@ -111,6 +111,8 @@ const capabilityManifest = JSON.parse(
   await readFile(path.join(root, "docs/capability-manifest.json"), "utf8"),
 );
 const readme = documents.get("README.md");
+const contributing = documents.get("CONTRIBUTING.md");
+const securityPolicy = documents.get("SECURITY.md");
 const architecture = documents.get("docs/architecture.md");
 const hostDesign = documents.get("docs/host-technical-design-review.md");
 const performanceGuide = documents.get("docs/performance-benchmarks.md");
@@ -139,6 +141,7 @@ for (const permissionName of Object.keys(capabilityManifest.permissions)) {
 }
 
 for (const requiredFragment of [
+  "> **Status**: `0.2.0-rc.07`, ABI v7.",
   "cmake --install build-release",
   "<capsid/runtime.hpp>",
   "When `egress_policy == NULL`, all egress Fetch requests are denied.",
@@ -149,6 +152,37 @@ for (const requiredFragment of [
   assert.ok(
     readme.includes(requiredFragment),
     `README.md is missing user-facing configuration guidance: ${requiredFragment}`,
+  );
+}
+
+assert.ok(
+  !readme.includes("v0.2.0-rc.04"),
+  "README.md still points users at a release that did not carry install.sh",
+);
+for (const [documentName, content] of [
+  ["CONTRIBUTING.md", contributing],
+  ["SECURITY.md", securityPolicy],
+]) {
+  assert.ok(
+    content.includes("`0.2.0-rc.07`"),
+    `${documentName} does not state the current release-candidate status`,
+  );
+}
+assert.ok(
+  contributing.includes("examples/elysia-reference"),
+  "CONTRIBUTING.md omits the Elysia example dependency install",
+);
+assert.ok(
+  architecture.includes("Elysia 1.4.29"),
+  "docs/architecture.md omits the currently validated Elysia version",
+);
+for (const staleClaim of [
+  "The current tree has no benchmark runner",
+  "The current tree has no `bench/`",
+]) {
+  assert.ok(
+    !hostDesign.includes(staleClaim),
+    `docs/host-technical-design-review.md contains stale current-state claim: ${staleClaim}`,
   );
 }
 

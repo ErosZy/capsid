@@ -564,6 +564,9 @@ struct RequestToken {
     // momentarily stable). A refs count that stops falling is a detached
     // continuation.
     int last_reclaim_refs_;
+    // Per-token absolute reclaim budget. It is assigned once when reclaim
+    // is first requested and is never extended by another request.
+    uint64_t reclaim_deadline_ns;
     // The cancel path sets this for one round: the cancel's own drain
     // runs the chain to completion, but the completed chain's captured
     // refs release only when a later GC round collects it (promise
@@ -580,6 +583,7 @@ struct RequestToken {
           job_refs(0),
           async_refs(0),
           last_reclaim_refs_(0),
+          reclaim_deadline_ns(0),
           reclaim_grace(false) {}
 };
 
@@ -756,8 +760,6 @@ public:
           poison_triggers_(0),
           poison_exit_started_(false),
           reclaim_pending_(false),
-          reclaim_retry_(false),
-          reclaim_retry_start_ns_(0),
           retained_refs_(0),
           interrupted_request_id_(0),
           audit_window_started_ns_(0),
@@ -1128,19 +1130,27 @@ private:
         // §6.2: identity comes from the token of the job actually running,
         // never from a bare global id + responses_ lookup.
         WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
-        if (!self || self->interrupted_request_id_ != 0) {
-            return 0;
-        }
-        RequestToken *token = self->current_token_;
-        if (!token || token->terminal || token->deadline_ns == 0) {
+        if (!self) {
             return 0;
         }
         const uint64_t now = uv_hrtime();
-        // §7.4: a poisoned worker may run a bounded drain, but terminal
-        // jobs are capped by the independent poison deadline as well —
-        // no post-poison continuation runs unbounded.
+        // Poison is a runtime-wide terminal state. It must cap every job,
+        // including one carrying an already-terminal request token.
         if (self->poisoned_) {
             return now >= self->poison_deadline_ns_ ? 1 : 0;
+        }
+        if (self->interrupted_request_id_ != 0) {
+            return 0;
+        }
+        RequestToken *token = self->current_token_;
+        if (!token) {
+            return 0;
+        }
+        if (token->terminal) {
+            return 0;
+        }
+        if (token->deadline_ns == 0) {
+            return 0;
         }
         if (now >= token->deadline_ns) {
             self->interrupted_request_id_ = token->request_id;
@@ -1496,7 +1506,7 @@ private:
                 token->reclaim_grace = true;
                 // §7.4: the normal completion path runs no drain; the
                 // deadline tick performs the post-settle reclaim.
-                request_reclaim();
+                request_reclaim(token);
                 if (diag_enabled_) {
                     std::fprintf(
                         stderr,
@@ -1581,15 +1591,13 @@ private:
     // nothing can ever resume the chain (any live continuation holds a
     // captured ref), so the token is reclaimed. A token whose response ended
     // while a chain is still unwinding defers inside a bounded window:
-    // non-terminal chains defer on pending jobs or falling refs; terminal
-    // chains (settle) additionally defer while promise reactions captured
-    // under the token are still live. Terminalized tokens make capability
-    // calls throw, so the deferral cannot re-arm side effects — it only
-    // lets the settle continuation's reactions release before the leak
-    // decision. Past the window any surviving refs poison the worker.
+    // both non-terminal and terminal chains defer only for jobs that are
+    // already queued or refs that are observably falling. A Promise reaction
+    // parked on an unfired resource is detached work, not completion-chain
+    // progress. Past the per-token window any surviving refs poison the
+    // worker.
     void reclaim_settled_tokens() {
         std::vector<uint64_t> reclaimable;
-        bool deferred_this_round = false;
         for (std::map<uint64_t, RequestToken *>::iterator it =
                  token_registry_.begin();
              it != token_registry_.end();
@@ -1616,10 +1624,10 @@ private:
                          token->refs < prev_reclaim_refs ||
                          token->reclaim_grace)) ||
                        (token->terminal &&
-                        reclaim_settle_window_open() &&
+                        reclaim_settle_window_open(token) &&
                         (token->reclaim_grace ||
-                         JS_CountPromiseReactionsWithContext(
-                             JS_GetRuntime(ctx_), token) > 0 ||
+                         JS_IsJobPendingWithContext(
+                             JS_GetRuntime(ctx_), token) ||
                          token->refs < prev_reclaim_refs))) {
                 if (token->reclaim_grace) {
                     // §7.4: the first reclaim after a settle or cancel
@@ -1640,18 +1648,14 @@ private:
                 }
                 // The response is gone and the chain has not settled.
                 // Refs are held by a live JS chain that is actively
-                // unwinding — pending jobs, promise reactions still
-                // captured under the token, or refs falling against the
+                // unwinding — pending jobs or refs falling against the
                 // previous round's baseline. Defer the poison decision to
                 // the next tick — the tick's drain+GC will reclaim once
                 // the chain settles. A non-terminal chain parked on an
                 // unfired timer defers nothing: the poison lands before
                 // the timer can run its continuation (the timeout-path
                 // regression: the 80ms timer's continuation emitted a
-                // native LOG inside the poison grace). Terminal chains
-                // may wait for captured reactions inside the same bounded
-                // window; capability calls on a terminal token throw, so
-                // those reactions cannot side-effect. Bounded by
+                // native LOG inside the poison grace). Bounded by
                 // kReclaimSettleWindowNs (see reclaim_settle_window_open).
                 if (diag_enabled_) {
                     std::fprintf(
@@ -1661,11 +1665,6 @@ private:
                         static_cast<unsigned long long>(token->refs));
                 }
                 reclaim_pending_ = true;
-                if (!reclaim_retry_) {
-                    reclaim_retry_ = true;
-                    reclaim_retry_start_ns_ = uv_hrtime();
-                }
-                deferred_this_round = true;
             } else {
                 if (diag_enabled_) {
                     std::fprintf(
@@ -1688,13 +1687,6 @@ private:
                                  : "detached resource after response end");
             }
         }
-        if (!deferred_this_round) {
-            // The retry sequence ends when a decision round neither
-            // defers nor re-arms; a fresh reclaim request then starts a
-            // full cycle (see the deadline tick).
-            reclaim_retry_ = false;
-            reclaim_retry_start_ns_ = 0;
-        }
         for (size_t i = 0; i < reclaimable.size(); ++i) {
             release_token(token_registry_[reclaimable[i]]);
         }
@@ -1709,23 +1701,21 @@ private:
     // token whose response is gone defers only while jobs are pending
     // (the chain is actively winding down); a chain parked on an unfired
     // timer is a detached continuation and poisons on the next tick. A
-    // settled token may additionally defer while promise reactions
-    // captured under it are still live (bounded by the same settle
-    // window).
-    void request_reclaim() {
+    // settled token gets the same one-round GC grace but no special parked
+    // Promise-reaction exemption.
+    void request_reclaim(RequestToken *token) {
         reclaim_pending_ = true;
-        reclaim_retry_ = false;
-        reclaim_retry_start_ns_ = 0;
+        if (token != NULL && token->reclaim_deadline_ns == 0) {
+            token->reclaim_deadline_ns =
+                uv_hrtime() + kReclaimSettleWindowNs;
+        }
     }
 
-    // §7.4: true while the reclaim retry sequence is inside its bounded
-    // settle window. A fresh reclaim request starts a full window; a
-    // deferred decision keeps the same sequence until a decision round
-    // neither defers nor re-arms.
-    bool reclaim_settle_window_open() const {
-        return !reclaim_retry_ ||
-               uv_hrtime() - reclaim_retry_start_ns_ <
-                   kReclaimSettleWindowNs;
+    // §7.4: each request receives one absolute settle window. Other requests
+    // can schedule reclaim work but cannot extend this token's deadline.
+    bool reclaim_settle_window_open(const RequestToken *token) const {
+        return token != NULL && token->reclaim_deadline_ns != 0 &&
+               uv_hrtime() < token->reclaim_deadline_ns;
     }
 
     // §7.4: true while the JS side still has pending jobs that could
@@ -1743,7 +1733,7 @@ private:
     // timer fires and the terminalized token makes the continuation's
     // capability call throw (require_active_request).
     bool defer_reclaim_while_live(RequestToken *token) {
-        if (!reclaim_settle_window_open()) {
+        if (!reclaim_settle_window_open(token)) {
             return false;
         }
         // Per-request, not runtime-global: unrelated requests' pending jobs
@@ -7189,7 +7179,7 @@ private:
         // their captured ctx_data first. A driver cancel is a kill order:
         // a live non-terminal continuation must poison on the next tick
         // instead of being deferred until it runs.
-        request_reclaim();
+        request_reclaim(cancelled_token);
         return called;
     }
 
@@ -7283,10 +7273,19 @@ private:
             if (state == responses_.end()) {
                 continue;
             }
+            RequestToken *expired_token = state->second.token;
             // Timeout fires exactly once: disarm the deadline and move
             // to TerminalPending before the cancel bridge runs, so a
             // saturated queue cannot re-trigger it on the next tick.
             state->second.deadline_ns = 0;
+            if (state->second.token != NULL) {
+                // The interrupt handler reads the token deadline while
+                // cancellation reactions drain. Disarm the same deadline
+                // there as well; otherwise the first abort reaction is
+                // interrupted again and the terminal queue can stop making
+                // progress under output backpressure.
+                state->second.token->deadline_ns = 0;
+            }
             state->second.phase = ResponsePhase::kFailurePending;
             reject_pending(state->second, "request timed out");
             // Forced reclamation is independent of Binding cooperation and
@@ -7299,19 +7298,18 @@ private:
                 "request deadline exceeded",
                 capsid::protocol::kErrorFlagTimeout);
             interrupted_request_id_ = 0;
+            // §7.4: same deferral as cancel_request — the timeout path's
+            // reject-timer releases its captured ctx_data on the next loop
+            // tick, so reclaim must not run before then. Schedule it while
+            // the response iterator and token are still owned: the job drain
+            // below may settle the request and erase its ResponseState.
+            request_reclaim(expired_token);
             /*
              * The deadline timer is a native embedder handle. Drain the jobs
              * queued by AbortSignal dispatch before another request observes
              * request-local framework state.
              */
             drain_jobs();
-            // §7.4: same deferral as cancel_request — the timeout path's
-            // reject-timer releases its captured ctx_data on the next loop
-            // tick, so reclaim must not run before then. No timer
-            // deferral: a chain parked on an unfired timer is a detached
-            // continuation and poisons on the next tick (the 80ms-timer
-            // continuation regression this unifies with the cancel path).
-            request_reclaim();
         }
     }
 
@@ -8028,12 +8026,9 @@ private:
     bool poison_exit_started_;
     // Set by settle_request (the normal completion path runs no drain);
     // the deadline tick performs the post-settle reclaim. Reclaim also
-    // re-arms itself (reclaim_retry_) while a non-terminal token defers
-    // poison because its JS chain is still live; the retry budget is
-    // kReclaimSettleWindowNs from the first deferral.
+    // re-arms itself while a token's completion chain is still actively
+    // unwinding. Each RequestToken owns its non-extendable retry budget.
     bool reclaim_pending_;
-    bool reclaim_retry_;
-    uint64_t reclaim_retry_start_ns_;
     // Sum of refs over live tokens (registry owner + captured jobs and
     // native resources). Must reach zero before exit; printed in diag.
     uint64_t retained_refs_;

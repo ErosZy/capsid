@@ -85,6 +85,23 @@ async function runnerOutput(args, { extraArgs = [], env = {}, runnerPath = null 
     });
 }
 
+async function assertNoProcessContains(marker) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const output = await new Promise((resolve, reject) => {
+        const child = spawn('ps', [ '-eo', 'args=' ],
+            { stdio: [ 'ignore', 'pipe', 'pipe' ] });
+        let stdout = '';
+        child.stdout.setEncoding('utf8');
+        child.stdout.on('data', (chunk) => { stdout += chunk; });
+        child.on('error', reject);
+        child.on('exit', (code) => code === 0
+            ? resolve(stdout)
+            : reject(new Error(`ps exited ${code}`)));
+    });
+    assert.ok(!output.includes(marker),
+        `benchmark runner left a marked component process alive: ${marker}`);
+}
+
 const args = parseArgs(process.argv.slice(2));
 
 if (!(await perfUsable())) {
@@ -173,11 +190,16 @@ const requiredFiles = [
 
 // ---- RED: A/B bundle/worker identity mismatch. ----
 {
+    const marker = `capsid-bench-child-${process.pid}-${Date.now()}`;
     const result = await runnerOutput(args, {
-        env: { CAPSID_BENCH_FAKE_BAD_IDENTITY: '1' },
+        env: {
+            CAPSID_BENCH_FAKE_BAD_IDENTITY: '1',
+            CAPSID_BENCH_FAKE_MARKER: marker,
+        },
     });
     assert.notEqual(result.code, 0, 'identity mismatch must be rejected');
     assert.match(result.stderr, /identity does not match/);
+    await assertNoProcessContains(marker);
 }
 
 // ---- RED: missing identity report. ----

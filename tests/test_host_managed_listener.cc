@@ -689,7 +689,9 @@ void test_cors_preflight(const std::string& worker_path) {
     options.config.routing.mode = "header";
     options.config.trusted = true;
     options.config.cors.configured = true;
-    options.config.cors.allowed_origins = {"http://localhost:57694"};
+    // Origin scheme/host comparison is ASCII case-insensitive even when an
+    // operator preserved mixed-case spelling in host.json.
+    options.config.cors.allowed_origins = {"http://LOCALHOST:57694"};
     options.config.cors.allowed_methods = {"GET", "POST"};
     options.config.cors.allowed_headers = {"content-type", "capsid-app"};
     options.config.cors.max_age_ms = 86400000;
@@ -738,6 +740,8 @@ void test_cors_preflight(const std::string& worker_path) {
                     std::to_string(denied.status) + ")");
         require(!head_has(denied.head, "access-control-allow-origin:"),
                 "rejected preflight leaked Allow-Origin");
+        require(head_has(denied.head, "vary: origin"),
+                "rejected preflight omitted Vary: Origin");
         close(fd);
     }
     // The actual request is routed normally and the worker response carries

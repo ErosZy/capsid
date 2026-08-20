@@ -1256,7 +1256,7 @@ Secret is implemented in the following order:
 
 #### Current Evidence Boundary
 
-The current tree has no benchmark runner, raw A/B, or verifiable gateway/worker layered profile, so this design records no historical QPS and sets no percentage improvement target for the C++ Host. M1 must first restore the runner, regenerate the Go baseline and both-side profiles; any capacity reasoning belongs in a run report with input parameters and must not become a product promise. General rules are in [Performance evidence rules](performance-benchmarks.md).
+The current tree carries `bench/run-ab.sh`, its evidence generator, fake-component contract tests, and layered gateway/worker profiling. Reproducible conclusions remain tied to each run's manifest and raw artifacts; this design does not turn one machine's historical QPS into a product-wide percentage promise. General rules are in [Performance evidence rules](performance-benchmarks.md).
 
 #### Profile Gate for Each Performance Slice
 
@@ -1297,7 +1297,7 @@ The first report establishes a repeatable baseline and does not preset a win/los
 
 After request-body bidirectional credit, streaming, disconnect cancel, and timeout are complete, use the same runner to add the second data-plane checkpoint. The two checkpoints' workloads are not mixed; the early GET/HEAD baseline remains a regression line and is not overwritten by later, more complex scenarios.
 
-The current tree has no `bench/`, so M1-perf's first test is fixed as `host_single_worker_ab_emits_complete_evidence`: first use fake baseline/candidate/loadgen to verify the runner can enforce identical conditions, three raw rounds, and both-side profiles, then connect real processes. Restoring the runner must not reverse-engineer or generate raw data from historical summaries in this document.
+`host_single_worker_ab_emits_complete_evidence` first uses fake baseline/candidate/loadgen components to verify that the runner enforces identical conditions, three raw rounds, complete profiles, and cleanup on every exit path. Real processes use that same contract; the evidence generator derives reports only from the run directory and never reconstructs raw data from historical summaries in this document.
 
 ### 15.8 Release Gate
 
