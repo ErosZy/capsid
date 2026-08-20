@@ -63,6 +63,7 @@
 #include <unistd.h>
 #endif
 
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -151,6 +152,23 @@ const std::vector<std::uint8_t>& fast_bundle() {
     return bundle;
 }
 
+// A streamed (non-fixed) response with an exact Content-Length: the Host
+// emits it through the buffer_body serializer, the path keep-alive clients
+// stress by sending the next request the moment the body is complete.
+const std::vector<std::uint8_t>& streamed_bundle() {
+    static const std::string source =
+        "const body = new TextEncoder().encode('streamed-ok');\n"
+        "export default { fetch: () => new Response(\n"
+        "  new ReadableStream({ start(controller) {\n"
+        "    controller.enqueue(body);\n"
+        "    controller.close();\n"
+        "  }}),\n"
+        "  { headers: { 'content-length': String(body.length) } }) };";
+    static const std::vector<std::uint8_t> bundle(source.begin(),
+                                                   source.end());
+    return bundle;
+}
+
 int connect_to(std::uint16_t port) {
     const int fd = capsid::win32::create_tcp_socket_fd();
     require(fd >= 0, "cannot create admission HTTP socket");
@@ -186,6 +204,42 @@ struct RawHttpResponse {
     unsigned status = 0;
     std::string body;
 };
+
+bool lower_starts_with(const std::string& value, const char* prefix) {
+    const std::size_t prefix_size = std::strlen(prefix);
+    if (value.size() < prefix_size) {
+        return false;
+    }
+    for (std::size_t index = 0; index < prefix_size; ++index) {
+        if (std::tolower(static_cast<unsigned char>(value[index])) !=
+            std::tolower(static_cast<unsigned char>(prefix[index]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool lower_contains(const std::string& value, const char* needle) {
+    const std::size_t needle_size = std::strlen(needle);
+    if (needle_size == 0 || value.size() < needle_size) {
+        return false;
+    }
+    for (std::size_t start = 0; start + needle_size <= value.size(); ++start) {
+        bool matches = true;
+        for (std::size_t index = 0; index < needle_size; ++index) {
+            if (std::tolower(static_cast<unsigned char>(value[start + index])) !=
+                std::tolower(static_cast<unsigned char>(needle[index]))) {
+                matches = false;
+                break;
+            }
+        }
+        if (matches) {
+            return true;
+        }
+    }
+    return false;
+}
+
 
 // Reads exactly one line ("\r\n"-terminated) from fd, refilling `buffer`
 // as needed. The line is appended to `buffer` (so the caller keeps a
@@ -245,14 +299,14 @@ RawHttpResponse read_response(int fd) {
     std::string header_line;
     while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch),
                                      deadline)).empty()) {
-        if (header_line.size() > 15 &&
-            header_line.compare(0, 15, "Content-Length:") == 0) {
+        if (lower_starts_with(header_line, "content-length:")) {
+
             body_length = static_cast<std::size_t>(
                 std::strtoul(header_line.c_str() + 15, nullptr, 10));
             saw_content_length = true;
-        } else if (header_line.size() > 18 &&
-                   header_line.compare(0, 18, "Transfer-Encoding:") == 0 &&
-                   header_line.find("chunked") != std::string::npos) {
+        } else if (lower_starts_with(header_line, "transfer-encoding:") &&
+
+                   lower_contains(header_line, "chunked")) {
             chunked = true;
         }
     }
@@ -556,6 +610,56 @@ void test_worker_death_returns_503(const char* worker_path) {
     require(server.wait(&error), "admission server wait failed: " + error);
 }
 
+
+// Keep-alive clients may legally send the next request the instant they
+// have read the full response body. The streamed (buffer_body) path writes
+// the end block as a separate completion; the next request's data can
+// therefore arrive while the current request is still registered. It must
+// be left in the socket buffer for the next read_request, not treated as
+// forbidden pipelining (the probe closes the connection). Frozen by ab -k:
+// before the fix every run had dozens of failed requests.
+void test_keepalive_streamed_responses(const char* worker_path) {
+    int ready[2];
+    require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
+    capsid::host::SingleWorkerServerOptions options =
+        make_worker_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServer server(std::move(options));
+    std::string error;
+    require(server.start(streamed_bundle(), &error),
+            "cannot start admission server: " + error);
+    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
+
+    constexpr int kConnections = 8;
+    constexpr int kRequestsPerConnection = 25;
+    std::vector<int> connections;
+    connections.reserve(kConnections);
+    for (int connection = 0; connection < kConnections; ++connection) {
+        const int fd = connect_to(port);
+        send_request(fd, "/@capsid/orders/stream", true);
+        connections.push_back(fd);
+    }
+    for (const int fd : connections) {
+        for (int request = 0; request < kRequestsPerConnection; ++request) {
+            const RawHttpResponse response = read_response(fd);
+            require(response.status == 200,
+                    "streamed keep-alive response status was " +
+                        std::to_string(response.status));
+            require(response.body == "streamed-ok",
+                    "streamed keep-alive response body was corrupted");
+            if (request + 1 < kRequestsPerConnection) {
+                // Send the next request immediately, exactly like ab -k /
+                // a keep-alive agent: the previous response is complete
+                // from the client's point of view.
+                send_request(fd, "/@capsid/orders/stream", true);
+            }
+        }
+        close(fd);
+    }
+
+    server.request_stop();
+    require(server.wait(&error), "admission server wait failed: " + error);
+}
+
 #endif  // CAPSID_HAS_SINGLE_WORKER_SERVER
 
 #if CAPSID_HAS_STATIC_POOL_SERVER
@@ -629,6 +733,8 @@ int main(int argc, char** argv) {
         test_queue_full_rejects(argv[2]);
     } else if (mode == "queue-timeout-504") {
         test_queue_timeout_returns_504(argv[2]);
+    } else if (mode == "keepalive-streamed") {
+        test_keepalive_streamed_responses(argv[2]);
     } else if (mode == "worker-death-503") {
         test_worker_death_returns_503(argv[2]);
 #if CAPSID_HAS_STATIC_POOL_SERVER

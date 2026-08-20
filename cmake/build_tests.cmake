@@ -1298,6 +1298,10 @@ if(BUILD_TESTING)
                 NAME host_admission_queue_timeout_returns_504
                 COMMAND test-host-admission queue-timeout-504
                     $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_admission_keepalive_streamed
+                COMMAND test-host-admission keepalive-streamed
+                    $<TARGET_FILE:capsid-worker>)
             if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(
                 NAME host_admission_worker_death_returns_503
@@ -1321,6 +1325,10 @@ if(BUILD_TESTING)
                 host_admission_inflight_full_rejects
                 host_admission_queue_full_rejects
                 host_admission_queue_timeout_returns_504 PROPERTIES
+                LABELS "host;integration;m2"
+                TIMEOUT 30)
+            set_tests_properties(
+                host_admission_keepalive_streamed PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 

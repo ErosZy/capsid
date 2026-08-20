@@ -615,6 +615,12 @@ public:
     void cancel_queued(const std::shared_ptr<Session>& session);
     std::uint64_t allocate_request_id();
     void cancel_request(std::uint64_t request_id);
+    // Disconnect-probe helper (§8.3): true once the response has reached a
+    // state where a keep-alive client may legally send the next request —
+    // every byte of the current response has been handed to a socket write.
+    // Used to distinguish the legal next request from forbidden pipelining
+    // when data arrives before the write-completion bookkeeping finishes.
+    bool response_may_complete_early(std::uint64_t request_id) const;
     // The session is taken by value: fail_request/finalize_request erase the
     // request (and with it the stored shared_ptr) before touching the
     // session, so the parameter must keep its own reference.
@@ -875,7 +881,20 @@ void Session::start_disconnect_probe() {
             if (peeked < 0) {
                 self->close();
             } else if (peeked > 0) {
-                self->close();
+                // Data arrived while a request is still registered. If the
+                // response has not reached a point where the client could
+                // legitimately send the next request, this is HTTP
+                // pipelining (v1 forbids it, §8.3) — close. Once every
+                // response byte has been submitted (fixed body complete, or
+                // a Content-Length body's last block submitted with the end
+                // already seen), a keep-alive client may legally send the
+                // next request before the server's own write completion
+                // handler has finished bookkeeping: leave the bytes in the
+                // stream for the next read_request.
+                if (!self->impl_->response_may_complete_early(
+                        *self->current_id_)) {
+                    self->close();
+                }
             }
         });
 }
@@ -2760,6 +2779,39 @@ void Impl::begin_request(
             it->second.request_ended = true;
         }
     }
+}
+
+bool Impl::response_may_complete_early(std::uint64_t request_id) const {
+    const auto it = requests_.find(request_id);
+    if (it == requests_.end()) {
+        return false;
+    }
+    const PendingRequest& pending = it->second;
+    if (pending.fixed_response) {
+        // The fixed path emits the whole response in one write; once the
+        // body is complete the client can receive it all and legally send
+        // the next request while that write is still completing.
+        return pending.end_seen &&
+               pending.fixed_body_received == pending.fixed_body_expected;
+    }
+    if (pending.head_only) {
+        // HEAD has no body: once the head write is in flight (or sent) the
+        // client has every byte it will ever get from this response.
+        return pending.writing || pending.head_sent;
+    }
+    if (!pending.end_seen) {
+        return false;
+    }
+    if (pending.cl_known) {
+        // The last body block is submitted when cl_remaining reaches zero;
+        // after that the client can receive the full body and send the next
+        // request before the write completion runs.
+        return pending.cl_remaining == 0;
+    }
+    // Chunked (or otherwise delimited): the end block is submitted with
+    // body().more=false; the client can only know the response is complete
+    // after that block's bytes are on the wire.
+    return pending.response && !pending.response->body().more;
 }
 
 void Impl::cancel_request(std::uint64_t request_id) {
