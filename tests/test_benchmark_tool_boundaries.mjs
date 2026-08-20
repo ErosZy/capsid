@@ -37,7 +37,10 @@ try {
     assert.match(result.stdout, /capsid\s+json16k\s+0\s+0\.0/,
         'zero-QPS input must report a finite 0.0 CV');
 
-    const source = fs.readFileSync(profiler, 'utf8');
+    // actions/checkout uses native CRLF line endings on Windows. These are
+    // source-shape assertions, so normalize line endings before matching the
+    // same shell structure on every host platform.
+    const source = fs.readFileSync(profiler, 'utf8').replace(/\r\n?/g, '\n');
     assert.match(source, /trap cleanup_components EXIT INT TERM/,
         'profiling must clean up every started component on all exits');
     assert.match(source, /profile_loadgen[\s\S]*?>[^\n]*&\nLOADGEN_PID=\$!\n/,
