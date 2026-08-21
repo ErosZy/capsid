@@ -10,7 +10,7 @@ Web-standard Fetch handlers. Your Host keeps control of listeners, TLS,
 routing, worker pools, and policy; each worker receives one self-contained ESM
 bundle and only the capabilities the Host approves.
 
-> **Status**: `0.2.0`, ABI v7. The first-party `capsid-host` is a
+> **Status**: `0.2.1`, ABI v7. The first-party `capsid-host` is a
 > development/benchmark entry point, not a production deployment interface;
 > production isolation is only promised by the Linux strict sandbox.
 
@@ -47,14 +47,14 @@ sandbox probes, and identity-linked performance evidence.
 
 ## Install Prebuilt Release
 
-The `v0.2.0` release carries an `install.sh` that downloads the
+The `v0.2.1` release carries an `install.sh` that downloads the
 archive for your OS/architecture, verifies its SHA-256, and extracts the
 binaries into `$HOME/.local` (override with `PREFIX`):
 
 ```sh
 # exact release
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.0/install.sh \
-  | bash -s -- v0.2.0
+curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.1/install.sh \
+  | bash -s -- v0.2.1
 
 # latest stable release
 curl -fsSL https://github.com/ErosZy/capsid/releases/latest/download/install.sh | bash

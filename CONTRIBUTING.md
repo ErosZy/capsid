@@ -1,6 +1,6 @@
 # Contributing Guide
 
-Thank you for contributing to Capsid. The project is currently in the `0.2.0` release line, and the public ABI, security boundary, and behavioral contracts are still evolving quickly; a clearly scoped change with verifiable evidence matters more than the size of the change.
+Thank you for contributing to Capsid. The project is currently in the `0.2.1` release line, and the public ABI, security boundary, and behavioral contracts are still evolving quickly; a clearly scoped change with verifiable evidence matters more than the size of the change.
 
 ## Before You Begin
 

@@ -8,9 +8,9 @@
 #
 # Usage:
 #   ./install.sh [VERSION]                # default: latest stable release
-#   ./install.sh v0.2.0                   # explicit release tag
+#   ./install.sh v0.2.1                   # explicit release tag
 #   PREFIX="$HOME/opt" ./install.sh       # install to a custom prefix
-#   ./install.sh --prefix "$HOME/opt" v0.2.0
+#   ./install.sh --prefix "$HOME/opt" v0.2.1
 #
 # Environment:
 #   CAPSID_REPO   GitHub repository (default: ErosZy/capsid)

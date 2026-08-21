@@ -185,10 +185,11 @@ function(capsid_compute_txiki_overlay_key)
     # 0031 fetch connection reuse (LCCSCF_PIPELINE, per-endpoint warm pool);
     # 0032 keepalive-evicted queued fetch requests fail closed with their
     #      user_space intact; 0033 only pool onto connections whose peer
-    #      already proved keepalive; 0034 per-token pending-job probe.
-    if(NOT CTOK_PATCH_COUNT EQUAL 35)
+    #      already proved keepalive; 0034 per-token pending-job probe;
+    # 0035 correct libwebsockets Secure/HttpOnly cookie attribute mapping.
+    if(NOT CTOK_PATCH_COUNT EQUAL 36)
         message(FATAL_ERROR
-            "expected 35 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 36 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

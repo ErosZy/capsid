@@ -5042,7 +5042,7 @@ if(BUILD_TESTING)
         )
         target_link_libraries(
             test-direct-fetch-matrix
-            PRIVATE capsid_runtime Threads::Threads
+            PRIVATE capsid_runtime Threads::Threads websockets
         )
         add_dependencies(
             test-direct-fetch-matrix

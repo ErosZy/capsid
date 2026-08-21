@@ -29,11 +29,14 @@
 #include <unistd.h>
 #endif
 
+#include <libwebsockets.h>
+
 #include <atomic>
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -436,6 +439,20 @@ private:
             send_all(client, response.str());
             return true;
         }
+        if (path == "/cookie-set") {
+            const std::string body = "cookie set";
+            std::ostringstream response;
+            response << "HTTP/1.1 200 OK\r\n"
+                     << "Set-Cookie: session=abc123def456; Path=/; Secure; "
+                        "HttpOnly\r\n"
+                     << "Set-Cookie: domain_session=domain_value; "
+                        "Domain=127.0.0.1; Path=/; HttpOnly\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "Connection: keep-alive\r\n\r\n"
+                     << body;
+            send_all(client, response.str());
+            return true;
+        }
         if (path == "/redirect") {
             const std::string code = query_value(request.target, "code");
             const std::string destination = query_value(request.target, "to");
@@ -704,6 +721,112 @@ private:
     std::map<std::string, unsigned int> served_path_counts_;
     std::thread thread_;
 };
+
+struct CookieJarProbe {
+    bool completed;
+    std::string error;
+
+    CookieJarProbe() : completed(false) {}
+};
+
+int cookie_jar_callback(struct lws *wsi,
+                        enum lws_callback_reasons reason,
+                        void *,
+                        void *in,
+                        size_t len) {
+    CookieJarProbe *probe = static_cast<CookieJarProbe *>(
+        lws_context_user(lws_get_context(wsi)));
+    switch (reason) {
+    case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+        probe->error = in ? static_cast<const char *>(in)
+                          : "cookie probe connection error";
+        probe->completed = true;
+        lws_cancel_service(lws_get_context(wsi));
+        break;
+    case LWS_CALLBACK_RECEIVE_CLIENT_HTTP: {
+        char buffer[1024 + LWS_PRE];
+        char *payload = buffer + LWS_PRE;
+        int available = sizeof(buffer) - LWS_PRE;
+        if (lws_http_client_read(wsi, &payload, &available) < 0) {
+            probe->error = "cookie probe response read failed";
+            probe->completed = true;
+            return -1;
+        }
+        break;
+    }
+    case LWS_CALLBACK_COMPLETED_CLIENT_HTTP:
+    case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
+        probe->completed = true;
+        lws_cancel_service(lws_get_context(wsi));
+        break;
+    default:
+        break;
+    }
+    return lws_callback_http_dummy(wsi, reason, NULL, in, len);
+}
+
+const struct lws_protocols cookie_jar_protocols[] = {
+    { "capsid-cookie-jar-probe", cookie_jar_callback, 0, 0, 0, NULL, 0 },
+    LWS_PROTOCOL_LIST_TERM
+};
+
+void verify_cookie_attribute_storage(const HttpMatrixServer &server) {
+    // txiki.js #1064: lws used the attribute-table index for the cookie
+    // element array, so HttpOnly overwrote the name and Secure overwrote the
+    // value. Exercise the actual lws library built from Capsid's overlay and
+    // assert its persisted Netscape-cookie fields, independent of the
+    // worker's intentionally empty cookie-jar path.
+    const std::string jar_path =
+        ".capsid-cookie-jar-" +
+        std::to_string(capsid::win32::getpid()) + "-" +
+        std::to_string(std::chrono::steady_clock::now()
+                           .time_since_epoch()
+                           .count()) +
+        ".txt";
+
+    CookieJarProbe probe;
+    struct lws_context_creation_info context_info = {};
+    context_info.port = CONTEXT_PORT_NO_LISTEN;
+    context_info.protocols = cookie_jar_protocols;
+    context_info.http_nsc_filepath = jar_path.c_str();
+    context_info.user = &probe;
+    context_info.fd_limit_per_thread = 4;
+    struct lws_context *context = lws_create_context(&context_info);
+    require(context != NULL, "cannot create lws cookie probe context");
+
+    struct lws_client_connect_info connect_info = {};
+    connect_info.context = context;
+    connect_info.address = "127.0.0.1";
+    connect_info.port = server.port();
+    connect_info.path = "/cookie-set";
+    connect_info.host = connect_info.address;
+    connect_info.origin = connect_info.address;
+    connect_info.method = "GET";
+    connect_info.protocol = cookie_jar_protocols[0].name;
+    connect_info.ssl_connection = LCCSCF_CACHE_COOKIES;
+    require(lws_client_connect_via_info(&connect_info) != NULL,
+            "cannot start lws cookie probe request");
+
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!probe.completed &&
+           std::chrono::steady_clock::now() < deadline) {
+        lws_service(context, 20);
+    }
+    lws_context_destroy(context);
+    require(probe.completed, "lws cookie probe timed out");
+    require(probe.error.empty(), probe.error.c_str());
+
+    const std::string jar = read_file(jar_path.c_str());
+    std::remove(jar_path.c_str());
+    std::remove((jar_path + ".LCK").c_str());
+    require(jar.find("\tTRUE\t0\tsession\tabc123def456") !=
+                std::string::npos,
+            "Secure/HttpOnly cookie name or value was corrupted in the jar");
+    require(jar.find("127.0.0.1\tFALSE\t/\tFALSE\t0\t"
+                     "domain_session\tdomain_value") != std::string::npos,
+            "HttpOnly domain cookie was incorrectly changed to host-only");
+}
 
 uint16_t unused_port() {
     const int fd = capsid::win32::create_tcp_socket_fd();
@@ -1195,5 +1318,6 @@ int main(int argc, char **argv) {
                 primary.requests() == before_default_deny + 4,
             "strict sandbox did not authorize a resolved localhost fetch");
     }
+    verify_cookie_attribute_storage(primary);
     return 0;
 }

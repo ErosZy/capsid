@@ -4,7 +4,7 @@ Capsid runs application code in separate worker processes, but process isolation
 
 ## Supported Scope
 
-The project is currently at `0.2.0` (C ABI v7); security fixes target the latest code line, and there is no commitment yet to long-term security maintenance for older versions. The first-party `capsid-host` is currently used for development, integration, and benchmarks; it is not a stable production deployment interface. The Linux strict sandbox is the v1 production isolation target; macOS native-dev, Windows native-dev, and any non-isolated mode must not be used to run untrusted code. For platform differences, see [platform support overview](docs/platform-support.md).
+The project is currently at `0.2.1` (C ABI v7); security fixes target the latest code line, and there is no commitment yet to long-term security maintenance for older versions. The first-party `capsid-host` is currently used for development, integration, and benchmarks; it is not a stable production deployment interface. The Linux strict sandbox is the v1 production isolation target; macOS native-dev, Windows native-dev, and any non-isolated mode must not be used to run untrusted code. For platform differences, see [platform support overview](docs/platform-support.md).
 
 The following are within the project's security boundary:
 
