@@ -270,7 +270,7 @@ Tracked against the implementation order in the plan (`/home/eroszhao/.claude/pl
 | 6. Fixpoint + report mode + pass switches | done | always-on report; corpus green |
 | 7. Differential + ctest + fuzzer | done (2026-08-23) | 10/10 ctest gates; fuzzer 20k runs under ASan/UBSan |
 | 8. Benchmarks + G1-G5 verdict + docs | done (2026-08-23) | this section |
-| 9. Tier-2 decision | pending | see §8 |
+| 9. Tier-2 decision | decided (2026-08-23): not started | §11 below |
 
 ### As-built pipeline (post-G4 trim, commit 47b9369)
 
@@ -375,9 +375,30 @@ that the pair fires on its target population.
 - Non-compute workloads remain at 0% static ceiling → ~0 wall-clock by
   construction, consistent with the IO-bound prior.
 
-### Step 9 (tier-2) — pending
+### Step 9 (tier-2) — decided: not started (2026-08-23)
 
-Per §8: the v1 evidence (G3 passed 1.9-2.4× over threshold with a two-pass
-pipeline) argues for the §8 low-hanging list — local copy propagation, literal
-`get_field`/`get_array_el` folding, cpool constant folding — each re-measured
-against the same G4 gate, before any SCCP reconsideration.
+Decision: **do not start SCCP; the v1 pipeline is complete as built.** Rationale,
+from the measured evidence rather than the §8 prior:
+
+- The entire remaining pie is small: the full pipeline removes 0.91% of corpus
+  insns; G4 already trimmed six passes that failed the 1% attribution bar.
+- The §8 low-hanging list was evaluated against the same bar and rejected:
+  - *local copy propagation* — P2 already is the constant form (get_loc→push);
+    variable-to-variable copies remove one cheap dispatch each and need
+    def-use chains across BBs, i.e. the P2 soundness surface for <P2's own 0.75%;
+  - *literal `get_field`/`get_array_el` folding* — requires modeling object-literal
+    property reads at compile time (prototype chain, accessors), crossing from
+    stack dataflow into heap semantics; corpus field-access values are runtime
+    arguments/JSON, not compile-time constants;
+  - *cpool constant folding* — P3.1's lattice already folds the small-int domain
+    where the compute-dense fixtures live; the residual (double/bigint/string
+    constants) is not in the fixture population that G3 measures.
+- G5's dispatch-amortization evidence shows the mechanism is instruction
+  elimination in hot loops; the remaining hot-loop dispatches are loop-carried
+  loads/compare/branch that stack dataflow cannot fold. Expected tier-2 value is
+  a fraction of the 0.91% already banked, below the plan's own gate.
+
+If the corpus changes (new compute-dense bundles) the pass switches
+(`kPassP2`/`kPassP31`, attribution via report mode) make any single-pass
+re-measurement a one-line harness change; nothing in the frozen CLI or format
+contract needs to change to revisit this.
