@@ -1,14 +1,17 @@
 // Bytecode AOT optimizer implementation (design: docs/bytecode-aot-optimizer.md).
 //
-// State: v1 pass pipeline over the serialized quickjs-ng bytecode
+// State: G4-trimmed v1 pipeline over the serialized quickjs-ng bytecode
 // format (BC_VERSION 26):
-//   parse  -> per-function: decode -> P3 peepholes (const binop folds,
-//   const-vs-const comparisons, push/drop elimination, dup/swap/rot
-//   cleanup, literal-condition folds) -> P6 re-shrink (short forms by
+//   parse  -> per-function: decode -> P2 cross-BB constant lattice ->
+//   P3.1 const binop peephole -> P6 re-shrink (short forms by
 //   value/index/argc) -> emit (jump-distance fixpoint) -> verifier
 //   (compute_stack_size re-implementation) -> P7 pc2line remap
 //   -> buffer rebuild (leb128 patches + bc_csum recompute) -> full
 //   reparse self-check.
+// G4 (2026-08-23, 20-bundle corpus) attributed P3.2/P3.4/P3.5/P3.6/
+// P4/P5 below the 1% gate and trimmed them — quickjs-ng's resolve_labels
+// already removes push+drop, dup/swap/rot3, and same-block constant
+// conditions; see PassFlags in bytecode_optimize.h.
 // Fail-closed: any input the optimizer cannot fully parse, or any
 // invariant the verifier rejects, returns false; the caller aborts the
 // compile without producing output files. No silent passthrough.
@@ -708,13 +711,14 @@ bool foldable_binop(uint8_t op, int64_t a, int64_t b, int64_t* out) {
 }
 
 // Full foldability scan over a function tree. Patterns counted are
-// exactly the v1 pipeline patterns (docs/bytecode-aot-optimizer.md §5
-// P3/P4/P6); the estimate is deliberately conservative.
+// exactly the deployed pipeline patterns (P2's rewrites are not
+// visible in the static scan — they need the dataflow — so this is
+// the P3.1 + P6 part of the ceiling; see G5 in
+// docs/bytecode-aot-optimizer.md); the estimate is deliberately
+// conservative.
 //   P3.1: push small-int + push small-int + binop (i32, no overflow)
 //         -> single push; removes the two pushes and the binop, emits
 //         the shortest push form.
-//   P3.4: push_* + drop -> both removed.
-//   P3.5: dup drop / dup2 drop / swap swap / rot3l rot3r.
 //   P6:   long -> short immediate re-encoding (shrinkable bytes).
 bool scan_function(const FuncRecord& f,
                    const uint8_t* data,
@@ -731,22 +735,6 @@ bool scan_function(const FuncRecord& f,
         st->bytes += oi.size;
 
         // --- lookahead patterns (checked at the push site) ---
-        bool push_noexcept = (op >= OP_push_minus1 && op <= OP_push_7) ||
-                             op == OP_push_i8 || op == OP_push_i16 ||
-                             op == OP_push_i32 || op == OP_push_const ||
-                             op == OP_push_const8 || op == OP_push_atom_value ||
-                             op == OP_push_true || op == OP_push_false ||
-                             op == OP_undefined || op == OP_null ||
-                             op == OP_push_this || op == OP_push_empty_string;
-        if (push_noexcept && pc + oi.size + 1 <= len) {
-            size_t q = pc + oi.size;
-            uint8_t op2 = code[q];
-            if (op2 == OP_drop) {
-                // P3.4: push + drop -> both removed
-                st->foldable_insns += 2;
-                st->foldable_bytes += oi.size + 1;
-            }
-        }
         // P3.1: push + push + binop with small-int immediates
         if (op == OP_push_i32 || op == OP_push_i8 || op == OP_push_i16 ||
             (op >= OP_push_minus1 && op <= OP_push_7)) {
@@ -776,24 +764,6 @@ bool scan_function(const FuncRecord& f,
                     }
                 }
             }
-        }
-        // P3.5: dup drop / dup2 drop -> dup1; swap swap; rot3l rot3r
-        if (op == OP_dup && pc + 1 + 1 <= len && code[pc + 1] == OP_drop) {
-            st->foldable_insns += 2;
-            st->foldable_bytes += 2;
-        }
-        if (op == OP_dup2 && pc + 1 + 1 <= len && code[pc + 1] == OP_drop) {
-            st->foldable_insns += 1;  // dup2 drop -> dup1
-            st->foldable_bytes += 1;
-        }
-        if (op == OP_swap && pc + 1 + 1 <= len && code[pc + 1] == OP_swap) {
-            st->foldable_insns += 2;
-            st->foldable_bytes += 2;
-        }
-        if ((op == OP_rot3l && pc + 1 + 1 <= len && code[pc + 1] == OP_rot3r) ||
-            (op == OP_rot3r && pc + 1 + 1 <= len && code[pc + 1] == OP_rot3l)) {
-            st->foldable_insns += 2;
-            st->foldable_bytes += 2;
         }
         // P6 shrinkable: push_i32 -> push_i8 / push_0..7 / push_minus1
         if (op == OP_push_i32) {
@@ -836,36 +806,6 @@ struct Insn {
 bool is_small_int_push(uint8_t op) {
     return (op >= OP_push_minus1 && op <= OP_push_7) ||
            op == OP_push_i8 || op == OP_push_i16 || op == OP_push_i32;
-}
-bool is_push_noexcept(uint8_t op) {
-    return is_small_int_push(op) || op == OP_push_const ||
-           op == OP_push_const8 || op == OP_push_atom_value ||
-           op == OP_push_true || op == OP_push_false || op == OP_undefined ||
-           op == OP_null || op == OP_push_this || op == OP_push_empty_string;
-}
-// Literal pushes with known identity (P3.2 const-vs-const folding).
-int literal_value(uint8_t op) {
-    switch (op) {
-    case OP_undefined: return 0;
-    case OP_push_false: return 1;
-    case OP_push_true: return 2;
-    case OP_null: return 3;
-    default: return -1;
-    }
-}
-// P3.2 lattice value of a push: literals in {kNull,kUndef,kBool} plus any
-// small-int push (its immediate). Returns false for non-constant pushes.
-// Small ints are offset by +4 so their value space never collides with
-// the literal tags above; equality is what matters, not the encoding.
-bool push_const_value(const Insn& in, int64_t* v) {
-    if (is_small_int_push(in.op)) {
-        *v = static_cast<int64_t>(in.imm) + 4;
-        return true;
-    }
-    int lv = literal_value(in.op);
-    if (lv < 0) return false;
-    *v = lv;
-    return true;
 }
 bool is_cond_jump(uint8_t op) {
     return op == OP_if_true || op == OP_if_false || op == OP_if_true8 ||
@@ -1055,13 +995,7 @@ bool decode_code(const uint8_t* code,
 
 struct RewriteStats {
     uint64_t folds_p31 = 0;  // const binop folds
-    uint64_t folds_p32 = 0;  // const strict_eq/neq folds
-    uint64_t folds_p34 = 0;  // push+drop eliminations
-    uint64_t folds_p35 = 0;  // dup/swap/rot cleanups
-    uint64_t folds_p36 = 0;  // literal-condition folds
     uint64_t folds_p2 = 0;   // P2: cross-BB constant propagation replaces
-    uint64_t threads = 0;    // P4: goto-chain threading + next-jump folds
-    uint64_t dead_blocks = 0;  // P5: unreachable block eliminations
     uint64_t shrinks = 0;    // short-form re-encodings
     uint64_t insns_before = 0;
     uint64_t insns_after = 0;
@@ -1125,125 +1059,6 @@ bool apply_peepholes(std::vector<Insn>* insns,
                 stats->folds_p31++;
                 changed = true;
                 continue;  // re-examine the replacement at i
-            }
-        }
-        // P3.2: const, const, strict_eq/strict_neq -> push_bool. The
-        // lattice covers {kNull,kUndef,kBool,kSmallInt}; small-int
-        // immediates compare by value (0 === -0 holds for ints, and
-        // float64 -0 is outside the int32 lattice, so this is exact).
-        // b/c skip tombstones: a P3.1 fold earlier in this round leaves
-        // the old pushes dead, and the comparison must still be foldable
-        // in the same round (the emitted stream never contains them).
-        if (passes & kPassP32) {
-            size_t b = next_live(*insns, *dead, i + 1);
-            size_t c = next_live(*insns, *dead, b + 1);
-            if (b < n && c < n &&
-                ((*insns)[c].op == OP_strict_eq ||
-                 (*insns)[c].op == OP_strict_neq)) {
-                int64_t lv, rv;
-                if (push_const_value(a, &lv) &&
-                    push_const_value((*insns)[b], &rv)) {
-                    bool same = lv == rv;
-                    bool res = (*insns)[c].op == OP_strict_eq ? same : !same;
-                    Insn ni;
-                    ni.op = res ? OP_push_true : OP_push_false;
-                    ni.old_off = a.old_off;
-                    ni.old_size = 1;
-                    ni.pc_off = (*insns)[c].old_off;
-                    ni.target = -1;
-                    ni.imm = 0;
-                    ni.has_aux = false;
-                    (*insns)[i] = ni;
-                    (*dead)[b] = (*dead)[c] = 1;
-                    stats->folds_p32++;
-                    changed = true;
-                    continue;
-                }
-            }
-        }
-        // P3.4: push_noexcept, drop -> both removed.
-        if ((passes & kPassP34) && i + 1 < n && !(*dead)[i + 1] &&
-            is_push_noexcept(a.op) && (*insns)[i + 1].op == OP_drop) {
-            (*dead)[i] = (*dead)[i + 1] = 1;
-            stats->folds_p34++;
-            changed = true;
-            i += 2;
-            continue;
-        }
-        // P3.5: dup drop -> removed; dup2 drop -> dup1; swap swap and
-        // rot3l rot3r -> removed.
-        if ((passes & kPassP35) && i + 1 < n && !(*dead)[i + 1]) {
-            const Insn& b = (*insns)[i + 1];
-            if (a.op == OP_dup && b.op == OP_drop) {
-                (*dead)[i] = (*dead)[i + 1] = 1;
-                stats->folds_p35++;
-                changed = true;
-                i += 2;
-                continue;
-            }
-            if (a.op == OP_dup2 && b.op == OP_drop) {
-                (*insns)[i].op = OP_dup1;
-                (*insns)[i].old_size = 1;
-                (*dead)[i + 1] = 1;
-                stats->folds_p35++;
-                changed = true;
-                i += 2;
-                continue;
-            }
-            if ((a.op == OP_swap && b.op == OP_swap) ||
-                (a.op == OP_rot3l && b.op == OP_rot3r) ||
-                (a.op == OP_rot3r && b.op == OP_rot3l)) {
-                (*dead)[i] = (*dead)[i + 1] = 1;
-                stats->folds_p35++;
-                changed = true;
-                i += 2;
-                continue;
-            }
-        }
-        // P3.6: literal true/false followed by a conditional jump. The
-        // jump is found through tombstones (a P3.2 fold this round may
-        // have deadened the instructions between the push and the jump).
-        if (passes & kPassP36) {
-            size_t jj = next_live(*insns, *dead, i + 1);
-            if (jj < n && (a.op == OP_push_true || a.op == OP_push_false) &&
-                is_cond_jump((*insns)[jj].op)) {
-                const Insn& j = (*insns)[jj];
-                bool cond = a.op == OP_push_true;
-                bool takes = (j.op == OP_if_true || j.op == OP_if_true8)
-                                 ? cond
-                                 : !cond;
-                if (!takes) {
-                    // Never taken: both removed; execution continues at
-                    // the next surviving instruction.
-                    (*dead)[i] = (*dead)[jj] = 1;
-                    stats->folds_p36++;
-                    changed = true;
-                    i = jj + 1;
-                    continue;
-                }
-                // Always taken: drop the push, replace the jump with a
-                // goto to the same target. For short-form jumps, only
-                // fold when the target is close enough that the
-                // replacement cannot outgrow the original (removals
-                // before a forward target lengthen its distance; keep
-                // 32 bytes of slack).
-                if (j.op != OP_if_true && j.op != OP_if_false) {
-                    uint32_t target_off =
-                        (*insns)[static_cast<size_t>(j.target)].old_off;
-                    int64_t dist = static_cast<int64_t>(target_off) -
-                                   (static_cast<int64_t>(j.old_off) + 1);
-                    if (dist > 95 || dist < -128) {
-                        i++;  // leave the pair alone
-                        continue;
-                    }
-                }
-                (*insns)[jj].op = OP_goto;
-                (*insns)[jj].old_size = 5;
-                (*dead)[i] = 1;
-                stats->folds_p36++;
-                changed = true;
-                i = jj + 1;
-                continue;
             }
         }
         i++;
@@ -1331,87 +1146,6 @@ void apply_reshrink(std::vector<Insn>* insns, RewriteStats* stats) {
             stats->shrinks++;
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Pass pipeline: P4 jump threading + P5 dead-block elimination.
-// ---------------------------------------------------------------------------
-
-bool is_goto_form(uint8_t op) {
-    return op == OP_goto || op == OP_goto8 || op == OP_goto16;
-}
-
-// Resolve a jump target through chains of unconditional jumps (goto's
-// are stack-neutral, so a jump to a goto behaves identically when
-// retargeted to the chain's end). goto-next is included: its jump
-// operand IS the following instruction, so following the chain covers
-// it. Cycle-safe: on a revisit the chain has no exit, so the original
-// target is kept (it stays a valid, live instruction).
-int32_t resolve_goto_chain(const std::vector<Insn>& insns, int32_t idx) {
-    std::vector<uint8_t> seen(insns.size(), 0);
-    while (idx >= 0 && static_cast<size_t>(idx) < insns.size() &&
-           is_goto_form(insns[static_cast<size_t>(idx)].op)) {
-        if (seen[static_cast<size_t>(idx)]) return idx;  // cycle: no exit
-        seen[static_cast<size_t>(idx)] = 1;
-        idx = insns[static_cast<size_t>(idx)].target;
-    }
-    return idx;
-}
-
-// P4: retarget every jump (goto, conditional, catch, gosub, with_*)
-// through goto chains, then delete unconditional jumps whose target is
-// the following instruction (untargeted ones only — retargeted jumpers
-// already point at the chain end, and a targeted goto-next survives as
-// a harmless no-op... it cannot survive targeted: nothing points at it
-// after retargeting, so the exact post-threading target set decides).
-// Also folds if_*/goto with target == next into a drop (pop semantics
-// preserved). Returns true when anything changed.
-bool apply_threading(std::vector<Insn>* insns,
-                     std::vector<uint8_t>* dead,
-                     RewriteStats* stats) {
-    bool changed = false;
-    const size_t n = insns->size();
-    // Retarget jumps through goto chains.
-    for (size_t i = 0; i < n; i++) {
-        Insn& in = (*insns)[i];
-        if (in.target < 0 || !is_jump_op(in.op)) continue;
-        int32_t t = resolve_goto_chain(*insns, in.target);
-        if (t != in.target) {
-            in.target = t;
-            changed = true;
-        }
-    }
-    // Exact target set after retargeting.
-    std::vector<uint8_t> targeted(n, 0);
-    for (size_t i = 0; i < n; i++) {
-        if ((*insns)[i].target >= 0) {
-            targeted[static_cast<size_t>((*insns)[i].target)] = 1;
-        }
-    }
-    // if_*/goto with target == next: conditional jumps become a drop
-    // (both arms continue at the next instruction), unconditional
-    // jumps vanish (fallthrough arrives at the same place). Both are
-    // stack-preserving even when targeted.
-    for (size_t i = 0; i < n; i++) {
-        const Insn& in = (*insns)[i];
-        if (in.target == static_cast<int32_t>(i + 1)) {
-            if (in.op == OP_if_true || in.op == OP_if_false ||
-                in.op == OP_if_true8 || in.op == OP_if_false8) {
-                (*insns)[i].op = OP_drop;
-                (*insns)[i].old_size = 1;
-                (*insns)[i].target = -1;
-                stats->threads++;
-                changed = true;
-            } else if (is_goto_form(in.op)) {
-                if (!targeted[i]) {
-                    (*dead)[i] = 1;
-                    stats->threads++;
-                    changed = true;
-                }
-            }
-        }
-    }
-    return changed;
 }
 
 // ---------------------------------------------------------------------------
@@ -1822,90 +1556,6 @@ bool apply_crossbb(std::vector<Insn>* insns,
         stats->folds_p2++;
         changed = true;
     }
-    return changed;
-}
-
-// P5: delete unreachable instructions. Reachability runs over the same
-// control-flow edges the verifier enforces, seeded from the entry and
-// conservatively from every catch target and post-gosub instruction
-// (exception handlers and OP_ret return points are static roots even
-// when their try/gosub is unreachable). Because a reachable fallthrough
-// seeds its successor, unreachable runs always sit between terminators
-// and jump targets — whole blocks — and no surviving jump references
-// them (a reachable jump seeds its target). Cycles of pure gotos are
-// handled by resolve_goto_chain keeping their targets live.
-bool eliminate_dead(std::vector<Insn>* insns,
-                    std::vector<uint8_t>* dead,
-                    RewriteStats* stats) {
-    const size_t n = insns->size();
-    std::vector<uint8_t> reach(n, 0);
-    std::vector<size_t> worklist;
-    auto seed = [&](int32_t idx) {
-        if (idx >= 0 && static_cast<size_t>(idx) < n && !reach[idx]) {
-            reach[idx] = 1;
-            worklist.push_back(static_cast<size_t>(idx));
-        }
-    };
-    seed(0);
-    for (size_t i = 0; i < n; i++) {
-        if ((*dead)[i]) continue;
-        const Insn& in = (*insns)[i];
-        if (in.op == OP_catch) seed(in.target);
-        if (in.op == OP_gosub) {
-            seed(in.target);
-            seed(static_cast<int32_t>(
-                next_live(*insns, *dead, i + 1)));
-        }
-    }
-    while (!worklist.empty()) {
-        size_t idx = worklist.back();
-        worklist.pop_back();
-        // Tombstoned instructions are pure-stack ops with no control
-        // flow (only P3.4/P3.5 mark instructions dead; a folded
-        // conditional jump is replaced by goto, never tombstoned). A
-        // dead instruction's logical fallthrough still executes, so
-        // reachability must not die at a tombstone — otherwise a fold
-        // at the very start of a function (e.g. P3.1 on the entry
-        // sequence) would make every following instruction look
-        // unreachable and eliminate the whole function body.
-        if ((*dead)[idx]) {
-            seed(static_cast<int32_t>(next_live(*insns, *dead, idx + 1)));
-            continue;
-        }
-        const Insn& in = (*insns)[idx];
-        // Fallthrough edges land on the next live instruction: a folded
-        //-away successor must not stop reachability from propagating.
-        int32_t nxt = static_cast<int32_t>(next_live(*insns, *dead, idx + 1));
-        switch (in.op) {
-        case OP_tail_call: case OP_tail_call_method:
-        case OP_return: case OP_return_undef: case OP_return_async:
-        case OP_throw: case OP_throw_error: case OP_ret:
-            break;  // terminators
-        case OP_goto: case OP_goto8: case OP_goto16:
-            seed(static_cast<int32_t>(next_live(*insns, *dead, in.target)));
-            break;
-        case OP_if_true: case OP_if_false:
-        case OP_if_true8: case OP_if_false8:
-        case OP_catch: case OP_gosub:
-        case OP_with_get_var: case OP_with_put_var:
-        case OP_with_delete_var: case OP_with_make_ref:
-        case OP_with_get_ref: case OP_with_get_ref_undef:
-            seed(static_cast<int32_t>(next_live(*insns, *dead, in.target)));
-            seed(nxt);
-            break;
-        default:
-            seed(nxt);
-            break;
-        }
-    }
-    bool changed = false;
-    for (size_t i = 0; i < n; i++) {
-        if (!reach[i]) {
-            (*dead)[i] = 1;
-            changed = true;
-        }
-    }
-    if (changed) stats->dead_blocks++;
     return changed;
 }
 
@@ -2461,29 +2111,18 @@ bool rewrite_function(const FuncRecord& f,
     stats->insns_before += insns.size();
     stats->bytes_before += f.code_len;
 
-    // P3/P4/P5/P6 fixpoint: peephole sweeps until stable (each round
+    // P2/P3.1/P6 fixpoint: peephole sweeps until stable (each round
     // that changes anything deletes at least one instruction, so this
-    // terminates), then shrink. The round-start target set is a
-    // superset of every target after P4 threading (threaded targets are
-    // chain ends that were already jump operands), so it stays a sound
-    // fold guard for the whole round.
+    // terminates), then shrink.
     for (int round = 0; round < 16; round++) {
         std::vector<uint8_t> dead(insns.size(), 0);
         bool round_changed = false;
-        if ((passes & kPassP4) &&
-            apply_threading(&insns, &dead, stats)) {
-            round_changed = true;
-        }
         if ((passes & kPassP2) &&
             apply_crossbb(&insns, &dead, f.var_count, stats)) {
             round_changed = true;
         }
-        if ((passes & (kPassP31 | kPassP32 | kPassP34 | kPassP35 |
-                       kPassP36)) &&
+        if ((passes & kPassP31) &&
             apply_peepholes(&insns, &dead, passes, stats)) {
-            round_changed = true;
-        }
-        if ((passes & kPassP5) && eliminate_dead(&insns, &dead, stats)) {
             round_changed = true;
         }
         if (!round_changed) break;
@@ -2705,21 +2344,13 @@ bool optimize(const std::vector<std::uint8_t>& in,
     if (report) {
         std::fprintf(stderr,
                      "bytecode optimize: %llu -> %llu insns, %llu -> %llu "
-                     "code bytes; folds P2 %llu P3.1 %llu P3.2 %llu P3.4 "
-                     "%llu P3.5 %llu P3.6 %llu, threads %llu, dead %llu, "
-                     "shrinks %llu\n",
+                     "code bytes; folds P2 %llu P3.1 %llu, shrinks %llu\n",
                      static_cast<unsigned long long>(stats.insns_before),
                      static_cast<unsigned long long>(stats.insns_after),
                      static_cast<unsigned long long>(stats.bytes_before),
                      static_cast<unsigned long long>(stats.bytes_after),
                      static_cast<unsigned long long>(stats.folds_p2),
                      static_cast<unsigned long long>(stats.folds_p31),
-                     static_cast<unsigned long long>(stats.folds_p32),
-                     static_cast<unsigned long long>(stats.folds_p34),
-                     static_cast<unsigned long long>(stats.folds_p35),
-                     static_cast<unsigned long long>(stats.folds_p36),
-                     static_cast<unsigned long long>(stats.threads),
-                     static_cast<unsigned long long>(stats.dead_blocks),
                      static_cast<unsigned long long>(stats.shrinks));
     }
     return true;

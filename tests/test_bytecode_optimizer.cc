@@ -1,13 +1,13 @@
 // Step 7 unit gate for the bytecode AOT optimizer
 // (docs/bytecode-aot-optimizer.md). Part A drives optimize() on
-// synthetic .qjsb buffers: per-peephole golden bytes, the P2 lattice
-// with its dynamic-scope gates, dead-block handling (catch targets stay
-// live), cpool skipping, pc2line remapping, the fail-closed matrix,
-// determinism, and checksum validity — no runtime needed. Part B runs
-// the real pipeline (JS_Eval COMPILE_ONLY → JS_WriteObject → optimize →
-// JS_ReadObject → JS_EvalFunction) through tjs and compares return
-// values, exceptions, and stack-trace line numbers against the
-// unoptimized path.
+// synthetic .qjsb buffers: per-peephole golden bytes (P2 + P3.1 — the
+// G4-trimmed pipeline; see the PassFlags comment), the P2 lattice with
+// its dynamic-scope gates, cpool skipping, pc2line remapping, the
+// fail-closed matrix, determinism, and checksum validity — no runtime
+// needed. Part B runs the real pipeline (JS_Eval COMPILE_ONLY →
+// JS_WriteObject → optimize → JS_ReadObject → JS_EvalFunction) through
+// tjs and compares return values, exceptions, and stack-trace line
+// numbers against the unoptimized path.
 //
 // Byte values below are the serialized opcode space (quickjs-opcode.h
 // physical order, temps excluded): push_i32=1, push_const=2, push_true=10,
@@ -303,100 +303,6 @@ void test_peephole_goldens() {
         b.finish(0);
         expect_code("p31 sub 3-10", &b, "c2 f9 28");
     }
-    // P3.2: 5 === 5 -> push_true; 5 !== 5 -> push_false
-    {
-        Builder b;
-        b.op_i32(1, 5);
-        b.op_i32(1, 5);
-        b.op(173);
-        b.op(40);
-        b.stack_size = 2;
-        b.finish(0);
-        expect_code("p32 strict_eq", &b, "0a 28");
-    }
-    {
-        Builder b;
-        b.op_i32(1, 5);
-        b.op_i32(1, 5);
-        b.op(174);
-        b.op(40);
-        b.stack_size = 2;
-        b.finish(0);
-        expect_code("p32 strict_neq", &b, "09 28");
-    }
-    // P3.6: constant conditional jumps -> the taken branch only.
-    {
-        Builder b;
-        b.op(10);  // push_true
-        b.op_i32(105, 5);
-        b.op(41);
-        b.op(41);
-        b.stack_size = 1;
-        b.finish(0);
-        expect_code("p36 true branch", &b, "29");
-    }
-    {
-        Builder b;
-        b.op(9);  // push_false
-        b.op_i32(104, 5);
-        b.op(41);
-        b.op(41);
-        b.stack_size = 1;
-        b.finish(0);
-        expect_code("p36 false branch", &b, "29");
-    }
-    // P3.4: push + drop; P3.5: dup drop / swap swap.
-    {
-        Builder b;
-        b.op_i32(1, 1);
-        b.op(14);
-        b.op(41);
-        b.stack_size = 1;
-        b.finish(0);
-        expect_code("p34 push+drop", &b, "29");
-    }
-    {
-        Builder b;
-        b.op_i32(1, 1);
-        b.op(17);  // dup
-        b.op(14);  // drop
-        b.op(41);
-        b.stack_size = 2;
-        b.finish(0);
-        expect_code("p35 dup drop", &b, "bb 29");
-    }
-    {
-        Builder b;
-        b.op_i32(1, 1);
-        b.op_i32(1, 2);
-        b.op(27);  // swap
-        b.op(27);
-        b.op(41);
-        b.stack_size = 2;
-        b.finish(0);
-        expect_code("p35 swap swap", &b, "bb bc 29");
-    }
-    // P4: goto chain -> threaded to the tail.
-    {
-        Builder b;
-        b.op_i32(106, 9);
-        b.op_i32(106, 4);
-        b.op(41);
-        b.stack_size = 0;
-        b.finish(0);
-        expect_code("p4 goto chain", &b, "29");
-    }
-    // P5: dead block after an unconditional jump.
-    {
-        Builder b;
-        b.op_i32(106, 10);
-        b.op_i32(1, 1);
-        b.op(14);
-        b.op(41);
-        b.stack_size = 1;
-        b.finish(0);
-        expect_code("p5 dead block", &b, "29");
-    }
     // P2 + P3.1 + P6: x = 1; x + 1 with one local slot.
     {
         Builder b;
@@ -649,35 +555,6 @@ void test_p2_gates() {
     }
 }
 
-void test_dead_block_catch_target() {
-    // goto M skips a block whose catch label points at the surviving
-    // return_undef; the catch opcode itself is unreachable and must be
-    // removed, but its target (a static root) must stay.
-    // Layout: push_i32(1) @0 (5B); goto M @5 (operand start 6, M=16,
-    //         offset 10); catch L @10 (operand start 11, L=15, offset 4);
-    //         return_undef @15; M: return_undef @16.
-    Builder b;
-    b.op_i32(1, 1);
-    b.op_i32(106, 10);  // goto M
-    b.op_i32(107, 4);   // catch L
-    b.op(41);           // return_undef @15
-    b.op(41);           // M: return_undef @16
-    b.stack_size = 1;
-    b.finish(0);
-    std::vector<std::uint8_t> code;
-    std::string err;
-    CHECK(b.optimize_and_code(&code, &err, 0xffffffffu));
-    bool has_catch = false;
-    for (std::uint8_t x : code) {
-        if (x == 107) has_catch = true;
-    }
-    CHECK(!has_catch);
-    bool has_ret = false;
-    for (std::uint8_t x : code) {
-        if (x == 41) has_ret = true;
-    }
-    CHECK(has_ret);
-}
 
 void test_debug_block_remap() {
     // Function with a debug block: the optimizer must rewrite the code
@@ -935,7 +812,6 @@ int main() {
     test_fail_closed_matrix();
     test_cpool_kept();
     test_p2_gates();
-    test_dead_block_catch_target();
     test_debug_block_remap();
     test_determinism_and_idempotence();
     test_roundtrip_values();

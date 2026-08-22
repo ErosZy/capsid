@@ -20,21 +20,22 @@ namespace capsid {
 namespace bytecode {
 
 // Per-pass enable mask, for attribution and A/B measurements (G4).
-// Each bit switches one optimization independently; bit 0 is the
-// format-level passes (P6 re-shorten, compaction, verification) which
-// always run when the optimizer runs and are not separately
-// measurable. Passes are never on the frozen CLI: the compiler calls
-// with kPassAll.
+// Each bit switches one optimization independently. Passes are never
+// on the frozen CLI: the compiler calls with kPassAll.
+//
+// G4 (20-bundle corpus, 2026-08-23) attributed every pass on the
+// committed corpus and trimmed the below-gate ones: P3.2 (const
+// strict_eq), P3.4 (push+drop), P3.5 (dup/swap/rot3), P3.6 (const
+// condition), P4 (threading), P5 (dead blocks) each contributed
+// < 1% — quickjs-ng's own resolve_labels already removes push+drop,
+// dup/swap/rot3, and same-block constant conditions — while P2
+// (1.61%) and P3.1 (1.91%) carry the whole measured win. The format
+// passes (P6 re-shorten, compaction, verification) always run when
+// the optimizer runs and are not separately measurable.
 enum PassFlags : uint32_t {
     kPassP2 = 1u << 0,   // cross-BB constant lattice propagation
     kPassP31 = 1u << 1,  // const binop folding (add/sub/mul/and/.../mod)
-    kPassP32 = 1u << 2,  // const strict_eq / strict_neq folding
-    kPassP34 = 1u << 3,  // push + drop removal
-    kPassP35 = 1u << 4,  // dup/dup2/swap/rot3 peepholes
-    kPassP36 = 1u << 5,  // const conditional-jump folding
-    kPassP4 = 1u << 6,   // goto-chain threading
-    kPassP5 = 1u << 7,   // unreachable block elimination
-    kPassAll = 0xFFFFFFFFu,
+    kPassAll = kPassP2 | kPassP31,
 };
 
 // Optimizes `in` (a serialized quickjs-ng bytecode buffer) into `out`.

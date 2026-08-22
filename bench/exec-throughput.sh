@@ -19,13 +19,13 @@ THROUGHPUT=${THROUGHPUT:-bench/bin/exec-throughput}
 ANALYZE=${ANALYZE:-bench/bin/analyze}
 SUT_CPUSET=${SUT_CPUSET:-0-3}
 ROUNDS=${ROUNDS:-5}
-FIXTURES=${FIXTURES:-"arith-rt matrix-rt sieve-rt string-rt fib-rt json-rt"}
+FIXTURES=${FIXTURES:-"arith-rt cascade-rt matrix-rt sieve-rt string-rt fib-rt json-rt"}
 
 echo "rounds: $ROUNDS sut_cpuset: $SUT_CPUSET" | tee "$OUT/manifest.txt"
 {
     echo "generated_at: $(date --iso-8601=seconds)"
     echo "commit: $(git rev-parse HEAD)"
-    echo "tag: $(git describe --exact-match --tags HEAD)"
+    echo "tag: $(git describe --exact-match --tags HEAD 2>/dev/null || echo untagged)"
     echo "runner_sha256: $(sha256sum bench/exec-throughput.sh | cut -d' ' -f1)"
     echo "runner_diff_sha256: $(git diff --no-ext-diff --binary -- bench/exec-throughput.sh | sha256sum | cut -d' ' -f1)"
     echo "command: OUT=$OUT BUILD=$BUILD WORKER=$WORKER COMPILE=$COMPILE RAW=$RAW THROUGHPUT=$THROUGHPUT ANALYZE=$ANALYZE FIXTURES=$FIXTURES bash bench/exec-throughput.sh"
