@@ -8,9 +8,13 @@
 //
 // Specs are "mode:path" arguments:
 //   normal:<path>   self-contained fixture, deterministic on GET /sync
-//   binding:<path>  same, after the host declares an inline mongo Binding
 //   failload:<path> the bundle must fail closed at load (kError before
 //                   READY) in BOTH workers, with identical error text
+//
+// No binding mode: the frozen compiler rejects every non-entry module
+// import ("module is unavailable"), so an app importing capsid:binding/*
+// cannot be compiled by the CLI at all — the binding path never sees the
+// optimizer (it is host-side runtime code) and is out of scope here.
 
 #include "capsid/runtime.h"
 
@@ -51,12 +55,6 @@ namespace {
 void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
-}
-
-void require(bool condition, const std::string& message) {
-    if (!condition) {
-        fail(message);
-    }
 }
 
 void require_result(capsid_result result, const char* operation) {
@@ -320,44 +318,6 @@ capsid_worker* spawn_worker(const char* worker_path) {
     return worker;
 }
 
-// Host-trusted inline mongo Binding (same factory as the Binding smoke
-// test): the app's `import mongo from 'capsid:binding/mongo'` resolves and
-// mongo.find returns a deterministic stamp string.
-void load_inline_mongo_binding(capsid_worker* worker) {
-    const std::string binding_source =
-        "import getopts from 'capsid:getopts';"
-        "export default function createBinding({ config, secrets, log }) {"
-        "  getopts.__capsidBindingProbe = 'capsid-module-mark';"
-        "  globalThis.__capsidBindingProbe = 'capsid-global';"
-        "  return {"
-        "    async find(input) {"
-        "      return 'binding:' + JSON.stringify(input) + ':' +"
-        "             (config && config.mode ? config.mode : 'default') + ':' +"
-        "             globalThis.__capsidBindingProbe + ':' +"
-        "             getopts.__capsidBindingProbe;"
-        "    }"
-        "  };"
-        "}";
-    const char config_json[] = "{\"mode\":\"differential\"}";
-    const char* modules[] = { "capsid:utils", "capsid:getopts" };
-    capsid_binding_policy policy = {};
-    policy.modules = modules;
-    policy.module_count = 2;
-    capsid_binding_descriptor binding = {};
-    binding.struct_size = sizeof(binding);
-    binding.version = CAPSID_BINDING_DESCRIPTOR_VERSION;
-    binding.binding_name = "mongo";
-    binding.source.data =
-        reinterpret_cast<const std::uint8_t*>(binding_source.data());
-    binding.source.size = binding_source.size();
-    binding.config_json.data =
-        reinterpret_cast<const std::uint8_t*>(config_json);
-    binding.config_json.size = sizeof(config_json) - 1;
-    binding.policy = &policy;
-    require_result(capsid_worker_load_binding(worker, &binding),
-                   "load binding");
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -395,9 +355,8 @@ int main(int argc, char** argv) {
             slash == std::string::npos ? fixture_path
                                        : fixture_path.substr(slash + 1);
         const std::string source_name = "file:///app/" + basename;
-        const bool expect_binding = mode == "binding";
         const bool expect_load_failure = mode == "failload";
-        if (!expect_binding && !expect_load_failure && mode != "normal") {
+        if (!expect_load_failure && mode != "normal") {
             fail("unknown fixture mode: " + mode);
         }
 
@@ -462,9 +421,6 @@ int main(int argc, char** argv) {
         Response source_response;
         {
             capsid_worker* worker = spawn_worker(worker_path);
-            if (expect_binding) {
-                load_inline_mongo_binding(worker);
-            }
             require_result(
                 capsid_worker_load_bundle_named(
                     worker,
@@ -480,9 +436,6 @@ int main(int argc, char** argv) {
         Response bytecode_response;
         {
             capsid_worker* worker = spawn_worker(worker_path);
-            if (expect_binding) {
-                load_inline_mongo_binding(worker);
-            }
             require_result(
                 capsid_worker_load_trusted_bytecode_named(
                     worker, bytecode.data(), bytecode.size(),
@@ -501,7 +454,9 @@ int main(int argc, char** argv) {
         if (source_response.body != bytecode_response.body) {
             fail(label + ": response body differs (" +
                  std::to_string(source_response.body.size()) + " vs " +
-                 std::to_string(bytecode_response.body.size()) + " bytes)");
+                 std::to_string(bytecode_response.body.size()) +
+                 " bytes)\n  source: " + source_response.body +
+                 "\n  bytecode: " + bytecode_response.body);
         }
         std::cout << label << ": ok (" << bytecode_response.status << ", "
                   << bytecode_response.body.size() << " bytes)" << std::endl;

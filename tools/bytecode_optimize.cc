@@ -290,7 +290,7 @@ public:
     // bc_put_string / JS_WriteString (quickjs.c:37906-37916):
     // leb128((len<<1)|is_wide) + len bytes or len x u16le.
     bool skip_string() {
-        uint32_t len2;
+        uint32_t len2 = 0;
         if (!leb128(&len2)) return false;
         uint32_t len = len2 >> 1;
         uint64_t nbytes = len * (len2 & 1 ? 2ull : 1ull);
@@ -309,7 +309,7 @@ public:
         std::string* error,
         int depth) {
         if (depth > 4096) return fail("bytecode nesting too deep");
-        uint8_t tag;
+        uint8_t tag = 0;
         uint32_t fn_start = static_cast<uint32_t>(offset());
         if (!u8(&tag)) return false;
         switch (tag) {
@@ -319,7 +319,7 @@ public:
         case BC_TAG_BOOL_TRUE:
             return true;
         case BC_TAG_INT32: {
-            int32_t v;
+            int32_t v = 0;
             return sleb128(&v);
         }
         case BC_TAG_FLOAT64:
@@ -329,12 +329,12 @@ public:
         case BC_TAG_SYMBOL:
             return skip_atom();
         case BC_TAG_OBJECT_REFERENCE: {
-            uint32_t v;
+            uint32_t v = 0;
             return leb128(&v);
         }
         case BC_TAG_TYPED_ARRAY: {
-            uint8_t class_id;
-            uint32_t count, off;
+            uint8_t class_id = 0;
+            uint32_t count = 0, off = 0;
             if (!u8(&class_id) || !leb128(&count) || !leb128(&off)) {
                 return false;
             }
@@ -342,14 +342,14 @@ public:
         }
         case BC_TAG_ARRAY_BUFFER:
         case BC_TAG_SHARED_ARRAY_BUFFER: {
-            uint32_t len, max_len;
+            uint32_t len = 0, max_len = 0;
             if (!leb128(&len) || !leb128(&max_len)) return false;
             if (tag == BC_TAG_ARRAY_BUFFER) return skip(len);
             return skip(8);  // u64 SAB pointer
         }
         case BC_TAG_ARRAY:
         case BC_TAG_TEMPLATE_OBJECT: {
-            uint32_t len;
+            uint32_t len = 0;
             if (!leb128(&len)) return false;
             for (uint32_t i = 0; i < len; i++) {
                 if (!skip_object_rec(children, error, depth + 1)) return false;
@@ -361,7 +361,7 @@ public:
             return true;
         }
         case BC_TAG_OBJECT: {
-            uint32_t prop_count;
+            uint32_t prop_count = 0;
             if (!leb128(&prop_count)) return false;
             for (uint32_t i = 0; i < prop_count; i++) {
                 if (!skip_atom() ||
@@ -379,7 +379,7 @@ public:
             return skip_object_rec(children, error, depth + 1);
         case BC_TAG_MAP:
         case BC_TAG_SET: {
-            uint32_t count;
+            uint32_t count = 0;
             if (!leb128(&count)) return false;
             for (uint32_t i = 0; i < count; i++) {
                 if (!skip_object_rec(children, error, depth + 1)) return false;
@@ -392,7 +392,7 @@ public:
             return true;
         }
         case BC_TAG_BIG_INT: {
-            uint32_t len;
+            uint32_t len = 0;
             if (!leb128(&len)) return false;
             return skip(len);
         }
@@ -409,12 +409,13 @@ public:
                        int depth,
                        uint32_t fn_start) {
         if (depth > 4096) return fail("bytecode nesting too deep");
-        uint16_t flags;
-        uint8_t strict;
+        uint16_t flags = 0;
+        uint8_t strict = 0;
         if (!u16le(&flags) || !u8(&strict) || !skip_atom()) return false;
-        uint32_t arg_count, var_count, defined_arg_count, stack_size;
-        uint32_t var_ref_count, closure_var_count, cpool_count;
-        uint32_t byte_code_len;
+        uint32_t arg_count = 0, var_count = 0, defined_arg_count = 0;
+        uint32_t stack_size = 0;
+        uint32_t var_ref_count = 0, closure_var_count = 0, cpool_count = 0;
+        uint32_t byte_code_len = 0;
         if (!leb128(&arg_count) || !leb128(&var_count) ||
             !leb128(&defined_arg_count) || !leb128(&stack_size) ||
             !leb128(&var_ref_count) || !leb128(&closure_var_count) ||
@@ -426,12 +427,12 @@ public:
         uint32_t byte_code_len_end = static_cast<uint32_t>(offset());
         // vardefs: leb128 count + per entry atom, leb128, leb128, u8,
         // optional leb128 var_ref_idx when captured.
-        uint32_t vardef_count;
+        uint32_t vardef_count = 0;
         if (!leb128(&vardef_count)) return false;
         for (uint32_t i = 0; i < vardef_count; i++) {
             if (!skip_atom()) return false;
-            uint32_t scope_level, scope_next;
-            uint8_t vflags;
+            uint32_t scope_level = 0, scope_next = 0;
+            uint8_t vflags = 0;
             if (!leb128(&scope_level) || !leb128(&scope_next) ||
                 !u8(&vflags)) {
                 return false;
@@ -512,44 +513,44 @@ public:
     // Module record (JS_WriteModule quickjs.c:38060-38108).
     bool skip_module(std::vector<FuncRecord>* children, std::string* error) {
         if (!skip_atom()) return false;  // module_name
-        uint32_t req_count;
+        uint32_t req_count = 0;
         if (!leb128(&req_count)) return false;
         for (uint32_t i = 0; i < req_count; i++) {
             if (!skip_atom()) return false;
         }
-        uint32_t export_count;
+        uint32_t export_count = 0;
         if (!leb128(&export_count)) return false;
         for (uint32_t i = 0; i < export_count; i++) {
-            uint8_t export_type;
+            uint8_t export_type = 0;
             if (!u8(&export_type)) return false;
             if (export_type == 0) {  // JS_EXPORT_TYPE_LOCAL
-                uint32_t v;
+                uint32_t v = 0;
                 if (!leb128(&v)) return false;
             } else {
-                uint32_t v;
+                uint32_t v = 0;
                 if (!leb128(&v) || !skip_atom()) return false;
             }
             if (!skip_atom()) return false;  // export_name
         }
-        uint32_t star_count;
+        uint32_t star_count = 0;
         if (!leb128(&star_count)) return false;
         for (uint32_t i = 0; i < star_count; i++) {
-            uint32_t v;
+            uint32_t v = 0;
             if (!leb128(&v)) return false;
         }
-        uint32_t import_count;
+        uint32_t import_count = 0;
         if (!leb128(&import_count)) return false;
         for (uint32_t i = 0; i < import_count; i++) {
-            uint32_t v, v2;
+            uint32_t v = 0, v2 = 0;
             if (!leb128(&v) || !skip_atom() || !leb128(&v2)) return false;
         }
-        uint8_t has_tla;
+        uint8_t has_tla = 0;
         if (!u8(&has_tla)) return false;
         // JS_WriteModule ends with JS_WriteObjectRec(s, m->func_obj),
         // which writes the BC_TAG_FUNCTION_BYTECODE tag byte; consume it
         // before the function record.
         uint32_t fn_start = static_cast<uint32_t>(offset());
-        uint8_t tag;
+        uint8_t tag = 0;
         if (!u8(&tag)) return false;
         if (tag != BC_TAG_FUNCTION_BYTECODE) {
             return fail_public("module function is not bytecode");
@@ -581,21 +582,21 @@ bool parse_buffer(const uint8_t* data,
                   std::vector<FuncRecord>* functions,
                   std::string* error) {
     Reader r(data, size, error);
-    uint8_t version;
+    uint8_t version = 0;
     if (!r.u8(&version)) return false;
     if (version != BC_VERSION) {
         *error = "bytecode optimize: unsupported bytecode version " +
                  std::to_string(version);
         return false;
     }
-    uint32_t stored_csum;
+    uint32_t stored_csum = 0;
     if (!r.u32le(&stored_csum)) return false;
     uint32_t actual_csum = bc_csum(data + 5, size - 5);
     if (stored_csum != actual_csum) {
         *error = "bytecode optimize: checksum mismatch";
         return false;
     }
-    uint32_t atom_count;
+    uint32_t atom_count = 0;
     if (!r.leb128(&atom_count)) return false;
     if (atom_count > 1000000) {
         *error = "bytecode optimize: atom count too large";
@@ -606,12 +607,12 @@ bool parse_buffer(const uint8_t* data,
     // GLOBAL_SYMBOL, SYMBOL) followed by a string. PRIVATE (4) is
     // asserted never serialized; anything else fails closed.
     for (uint32_t i = 0; i < atom_count; i++) {
-        uint8_t type;
+        uint8_t type = 0;
         if (!r.u8(&type)) return false;
         if (type == 0) {
             // Const atom: full u32 value, not LEB128 (quickjs.c
             // JS_WriteObjectAtoms, "bc_put_u32(s, atom)").
-            uint32_t v;
+            uint32_t v = 0;
             if (!r.u32le(&v)) return false;
         } else if (type >= 1 && type <= 3) {
             if (!r.skip_string()) return false;
@@ -619,7 +620,7 @@ bool parse_buffer(const uint8_t* data,
             return r.fail_public("unexpected atom type");
         }
     }
-    uint8_t tag;
+    uint8_t tag = 0;
     if (!r.u8(&tag)) return false;
     if (tag != BC_TAG_MODULE) {
         *error = "bytecode optimize: top-level record is not a module";
@@ -1429,7 +1430,16 @@ bool apply_threading(std::vector<Insn>* insns,
 // dynamic-scope operations (with_*, eval, apply_eval) can alias a local
 // name, so their presence disables the pass for the whole function.
 // ---------------------------------------------------------------------------
-enum P2Kind { K_UNKNOWN = 0, K_NULL, K_UNDEF, K_BOOL, K_INT };
+enum P2Kind {
+    K_UNKNOWN = 0,  // may be any value, incl. objects whose conversions
+                    // (ToPrimitive/ToNumber) run arbitrary user code
+    K_NULL,
+    K_UNDEF,
+    K_BOOL,
+    K_INT,   // small-int push with a known value (foldable)
+    K_NUM,   // push_const/push_i32: provably a number, value not tracked
+    K_ATOM,  // push_atom_value: provably a string or symbol, not tracked
+};
 struct P2Val {
     int kind;
     int64_t imm;
@@ -1450,14 +1460,107 @@ static bool p2_set(const P2Val& v, P2Val* out) {
 static bool is_loc_read(uint8_t op) {
     return op == OP_get_loc || op == OP_get_loc_check ||
            op == OP_get_loc8 ||
-           (op >= OP_get_loc0 && op <= OP_get_loc3);
+           (op >= OP_get_loc0 && op <= OP_get_loc3) ||
+           op == OP_get_arg ||
+           (op >= OP_get_arg0 && op <= OP_get_arg3);
 }
 static bool is_loc_write(uint8_t op) {
     return op == OP_put_loc || op == OP_put_loc_check ||
            op == OP_put_loc_check_init || op == OP_put_loc8 ||
            op == OP_set_loc || op == OP_set_loc8 ||
            (op >= OP_put_loc0 && op <= OP_put_loc3) ||
-           (op >= OP_set_loc0 && op <= OP_set_loc3);
+           (op >= OP_set_loc0 && op <= OP_set_loc3) ||
+           op == OP_put_arg ||
+           (op >= OP_put_arg0 && op <= OP_put_arg3) ||
+           op == OP_set_arg ||
+           (op >= OP_set_arg0 && op <= OP_set_arg3);
+}
+
+// ---- P2 variable barrier model ----
+// The slot lattice is sound only if no user code can run between a slot
+// write and a later read of that slot: a nested function invoked behind an
+// opaque op (e.g. a setInterval callback) can mutate a captured local
+// invisibly to this intra-function analysis, and the lattice would fold a
+// later read on stale state. Every op that can run arbitrary user code —
+// calls, getters/setters/proxies, the iterator protocol, dynamic-scope
+// resolution (globals can carry accessors), async suspension, class
+// definition (static blocks) and finally blocks entered via gosub — is a
+// barrier that drops every slot to unknown. Value-converting ops
+// (arithmetic, comparisons, inc/dec) only escape on non-primitive
+// operands: unknown values may be objects whose ToPrimitive/ToNumber
+// runs user code; provably primitive operands (numbers, bools, null,
+// undefined, strings, symbols) convert without it.
+static bool p2_op_barrier(uint8_t op, int32_t imm, const P2Val& top,
+                          const P2Val& prev, const std::vector<P2Val>& vals,
+                          uint32_t var_count) {
+    switch (op) {
+    // Provably pure: no user code runs, no suspension. (Reads of TDZ
+    // checks and brand checks can throw, but exception edges are not
+    // modeled at all — every catch block joins with unknown slots — so a
+    // throwing pure op never leaks values into a handler.)
+    case OP_push_i32: case OP_push_const: case OP_push_const8:
+    case OP_push_atom_value: case OP_private_symbol:
+    case OP_push_bigint_i32: case OP_fclosure: case OP_fclosure8:
+    case OP_push_this: case OP_push_empty_string:
+    case OP_object: case OP_special_object: case OP_regexp: case OP_rest:
+    case OP_nop: case OP_dup1: case OP_dup2: case OP_dup3:
+    case OP_drop: case OP_nip: case OP_nip1:
+    case OP_insert2: case OP_insert3: case OP_insert4:
+    case OP_perm3: case OP_perm4: case OP_perm5:
+    case OP_swap: case OP_swap2: case OP_rot3l: case OP_rot3r:
+    case OP_rot4l: case OP_rot5l:
+    case OP_get_var_ref: case OP_get_var_ref_check:
+    case OP_put_var_ref: case OP_put_var_ref_check:
+    case OP_put_var_ref_check_init:
+    case OP_set_var_ref:
+    case OP_get_var_ref0: case OP_get_var_ref1:
+    case OP_get_var_ref2: case OP_get_var_ref3:
+    case OP_put_var_ref0: case OP_put_var_ref1:
+    case OP_put_var_ref2: case OP_put_var_ref3:
+    case OP_set_var_ref0: case OP_set_var_ref1:
+    case OP_set_var_ref2: case OP_set_var_ref3:
+    case OP_close_loc:
+    case OP_make_loc_ref: case OP_make_arg_ref:
+    case OP_make_var_ref_ref: case OP_make_var_ref:
+    case OP_define_var: case OP_check_define_var: case OP_define_func:
+    case OP_get_private_field: case OP_put_private_field:
+    case OP_define_private_field: case OP_private_in:
+    case OP_check_brand: case OP_add_brand:
+    case OP_get_super: case OP_set_home_object:
+    case OP_set_name: case OP_set_name_computed:
+    case OP_lnot: case OP_typeof: case OP_typeof_is_undefined:
+    case OP_typeof_is_function:
+    case OP_is_undefined: case OP_is_null: case OP_is_undefined_or_null:
+    case OP_strict_eq: case OP_strict_neq:
+    case OP_delete_var:
+    case OP_nip_catch:
+    case OP_goto: case OP_goto8: case OP_goto16:
+    case OP_if_true: case OP_if_false: case OP_if_true8:
+    case OP_if_false8: case OP_catch: case OP_ret:
+    case OP_return: case OP_return_undef: case OP_return_async:
+    case OP_throw: case OP_throw_error:
+        return false;
+    // Value ops: escape only when an operand is not provably primitive.
+    // (inc_loc/dec_loc/add_loc operate in place on a local slot, so the
+    // slot value is an operand too.)
+    case OP_neg: case OP_plus: case OP_inc: case OP_dec:
+    case OP_post_inc: case OP_post_dec: case OP_not:
+    case OP_mul: case OP_div: case OP_mod: case OP_add: case OP_sub:
+    case OP_shl: case OP_sar: case OP_shr: case OP_and: case OP_or:
+    case OP_xor: case OP_pow:
+    case OP_eq: case OP_neq: case OP_lt: case OP_lte: case OP_gt:
+    case OP_gte:
+        return top.kind == K_UNKNOWN || prev.kind == K_UNKNOWN;
+    case OP_inc_loc: case OP_dec_loc: case OP_add_loc:
+        return top.kind == K_UNKNOWN ||
+               (imm >= 0 && static_cast<size_t>(imm) < var_count &&
+                vals[static_cast<size_t>(imm)].kind == K_UNKNOWN);
+    // Everything else can run user code: calls, field access through
+    // getters/setters/proxies, dynamic-scope var access, the iterator
+    // protocol, async suspension, class static blocks, with/eval, import.
+    default:
+        return true;
+    }
 }
 
 bool apply_crossbb(std::vector<Insn>* insns,
@@ -1549,9 +1652,36 @@ bool apply_crossbb(std::vector<Insn>* insns,
                 }
                 prev = kP2Unknown;
                 top = kP2Unknown;
+            } else if (op == OP_get_loc0_loc1) {
+                // get_loc(0) get_loc(1) fused: pushes loc0 then loc1.
+                prev = vals[0];
+                top = vals[1];
+            } else if (op == OP_inc_loc || op == OP_dec_loc ||
+                       op == OP_add_loc) {
+                // In-place slot arithmetic: result is never a tracked
+                // constant, but a provably-primitive operand keeps the
+                // other slots sound.
+                int32_t s = static_cast<int32_t>(in.imm);
+                if (s >= 0 && static_cast<size_t>(s) < var_count) {
+                    vals[static_cast<size_t>(s)] = kP2Unknown;
+                }
+                prev = kP2Unknown;
+                top = kP2Unknown;
             } else if (is_small_int_push(op)) {
                 prev = top;
                 top = {K_INT, in.imm};
+            } else if (op == OP_push_i32 || op == OP_push_const ||
+                       op == OP_push_const8) {
+                // Provably a number; the exact value is not tracked
+                // (floats and out-of-i32-range ints), so no folding —
+                // but arithmetic on it stays pure.
+                prev = top;
+                top = {K_NUM, 0};
+            } else if (op == OP_push_atom_value || op == OP_private_symbol) {
+                // Provably a string or symbol: no ToPrimitive user code
+                // in later conversions, so not a barrier.
+                prev = top;
+                top = {K_ATOM, 0};
             } else if (op == OP_push_true || op == OP_push_false) {
                 prev = top;
                 top = {K_BOOL, op == OP_push_true ? 1 : 0};
@@ -1576,8 +1706,19 @@ bool apply_crossbb(std::vector<Insn>* insns,
                     top = kP2Unknown;
                 }
                 prev = kP2Unknown;
+            } else if (p2_op_barrier(op, static_cast<int32_t>(in.imm), top,
+                                     prev, vals, var_count)) {
+                // Opaque op: user code may run between the last slot
+                // write and a later read (a captured local mutated by a
+                // nested function is invisible here), so every slot
+                // falls back to unknown — folding a get_loc on stale
+                // state would change behavior.
+                std::fill(vals.begin(), vals.end(), kP2Unknown);
+                prev = kP2Unknown;
+                top = kP2Unknown;
             } else {
-                // Any other op invalidates the stack-top lattice.
+                // Provably pure op with an unmodeled stack effect: the
+                // slot lattice survives, the stack lattice does not.
                 prev = kP2Unknown;
                 top = kP2Unknown;
             }
