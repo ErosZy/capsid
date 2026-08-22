@@ -2000,7 +2000,8 @@ if(BUILD_TESTING)
         function(capsid_add_fuzzer TARGET_NAME SOURCE_FILE CORPUS_NAME)
             add_executable("${TARGET_NAME}" "${SOURCE_FILE}" ${ARGN})
             target_include_directories("${TARGET_NAME}" PRIVATE
-                include src "${CAPSID_GENERATED_DIR}")
+                include src "${CAPSID_GENERATED_DIR}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools")
             target_compile_options("${TARGET_NAME}" PRIVATE
                 -fsanitize=fuzzer,address,undefined
                 -fno-omit-frame-pointer
@@ -2062,6 +2063,18 @@ if(BUILD_TESTING)
             src/audit.cc
             src/protocol.cc
         )
+        capsid_add_fuzzer(
+            fuzz-bytecode-opt
+            tests/fuzz/fuzz_bytecode_opt.cc
+            bytecode_opt
+            tools/bytecode_optimize.cc
+        )
+        # The optimizer's opcode table comes from the vendored quickjs
+        # header (never linked — names only). CI builds fuzzers with
+        # CAPSID_BUILD_WORKER=OFF, so the vendor-overlay variable is
+        # not defined there; the vendor path always exists.
+        target_include_directories(fuzz-bytecode-opt PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/quickjs")
     endif()
 
     if(CAPSID_BUILD_WORKER)
