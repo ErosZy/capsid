@@ -148,12 +148,13 @@ READY times (same samples): capsid source 8.00/17.85/133.71, bytecode 6.91/9.27/
 Measurement class: warm execution of compute-dense fixtures (source vs
 unoptimized bytecode vs optimized bytecode), CPU pinned to SUT_CPUSET 0-3, 1
 warmup run discarded + 5 measured rounds, median ms per round. The optimized
-bundle is produced by `capsid-bytecode-compile` (Release, commit `cab458d`,
-G4-trimmed pipeline P2+P3.1) and each optimized body is cross-checked against the
-source body byte-for-byte. Raw samples, compiler reports, manifest, and sha256
-are in `bench/results/exec-throughput-20260823T042708/`; `load_noise` is the
-source-vs-raw parse-skip reference (bytecode path vs source path). Full
-G1-G5 verdict and static ceilings live in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md) §11. Per the evidence rules above, these are observed samples, not a general "optimization works" claim: no perf profiles were collected in this class.
+bundle is produced by `capsid-bytecode-compile` (Release, G4-trimmed pipeline
+P2+P3.1; the run manifest records commit `47b9369` — `cab458d` afterwards changed
+only the no-change report line, not output bytes) and each optimized body is
+cross-checked against the source body byte-for-byte. Raw samples, compiler
+reports, manifest, and sha256 are in `bench/results/exec-throughput-20260823T042708/`;
+`load_noise` is the source-vs-raw parse-skip reference (bytecode path vs source
+path). Full G1-G5 verdict and static ceilings live in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md) §11. Per the evidence rules above, these are observed samples, not a general "optimization works" claim: no perf profiles were collected in this class.
 
 | fixture | source ms | raw ms | opt ms | opt vs raw | load_noise |
 | --- | ---: | ---: | ---: | ---: | ---: |
