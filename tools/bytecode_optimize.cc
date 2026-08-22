@@ -1464,6 +1464,20 @@ static bool is_loc_read(uint8_t op) {
            op == OP_get_arg ||
            (op >= OP_get_arg0 && op <= OP_get_arg3);
 }
+// Slot index for a loc/arg access. Operand-less short forms carry the
+// index in the opcode itself; every other loc/arg op carries it in aux.
+// Never imm: imm holds push immediates (the decoder keeps the two
+// operand spaces separate), and the P2 lattice must not alias slots.
+static int32_t loc_index(const Insn& in) {
+    const uint8_t op = in.op;
+    if (op >= OP_get_loc0 && op <= OP_get_loc3) return op - OP_get_loc0;
+    if (op >= OP_put_loc0 && op <= OP_put_loc3) return op - OP_put_loc0;
+    if (op >= OP_set_loc0 && op <= OP_set_loc3) return op - OP_set_loc0;
+    if (op >= OP_get_arg0 && op <= OP_get_arg3) return op - OP_get_arg0;
+    if (op >= OP_put_arg0 && op <= OP_put_arg3) return op - OP_put_arg0;
+    if (op >= OP_set_arg0 && op <= OP_set_arg3) return op - OP_set_arg0;
+    return static_cast<int32_t>(in.aux);
+}
 static bool is_loc_write(uint8_t op) {
     return op == OP_put_loc || op == OP_put_loc_check ||
            op == OP_put_loc_check_init || op == OP_put_loc8 ||
@@ -1645,7 +1659,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
             const Insn& in = (*insns)[i];
             uint8_t op = in.op;
             if (is_loc_read(op)) {
-                int32_t s = static_cast<int32_t>(in.imm);
+                int32_t s = loc_index(in);
                 P2Val v = (s >= 0 && static_cast<size_t>(s) < var_count)
                               ? vals[static_cast<size_t>(s)]
                               : kP2Unknown;
@@ -1653,7 +1667,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
                 prev = kP2Unknown;
                 top = v;
             } else if (is_loc_write(op)) {
-                int32_t s = static_cast<int32_t>(in.imm);
+                int32_t s = loc_index(in);
                 if (s >= 0 && static_cast<size_t>(s) < var_count) {
                     vals[static_cast<size_t>(s)] = top;
                 }
@@ -1668,7 +1682,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
                 // In-place slot arithmetic: result is never a tracked
                 // constant, but a provably-primitive operand keeps the
                 // other slots sound.
-                int32_t s = static_cast<int32_t>(in.imm);
+                int32_t s = loc_index(in);
                 if (s >= 0 && static_cast<size_t>(s) < var_count) {
                     vals[static_cast<size_t>(s)] = kP2Unknown;
                 }
@@ -1713,7 +1727,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
                     top = kP2Unknown;
                 }
                 prev = kP2Unknown;
-            } else if (p2_op_barrier(op, static_cast<int32_t>(in.imm), top,
+            } else if (p2_op_barrier(op, loc_index(in), top,
                                      prev, vals, var_count)) {
                 // Opaque op: user code may run between the last slot
                 // write and a later read (a captured local mutated by a
