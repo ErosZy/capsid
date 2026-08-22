@@ -2319,6 +2319,19 @@ bool optimize(const std::vector<std::uint8_t>& in,
         // No rewrite applied: the output is byte-identical to the input
         // (determinism contract for the frozen CLI).
         out->assign(in.begin(), in.end());
+        if (report) {
+            std::fprintf(stderr,
+                         "bytecode optimize: %llu -> %llu insns, %llu -> "
+                         "%llu code bytes; folds P2 %llu P3.1 %llu, "
+                         "shrinks %llu\n",
+                         static_cast<unsigned long long>(stats.insns_before),
+                         static_cast<unsigned long long>(stats.insns_after),
+                         static_cast<unsigned long long>(stats.bytes_before),
+                         static_cast<unsigned long long>(stats.bytes_after),
+                         static_cast<unsigned long long>(stats.folds_p2),
+                         static_cast<unsigned long long>(stats.folds_p31),
+                         static_cast<unsigned long long>(stats.shrinks));
+        }
         return true;
     }
     out->clear();
