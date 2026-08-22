@@ -2,7 +2,7 @@
 
 Capsid Runtime is a process-isolated JavaScript runtime built from a pinned txiki.js vendor tree. It targets embedded HTTP hosts and provides a versioned Minimum Common Web API subset; it does not claim full ECMA-429 conformance. Capsid is the only product name; external organization names are used only to identify standard sources and historical internal implementation.
 
-The compile-time bytecode optimizer on the trusted-bytecode path is specified separately in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md).
+The compile-time bytecode optimizer on the trusted-bytecode path is specified separately in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md); as built (2026-08-23) it runs P2 (cross-BB constant lattice) + P3.1 (const binop folding) plus the format passes over standard BC_VERSION 26 output, with the G1-G5 verdicts recorded in that document's §11.
 
 ## Deliverables and Application Model
 

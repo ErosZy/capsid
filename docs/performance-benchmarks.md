@@ -143,6 +143,34 @@ READY times (same samples): capsid source 8.00/17.85/133.71, bytecode 6.91/9.27/
 - **At 1M source capsid and Node are effectively tied in these medians** (134.09 vs 135 ms), while Deno remains faster at 52 ms. Trusted bytecode erases that source-compilation gap.
 - Semantic note: capsid first response goes through in-process IPC, while Node/Deno use local HTTP curl; "first request completes after ready" is aligned, but the request path implementation differs, so this is not an isomorphic comparison.
 
-## 5. Retired Checkpoints
+## 5. Bytecode AOT Optimizer (2026-08-23, observed samples)
+
+Measurement class: warm execution of compute-dense fixtures (source vs
+unoptimized bytecode vs optimized bytecode), CPU pinned to SUT_CPUSET 0-3, 1
+warmup run discarded + 5 measured rounds, median ms per round. The optimized
+bundle is produced by `capsid-bytecode-compile` (Release, commit `cab458d`,
+G4-trimmed pipeline P2+P3.1) and each optimized body is cross-checked against the
+source body byte-for-byte. Raw samples, compiler reports, manifest, and sha256
+are in `bench/results/exec-throughput-20260823T042708/`; `load_noise` is the
+source-vs-raw parse-skip reference (bytecode path vs source path). Full
+G1-G5 verdict and static ceilings live in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md) §11. Per the evidence rules above, these are observed samples, not a general "optimization works" claim: no perf profiles were collected in this class.
+
+| fixture | source ms | raw ms | opt ms | opt vs raw | load_noise |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| arith-rt | 44.584 | 44.487 | 27.164 | +38.94% | 0.22% |
+| cascade-rt | 16.272 | 16.135 | 11.441 | +29.09% | 0.84% |
+| matrix-rt | 4.514 | 4.832 | 4.638 | +4.01% | -7.04% |
+| sieve-rt | 24.002 | 24.998 | 25.613 | -2.46% | -4.15% |
+| string-rt | 0.474 | 0.440 | 0.459 | -4.32% | 7.17% |
+| fib-rt | 15.123 | 15.207 | 15.086 | +0.80% | -0.56% |
+| json-rt | 1.790 | 1.775 | 1.763 | +0.68% | 0.84% |
+
+Static reductions (compiler report): arith-rt 145→85 insns / 297→240 bytes;
+cascade-rt 100→76 insns / 225→205 bytes; the other five fixtures are
+byte-identical (0% static ceiling). The two moving fixtures are const-chain-dense
+loops — the pipeline's target population; the wall-clock gain tracks the insn
+removal rate (see G5 in the optimizer doc for the dispatch-amortization reading).
+
+## 6. Retired Checkpoints
 
 The previous 2026-08-18 AMD Ryzen 3 3300X checkpoint (`c943e35`, `four-qps-final-20260818T131300`, `four-qps-profile-20260818T132600`, and `cold-start-20260818T134435`) was superseded by the clean rc.07 run above. The 2026-08-18 Intel i5-12400F 6C/12T conclusion-adjacent tables (commit `b39acee`/`build-win`) and the 2026-08-14 4C tables are also retired. They remain available in git history and in the raw artifacts under `bench/results/` referenced by the older revisions of this document.
