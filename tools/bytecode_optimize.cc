@@ -1612,12 +1612,19 @@ bool apply_crossbb(std::vector<Insn>* insns,
     }
 
     // Per-block entry lattice; monotone meet, so iteration terminates.
+    // Every block starts in the worklist: within-block folds (constant
+    // chains after a put_loc) do not depend on the entry state, and a
+    // block whose only incoming edge is a conditional jump in the middle
+    // of another block never receives a propagated exit state.
     std::vector<P2Val> in_val(nb * var_count, kP2Unknown);
+    std::vector<uint8_t> in_seen(nb, 0);  // entry got its first contribution
     std::vector<uint8_t> in_wl(nb, 0);
     std::vector<size_t> worklist;
     std::vector<P2Val> repl(n, kP2Unknown);  // pending get_loc replacements
-    in_wl[block_id[0]] = 1;
-    worklist.push_back(static_cast<size_t>(block_id[0]));
+    for (size_t b = 0; b < nb; b++) {
+        in_wl[b] = 1;
+        worklist.push_back(b);
+    }
 
     while (!worklist.empty()) {
         size_t b = worklist.back();
@@ -1755,10 +1762,26 @@ bool apply_crossbb(std::vector<Insn>* insns,
             if (s < 0 || static_cast<size_t>(s) >= n) continue;
             int32_t sb = block_id[static_cast<size_t>(s)];
             if (sb < 0) continue;
+            P2Val* entry = &in_val[static_cast<size_t>(sb) * var_count];
             bool changed = false;
-            for (uint32_t v = 0; v < var_count; v++) {
-                P2Val& dst = in_val[static_cast<size_t>(sb) * var_count + v];
-                if (p2_set(p2_meet(dst, vals[v]), &dst)) changed = true;
+            if (!in_seen[static_cast<size_t>(sb)]) {
+                // First predecessor: adopt its exit state wholesale —
+                // the join of the unseen (bottom) entry with anything is
+                // that anything. Marked seen even when the contribution
+                // is all-unknown, so a later, more precise predecessor
+                // meets with it (absorbing to unknown) instead of
+                // overwriting — p2_meet(unknown, x) == unknown is the
+                // correct join for a block reachable on both paths.
+                for (uint32_t v = 0; v < var_count; v++) {
+                    if (p2_set(vals[v], &entry[v])) changed = true;
+                }
+                in_seen[static_cast<size_t>(sb)] = 1;
+            } else {
+                for (uint32_t v = 0; v < var_count; v++) {
+                    if (p2_set(p2_meet(entry[v], vals[v]), &entry[v])) {
+                        changed = true;
+                    }
+                }
             }
             if (changed && !in_wl[static_cast<size_t>(sb)]) {
                 in_wl[static_cast<size_t>(sb)] = 1;
