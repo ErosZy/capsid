@@ -229,6 +229,96 @@ if(BUILD_TESTING)
                 test-runtime-bytecode-compiler-round-trip
                 capsid-bytecode-compile
                 capsid-worker)
+
+            # Step 7 unit gate for the bytecode AOT optimizer
+            # (docs/bytecode-aot-optimizer.md): synthetic-buffer golden
+            # bytes, fail-closed matrix, P2 gates, and a full
+            # compile → serialize → optimize → deserialize → eval
+            # round-trip through tjs compared with the unoptimized path.
+            add_executable(
+                test-bytecode-optimizer
+                tests/test_bytecode_optimizer.cc)
+            target_include_directories(
+                test-bytecode-optimizer PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools")
+            target_link_libraries(
+                test-bytecode-optimizer PRIVATE
+                capsid_bytecode_opt
+                tjs)
+            set_target_properties(
+                test-bytecode-optimizer PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-bytecode-optimizer PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-bytecode-optimizer PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(
+                NAME bytecode_optimizer
+                COMMAND test-bytecode-optimizer)
+            set_tests_properties(
+                bytecode_optimizer PROPERTIES TIMEOUT 60)
+
+            # Step 7 differential gate (G1): every fixture runs through
+            # the real deployment path — compiler (optimizer on) →
+            # trusted-bytecode worker load — and the response must match
+            # the source-loaded worker byte for byte. binding: fixtures
+            # additionally declare the inline mongo Binding; failload:
+            # fixtures must fail closed at load on both paths with
+            # identical error text.
+            add_executable(
+                test-bytecode-opt-diff
+                tests/test_bytecode_opt_diff.cc)
+            target_link_libraries(
+                test-bytecode-opt-diff PRIVATE
+                capsid_runtime
+                Threads::Threads)
+            set_target_properties(
+                test-bytecode-opt-diff PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-bytecode-opt-diff PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-bytecode-opt-diff PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(
+                NAME bytecode_opt_differential
+                COMMAND test-bytecode-opt-diff
+                    $<TARGET_FILE:capsid-worker>
+                    $<TARGET_FILE:capsid-bytecode-compile>
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/incoming-request-fast-path.js"
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/queue-saturation.js"
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/host-single-worker.js"
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/p1-platform-contract.js"
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/wasm-minimal.js"
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/wasm-edge-cases.js"
+                    "normal:${CAPSID_GLOBAL_SURFACE_FIXTURE}"
+                    "normal:${CAPSID_GENERATED_DIR}/test-wasm-exported-memory-reimport.js"
+                    "binding:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-call.js"
+                    "failload:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/binding-import.js")
+            set_tests_properties(
+                bytecode_opt_differential PROPERTIES TIMEOUT 300)
+            add_dependencies(
+                test-bytecode-opt-diff
+                capsid-bytecode-compile
+                capsid-worker
+                test-global-surface-fixture
+                test-wasm-exported-memory-reimport-fixture)
         endif()
 
         # The safe-read fixture builder uses dirfd-relative POSIX

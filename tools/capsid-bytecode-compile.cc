@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include "bytecode_optimize.h"
 #include "win32_compat.h"
 #if defined(_WIN32)
 #else
@@ -665,6 +666,20 @@ int main(int argc, char** argv) {
     std::vector<std::uint8_t> bytecode;
     if (!compile_module(source_name, source, &bytecode)) {
         return 1;
+    }
+    // Bytecode AOT optimizer (docs/bytecode-aot-optimizer.md): pure
+    // post-serialization rewrite, deterministic, fail-closed. The
+    // attestation/signing flow below then covers the optimized bytes.
+    {
+        std::string opt_error;
+        std::vector<std::uint8_t> optimized;
+        if (!capsid::bytecode::optimize(bytecode, &optimized,
+                                        capsid::bytecode::kPassAll, true,
+                                        &opt_error)) {
+            std::fprintf(stderr, "%s\n", opt_error.c_str());
+            return 1;
+        }
+        bytecode.swap(optimized);
     }
     std::string bytecode_sha256;
     if (!sha256_hex(bytecode.data(), bytecode.size(), &bytecode_sha256)) {

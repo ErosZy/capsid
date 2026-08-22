@@ -247,3 +247,46 @@ constant folding — then re-evaluate SCCP with real numbers.
 | parser overflow / DoS | bounds-checked reader everywhere (precedent: quickjs-ng#1416), 5-byte LEB128 cap, depth/iteration/instruction-count caps |
 | jump-offset bugs after re-shrink | verifier asserts every target lands on a leader/op boundary; RED + differential cover if/goto-dense code |
 | determinism regression | no unordered containers in output paths; bit-for-bit RED check; idempotence test |
+
+## 11. Execution Status
+
+Tracked against the implementation order in the plan (`/home/eroszhao/.claude/plans/swirling-cooking-rose.md`).
+
+| Step | Status | Evidence |
+| --- | --- | --- |
+| 0. Ceiling analysis + analyze-only | done | arith-rt 68.1% / cascade 48.1% static insn reduction ceiling measured on real bundles |
+| 1. Reader skeleton + validation | done | RED round-trip green; fail-closed matrix on truncated/bad checksum inputs |
+| 2. CFG + dataflow + verifier | done | per-pass verifier; stack-height invariant; with/eval gates |
+| 3. Core peepholes + pc2line + emission | done | full round-trip green (0.31 s) |
+| 4. Threading + dead blocks + re-shrink | done | threads/dead/shrink stats in report mode |
+| 5. Cross-BB constant lattice + scope gates | done | arith-rt 15616→4980 insns (-68.1%), 22623→9049 bytes (-60.0%) |
+| 6. Fixpoint + report mode + pass switches | done (2026-08-23) | see attribution below; corpus 98/98 pass |
+| 7. Differential + ctest + fuzzer | in progress | — |
+| 8. Benchmarks + G1-G5 verdict + docs | pending | — |
+| 9. Tier-2 decision | pending | — |
+
+### Step 6 G4 attribution (complementary: full set minus the pass; baseline = unoptimized)
+
+| Pass | arith-rt (15616 insns) | cascade (160 insns) | 1% gate |
+| --- | --- | --- | --- |
+| P3.1 const binop folding | 10636 (68.1%) | 75 (46.9%) | pass |
+| P3.2 const strict_eq/neq | 4630 (29.6%) | 63 (39.4%) | pass |
+| P3.6 const cond-jump folding | 3830 (24.5%) | 53 (33.1%) | pass |
+| P5 dead-block elimination | 3294 (21.1%) | 40 (25.0%) | pass |
+| P4 jump threading | 563 (3.6%) | 15 (9.4%) | pass |
+| P2 cross-BB propagation (prerequisite) | 236 (1.5%) | 10 (6.3%) | pass |
+| P3.4 push+drop removal | 0 on all 98 corpus fixtures | — | **trim candidate (G4)** |
+| P3.5 dup/swap/rot3 cancellation | 0 on all 98 corpus fixtures | — | **trim candidate (G4)** |
+
+Pass interaction, confirmed by the matrix: P3.2/P3.6 are silent standalone because
+their constant inputs are produced by P3.1/P2 (the `2+3===5` pattern only folds
+after P3.1 turns `add` into `push_5`); disabling P3.1 silences both downstream
+passes. P3.4/P3.5 never fire on real emitter output — quickjs-ng's own
+`resolve_labels` already eliminates push/drop and dup/swap/rot3 pairs at emission
+— so they are dead code on the corpus and are candidates for trimming under G4
+(decision recorded at Step 8).
+
+Step 6 verification: 98-fixture corpus — optimize success 98/98, cross-process
+determinism (byte-identical) 98/98, same-mask idempotence 98/98, exec-equivalence
+69/69 (stdout fixtures) + 29/29 (empty-body fixtures, stdout+stderr identical);
+mask matrix (10 masks × arith-rt + cascade) exec + idempotence 20/20.
