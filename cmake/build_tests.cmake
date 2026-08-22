@@ -306,6 +306,7 @@ if(BUILD_TESTING)
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/host-single-worker.js"
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/p1-platform-contract.js"
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/wasm-minimal.js"
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/opt-slot-reuse.js"
                     "normal:${CAPSID_GENERATED_DIR}/test-global-surface.js"
                     "normal:${CAPSID_GENERATED_DIR}/test-wasm-exported-memory-reimport.js"
                     "failload:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/load-fail-no-fetch.js")
