@@ -556,6 +556,286 @@ void test_p2_gates() {
 }
 
 
+void test_p14_folds() {
+    // Object literal: object; push_1; define_field a; put_loc0; then
+    // get_loc0; get_field a folds to push_1 (get_loc0 replaced, get_field
+    // removed). Atom operands are raw u32 values; 0 works on both sides.
+    {
+        Builder b;
+        b.op(0x0b);  // object
+        b.op(0xbb);  // push_1
+        b.code.push_back(0x4b);  // define_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0xcf);  // put_loc0
+        b.op(0xcb);  // get_loc0
+        b.code.push_back(0x40);  // get_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0x28);  // return
+        b.stack_size = 2;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        const std::uint8_t want[] = {0x0b, 0xbb, 0x4b, 0, 0, 0, 0,
+                                     0xcf, 0xbb, 0x28};
+        CHECK(code.size() == sizeof(want));
+        CHECK(std::memcmp(code.data(), want, sizeof(want)) == 0);
+    }
+    // Array literal: [10, 20, 30]; a[1] folds to push_i8 20.
+    {
+        Builder b;
+        b.op(0xc2); b.code.push_back(10);  // push_i8 10
+        b.op(0xc2); b.code.push_back(20);  // push_i8 20
+        b.op(0xc2); b.code.push_back(30);  // push_i8 30
+        b.op_u16(0x26, 3);  // array_from 3
+        b.op(0xcf);  // put_loc0
+        b.op(0xcb);  // get_loc0
+        b.op(0xbb);  // push_1
+        b.op(0x46);  // get_array_el
+        b.op(0x28);  // return
+        b.stack_size = 3;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        const std::uint8_t want[] = {0xc2, 10, 0xc2, 20, 0xc2, 30, 0x26,
+                                     0x03, 0x00, 0xcf, 0xc2, 20, 0x28};
+        CHECK(code.size() == sizeof(want));
+        CHECK(std::memcmp(code.data(), want, sizeof(want)) == 0);
+    }
+    // String-literal field via push_atom_value folds to the identical
+    // instruction (atom operand preserved verbatim).
+    {
+        Builder b;
+        b.op(0x0b);  // object
+        b.code.push_back(0x04);  // push_atom_value atom 0
+        put_u32(&b.code, 0);
+        b.code.push_back(0x4b);  // define_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0xcf);
+        b.op(0xcb);
+        b.code.push_back(0x40);  // get_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0x28);
+        b.stack_size = 2;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        const std::uint8_t want[] = {0x0b, 0x04, 0, 0, 0, 0, 0x4b,
+                                     0, 0, 0, 0, 0xcf, 0x04, 0, 0, 0, 0, 0x28};
+        CHECK(code.size() == sizeof(want));
+        CHECK(std::memcmp(code.data(), want, sizeof(want)) == 0);
+    }
+    // Constant-pool field via push_const8 folds to push_const8 (re-shortened).
+    {
+        Builder b;
+        b.op(0x0b);
+        b.op(0xc4); b.code.push_back(0);  // push_const8 idx 0
+        b.code.push_back(0x4b);  // define_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0xcf);
+        b.op(0xcb);
+        b.code.push_back(0x40);
+        put_u32(&b.code, 0);
+        b.op(0x28);
+        b.stack_size = 2;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        const std::uint8_t want[] = {0x0b, 0xc4, 0, 0x4b, 0, 0, 0, 0,
+                                     0xcf, 0xc4, 0, 0x28};
+        CHECK(code.size() == sizeof(want));
+        CHECK(std::memcmp(code.data(), want, sizeof(want)) == 0);
+    }
+}
+
+void test_p14_gates() {
+    // put_field between construction and read: the mutation defeats the
+    // fold; the get_field must survive.
+    {
+        Builder b;
+        b.op(0x0b);
+        b.op(0xbb);
+        b.code.push_back(0x4b);  // define_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0xcf);  // put_loc0
+        b.op(0xcb);  // get_loc0 (receiver)
+        b.op(0xbb);  // push_1 (value)
+        b.code.push_back(0x42);  // put_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0xcb);  // get_loc0
+        b.code.push_back(0x40);  // get_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0x28);
+        b.stack_size = 2;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        bool has_getfield = false;
+        for (std::uint8_t x : code) {
+            if (x == 0x40) has_getfield = true;
+        }
+        CHECK(has_getfield);
+    }
+    // Any call is a barrier: a call between the binding and the read
+    // (the described value may be observed or mutated) defeats the fold.
+    {
+        Builder b;
+        b.op(0x0b);
+        b.op(0xbb);
+        b.code.push_back(0x4b);
+        put_u32(&b.code, 0);
+        b.op(0xcf);
+        b.op(0xbb);  // callee
+        b.op(0xcb);  // arg
+        b.op(0xf5);  // call1
+        b.op(0x0e);  // drop
+        b.op(0xcb);
+        b.code.push_back(0x40);
+        put_u32(&b.code, 0);
+        b.op(0x28);
+        b.stack_size = 2;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        bool has_getfield = false;
+        for (std::uint8_t x : code) {
+            if (x == 0x40) has_getfield = true;
+        }
+        CHECK(has_getfield);
+    }
+    // put_array_el on a slot-read array defeats the element fold.
+    {
+        Builder b;
+        b.op(0xc2); b.code.push_back(1);
+        b.op(0xc2); b.code.push_back(2);
+        b.op_u16(0x26, 2);
+        b.op(0xcf);
+        b.op(0xcb);  // arr
+        b.op(0xbb);  // idx 1
+        b.op(0xc2); b.code.push_back(9);  // value
+        b.op(0x48);  // put_array_el
+        b.op(0xcb);
+        b.op(0xbb);  // idx 1
+        b.op(0x46);  // get_array_el
+        b.op(0x28);
+        b.stack_size = 3;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        bool has_gael = false;
+        for (std::uint8_t x : code) {
+            if (x == 0x46) has_gael = true;
+        }
+        CHECK(has_gael);
+    }
+    // append on a slot-read array defeats the element fold.
+    {
+        Builder b;
+        b.op(0xc2); b.code.push_back(1);
+        b.op(0xc2); b.code.push_back(2);
+        b.op_u16(0x26, 2);
+        b.op(0xcf);
+        b.op(0xcb);
+        b.op(0xbb);  // pushed values
+        b.op(0xc2); b.code.push_back(8);
+        b.op(0x51);  // append
+        b.op(0x0e);  // drop x2 (append pushes 2)
+        b.op(0x0e);
+        b.op(0xcb);
+        b.op(0xbb);
+        b.op(0x46);
+        b.op(0x28);
+        b.stack_size = 3;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        bool has_gael = false;
+        for (std::uint8_t x : code) {
+            if (x == 0x46) has_gael = true;
+        }
+        CHECK(has_gael);
+    }
+    // Out-of-range element index: no fold.
+    {
+        Builder b;
+        b.op(0xc2); b.code.push_back(1);
+        b.op(0xc2); b.code.push_back(2);
+        b.op(0xc2); b.code.push_back(3);
+        b.op_u16(0x26, 3);
+        b.op(0xcf);
+        b.op(0xcb);
+        b.op(0xbd);  // push_3
+        b.op(0x46);
+        b.op(0x28);
+        b.stack_size = 3;  // three element pushes peak here
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        bool has_gael = false;
+        for (std::uint8_t x : code) {
+            if (x == 0x46) has_gael = true;
+        }
+        CHECK(has_gael);
+    }
+    // Negative element index: no fold.
+    {
+        Builder b;
+        b.op(0xc2); b.code.push_back(1);
+        b.op(0xc2); b.code.push_back(2);
+        b.op_u16(0x26, 2);
+        b.op(0xcf);
+        b.op(0xcb);
+        b.op(0xc2); b.code.push_back(0xff);  // push_i8 -1
+        b.op(0x46);
+        b.op(0x28);
+        b.stack_size = 2;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        bool has_gael = false;
+        for (std::uint8_t x : code) {
+            if (x == 0x46) has_gael = true;
+        }
+        CHECK(has_gael);
+    }
+    // get_field directly on the under-construction object consumes it:
+    // the later put_loc must not bind a stale description (no fold on
+    // the second read).
+    {
+        Builder b;
+        b.op(0x0b);
+        b.op(0xbb);
+        b.code.push_back(0x4b);
+        put_u32(&b.code, 0);
+        b.code.push_back(0x40);  // get_field on the stack object
+        put_u32(&b.code, 0);
+        b.op(0xcf);  // put_loc0 holds the FIELD VALUE, not the object
+        b.op(0xcb);
+        b.code.push_back(0x40);
+        put_u32(&b.code, 0);
+        b.op(0x28);
+        b.stack_size = 2;
+        b.finish(1);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP14));
+        int getfields = 0;
+        for (std::uint8_t x : code) {
+            if (x == 0x40) getfields++;
+        }
+        CHECK(getfields == 2);
+    }
+}
+
 void test_debug_block_remap() {
     // Function with a debug block: the optimizer must rewrite the code
     // blob and keep the debug block structurally valid (the optimizer's
@@ -775,6 +1055,71 @@ void test_roundtrip_values() {
     JS_FreeRuntime(rt);
 }
 
+void test_p14_semantics() {
+    // P14-specific differential: the literal folds (and their gates)
+    // must keep raw and optimized execution identical. Covers the
+    // object/array element folds, atom/cpool-valued fields, and the
+    // mutation barriers (put_field, calls, put_array_el, read-modify-
+    // write, out-of-range indexes, nested values).
+    JSRuntime* rt = JS_NewRuntime();
+    CHECK(rt != nullptr);
+    JSContext* ctx = JS_NewContext(rt);
+    CHECK(ctx != nullptr);
+    if (ctx == nullptr) return;
+
+    const char* sources[] = {
+        // Object literal folds.
+        "const o = { a: 1, b: 2 }; globalThis.__r = o.a + o.b * 10;",
+        // Array literal folds.
+        "const a = [10, 20, 30]; globalThis.__r = a[0] + a[1] + a[2];",
+        // Atom/cpool-valued fields.
+        "const o = { s: 'ab', f: 1.5, n: 3 };"
+        "globalThis.__r = o.s + o.f + o.n + o.zzz;",
+        // Mutation via put_field must defeat the fold.
+        "const o = { a: 1 }; o.a = 5; globalThis.__r = o.a;",
+        // Mutation via a call must defeat the fold.
+        "const o = { b: 2 }; const mut = (x) => { x.b = 99; }; mut(o);"
+        "globalThis.__r = o.b;",
+        // Array element write must defeat the element fold.
+        "const a = [1, 2, 3]; a[0] = 7; globalThis.__r = a[0];",
+        // Array mutation through a call must defeat the fold.
+        "const a = [1, 2, 3]; const mut = (x) => { x[2] = 42; }; mut(a);"
+        "globalThis.__r = a[2];",
+        // Read-modify-write must keep the folded read consistent.
+        "const o = { a: 1 }; o.a += 1; globalThis.__r = o.a;",
+        "const a = [1, 2, 3]; a[0] += 1; a[1]++; globalThis.__r = a[0] + a[1];",
+        // Out-of-range and negative indexes read undefined, never fold.
+        "const a = [1, 2]; globalThis.__r = a[5] === undefined && a[-1] === undefined;",
+        // Nested (object-valued) fields and elements never fold.
+        "const n = { inner: { q: 7 } }; const m = [{ k: 1 }, 2];"
+        "globalThis.__r = n.inner.q + m[0].k + m[1];",
+        // Field on a function-scope literal used across a loop.
+        "let acc = 0; const o = { x: 1, y: 2, z: 3 };"
+        "for (let i = 0; i < 100; i++) acc += o.x + o.y + o.z;"
+        "globalThis.__r = acc;",
+        // Same with an array literal.
+        "let acc = 0; const a = [10, 20, 30];"
+        "for (let i = 0; i < 100; i++) acc += a[0] + a[1] + a[2];"
+        "globalThis.__r = acc;",
+    };
+    for (const char* src : sources) {
+        RtResult base = run_roundtrip(ctx, src, "p14.js", false);
+        RtResult opt = run_roundtrip(ctx, src, "p14.js", true);
+        CHECK(base.ok == opt.ok);
+        if (base.ok) {
+            CHECK(base.value == opt.value);
+        }
+        if (base.value != opt.value || base.ok != opt.ok) {
+            std::fprintf(stderr, "  source: %s\n", src);
+            std::fprintf(stderr, "    base=%s/%s opt=%s/%s\n",
+                         base.ok ? "ok" : "fail", base.value.c_str(),
+                         opt.ok ? "ok" : "fail", opt.value.c_str());
+        }
+    }
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+
 void test_roundtrip_exception_lines() {
     JSRuntime* rt = JS_NewRuntime();
     CHECK(rt != nullptr);
@@ -812,9 +1157,12 @@ int main() {
     test_fail_closed_matrix();
     test_cpool_kept();
     test_p2_gates();
+    test_p14_folds();
+    test_p14_gates();
     test_debug_block_remap();
     test_determinism_and_idempotence();
     test_roundtrip_values();
+    test_p14_semantics();
     test_roundtrip_exception_lines();
     if (g_failures != 0) {
         std::fprintf(stderr, "test_bytecode_optimizer: %d failure(s)\n",

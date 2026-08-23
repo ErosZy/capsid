@@ -1305,49 +1305,183 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     return changed;
 }
 
-// P14: literal get_field fold. Tracks OP_object construction sequences
-// in a linear sweep: object; push k; define_field(atom); ...; put_loc t
-// binds a field description to slot t. A later get_loc t + get_field x
-// folds to push of the recorded value when x is a known own data
-// property. Soundness: the constructed object holds only define_field
-// writes (no getters on a plain object literal), any define_field on an
-// object read out of a slot clears all descriptions (external
-// mutation), and unknown fields (prototype chain, e.g. toString) are
-// never folded. Stack effect of the folded pair (1 push) equals push.
+// P14: literal get_field/get_array_el fold. Tracks OP_object /
+// OP_array_from construction sequences in a linear sweep: construction;
+// constant pushes; define_field / array_from; put_loc t binds a field /
+// element description to slot t. A later get_loc t + get_field x (or
+// get_loc t + push k + get_array_el) folds to a push of the recorded
+// value when x / k is a known own data property or element.
+//
+// Soundness:
+//  - The constructed value holds only construction writes (a plain
+//    object literal has no accessors); any mutation of a slot-read
+//    value (put_field / put_array_el / define_array_el / append) clears
+//    every description, since the construction is no longer the only
+//    writer. define_field with an unknown (non-constant) value makes
+//    the object under construction unfoldable.
+//  - Any call may observe or mutate a described value (argument,
+//    receiver, or closure), so the whole call family is a barrier
+//    (OP_fclosure already is, in is_slot_alias_barrier).
+//  - Unknown fields (prototype chain, e.g. toString) are never folded.
+//  - The under-construction tracker (cur) is cleared by any
+//    instruction that is not a construction step: the stack value may
+//    be consumed (get_field on a literal, a call) or aliased, and a
+//    stale description must never be bound to a later put_loc.
+//  - Values recorded from push_const/push_const8 are re-emitted as the
+//    identical instruction (same constant-pool index; the table is
+//    never modified), so value identity and aliasing are preserved.
+// Stack effect of each folded pair equals the replacement push.
 bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                     uint32_t var_count, RewriteStats* stats) {
     const size_t n = insns->size();
-    // Description of an object under construction / bound to a slot:
-    // atom (raw u32 JSAtom value) -> int64 small-int value.
+    // A recorded value: a small integer, an existing constant-pool
+    // entry (the push_const/push_const8 source), or an atom value
+    // (the push_atom_value source, e.g. a string literal).
+    struct Val {
+        bool is_cpool;
+        bool is_atom;
+        int64_t v;        // small-int value when !is_cpool && !is_atom
+        uint32_t cidx;    // cpool index when is_cpool
+        uint32_t atom;    // atom when is_atom
+    };
+    // Description of a value under construction / bound to a slot.
+    // is_array == false: object (fields); true: array (elements).
     struct Desc {
         bool valid;
-        std::vector<std::pair<uint32_t, int64_t>> fields;
+        bool is_array;
+        std::vector<std::pair<uint32_t, Val>> fields;
+        std::vector<Val> elements;
     };
     std::vector<Desc> slot_desc(var_count);
-    Desc cur;  // object currently being built on the stack
+    Desc cur;  // value currently being built on the stack
     cur.valid = false;
 
-    auto clear_all = [&]() {
-        for (size_t j = 0; j < slot_desc.size(); j++) slot_desc[j].valid = false;
+    auto clear_cur = [&]() {
         cur.valid = false;
         cur.fields.clear();
+        cur.elements.clear();
     };
-    auto find_field = [](Desc* d, uint32_t atom) -> int64_t* {
+    auto clear_all = [&]() {
+        for (size_t j = 0; j < slot_desc.size(); j++) slot_desc[j].valid = false;
+        clear_cur();
+    };
+    auto find_field = [](Desc* d, uint32_t atom) -> Val* {
         for (size_t j = 0; j < d->fields.size(); j++)
             if (d->fields[j].first == atom) return &d->fields[j].second;
         return nullptr;
+    };
+    auto is_call = [](uint8_t op) {
+        switch (op) {
+        case OP_call: case OP_call1: case OP_call2: case OP_call3:
+        case OP_tail_call:
+        case OP_call_method: case OP_tail_call_method:
+        case OP_call_constructor:
+        case OP_apply: case OP_apply_eval:
+        case OP_iterator_call:
+            return true;
+        default:
+            return false;
+        }
+    };
+    // Index of the previous live instruction at or below `at`, or -1.
+    auto prev_live = [&](size_t at) -> int64_t {
+        while (at > 0) {
+            at--;
+            if (!(*dead)[at]) return static_cast<int64_t>(at);
+        }
+        return -1;
+    };
+    // Read a constant push (small int, cpool, or atom value) into
+    // `val`; false for anything else.
+    auto read_const_push = [](const Insn& in, Val* val) -> bool {
+        val->is_atom = false;
+        if (is_small_int_push(in.op)) {
+            val->is_cpool = false;
+            val->v = in.imm;
+            return true;
+        }
+        if (in.op == OP_push_const || in.op == OP_push_const8) {
+            val->is_cpool = true;
+            val->cidx = in.aux;
+            return true;
+        }
+        if (in.op == OP_push_atom_value) {
+            val->is_cpool = false;
+            val->is_atom = true;
+            val->atom = in.aux;
+            return true;
+        }
+        return false;
+    };
+    // Replace the instruction at `at` with a push of `val`; `pc_off` is
+    // the original offset of the fold site (used for pc2line). The
+    // constant pool is never modified (red line): cpool and atom
+    // values re-emit the identical original instruction.
+    auto emit_val_push = [&](size_t at, const Val& val, uint32_t pc_off) {
+        Insn ni;
+        if (val.is_atom) {
+            ni.op = OP_push_atom_value;
+            ni.aux = val.atom;
+            ni.has_aux = true;
+            ni.imm = 0;
+        } else if (val.is_cpool) {
+            ni.op = OP_push_const;  // reshrunk to push_const8 when small
+            ni.aux = val.cidx;
+            ni.has_aux = true;
+            ni.imm = 0;
+        } else {
+            ni.op = shortest_push_op(val.v);
+            ni.imm = val.v;
+            ni.has_aux = false;
+        }
+        ni.old_off = (*insns)[at].old_off;
+        ni.old_size = static_cast<uint16_t>(short_opcode_info(ni.op).size);
+        ni.pc_off = pc_off;
+        ni.target = -1;
+        (*insns)[at] = ni;
     };
 
     bool changed = false;
     for (size_t i = 0; i < n; i++) {
         if ((*dead)[i]) continue;
         const Insn& in = (*insns)[i];
-        if (is_slot_alias_barrier(in.op)) {
+        if (is_slot_alias_barrier(in.op) || is_call(in.op)) {
             clear_all();
             continue;
         }
         if (in.op == OP_object) {
             cur.fields.clear();
+            cur.elements.clear();
+            cur.is_array = false;
+            cur.valid = true;
+            continue;
+        }
+        if (in.op == OP_array_from) {
+            // Elements are the `aux` most recent live constant pushes
+            // (pushed in order, so walked back in reverse).
+            uint32_t count = in.aux;
+            std::vector<Val> elems;
+            elems.reserve(count);
+            int64_t p = static_cast<int64_t>(i);
+            bool ok = true;
+            for (uint32_t k = 0; k < count; k++) {
+                p = prev_live(static_cast<size_t>(p));
+                if (p < 0) { ok = false; break; }
+                Val val;
+                if (!read_const_push((*insns)[static_cast<size_t>(p)], &val)) {
+                    ok = false;
+                    break;
+                }
+                elems.push_back(val);
+            }
+            if (!ok || elems.size() != count) {
+                clear_cur();
+                continue;
+            }
+            std::reverse(elems.begin(), elems.end());
+            cur.elements = std::move(elems);
+            cur.fields.clear();
+            cur.is_array = true;
             cur.valid = true;
             continue;
         }
@@ -1358,26 +1492,31 @@ bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 clear_all();
                 continue;
             }
-            // Previous live insn must be a small-int push (the value).
-            size_t prev = i;
-            while (prev > 0) {
-                prev--;
-                if (!(*dead)[prev]) break;
-            }
-            if (prev < i && is_small_int_push((*insns)[prev].op)) {
-                int64_t v = (*insns)[prev].imm;
-                int64_t* f = find_field(&cur, in.aux);
-                if (f) {
-                    *f = v;
-                } else {
-                    cur.fields.push_back({in.aux, v});
+            int64_t prev = prev_live(i);
+            if (prev >= 0) {
+                Val val;
+                if (read_const_push((*insns)[static_cast<size_t>(prev)], &val)) {
+                    Val* f = find_field(&cur, in.aux);
+                    if (f) {
+                        *f = val;
+                    } else {
+                        cur.fields.push_back({in.aux, val});
+                    }
+                    continue;
                 }
-            } else {
-                // Non-constant field value: the object's shape is still
-                // defined by the writes, but the value is unknown; fold
-                // nothing for this object.
-                cur.valid = false;
             }
+            // Non-constant field value: the object's shape is still
+            // defined by the writes, but the value is unknown; fold
+            // nothing for this object.
+            cur.valid = false;
+            continue;
+        }
+        if (in.op == OP_put_field || in.op == OP_put_array_el ||
+            in.op == OP_define_array_el || in.op == OP_append) {
+            // Mutation of a described value (slot-read or under
+            // construction): the description reflects the construction
+            // writes, not this writer.
+            clear_all();
             continue;
         }
         if (in.op == OP_set_home_object || in.op == OP_set_name ||
@@ -1390,9 +1529,8 @@ bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
         if (is_put_loc_op(in.op) && slot_of(in, &sl)) {
             if (cur.valid) {
                 slot_desc[sl] = cur;
-                cur.valid = false;
-                cur.fields.clear();
             }
+            clear_cur();
             continue;
         }
         if (is_set_loc_op(in.op) || is_slot_mut_op(in.op)) {
@@ -1400,25 +1538,15 @@ bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
             continue;
         }
         if (in.op == OP_get_field) {
-            size_t prev = i;
-            while (prev > 0) {
-                prev--;
-                if (!(*dead)[prev]) break;
-            }
-            if (prev < i && is_get_loc_op((*insns)[prev].op)) {
+            int64_t prev = prev_live(i);
+            if (prev >= 0 && is_get_loc_op((*insns)[static_cast<size_t>(prev)].op)) {
                 uint32_t s;
-                if (slot_of((*insns)[prev], &s) && slot_desc[s].valid) {
-                    int64_t* f = find_field(&slot_desc[s], in.aux);
+                if (slot_of((*insns)[static_cast<size_t>(prev)], &s) &&
+                    slot_desc[s].valid && !slot_desc[s].is_array) {
+                    Val* f = find_field(&slot_desc[s], in.aux);
                     if (f) {
-                        Insn ni;
-                        ni.op = shortest_push_op(*f);
-                        ni.old_off = (*insns)[prev].old_off;
-                        ni.old_size = short_opcode_info(ni.op).size;
-                        ni.pc_off = in.old_off;
-                        ni.target = -1;
-                        ni.imm = *f;
-                        ni.has_aux = false;
-                        (*insns)[prev] = ni;
+                        emit_val_push(static_cast<size_t>(prev), *f,
+                                      in.old_off);
                         (*dead)[i] = 1;
                         stats->folds_p14++;
                         changed = true;
@@ -1427,17 +1555,47 @@ bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 }
             }
             // Unknown property (prototype chain could provide it) or
-            // object not from a construction: no fold; description of
-            // the read slot stays valid (own fields remain foldable).
+            // value not from a construction: no fold; the description
+            // of the read slot stays valid (own fields remain
+            // foldable). The stack object is consumed.
+            clear_cur();
             continue;
         }
         if (in.op == OP_get_array_el) {
-            // Array literals are built with OP_array_from; not handled
-            // in the direct level (see tier-2 plan).
+            int64_t prev = prev_live(i);
+            if (prev >= 0 && is_small_int_push((*insns)[static_cast<size_t>(prev)].op)) {
+                int64_t k = (*insns)[static_cast<size_t>(prev)].imm;
+                int64_t prev2 = prev_live(static_cast<size_t>(prev));
+                if (prev2 >= 0 && is_get_loc_op((*insns)[static_cast<size_t>(prev2)].op)) {
+                    uint32_t s;
+                    if (slot_of((*insns)[static_cast<size_t>(prev2)], &s) &&
+                        slot_desc[s].valid && slot_desc[s].is_array &&
+                        k >= 0 &&
+                        static_cast<uint64_t>(k) <
+                            slot_desc[s].elements.size()) {
+                        emit_val_push(static_cast<size_t>(prev2),
+                                      slot_desc[s].elements[k], in.old_off);
+                        (*dead)[static_cast<size_t>(prev)] = 1;
+                        (*dead)[i] = 1;
+                        stats->folds_p14++;
+                        changed = true;
+                        continue;
+                    }
+                }
+            }
+            clear_cur();
             continue;
         }
-        // Any other get_loc of a described slot keeps the description
-        // (reads don't mutate; check-form slots are closure-free).
+        if (is_small_int_push(in.op) || in.op == OP_push_const ||
+            in.op == OP_push_const8 || in.op == OP_push_atom_value) {
+            // Construction value.
+            continue;
+        }
+        // Any other instruction: the stack value under construction is
+        // consumed or aliased; the description dies with it. Slot
+        // descriptions bound by put_loc survive reads (mutations and
+        // calls were handled above).
+        clear_cur();
     }
     return changed;
 }
@@ -2137,6 +2295,7 @@ bool emit_code(const std::vector<Insn>& insns,
         }
         case OP_push_const:
         case OP_fclosure:
+        case OP_push_atom_value:
             out->push_back(static_cast<uint8_t>(in.aux));
             out->push_back(static_cast<uint8_t>(in.aux >> 8));
             out->push_back(static_cast<uint8_t>(in.aux >> 16));
