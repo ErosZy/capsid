@@ -994,9 +994,11 @@ bool decode_code(const uint8_t* code,
 // ---------------------------------------------------------------------------
 
 struct RewriteStats {
-    uint64_t folds_p31 = 0;  // const binop folds
-    uint64_t folds_p2 = 0;   // P2: cross-BB constant propagation replaces
-    uint64_t shrinks = 0;    // short-form re-encodings
+    uint64_t folds_p31 = 0;   // const binop folds
+    uint64_t folds_p2 = 0;    // P2: cross-BB constant propagation replaces
+    uint64_t folds_p11 = 0;   // P11: dead stores removed via copy propagation
+    uint64_t folds_p14 = 0;   // P14: literal get_field folds
+    uint64_t shrinks = 0;     // short-form re-encodings
     uint64_t insns_before = 0;
     uint64_t insns_after = 0;
     uint64_t bytes_before = 0;
@@ -1063,6 +1065,373 @@ bool apply_peepholes(std::vector<Insn>* insns,
         }
         i++;
     }
+    return changed;
+}
+
+// ---------------------------------------------------------------------------
+// Tier-2 direct-level passes (P11 copy propagation, P14 literal folds).
+// Linear sweeps over the decoded stream, run before the v1 fixpoint.
+// All rewrites are stack-neutral (deleted pairs or equal-stack-effect
+// replacements) so compact_insns' jump-target redirect stays sound.
+// ---------------------------------------------------------------------------
+
+// Loc-slot access helpers. Only check-form and short-form loc ops
+// participate: the compiler emits these only for slots it proved are
+// not captured by closures, so no opaque user code can mutate them
+// behind our back. get_loc0_loc1 reads two slots and is treated as an
+// opaque read (never participates, never invalidates).
+bool is_get_loc_op(uint8_t op) {
+    return op == OP_get_loc || op == OP_get_loc8 || op == OP_get_loc_check ||
+           (op >= OP_get_loc0 && op <= OP_get_loc3);
+}
+bool is_put_loc_op(uint8_t op) {
+    return op == OP_put_loc || op == OP_put_loc8 || op == OP_put_loc_check ||
+           op == OP_put_loc_check_init ||
+           (op >= OP_put_loc0 && op <= OP_put_loc3);
+}
+bool is_set_loc_op(uint8_t op) {
+    return op == OP_set_loc || op == OP_set_loc8 ||
+           (op >= OP_set_loc0 && op <= OP_set_loc3);
+}
+// In-place slot mutations (read + write the slot).
+bool is_slot_mut_op(uint8_t op) {
+    return op == OP_inc_loc || op == OP_dec_loc || op == OP_add_loc ||
+           op == OP_set_loc_uninitialized || op == OP_close_loc;
+}
+
+// Ops after which no slot copy/literal description may survive: they
+// can run arbitrary user code that could touch a captured frame, or
+// create closures (frame shapes are compiler-fixed, but a conservative
+// barrier is free here).
+bool is_slot_alias_barrier(uint8_t op) {
+    switch (op) {
+    case OP_eval:
+    case OP_with_get_var: case OP_with_put_var:
+    case OP_with_delete_var: case OP_with_make_ref:
+    case OP_with_get_ref: case OP_with_get_ref_undef:
+    case OP_fclosure: case OP_fclosure8:
+    case OP_using_dispose: case OP_using_dispose_async:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Build the set of instruction indices that are jump targets (any jump
+// form, including catch/gosub, which land on stack effect boundaries).
+std::vector<uint8_t> compute_targets(const std::vector<Insn>& insns) {
+    std::vector<uint8_t> t(insns.size(), 0);
+    for (size_t i = 0; i < insns.size(); i++) {
+        if (insns[i].target >= 0) {
+            size_t tt = static_cast<size_t>(insns[i].target);
+            if (tt < t.size()) t[tt] = 1;
+        }
+    }
+    return t;
+}
+
+// Resolve a loc-family op to its slot index (raw aux value or the
+// short-form implicit slot 0..3).
+bool slot_of(const Insn& in, uint32_t* slot) {
+    switch (in.op) {
+    case OP_get_loc: case OP_get_loc8: case OP_get_loc_check:
+    case OP_put_loc: case OP_put_loc8: case OP_put_loc_check:
+    case OP_put_loc_check_init:
+    case OP_set_loc: case OP_set_loc8:
+    case OP_set_loc_uninitialized:
+    case OP_inc_loc: case OP_dec_loc: case OP_add_loc:
+    case OP_close_loc:
+        *slot = static_cast<uint32_t>(in.aux);
+        return true;
+    case OP_get_loc0: case OP_get_loc1: case OP_get_loc2:
+    case OP_get_loc3:
+        *slot = static_cast<uint32_t>(in.op - OP_get_loc0);
+        return true;
+    case OP_put_loc0: case OP_put_loc1: case OP_put_loc2:
+    case OP_put_loc3:
+        *slot = static_cast<uint32_t>(in.op - OP_put_loc0);
+        return true;
+    case OP_set_loc0: case OP_set_loc1: case OP_set_loc2:
+    case OP_set_loc3:
+        *slot = static_cast<uint32_t>(in.op - OP_set_loc0);
+        return true;
+    default:
+        return false;
+    }
+}
+
+// P11: copy propagation + dead store materialization.
+// One linear pass tracks alias pairs (get_loc s; put_loc t => t copies
+// s), renames later reads of t to s, and records candidate dead stores.
+// A store may be deleted only together with its feeding get_loc (pair
+// is stack-neutral), only when nothing after it in the linear stream
+// reads t, only when no read of t precedes it (a loop-back edge could
+// otherwise carry the pre-store value around), and only when neither
+// instruction is a jump target.
+bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
+                    uint32_t var_count, RewriteStats* stats) {
+    const size_t n = insns->size();
+    std::vector<uint8_t> targets = compute_targets(*insns);
+    // alias[t] = s means slot t currently holds a copy of slot s.
+    std::vector<int32_t> alias(var_count, -1);
+    // Candidate dead stores: put_idx -> (feeding get_idx, slot, reads).
+    struct Cand {
+        size_t put_idx;
+        size_t get_idx;
+    };
+    std::vector<Cand> cands;
+    std::vector<uint32_t> cand_slot;
+    std::vector<size_t> reads_after;
+    // read_attr[put_idx] = candidate index, or n when the put is not a
+    // candidate; last_put_idx[t] = index of the most recent put_loc t.
+    std::vector<size_t> last_put_idx(var_count, n);
+    std::vector<size_t> read_attr(n, n);
+    // first_get[t] = position of the first (un-aliased) read of t, or
+    // n when t is never read. Precomputed on the original stream so a
+    // read before a candidate store disqualifies it (loop-back edges).
+    std::vector<size_t> first_get(var_count, n);
+    for (size_t i = 0; i < n; i++) {
+        if ((*dead)[i]) continue;
+        const Insn& in = (*insns)[i];
+        uint32_t sl;
+        if (is_get_loc_op(in.op) && slot_of(in, &sl) &&
+            first_get[sl] == n)
+            first_get[sl] = i;
+    }
+    auto clear_alias_to = [&alias](uint32_t s) {
+        for (size_t j = 0; j < alias.size(); j++)
+            if (alias[j] == static_cast<int32_t>(s)) alias[j] = -1;
+    };
+    auto clear_all_alias = [&alias]() {
+        for (size_t j = 0; j < alias.size(); j++) alias[j] = -1;
+    };
+
+    for (size_t i = 0; i < n; i++) {
+        if ((*dead)[i]) continue;
+        const Insn& in = (*insns)[i];
+        if (is_slot_alias_barrier(in.op)) {
+            clear_all_alias();
+            last_put_idx.assign(var_count, n);
+            continue;
+        }
+        uint32_t sl;
+        if (is_put_loc_op(in.op) && slot_of(in, &sl)) {
+            // Pair candidate: previous live insn is a get_loc reading a
+            // different slot, and no read of t precedes this store.
+            size_t prev = i;
+            while (prev > 0) {
+                prev--;
+                if (!(*dead)[prev]) break;
+            }
+            if (prev < i && is_get_loc_op((*insns)[prev].op)) {
+                uint32_t s;
+                if (slot_of((*insns)[prev], &s) && s != sl &&
+                    alias[sl] < 0 && first_get[sl] >= i) {
+                    size_t c = cands.size();
+                    cands.push_back({i, prev});
+                    cand_slot.push_back(sl);
+                    reads_after.push_back(0);
+                    read_attr[i] = c;
+                    alias[sl] = static_cast<int32_t>(s);
+                    last_put_idx[sl] = i;
+                    continue;
+                }
+            }
+            // Store of a different value or disqualified: break alias.
+            clear_alias_to(sl);
+            alias[sl] = -1;
+            last_put_idx[sl] = n;
+            continue;
+        }
+        if (is_set_loc_op(in.op) || is_slot_mut_op(in.op)) {
+            if (slot_of(in, &sl)) {
+                clear_alias_to(sl);
+                alias[sl] = -1;
+                last_put_idx[sl] = n;
+            }
+            continue;
+        }
+        if (is_get_loc_op(in.op) && slot_of(in, &sl)) {
+            if (alias[sl] >= 0) {
+                // Rename this read of t to its alias root s. The read
+                // no longer touches t, so it does not keep the store
+                // alive (reads_after stays 0).
+                uint32_t s = static_cast<uint32_t>(alias[sl]);
+                (*insns)[i].aux = s;
+                (*insns)[i].has_aux = true;
+            } else {
+                // Un-aliased read of t: the most recent store of t has
+                // a real reader and must stay.
+                size_t lp = last_put_idx[sl];
+                if (lp < n && read_attr[lp] < cands.size())
+                    reads_after[read_attr[lp]]++;
+            }
+            continue;
+        }
+    }
+    bool changed = false;
+    for (size_t c = 0; c < cands.size(); c++) {
+        if (reads_after[c] != 0) continue;
+        const Cand& cd = cands[c];
+        // Neither the store nor its feeding load may be a jump target
+        // (a jump landing on the load expects the pushed value).
+        if (targets[cd.put_idx] || targets[cd.get_idx]) continue;
+        (*dead)[cd.put_idx] = 1;
+        (*dead)[cd.get_idx] = 1;
+        stats->folds_p11++;
+        changed = true;
+    }
+    return changed;
+}
+
+// P14: literal get_field fold. Tracks OP_object construction sequences
+// in a linear sweep: object; push k; define_field(atom); ...; put_loc t
+// binds a field description to slot t. A later get_loc t + get_field x
+// folds to push of the recorded value when x is a known own data
+// property. Soundness: the constructed object holds only define_field
+// writes (no getters on a plain object literal), any define_field on an
+// object read out of a slot clears all descriptions (external
+// mutation), and unknown fields (prototype chain, e.g. toString) are
+// never folded. Stack effect of the folded pair (1 push) equals push.
+bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
+                    uint32_t var_count, RewriteStats* stats) {
+    const size_t n = insns->size();
+    // Description of an object under construction / bound to a slot:
+    // atom (raw u32 JSAtom value) -> int64 small-int value.
+    struct Desc {
+        bool valid;
+        std::vector<std::pair<uint32_t, int64_t>> fields;
+    };
+    std::vector<Desc> slot_desc(var_count);
+    Desc cur;  // object currently being built on the stack
+    cur.valid = false;
+
+    auto clear_all = [&]() {
+        for (size_t j = 0; j < slot_desc.size(); j++) slot_desc[j].valid = false;
+        cur.valid = false;
+        cur.fields.clear();
+    };
+    auto find_field = [](Desc* d, uint32_t atom) -> int64_t* {
+        for (size_t j = 0; j < d->fields.size(); j++)
+            if (d->fields[j].first == atom) return &d->fields[j].second;
+        return nullptr;
+    };
+
+    bool changed = false;
+    for (size_t i = 0; i < n; i++) {
+        if ((*dead)[i]) continue;
+        const Insn& in = (*insns)[i];
+        if (is_slot_alias_barrier(in.op)) {
+            clear_all();
+            continue;
+        }
+        if (in.op == OP_object) {
+            cur.fields.clear();
+            cur.valid = true;
+            continue;
+        }
+        if (in.op == OP_define_field) {
+            if (!cur.valid) {
+                // Mutating an object read out of a slot (or any other
+                // object): no description can be trusted anymore.
+                clear_all();
+                continue;
+            }
+            // Previous live insn must be a small-int push (the value).
+            size_t prev = i;
+            while (prev > 0) {
+                prev--;
+                if (!(*dead)[prev]) break;
+            }
+            if (prev < i && is_small_int_push((*insns)[prev].op)) {
+                int64_t v = (*insns)[prev].imm;
+                int64_t* f = find_field(&cur, in.aux);
+                if (f) {
+                    *f = v;
+                } else {
+                    cur.fields.push_back({in.aux, v});
+                }
+            } else {
+                // Non-constant field value: the object's shape is still
+                // defined by the writes, but the value is unknown; fold
+                // nothing for this object.
+                cur.valid = false;
+            }
+            continue;
+        }
+        if (in.op == OP_set_home_object || in.op == OP_set_name ||
+            in.op == OP_set_name_computed) {
+            // Class/name machinery can change the object.
+            clear_all();
+            continue;
+        }
+        uint32_t sl;
+        if (is_put_loc_op(in.op) && slot_of(in, &sl)) {
+            if (cur.valid) {
+                slot_desc[sl] = cur;
+                cur.valid = false;
+                cur.fields.clear();
+            }
+            continue;
+        }
+        if (is_set_loc_op(in.op) || is_slot_mut_op(in.op)) {
+            if (slot_of(in, &sl)) slot_desc[sl].valid = false;
+            continue;
+        }
+        if (in.op == OP_get_field) {
+            size_t prev = i;
+            while (prev > 0) {
+                prev--;
+                if (!(*dead)[prev]) break;
+            }
+            if (prev < i && is_get_loc_op((*insns)[prev].op)) {
+                uint32_t s;
+                if (slot_of((*insns)[prev], &s) && slot_desc[s].valid) {
+                    int64_t* f = find_field(&slot_desc[s], in.aux);
+                    if (f) {
+                        Insn ni;
+                        ni.op = shortest_push_op(*f);
+                        ni.old_off = (*insns)[prev].old_off;
+                        ni.old_size = short_opcode_info(ni.op).size;
+                        ni.pc_off = in.old_off;
+                        ni.target = -1;
+                        ni.imm = *f;
+                        ni.has_aux = false;
+                        (*insns)[prev] = ni;
+                        (*dead)[i] = 1;
+                        stats->folds_p14++;
+                        changed = true;
+                        continue;
+                    }
+                }
+            }
+            // Unknown property (prototype chain could provide it) or
+            // object not from a construction: no fold; description of
+            // the read slot stays valid (own fields remain foldable).
+            continue;
+        }
+        if (in.op == OP_get_array_el) {
+            // Array literals are built with OP_array_from; not handled
+            // in the direct level (see tier-2 plan).
+            continue;
+        }
+        // Any other get_loc of a described slot keeps the description
+        // (reads don't mutate; check-form slots are closure-free).
+    }
+    return changed;
+}
+
+// Tier-2 direct level combined driver (P11 then P14 per round).
+bool apply_tier2_direct(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
+                        uint32_t var_count, uint32_t passes,
+                        RewriteStats* stats) {
+    bool changed = false;
+    if ((passes & kPassP11) &&
+        apply_copyprop(insns, dead, var_count, stats))
+        changed = true;
+    if ((passes & kPassP14) &&
+        apply_lit_fold(insns, dead, var_count, stats))
+        changed = true;
     return changed;
 }
 
@@ -2111,12 +2480,18 @@ bool rewrite_function(const FuncRecord& f,
     stats->insns_before += insns.size();
     stats->bytes_before += f.code_len;
 
-    // P2/P3.1/P6 fixpoint: peephole sweeps until stable (each round
-    // that changes anything deletes at least one instruction, so this
-    // terminates), then shrink.
+    // Tier-2 direct level (P11/P14) then P2/P3.1/P6 fixpoint: peephole
+    // sweeps until stable (each round that changes anything deletes at
+    // least one instruction, so this terminates), then shrink. The
+    // tier-2 passes run first so their folds feed the v1 lattice.
     for (int round = 0; round < 16; round++) {
         std::vector<uint8_t> dead(insns.size(), 0);
         bool round_changed = false;
+        if ((passes & (kPassP11 | kPassP14)) &&
+            apply_tier2_direct(&insns, &dead, f.var_count, passes,
+                               stats)) {
+            round_changed = true;
+        }
         if ((passes & kPassP2) &&
             apply_crossbb(&insns, &dead, f.var_count, stats)) {
             round_changed = true;
@@ -2322,14 +2697,16 @@ bool optimize(const std::vector<std::uint8_t>& in,
         if (report) {
             std::fprintf(stderr,
                          "bytecode optimize: %llu -> %llu insns, %llu -> "
-                         "%llu code bytes; folds P2 %llu P3.1 %llu, "
-                         "shrinks %llu\n",
+                         "%llu code bytes; folds P2 %llu P3.1 %llu "
+                         "P11 %llu P14 %llu, shrinks %llu\n",
                          static_cast<unsigned long long>(stats.insns_before),
                          static_cast<unsigned long long>(stats.insns_after),
                          static_cast<unsigned long long>(stats.bytes_before),
                          static_cast<unsigned long long>(stats.bytes_after),
                          static_cast<unsigned long long>(stats.folds_p2),
                          static_cast<unsigned long long>(stats.folds_p31),
+                         static_cast<unsigned long long>(stats.folds_p11),
+                         static_cast<unsigned long long>(stats.folds_p14),
                          static_cast<unsigned long long>(stats.shrinks));
         }
         return true;
@@ -2357,13 +2734,16 @@ bool optimize(const std::vector<std::uint8_t>& in,
     if (report) {
         std::fprintf(stderr,
                      "bytecode optimize: %llu -> %llu insns, %llu -> %llu "
-                     "code bytes; folds P2 %llu P3.1 %llu, shrinks %llu\n",
+                     "code bytes; folds P2 %llu P3.1 %llu "
+                     "P11 %llu P14 %llu, shrinks %llu\n",
                      static_cast<unsigned long long>(stats.insns_before),
                      static_cast<unsigned long long>(stats.insns_after),
                      static_cast<unsigned long long>(stats.bytes_before),
                      static_cast<unsigned long long>(stats.bytes_after),
                      static_cast<unsigned long long>(stats.folds_p2),
                      static_cast<unsigned long long>(stats.folds_p31),
+                     static_cast<unsigned long long>(stats.folds_p11),
+                     static_cast<unsigned long long>(stats.folds_p14),
                      static_cast<unsigned long long>(stats.shrinks));
     }
     return true;

@@ -33,9 +33,29 @@ namespace bytecode {
 // passes (P6 re-shorten, compaction, verification) always run when
 // the optimizer runs and are not separately measurable.
 enum PassFlags : uint32_t {
-    kPassP2 = 1u << 0,   // cross-BB constant lattice propagation
-    kPassP31 = 1u << 1,  // const binop folding (add/sub/mul/and/.../mod)
-    kPassAll = kPassP2 | kPassP31,
+    kPassP2 = 1u << 0,    // cross-BB constant lattice propagation
+    kPassP31 = 1u << 1,   // const binop folding (add/sub/mul/and/.../mod)
+    // Tier-2 direct level (tier-2 plan, docs/bytecode-aot-optimizer.md):
+    // linear sweeps over the decoded instruction stream, run before the
+    // v1 fixpoint so their folded results feed the lattice.
+    kPassP11 = 1u << 2,   // copy propagation + dead store materialization
+                          // (get_loc s; put_loc t chains; dead stores
+                          // vanish as pairs with their feeding get_loc)
+    kPassP14 = 1u << 3,   // literal get_field fold: OP_object construction
+                          // sequences + slot binding, fold get_loc t +
+                          // get_field x to the field's known value
+    // Tier-2 SSI level (P9 construction .. P9' de-SSA) — reserved bits;
+    // implemented in the SSI suite.
+    kPassP9 = 1u << 4,    // SSI construction (slot reads/writes -> SSA)
+    kPassP10 = 1u << 5,   // SCCP incl. constant-condition dead edges
+    kPassP11S = 1u << 6,  // SSA copy propagation
+    kPassP12S = 1u << 7,  // SSA dead code elimination
+    kPassP13S = 1u << 8,  // LICM (stack-neutral subset)
+    kPassP14S = 1u << 9,  // SSI form-(b) fold (loop-invariant literals)
+    kPassP15S = 1u << 10, // GVN slot-read CSE
+    kPassSSI = kPassP9 | kPassP10 | kPassP11S | kPassP12S | kPassP13S |
+               kPassP14S | kPassP15S,
+    kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassSSI,
 };
 
 // Optimizes `in` (a serialized quickjs-ng bytecode buffer) into `out`.
