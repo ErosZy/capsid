@@ -134,6 +134,11 @@ if(CAPSID_BUILD_WORKER)
     set(BUILD_TJS_TEST_LIBS OFF CACHE BOOL "" FORCE)
     set(BUILD_TJS_RESTRICTED_CORE ON CACHE BOOL "" FORCE)
     set(BUILD_TJS_BENCHMARK_SQLITE OFF CACHE BOOL "" FORCE)
+    # A1: forward the profiling option into the quickjs xoption. The
+    # overlay key/manifest do not depend on this cache value — the
+    # compiled code does, so production builds keep it OFF.
+    set(CONFIG_OPCODE_PROFILE ${CAPSID_ENABLE_OPCODE_PROFILE}
+        CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public
@@ -252,6 +257,15 @@ if(CAPSID_BUILD_WORKER)
         capsid-worker PRIVATE
         "CAPSID_RUNTIME_VERSION=\"${PROJECT_VERSION}\""
     )
+    if(CAPSID_ENABLE_OPCODE_PROFILE)
+        # A1: gate the teardown-time profile dump hook in worker_runtime.cc.
+        # The quickjs CONFIG_OPCODE_PROFILE counters are enabled via the
+        # forwarded cache value above; this define enables the capsid-side
+        # observer that calls JS_DumpOpcodeProfile before each
+        # TJS_FreeRuntime.
+        target_compile_definitions(capsid-worker PRIVATE
+            CAPSID_OPCODE_PROFILE=1)
+    endif()
     if(CAPSID_GENERATE_LINK_MAP)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
            CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

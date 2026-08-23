@@ -186,10 +186,13 @@ function(capsid_compute_txiki_overlay_key)
     # 0032 keepalive-evicted queued fetch requests fail closed with their
     #      user_space intact; 0033 only pool onto connections whose peer
     #      already proved keepalive; 0034 per-token pending-job probe;
-    # 0035 correct libwebsockets Secure/HttpOnly cookie attribute mapping.
-    if(NOT CTOK_PATCH_COUNT EQUAL 36)
+    # 0035 correct libwebsockets Secure/HttpOnly cookie attribute mapping;
+    # 0036 CONFIG_OPCODE_PROFILE opcode counters (measurement build only;
+    #      compiled out of production builds — zero-tax verified at the
+    #      object and linked-binary level for the OFF configuration).
+    if(NOT CTOK_PATCH_COUNT EQUAL 37)
         message(FATAL_ERROR
-            "expected 36 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 37 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

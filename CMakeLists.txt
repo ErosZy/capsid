@@ -64,6 +64,12 @@ option(CAPSID_ENABLE_ASAN "Build all runtime targets with AddressSanitizer" OFF)
 option(CAPSID_ENABLE_UBSAN "Build all runtime targets with UndefinedBehaviorSanitizer" OFF)
 option(CAPSID_ENABLE_TSAN "Build all runtime targets with ThreadSanitizer" OFF)
 option(CAPSID_BUILD_FUZZERS "Build the libFuzzer protocol boundary targets" OFF)
+# A1: quickjs-ng opcode profiling counters (overlay patch 0036). The
+# worker dumps one JSON object per runtime to stderr at teardown. This is
+# a measurement build only — production performance is never measured with
+# it, and zero-tax is enforced by the overlay OFF configuration.
+option(CAPSID_ENABLE_OPCODE_PROFILE
+    "Build the worker with quickjs-ng opcode profiling counters" OFF)
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY

@@ -18,6 +18,14 @@ extern "C" {
 #include "utils.h"
 #include "uv.h"
 
+#ifdef CAPSID_OPCODE_PROFILE
+// A1: teardown-time opcode profile dump (measurement builds only; the
+// whole block compiles to nothing in production). JS_DumpOpcodeProfile
+// exists in the overlay only under CONFIG_OPCODE_PROFILE, so it is
+// declared here rather than in quickjs.h, which this TU sees without
+// that define.
+extern "C" void JS_DumpOpcodeProfile(FILE *fp, JSRuntime *rt);
+#endif
 int capsid_tjs_set_ca_bundle_path(TJSRuntime *runtime, const char *path);
 int capsid_tjs_set_cookie_jar_path(TJSRuntime *runtime, const char *path);
 int capsid_tjs_set_fs_policy(
@@ -807,6 +815,11 @@ public:
                 table.abort = JS_UNDEFINED;
             }
             if (table.runtime != NULL) {
+#ifdef CAPSID_OPCODE_PROFILE
+                if (table.ctx != NULL) {
+                    JS_DumpOpcodeProfile(stderr, JS_GetRuntime(table.ctx));
+                }
+#endif
                 TJS_FreeRuntime(table.runtime);
                 table.runtime = NULL;
                 table.ctx = NULL;
@@ -825,6 +838,11 @@ public:
             // on the assertion. shutdown() is idempotent, so the normal
             // exit paths (EOF/poison drain) are unaffected.
             shutdown();
+#ifdef CAPSID_OPCODE_PROFILE
+            if (ctx_ != NULL) {
+                JS_DumpOpcodeProfile(stderr, JS_GetRuntime(ctx_));
+            }
+#endif
             TJS_FreeRuntime(runtime_);
             // §7.5: a poison exit can leave registry tokens behind — refs
             // held by parked JS continuations are never released, because
@@ -1383,6 +1401,11 @@ private:
             table->abort = JS_UNDEFINED;
         }
         if (table->runtime != NULL) {
+#ifdef CAPSID_OPCODE_PROFILE
+            if (table->ctx != NULL) {
+                JS_DumpOpcodeProfile(stderr, JS_GetRuntime(table->ctx));
+            }
+#endif
             TJS_FreeRuntime(table->runtime);
             table->runtime = NULL;
             table->ctx = NULL;

@@ -12,30 +12,51 @@ direct rewrites are useful but that a general SSI/SCCP/GVN/LICM layer added only
 0.016% on the measured corpus. Tier 3 therefore profiles actual interpreter
 cost before deciding whether to add specialized opcodes.
 
+Active scope (product decision 2026-08-23): **bytecode-level measures only,
+no IC/GC**. Lane 1 and Lane 2A are in scope; Lane 2B (sparse cache) and Lane 3
+(runtime quickening) are deferred — they require runtime state and are
+IC-adjacent. Every emitted instruction must preserve the zero-state contract:
+the generic handler remains authoritative for every miss, and no runtime field,
+allocation, or GC root exists for any in-scope lane.
+
 The implementation order is deliberately conservative:
 
-| Lane | Mechanism | Runtime state |
-| --- | --- | --- |
-| 1 | Candidate-specific AOT type proof; emit a guard-free specialized opcode | None |
-| 2A | PGO-selected stateless guard, branch layout, or fused instruction | None |
-| 2B | PGO-selected sparse shape/property/callee cache | Hot sites only |
-| 3 | Runtime quickening for residual stable hotspots | Hot functions/sites |
+| Lane | Mechanism | Runtime state | Status |
+| --- | --- | --- | --- |
+| 1 | Candidate-specific AOT type proof; emit a guard-free specialized opcode | None | In scope |
+| 2A | PGO-selected stateless guard, branch layout, or fused instruction | None | In scope |
+| 2B | PGO-selected sparse shape/property/callee cache | Hot sites only | Deferred (IC-shaped) |
+| 3 | Runtime quickening for residual stable hotspots | Hot functions/sites | Deferred (runtime state) |
 
-Prior ranges, not promises:
+This is an opcode-cost plan, not a restart of the retired generic P9-P15' SSI
+suite. Dynamic opcode/site evidence selects a candidate first. Lane 1 then
+builds only the CFG and full-stack type dataflow needed to prove that candidate;
+Lane 2A uses guarded or fused bytecode forms and does not require SSI. A local
+sparse SSA/SSI representation is allowed only when a selected candidate cannot
+be proved without use-position refinement and its analyze-only ceiling already
+clears the benefit gate.
+
+Prior ranges, not promises (bytecode-only subset):
 
 | Mechanism | Broad workloads | Isolated hotspot |
 | --- | ---: | ---: |
 | Lane 1 static tag elimination | 0%..3% | 3%..10% |
 | Lane 2A stateless/fusion | 1%..5% | 5%..15% |
-| Lane 2B sparse property/call cache | 3%..10% | 10%..25% |
-| First combined release | **3%..8%** | workload-dependent |
+| First combined release | **1%..8%** | workload-dependent |
 
 `8%..15%` is a stretch goal requiring a property, call, or fusion candidate to
 pass every correctness, RSS, and per-workload gate. `15%..25%` is only a
 multi-round ceiling. No candidate means no BC27.
 
 Out of scope: JIT/baseline native compiler, NaN-boxing redesign, decoded
-16-bit IR, AST HIR, call inlining, and profile-driven instruction reordering.
+16-bit IR, AST HIR, call inlining, profile-driven instruction reordering,
+inline caches, and GC-related work.
+
+Execution status (2026-08-23): A0 baseline is largely in place — the
+interpreter-ceiling reference (quickjs-ng 1.95x behind V8 jitless on v8-suite)
+and the DSE +2.6% paired A/B are archived under `bench/results/`. A1 is in
+progress as overlay patch 0036 (`CONFIG_OPCODE_PROFILE`). A2-A4, B1, C1, C2
+follow in order.
 
 ## 2. Verified Baseline Facts
 
@@ -99,6 +120,14 @@ Sampling must not reorder the observed fast/slow branches. Calibrate clock
 overhead with a control handler and report how much the profiling binary itself
 perturbs patchless execution. Profiling results rank opportunities; production
 performance is never measured with this build.
+
+The first implementation (overlay patch 0036) covers a strict subset: per-
+opcode dispatch executions and slow-path entries, three-way arithmetic operand
+classes for `add/sub/mul/div/mod` (int-int, float-float, other), branch
+direction, call argc buckets, and property fast/slow counts. Remaining classes
+are additive and keep the schema name `quickjs-ng-opcode-profile-v1`. All
+counters are per-runtime saturating u64s, so the process may host multiple
+worker runtimes; the dump API emits one JSON object per runtime.
 
 ### 3.3 Stable site identity
 
@@ -207,7 +236,7 @@ must demonstrate a concrete difference such as float-first ordering, one guard
 shared by a fused sequence, or removed dispatches. Stability alone is not a
 reason to emit it.
 
-### 5.3 Lane 2B: sparse cache
+### 5.3 Lane 2B: sparse cache (deferred 2026-08-23)
 
 Exact shape, property offset, and closure identity require runtime state. If
 product policy allows them, allocate state only for PGO-selected hot sites:
@@ -271,7 +300,7 @@ slots stay invalid.
 An upstream move to wire version 27 requires re-baseline and an explicit format
 identity decision; the bare byte is never assumed globally unique.
 
-## 7. Lane 3: Runtime Quickening
+## 7. Lane 3: Runtime Quickening (deferred 2026-08-23)
 
 Lane 3 begins only after Lane 1/2 land and re-profiling still shows a residual
 site with at least 2% tick coverage and a 90% Wilson-lower-bound dominant class.
@@ -424,3 +453,11 @@ Each stage is a separate commit. Stop without BC27 if A4 has no winner, if ext
 dispatch consumes the predicted win, if optimized-test262 finds a semantic
 gap, if sparse state repeats upstream IC's memory/regression distribution, or
 if the production deployment floors fail.
+
+Status: **A0** baseline evidence archived (interpreter ceiling, DSE paired A/B);
+**A1** in progress as overlay patch 0036; A2-A4, B1, C1, C2 not started.
+C2 is the final in-scope lane; after it lands, a convergence round re-profiles
+the released output. The bytecode-only loop stops (per the 2026-08-23
+directive) when re-profiling shows no candidate with at least 1% attributed
+broad gain and no >2% regression — that verdict, positive or negative, is
+recorded as the termination report. Lane 2B/3 remain deferred, not cancelled.

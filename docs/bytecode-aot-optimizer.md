@@ -168,6 +168,33 @@ The evidence answers the CFG/SSI question:
 - large synthetic wins identify a mechanism but cannot be extrapolated to the
   mixed Hono/request workload.
 
+### Why CFG remains but generic SSI does not
+
+Capsid has not abandoned CFG analysis. CFG construction, join handling, stack
+height verification, forward constant propagation, and backward slot liveness
+remain part of the deployed optimizer. What was retired is the generic
+P9-P15' SSI/SCCP/GVN/LICM layer. On the measured corpus it added only 2 removed
+instructions over the direct passes (2/12,645, or 0.016%): SCCP duplicated P2,
+the SSI property fold duplicated direct P14, and copy propagation, SSA DCE,
+LICM, and slot-read CSE had no independent breadth. LICM did not move code even
+on its dedicated anchor fixture.
+
+This is also a structural result. quickjs-ng has already removed many shallow
+stack-bytecode redundancies, while the remaining expensive work is dominated
+by runtime tags, property shapes/prototypes, dynamic callees, coercion, and
+exceptional paths. Generic SSI can describe value flow, but calls, accessors,
+proxies, iterators, suspension, and dynamic scope force a sound analysis to
+discard most facts needed to eliminate those costs. Maintaining a general SSI
+framework is therefore not justified by the measured incremental benefit.
+
+SSI is not forbidden as a technique. A future measured opcode candidate may
+use candidate-specific CFG/type dataflow and, only when needed, a local sparse
+SSA/SSI representation. Profiling selects the expensive operation first; the
+analysis is then the minimum proof machinery required to emit its specialized
+form. test262 and differential tests judge correctness, while corpus
+attribution and paired runtime measurements judge whether that machinery is
+worth keeping.
+
 Further gains inside BC26 should be proposed only with an analyze-only ceiling
 and a new corpus class. Work that changes opcode cost or introduces runtime
 specialization belongs to the separately gated
