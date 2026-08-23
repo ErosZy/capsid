@@ -728,3 +728,24 @@ tier-2 direct passes so their dead-store materializations are visible;
 it only deletes instructions (never rewrites), so it cannot feed the
 lattice and termination is unchanged. `kPassAll` = P2|P31|P11|P14|P16;
 the report line covers P2/P3.1/P11/P14/P16 folds + shrinks.
+
+### Tier-3 direction (plans only, not committed — 2026-08-23)
+
+Two sibling plans define the next direction, which ends the v1/tier-2
+red line of "no VM changes, frozen BC26" and therefore requires the same
+user-level decision as the Step 9 reversal before any code lands:
+
+- [quickjs-ng-deep-opcode-specialization.md](plans/quickjs-ng-deep-opcode-specialization.md) —
+  VM-side adaptive specialization (BC27 `OP_ext` escape hatch, runtime
+  quickening with side tables) — the upstream-IC lineage, mitigated
+  against the PR #884 failure modes;
+- [quickjs-ng-opcode-profiling-aot-pgo.md](plans/quickjs-ng-opcode-profiling-aot-pgo.md) —
+  this optimizer's CFG+SSI machinery extended to a type lattice (P17)
+  and guard-free static opcode specialization (P18), plus offline PGO
+  feeding guarded adaptive forms; runtime quickening only as the last
+  lane. Shares the profiling schema and the BC27 format decision with
+  the sibling plan; execution order is A0-A2 shared, then the AOT lane
+  first (no runtime state, no GC rooting, no memory growth).
+
+Neither plan changes the as-built pipeline until its own A2
+(profile-driven candidate selection) go/no-go passes.

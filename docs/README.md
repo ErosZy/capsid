@@ -31,9 +31,11 @@ Capsid documentation is organized around selection → integration → configura
   [framework-compatibility/README.md](framework-compatibility/README.md)
 - Test gate: [testing.md](testing.md)
 - Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
-- Bytecode AOT optimizer design and tier-2b plan:
+- Bytecode AOT optimizer and QuickJS opcode plans:
   [bytecode-aot-optimizer.md](bytecode-aot-optimizer.md) ·
-  [plans/tier-2b-tdz-sound-dce.md](plans/tier-2b-tdz-sound-dce.md)
+  [plans/tier-2b-tdz-sound-dce.md](plans/tier-2b-tdz-sound-dce.md) ·
+  [plans/quickjs-ng-deep-opcode-specialization.md](plans/quickjs-ng-deep-opcode-specialization.md) ·
+  [plans/quickjs-ng-opcode-profiling-aot-pgo.md](plans/quickjs-ng-opcode-profiling-aot-pgo.md)
 
 ## Maintenance Rules
 
