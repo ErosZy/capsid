@@ -463,6 +463,65 @@ noise). Per the stop condition, the bytecode-only loop stops here:
 would re-open them is a re-profile of the released output (D1) or a
 product decision to allow BC27/VM-state changes.
 
+### 4.5 D1 head-to-head vs sablejs (2026-08-24): residual re-profile
+
+Protocol: identical suite source — the pinned fixture
+(`bench/fixtures/v8-suite-rt.js`, quickjs-ng indirect-eval) and sablejs's
+`benchmark/v8-suite.js` are byte-identical (137,004 bytes) after their
+print shim line, verified by direct comparison. Same machine, alternating
+runs, taskset 2-3, 3 samples each. sablejs: `node --expose-gc
+benchmark/run.js` (O2, trusted — their production config; compile
+~0.56 s per run, reported separately). quickjs-ng: source-mode worker
+(JS_Eval, no AOT — the suite is eval'd code).
+
+| benchmark | sablejs | quickjs-ng | ratio |
+| --- | ---: | ---: | ---: |
+| Richards (polymorphic OO) | 1012 | **1041** | qjs +3% |
+| Crypto (RSA big-int) | **7140** | 1089 | qjs 6.6× slower |
+| RayTrace (float + objects) | 651 | **1570** | qjs 2.4× faster |
+| NavierStokes (float array loops) | **12564** | 1823 | qjs 6.9× slower |
+| DeltaBlue (polymorphic OO) | 575 | **1033** | qjs 1.8× faster |
+| **Score (v7, geomean)** | **2024** | **1274** | sablejs 1.59× |
+
+Wall-clock: sablejs ≈ 16.0 s (15.3-16.0 excl. compile + node startup)
+vs quickjs-ng ≈ 17.9 s median (17.5-18.8) — sablejs ≈ 11% faster on
+total time; the two losing benchmarks dominate the suite's runtime, so
+the geomean score and the wall-clock diverge.
+
+Attribution (source-shape reading + A2 mechanism data):
+
+- **NavierStokes (6.9×)**: plain-array float loops (`x[i] += dt *
+  s[i]`) — every element access takes the generic `JS_GetPropertyValue`
+  path (A2 rank 1: 4.39% dispatch, 6.27B slow-cost units) plus boxed
+  float64 arithmetic per op.
+- **Crypto (6.6×)**: RSA big-integer arithmetic — mul/add with int32
+  overflow promoting to float64 (A2 "arith other" buckets: 36M mul +
+  43M add execs, 1.58B combined slow-cost units). sablejs runs its
+  generated code on V8, whose JIT keeps typed locals unboxed.
+- **Richards/RayTrace/DeltaBlue (qjs wins 1.03-2.4×)**: object-property
+  and call-heavy — quickjs-ng's native property machinery and native
+  Math functions beat sablejs's JS-level interpreter even on V8.
+
+Residual site (Lane 3 gate): `get_array_el` retains **4.39% tick
+coverage (> 2% gate)** with a dominant class — plain-array element
+access in hot loops, 100% taking the generic path. Lane 3's entry
+condition is met by measurement.
+
+Honest ceiling for quickening: a specialized `get_array_el` ext variant
+skips the `JS_GetPropertyValue` call but keeps index tag/bounds checks
+and boxed-value moves — realistic expectation is a single-digit %
+suite-level win (the A2 slow-path share, not the 6.9×). The Crypto
+arithmetic gap is interpreter-model-inherent (boxed values); closing it
+needs register-level specialization, i.e. JIT-class work that is out of
+scope here (quickjs-aot/quickjit excluded). AOT passes see zero sites in
+this corpus (eval'd string) — only runtime-side work can touch it.
+
+Decision record: the bytecode-only loop remains terminated (§4.4). The
+measured residual authorizes Lane 3 (quickening, §7) as the next
+in-scope direction IF product decides to invest; Lane 2B/3 and B1 stay
+deferred otherwise. The sablejs comparison itself is archived here as
+the D1 evidence base.
+
 ## 5. Lane 1 and Lane 2 Emission
 
 ### 5.1 Lane 1: guard-free
@@ -548,10 +607,14 @@ slots stay invalid.
 An upstream move to wire version 27 requires re-baseline and an explicit format
 identity decision; the bare byte is never assumed globally unique.
 
-## 7. Lane 3: Runtime Quickening (deferred 2026-08-23)
+## 7. Lane 3: Runtime Quickening (gate met 2026-08-24, deferred by decision)
 
 Lane 3 begins only after Lane 1/2 land and re-profiling still shows a residual
 site with at least 2% tick coverage and a 90% Wilson-lower-bound dominant class.
+Status: Lane 1/2 landed (§4.3/§4.4); the D1 residual re-profile (§4.5) shows
+`get_array_el` at 4.39% tick coverage with a 100%-generic dominant class —
+the gate is **met**. Investment remains a product decision; the direction
+stays deferred, not cancelled.
 
 Use a runtime-only saturating function score and hot-function side table. No
 runtime field is serialized. Only functions containing adaptive ext sites pay
