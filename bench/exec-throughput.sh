@@ -19,7 +19,7 @@ THROUGHPUT=${THROUGHPUT:-bench/bin/exec-throughput}
 ANALYZE=${ANALYZE:-bench/bin/analyze}
 SUT_CPUSET=${SUT_CPUSET:-0-3}
 ROUNDS=${ROUNDS:-5}
-FIXTURES=${FIXTURES:-"arith-rt cascade-rt matrix-rt sieve-rt string-rt fib-rt json-rt"}
+FIXTURES=${FIXTURES:-"arith-rt cascade-rt matrix-rt sieve-rt string-rt fib-rt json-rt prop-loop-rt prop-hoist-rt copy-chain-rt branch-const-rt cse-loop-rt licm-rt"}
 
 echo "rounds: $ROUNDS sut_cpuset: $SUT_CPUSET" | tee "$OUT/manifest.txt"
 {

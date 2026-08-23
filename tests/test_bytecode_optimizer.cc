@@ -314,10 +314,12 @@ void test_peephole_goldens() {
         b.op(40);
         b.stack_size = 2;
         b.finish(1);
-        // P2 folds the read (cell 1), P3.1 folds 1+1 -> 2, and the
-        // SSA DCE (P10 SCCP + P12') removes the now-dead store x=1:
-        // output is just push_2; return.
-        expect_code("p2 crossbb x+1", &b, "bc 28");
+        // P2 folds the read (cell 1), P3.1 folds 1+1 -> 2. The dead
+        // store x=1 is kept: removing it needs the SSA dead-store
+        // elimination (P12'), which the tier-2 G4 trim deleted
+        // (docs/bytecode-aot-optimizer.md §11); output is
+        // push_1; put_loc0; push_2; return.
+        expect_code("p2 crossbb x+1", &b, "bb cf bc 28");
     }
 }
 
