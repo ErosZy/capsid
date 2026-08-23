@@ -957,6 +957,27 @@ bool decode_code(const uint8_t* code,
         default:
             break;
         }
+        // Atom-family operands: raw u32 JSAtom value at pc+1 (also the
+        // atom_u8/u16 and with_* label variants). P14 compares
+        // define_field vs get_field atoms by value; no name resolution
+        // is needed (both operands use the same raw encoding).
+        if (!in.has_aux) {
+            switch (oi.fmt) {
+            case OP_FMT_atom:
+            case OP_FMT_atom_u8:
+            case OP_FMT_atom_u16:
+            case OP_FMT_atom_label_u8:
+            case OP_FMT_atom_label_u16:
+                in.aux = static_cast<uint32_t>(code[pc + 1]) |
+                         (static_cast<uint32_t>(code[pc + 2]) << 8) |
+                         (static_cast<uint32_t>(code[pc + 3]) << 16) |
+                         (static_cast<uint32_t>(code[pc + 4]) << 24);
+                in.has_aux = true;
+                break;
+            default:
+                break;
+            }
+        }
         insns->push_back(in);
         pc += oi.size;
     }
