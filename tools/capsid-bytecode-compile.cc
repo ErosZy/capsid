@@ -35,7 +35,7 @@
 #include <string>
 #include <vector>
 
-#include "bytecode_optimize.h"
+#include "bytecode_optimizer/bytecode_optimizer.h"
 #include "win32_compat.h"
 #if defined(_WIN32)
 #else

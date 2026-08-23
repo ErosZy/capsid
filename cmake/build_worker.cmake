@@ -319,13 +319,14 @@ if(CAPSID_BUILD_WORKER)
         endif()
     endif()
     # Bytecode AOT optimizer (docs/bytecode-aot-optimizer.md): pure
-    # capsid-side post-serialization rewrite of the .qjsb buffer. Never
-    # changes the vendored VM or the bytecode compatibility identity;
-    # only the compiler tool links it.
+    # capsid-side post-serialization rewrite of the .qjsb buffer. This is
+    # product source consumed by the compiler, tests, benchmarks, and fuzzers;
+    # it never changes the vendored VM or bytecode compatibility identity.
     add_library(capsid_bytecode_opt STATIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/bytecode_optimize.cc")
-    target_include_directories(capsid_bytecode_opt PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/bytecode_optimizer.cc")
+    target_include_directories(capsid_bytecode_opt
+        PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        PRIVATE
         "${CAPSID_TXIKI_OVERLAY}/deps/quickjs")
     set_target_properties(capsid_bytecode_opt PROPERTIES
         CXX_STANDARD 11

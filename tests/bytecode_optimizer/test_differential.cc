@@ -1,5 +1,5 @@
-// Step 7 differential gate for the bytecode AOT optimizer
-// (docs/bytecode-aot-optimizer.md, G1): for every fixture spec the
+// End-to-end differential gate for the bytecode AOT optimizer
+// (docs/bytecode-aot-optimizer.md): for every fixture spec the
 // compiler — which runs the optimizer on its output — produces a .qjsb
 // bundle, then two workers are driven through the identical request:
 //   - source worker:    capsid_worker_load_bundle_named(source)

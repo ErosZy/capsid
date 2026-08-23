@@ -230,17 +230,14 @@ if(BUILD_TESTING)
                 capsid-bytecode-compile
                 capsid-worker)
 
-            # Step 7 unit gate for the bytecode AOT optimizer
+            # Unit gate for the bytecode AOT optimizer
             # (docs/bytecode-aot-optimizer.md): synthetic-buffer golden
             # bytes, fail-closed matrix, P2 gates, and a full
             # compile → serialize → optimize → deserialize → eval
             # round-trip through tjs compared with the unoptimized path.
             add_executable(
                 test-bytecode-optimizer
-                tests/test_bytecode_optimizer.cc)
-            target_include_directories(
-                test-bytecode-optimizer PRIVATE
-                "${CMAKE_CURRENT_SOURCE_DIR}/tools")
+                tests/bytecode_optimizer/test_optimizer.cc)
             target_link_libraries(
                 test-bytecode-optimizer PRIVATE
                 capsid_bytecode_opt
@@ -266,7 +263,7 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_optimizer PROPERTIES TIMEOUT 60)
 
-            # Step 7 differential gate (G1): every fixture runs through
+            # Differential gate: every fixture runs through
             # the real deployment path — compiler (optimizer on) →
             # trusted-bytecode worker load — and the response must match
             # the source-loaded worker byte for byte. binding: fixtures
@@ -275,7 +272,7 @@ if(BUILD_TESTING)
             # identical error text.
             add_executable(
                 test-bytecode-opt-diff
-                tests/test_bytecode_opt_diff.cc)
+                tests/bytecode_optimizer/test_differential.cc)
             target_link_libraries(
                 test-bytecode-opt-diff PRIVATE
                 capsid_runtime
@@ -2068,7 +2065,7 @@ if(BUILD_TESTING)
             fuzz-bytecode-opt
             tests/fuzz/fuzz_bytecode_opt.cc
             bytecode_opt
-            tools/bytecode_optimize.cc
+            src/bytecode_optimizer/bytecode_optimizer.cc
         )
         # The optimizer's opcode table comes from the vendored quickjs
         # header (never linked — names only). CI builds fuzzers with

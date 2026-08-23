@@ -143,112 +143,57 @@ READY times (same samples): capsid source 8.00/17.85/133.71, bytecode 6.91/9.27/
 - **At 1M source capsid and Node are effectively tied in these medians** (134.09 vs 135 ms), while Deno remains faster at 52 ms. Trusted bytecode erases that source-compilation gap.
 - Semantic note: capsid first response goes through in-process IPC, while Node/Deno use local HTTP curl; "first request completes after ready" is aligned, but the request path implementation differs, so this is not an isomorphic comparison.
 
-## 5. Bytecode AOT Optimizer (2026-08-23, observed samples)
+## 5. Bytecode AOT Optimizer (final BC26 configuration)
 
-Measurement class: warm execution of compute-dense fixtures (source vs
-unoptimized bytecode vs optimized bytecode), CPU pinned to SUT_CPUSET 0-3, 1
-warmup run discarded + 5 measured rounds, median ms per round. The optimized
-bundle is produced by `capsid-bytecode-compile` (Release, G4-trimmed pipeline
-P2+P3.1; the run manifest records commit `47b9369` — `cab458d` afterwards changed
-only the no-change report line, not output bytes) and each optimized body is
-cross-checked against the source body byte-for-byte. Raw samples, compiler
-reports, manifest, and sha256 are in `bench/results/exec-throughput-20260823T042708/`;
-`load_noise` is the source-vs-raw parse-skip reference (bytecode path vs source
-path). Full G1-G5 verdict and static ceilings live in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md) §11. Per the evidence rules above, these are observed samples, not a general "optimization works" claim: no perf profiles were collected in this class.
+This section keeps only the final deployed result. Intermediate v1, tier-2, and
+tier-2b tables remain in git history; implementation and soundness are maintained
+in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md).
 
-| fixture | source ms | raw ms | opt ms | opt vs raw | load_noise |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| arith-rt | 44.584 | 44.487 | 27.164 | +38.94% | 0.22% |
-| cascade-rt | 16.272 | 16.135 | 11.441 | +29.09% | 0.84% |
-| matrix-rt | 4.514 | 4.832 | 4.638 | +4.01% | -7.04% |
-| sieve-rt | 24.002 | 24.998 | 25.613 | -2.46% | -4.15% |
-| string-rt | 0.474 | 0.440 | 0.459 | -4.32% | 7.17% |
-| fib-rt | 15.123 | 15.207 | 15.086 | +0.80% | -0.56% |
-| json-rt | 1.790 | 1.775 | 1.763 | +0.68% | 0.84% |
+The execution harness compares source, unoptimized bytecode, and optimized
+bytecode on pinned CPUs, discards one warmup, and records five measured samples.
+Optimization attribution always uses optimized versus unoptimized bytecode;
+source additionally measures parsing/compilation and is not the optimization
+baseline. Raw manifests, samples, reports and hashes are under
+`bench/results/exec-throughput-20260823T152705/`,
+`bench/results/exec-throughput-20260823T153323/`,
+`bench/results/exec-throughput-20260823T153344/`, and
+`bench/results/p16-evidence/`.
 
-Static reductions (compiler report): arith-rt 145→85 insns / 297→240 bytes;
-cascade-rt 100→76 insns / 225→205 bytes; the other five fixtures are
-byte-identical (0% static ceiling). The two moving fixtures are const-chain-dense
-loops — the pipeline's target population; the wall-clock gain tracks the insn
-removal rate (see G5 in the optimizer doc for the dispatch-amortization reading).
+The deployed pipeline is P11/P14/P16/P2/P3.1 plus compaction, pc2line remapping,
+checksum rebuild and verification.
 
-### Tier-2 final-config run (2026-08-23, commit 8078d04)
+### Breadth and pass decisions
 
-Same protocol, 13 fixtures, post-G4-trim deployed pipeline (P2+P3.1+P11+P14 +
-format passes; the tier-2 SSI suite was measured and deleted — see
-[Bytecode AOT Optimizer](bytecode-aot-optimizer.md) §11 for the full G4
-attribution table). Raw samples, compiler reports, manifest, and sha256 are in
-`bench/results/exec-throughput-20260823T140906/`.
+| Evidence set | Result | Interpretation |
+| --- | ---: | --- |
+| 12,645-instruction tier-2 corpus | SSI suite added 2 unique removals (0.016%) | P9-P15' deleted; direct P11/P14 retained |
+| 12,233-instruction bundle corpus | P16 removed 88 instructions (0.72%) | Best current breadth estimate for P16 |
+| 1,076-instruction compute fixture corpus | P16 removed 120 instructions (11.15%) | Deliberately marker-dense mechanism corpus, not production prevalence |
+| `arith-rt` optimized loop | 76 → 26 instructions | Entry marker/producer/store scaffolding was the dominant synthetic cost |
 
-| fixture | source ms | raw ms | opt ms | opt vs raw | load_noise |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| arith-rt | 46.984 | 47.083 | 28.103 | +40.31% | -0.21% |
-| cascade-rt | 16.665 | 16.605 | 11.409 | +31.29% | 0.36% |
-| matrix-rt | 4.739 | 4.666 | 4.720 | -1.16% | 1.54% |
-| sieve-rt | 25.106 | 25.677 | 25.936 | -1.01% | -2.27% |
-| string-rt | 0.452 | 0.457 | 0.448 | +1.97% | -1.11% |
-| fib-rt | 15.627 | 15.726 | 15.434 | +1.86% | -0.63% |
-| json-rt | 2.124 | 1.799 | 1.791 | +0.44% | 15.30% |
-| prop-loop-rt | 34.012 | 33.705 | 31.194 | +7.45% | 0.90% |
-| prop-hoist-rt | 6.026 | 6.005 | 3.498 | +41.75% | 0.35% |
-| copy-chain-rt | 7.654 | 7.754 | 6.723 | +13.30% | -1.31% |
-| branch-const-rt | 4.305 | 4.375 | 4.200 | +4.00% | -1.63% |
-| cse-loop-rt | 7.378 | 7.547 | 7.501 | +0.61% | -2.29% |
-| licm-rt | 4.600 | 4.690 | 4.596 | +2.00% | -1.96% |
+The large fixture effects are real mechanism evidence but not broad product
+claims. The final three recorded runs produced:
 
-Static reductions (compiler report, final config): arith-rt 145→85 /
-297→240; cascade-rt 100→76 / 225→205; prop-hoist-rt and prop-loop-rt 53→46 /
-124→99 (P14 literal-get_field folds + downstream P3.1 cascade); copy-chain-rt
-48→44 / 102→93 (P11 copy-prop); the other eight fixtures are byte-identical
-(0% static ceiling). prop-hoist's +41.75% on a 13.2% insn removal shows the
-removed instructions are expensive `get_field` lookups, not cheap dispatches
-(G5 in the optimizer doc). The G4 attribution matrix and the SSI suite's
-0.016% corpus contribution are in the optimizer doc's §11.
-
-### Tier-2b final-config run (2026-08-23, commit 40c3d8a)
-
-Same protocol, 13 fixtures, post-tier-2b deployed pipeline (P2+P3.1+P11+P14+
-P16 + format passes; P16 is the tier-2b TDZ-sound dead-store elimination —
-see [Bytecode AOT Optimizer](bytecode-aot-optimizer.md) §11 for the G1-G5
-adjudication). Raw samples, compiler reports, manifest, and sha256 are in
-`bench/results/exec-throughput-20260823T152705/` (plus retest runs
-T153323/T153344). The machine carried concurrent sessions (a test262
-conformance run at 125% CPU, then a sablejs Crypto benchmark at ~115%
-CPU), so the table below gives run 1 plus the range across all three
-runs for each fixture; the large-gain fixtures are stable across all
-three, and the millisecond-scale swings trace to that load — P16's
-edits there delete only dead markers with strictly smaller outputs, so
-a genuine slowdown is structurally impossible.
-
-| fixture | opt vs raw (run 1) | opt vs raw (3-run range) |
+| fixture | final instructions | optimized vs raw |
 | --- | ---: | ---: |
-| arith-rt | **+84.09%** | +83.80…+84.70% |
-| cascade-rt | +56.56% | +56.17…+57.22% |
-| prop-hoist-rt | +42.77% | +39.86…+42.77% |
-| copy-chain-rt | +21.39% | +21.07…+26.60% |
-| prop-loop-rt | +18.54% | +17.26…+18.67% |
-| branch-const-rt | +9.83% | -1.82…+9.83% |
-| matrix-rt | +5.95% | -4.59…+5.95% |
-| cse-loop-rt | +2.36% | -4.97…+6.77% |
-| sieve-rt | +0.05% | -0.58…+0.70% |
-| fib-rt | +0.05% | -7.49…+0.25% |
-| json-rt | -0.92% | -18.03…+8.51% |
-| string-rt | -2.46% | -3.34…+4.37% |
-| licm-rt | -2.52% | -16.21…-2.31% |
+| arith-rt | 145 → 35 | +83.80%..+84.70% |
+| cascade-rt | 100 → 59 | +56.17%..+57.22% |
+| prop-hoist-rt | 53 → 43 | +39.86%..+42.77% |
+| copy-chain-rt | 48 → 39 | +21.07%..+26.60% |
+| prop-loop-rt | 53 → 43 | +17.26%..+18.67% |
 
-Static reductions (compiler report, post-tier-2b): arith-rt 145→35 /
-297→74 (P16 −50 insns: 18× set_loc_uninitialized + 17× push_i32 + 14×
-put_loc8 + 1); cascade-rt 100→59 / 225→149 (P16 −17); matrix-rt 203→187 /
-477→429 (P16 −16); the other fixtures −3 to −7 insns each; fib-rt remains
-byte-identical (P16 true negative). arith-rt's +84.09% on a 76→26-insn
-loop (the tier-2 G5 report's predicted dead-store scaffolding, now
-removed) is the pipeline's headline: P16's deletions are paid once per
-function call, so the win lands on every invocation rather than being
-amortized across loop iterations. The P16 switch matrix (kPassAll vs
-kPassAll∖P16, 120/1076 = 11.15% corpus static attribution on this
-marker-dense corpus) and the G1-G5 verdicts are in the optimizer doc's
-§11; per-fixture evidence is archived in `bench/results/p16-evidence/`.
+Those runs shared a machine with concurrent sessions; the five large effects
+were stable, while millisecond-scale fixtures changed sign and are intentionally
+not used for a performance conclusion. No result here supports a general
+20%+ request-throughput claim. The 0.72% bundle-corpus attribution is the
+relevant warning against extrapolating the marker-dense fixtures.
 
+Correctness for the final configuration: 10/10 targeted ctest groups, optimized
+round-trip and source-worker differential coverage, 40,000 ASan/UBSan fuzz
+cases, and byte-for-byte determinism. P14 also demonstrated why instruction
+count is not a cost model: removing a small number of expensive `get_field`
+operations produced more wall-clock benefit than removing the same number of
+cheap dispatches.
 ## 6. Retired Checkpoints
 
 The previous 2026-08-18 AMD Ryzen 3 3300X checkpoint (`c943e35`, `four-qps-final-20260818T131300`, `four-qps-profile-20260818T132600`, and `cold-start-20260818T134435`) was superseded by the clean rc.07 run above. The 2026-08-18 Intel i5-12400F 6C/12T conclusion-adjacent tables (commit `b39acee`/`build-win`) and the 2026-08-14 4C tables are also retired. They remain available in git history and in the raw artifacts under `bench/results/` referenced by the older revisions of this document.

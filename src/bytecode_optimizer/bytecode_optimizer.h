@@ -9,8 +9,8 @@
 // (unknown BCTag, unknown opcode, malformed LEB128, checksum mismatch,
 // bounds violation) returns false with a message; the caller aborts
 // the compile without producing output files. No silent passthrough.
-#ifndef CAPSID_TOOLS_BYTECODE_OPTIMIZE_H
-#define CAPSID_TOOLS_BYTECODE_OPTIMIZE_H
+#ifndef CAPSID_SRC_BYTECODE_OPTIMIZER_BYTECODE_OPTIMIZER_H
+#define CAPSID_SRC_BYTECODE_OPTIMIZER_BYTECODE_OPTIMIZER_H
 
 #include <cstdint>
 #include <string>
@@ -36,19 +36,19 @@ namespace bytecode {
 // was 2 insns (0.016%): P10's 22 folds on arith-rt duplicate P2's,
 // P14' is a byte-identical substitute for P14, and P11'/P12'/P13'/P15
 // fired nowhere (P13' hoisted nothing even on the LICM anchor
-// fixture). Full adjudication in docs/bytecode-aot-optimizer.md §11.
-// Tier-2b (tier-2b plan, docs/plans/tier-2b-tdz-sound-dce.md): P12''
-// returned as P16, a TDZ-sound dead-store elimination that replaces
+// fixture). Full adjudication is in docs/bytecode-aot-optimizer.md.
+// Tier-2b returned P12'' as P16, a TDZ-sound dead-store elimination
+// that replaces
 // the archived P12' whole-slot TDZ guard with precise backward slot
 // liveness (set_loc_uninitialized writes the JS_UNINITIALIZED marker
 // as the slot value, so plain value liveness is sound). Adjudicated in
-// docs/bytecode-aot-optimizer.md §11 (tier-2b).
+// docs/bytecode-aot-optimizer.md.
 // The format passes (P6 re-shorten, compaction, verification) always
 // run when the optimizer runs and are not separately measurable.
 enum PassFlags : uint32_t {
     kPassP2 = 1u << 0,  // cross-BB constant lattice propagation
     kPassP31 = 1u << 1, // const binop folding (add/sub/mul/and/.../mod)
-    // Tier-2 direct level (tier-2 plan, docs/bytecode-aot-optimizer.md):
+    // Tier-2 direct passes (docs/bytecode-aot-optimizer.md):
     // linear sweeps over the decoded instruction stream, run before the
     // v1 fixpoint so their folded results feed the lattice.
     kPassP11 = 1u << 2, // copy propagation + dead store materialization
@@ -87,4 +87,4 @@ bool analyze_only(const std::vector<std::uint8_t>& in,
 }  // namespace bytecode
 }  // namespace capsid
 
-#endif  // CAPSID_TOOLS_BYTECODE_OPTIMIZE_H
+#endif  // CAPSID_SRC_BYTECODE_OPTIMIZER_BYTECODE_OPTIMIZER_H

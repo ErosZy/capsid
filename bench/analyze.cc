@@ -5,7 +5,7 @@
 // the committed fixture set.
 //
 // Usage: analyze <in.qjsb>
-#include "bytecode_optimize.h"
+#include "bytecode_optimizer/bytecode_optimizer.h"
 
 #include <cstdio>
 #include <string>

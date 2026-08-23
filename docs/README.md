@@ -22,8 +22,6 @@ Capsid documentation is organized around selection → integration → configura
 - Host-authored Binding packages and isolated runtimes:
   [binding-technical-design.md](binding-technical-design.md) ·
   [binding-modules.md](binding-modules.md)
-- Binding v1 adversarial audit and TDD remediation plan:
-  [2026-08-16-binding-v1-security-audit-remediation.md](superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md)
 
 **Compatibility and Quality**
 
@@ -31,12 +29,9 @@ Capsid documentation is organized around selection → integration → configura
   [framework-compatibility/README.md](framework-compatibility/README.md)
 - Test gate: [testing.md](testing.md)
 - Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
-- Bytecode AOT optimizer and QuickJS opcode plans:
-  [bytecode-aot-optimizer.md](bytecode-aot-optimizer.md) ·
-  [plans/tier-2b-tdz-sound-dce.md](plans/tier-2b-tdz-sound-dce.md) ·
-  [plans/quickjs-ng-deep-opcode-specialization.md](plans/quickjs-ng-deep-opcode-specialization.md) ·
-  [plans/quickjs-ng-opcode-profiling-aot-pgo.md](plans/quickjs-ng-opcode-profiling-aot-pgo.md) ·
-  [plans/quickjs-ng-opcode-profiling-aot-pgo-review.md](plans/quickjs-ng-opcode-profiling-aot-pgo-review.md)
+- Deployed bytecode optimizer: [bytecode-aot-optimizer.md](bytecode-aot-optimizer.md)
+- Proposed QuickJS opcode/PGO work:
+  [quickjs-ng-opcode-optimization.md](quickjs-ng-opcode-optimization.md)
 
 ## Maintenance Rules
 

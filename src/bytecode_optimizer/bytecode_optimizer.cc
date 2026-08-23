@@ -11,7 +11,7 @@
 // G4 (2026-08-23, 20-bundle corpus) attributed P3.2/P3.4/P3.5/P3.6/
 // P4/P5 below the 1% gate and trimmed them — quickjs-ng's resolve_labels
 // already removes push+drop, dup/swap/rot3, and same-block constant
-// conditions; see PassFlags in bytecode_optimize.h.
+// conditions; see PassFlags in bytecode_optimizer.h.
 // Fail-closed: any input the optimizer cannot fully parse, or any
 // invariant the verifier rejects, returns false; the caller aborts the
 // compile without producing output files. No silent passthrough.
@@ -40,7 +40,7 @@
 //            in [-1,3], pc_delta <= 50), else 0 + uleb128 + sleb128;
 //            every entry ends with sleb128(col_delta); the base
 //            line/col are the function record's debug line/col fields.
-#include "bytecode_optimize.h"
+#include "bytecode_optimizer/bytecode_optimizer.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -725,7 +725,7 @@ bool foldable_binop(uint8_t op, int64_t a, int64_t b, int64_t* out) {
 // Full foldability scan over a function tree. Patterns counted are
 // exactly the deployed pipeline patterns (P2's rewrites are not
 // visible in the static scan — they need the dataflow — so this is
-// the P3.1 + P6 part of the ceiling; see G5 in
+// the P3.1 + P6 part of the ceiling; see the final evidence in
 // docs/bytecode-aot-optimizer.md); the estimate is deliberately
 // conservative.
 //   P3.1: push small-int + push small-int + binop (i32, no overflow)

@@ -1,4 +1,4 @@
-// Step 7 unit gate for the bytecode AOT optimizer
+// Unit gate for the bytecode AOT optimizer
 // (docs/bytecode-aot-optimizer.md). Part A drives optimize() on
 // synthetic .qjsb buffers: per-peephole golden bytes (P2 + P3.1 — the
 // G4-trimmed pipeline; see the PassFlags comment), the P2 lattice with
@@ -21,7 +21,7 @@
 // mode), so the with/eval P2 gates are exercised with synthetic bytes in
 // Part A; Part B covers eval through the real compiler.
 
-#include "bytecode_optimize.h"
+#include "bytecode_optimizer/bytecode_optimizer.h"
 #include "quickjs.h"
 
 #include <cstdint>

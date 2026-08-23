@@ -1,4 +1,4 @@
-// Step 7 fuzzer for the bytecode AOT optimizer (docs/bytecode-aot-optimizer.md).
+// Fuzzer gate for the bytecode AOT optimizer (docs/bytecode-aot-optimizer.md).
 // Invariants under ASan/UBSan:
 //   1. optimize() never crashes on any input (fail-closed parser).
 //   2. A success produces output the optimizer itself can re-parse:
@@ -8,7 +8,7 @@
 //      byte-identical (determinism + convergence).
 //   4. mask-0 (parse + verify + copy) must also accept a success output.
 // Corpus: deterministic .qjsb bundles compiled from tests/fixtures.
-#include "bytecode_optimize.h"
+#include "bytecode_optimizer/bytecode_optimizer.h"
 
 #include <cstdlib>
 #include <string>

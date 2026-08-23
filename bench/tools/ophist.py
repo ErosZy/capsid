@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Opcode-frequency histogram for a .qjsb bundle (G5 deliverable).
 
-Layout mirrors the optimizer's reader (tools/bytecode_optimize.cc):
+Layout mirrors the optimizer's reader
+(src/bytecode_optimizer/bytecode_optimizer.cc):
 header, atom table, module record, then function records reached by
 recursing into cpool object records (BC_TAG_FUNCTION_BYTECODE children).
 Every function's code blob is decoded with operand sizes from the vendored

@@ -44,10 +44,11 @@ echo "==> exec-throughput + analyze (Step 8; link capsid_bytecode_opt)"
 g++ -O2 -std=c++20 -I"$SCRIPT_DIR/../include" -I"$SCRIPT_DIR/../src" \
     "$SCRIPT_DIR/exec-throughput.cc" -o "$BIN/exec-throughput" \
     -L"$BUILD_LINUX" -lcapsid_runtime -pthread
-g++ -O2 -std=c++20 -I"$SCRIPT_DIR/../tools" \
+g++ -O2 -std=c++20 -I"$SCRIPT_DIR/../src" \
     -I"$BUILD_LINUX/txiki-build/deps/quickjs" \
     -I"$SCRIPT_DIR/../vendor/txiki.js/deps/quickjs" \
-    "$SCRIPT_DIR/analyze.cc" "$SCRIPT_DIR/../tools/bytecode_optimize.cc" \
+    "$SCRIPT_DIR/analyze.cc" \
+    "$SCRIPT_DIR/../src/bytecode_optimizer/bytecode_optimizer.cc" \
     -o "$BIN/analyze"
 
 echo "==> components"
