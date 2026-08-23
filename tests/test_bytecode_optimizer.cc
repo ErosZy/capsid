@@ -137,7 +137,8 @@ struct Builder {
     }
 
     void finish(int var_count, std::uint16_t flags = 0,
-                const std::vector<std::uint8_t>* debug = nullptr) {
+                const std::vector<std::uint8_t>* debug = nullptr,
+                const std::vector<std::uint8_t>* captured = nullptr) {
         buf.push_back(26);  // BC_VERSION
         put_u32(&buf, 0);   // checksum, patched below
         put_leb(&buf, 1);   // atom count
@@ -167,7 +168,12 @@ struct Builder {
             put_leb(&buf, 0);  // atom, scope_level, scope_next, flags
             put_leb(&buf, 0);
             put_leb(&buf, 0);
-            buf.push_back(0);
+            const bool cap =
+                captured != nullptr &&
+                static_cast<size_t>(i) < captured->size() &&
+                (*captured)[static_cast<size_t>(i)] != 0;
+            buf.push_back(cap ? 0x40 : 0);  // is_captured (bit 6)
+            if (cap) put_leb(&buf, 0);      // var_ref_idx
         }
         buf.insert(buf.end(), cpool.begin(), cpool.end());
         buf.insert(buf.end(), code.begin(), code.end());
@@ -224,7 +230,9 @@ struct Builder {
             for (int k = 0; k < 3; k++) {
                 while (out[p++] & 0x80) { /* vardef fields */ }
             }
-            p += 1;
+            if (out[p++] & 0x40) {  // is_captured: extra var_ref_idx leb
+                while (out[p++] & 0x80) { }
+            }
         }
         out_code->assign(out.begin() + static_cast<std::ptrdiff_t>(p),
                          out.end());
@@ -314,12 +322,178 @@ void test_peephole_goldens() {
         b.op(40);
         b.stack_size = 2;
         b.finish(1);
-        // P2 folds the read (cell 1), P3.1 folds 1+1 -> 2. The dead
-        // store x=1 is kept: removing it needs the SSA dead-store
-        // elimination (P12'), which the tier-2 G4 trim deleted
-        // (docs/bytecode-aot-optimizer.md §11); output is
-        // push_1; put_loc0; push_2; return.
-        expect_code("p2 crossbb x+1", &b, "bb cf bc 28");
+        // P2 folds the read (cell 1), P3.1 folds 1+1 -> 2. P16
+        // (TDZ-sound dead-store elimination, tier-2b) then removes the
+        // dead store x=1: slot 0 is never read after the store on any
+        // path, and the producer is the pure push_1. Output is
+        // push_2; return.
+        expect_code("p2 crossbb x+1", &b, "bc 28");
+    }
+}
+
+void test_p16_dead_store_goldens() {
+    // P16 (tier-2b, TDZ-sound dead-store elimination). Slot 4 is used
+    // so P6's re-shorten (put_loc0-3 are 1-byte forms) cannot change
+    // the expected bytes. Stack heights stay within stack_size (the
+    // output verifier rejects underflow and over-height).
+    //
+    // Opcode bytes (BC_VERSION 26, quickjs-ng enum): set_loc_uninitialized
+    // 0x60+u16 loc, push_i32 0x01+u32, put_loc8 0xc8+u8, get_loc_check /
+    // put_loc_check 0x61/0x62+u16 loc, push_0..7 0xba..0xc1, put_loc0 0xcf,
+    // push_this 0x08, eval 0x32+u16, if_false8 0xf0+i8, return 0x28,
+    // return_undef 0x29.
+    //
+    // dead-triple-marker: marker + store + pure-push producer are all
+    // dead (slot 4 is never read) -> only return_undef survives.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_i32(1, 5);   // push_i32 5
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op(41);         // return_undef
+        b.stack_size = 1;
+        b.finish(5);
+        expect_code("p16 dead-triple-marker", &b, "29");
+    }
+    // dead-store-no-marker: the dead store x=1 (push_1; put_loc0) is
+    // removed with its producer -> push_2; return.
+    {
+        Builder b;
+        b.op(187);        // push_1
+        b.op(207);        // put_loc0
+        b.op(188);        // push_2
+        b.op(40);         // return
+        b.stack_size = 1;
+        b.finish(1);
+        expect_code("p16 dead-store-no-marker", &b, "bc 28");
+    }
+    // tdz-keep-read-after: the store feeds the get_loc_check read and
+    // stays; the marker is overwritten by the store before any read
+    // (dead) and is removed. push_atom_value (not push_i32: P2 tracks
+    // push_i32 as an exact K_INT and would fold the read away before
+    // P16 runs) is a K_ATOM the lattice never folds.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_i32(4, 0);   // push_atom_value 0
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op_u16(97, 4);  // get_loc_check 4
+        b.op(40);         // return
+        b.stack_size = 1;
+        b.finish(5);
+        expect_code("p16 tdz-keep-read-after", &b,
+                    "04 00 00 00 00 c8 04 61 04 00 28");
+    }
+    // tdz-keep-marker-live: the get_loc_check between marker and store
+    // reads the marker value, so the marker stays; the trailing store
+    // is dead and is removed with its producer.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_u16(97, 4);  // get_loc_check 4
+        b.op_i32(1, 5);   // push_i32 5
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op(40);         // return
+        b.stack_size = 2;
+        b.finish(5);
+        expect_code("p16 tdz-keep-marker-live", &b, "60 04 00 61 04 00 28");
+    }
+    // loop-carried-keep: slot 4 is read by put_loc_check (a check-form
+    // write that reads the slot for the TDZ test) on every loop
+    // iteration, so the entry store is live across the backedge and
+    // stays; the marker is overwritten by the store before any read and
+    // is removed. if_false8 at byte 11 targets byte 6:
+    // operand_start = 12, diff = -6 (0xfa).
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op(186);        // push_0
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op(186);        // push_0
+        b.op_u16(98, 4);  // put_loc_check 4
+        b.op(187);        // push_1
+        b.op(240);        // if_false8 -> loop head (byte 6)
+        b.op(0xfa);
+        b.op(188);        // push_2
+        b.op(40);         // return
+        b.stack_size = 1;
+        b.finish(5);
+        expect_code("p16 loop-carried-keep", &b,
+                    "ba c8 04 ba 62 04 00 bb f0 fa bc 28");
+    }
+    // captured-keep: slot 4 is captured (vardef flag 0x40), so the
+    // marker and store are never deleted even though slot 4 is dead.
+    // return_undef (no stack value needed: the store consumed the
+    // producer), push_i32 5 re-shortens to push_5 under P6.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_i32(1, 5);   // push_i32 5
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op(41);         // return_undef
+        b.stack_size = 1;
+        const std::vector<std::uint8_t> captured = {0, 0, 0, 0, 1};
+        b.finish(5, 0, nullptr, &captured);
+        expect_code("p16 captured-keep", &b,
+                    "60 04 00 bf c8 04 29");
+    }
+    // producer-side-effect: the store's producer is push_this, not a
+    // pure push, so the store stays; the marker is dead (never read)
+    // and is removed.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op(8);          // push_this
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op(188);        // push_2
+        b.op(40);         // return
+        b.stack_size = 1;
+        b.finish(5);
+        expect_code("p16 producer-side-effect", &b, "08 c8 04 bc 28");
+    }
+    // barrier-keep: OP_eval is a slot-alias barrier; the whole function
+    // is left untouched except P6's re-shorten (push_i32 5 -> push_5,
+    // push_i32 1 -> push_1). eval is 5 bytes: opcode + u16 argc + u16
+    // scope index.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_i32(1, 5);   // push_i32 5
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op_i32(1, 1);   // the "function" for eval
+        b.op(50);         // eval argc=0, scope=0
+        b.op(0);
+        b.op(0);
+        b.op(0);
+        b.op(0);
+        b.op(40);         // return
+        b.stack_size = 1;
+        b.finish(5);
+        expect_code("p16 barrier-keep", &b,
+                    "60 04 00 bf c8 04 bb 32 00 00 00 00 28");
+    }
+    // tdz-check-store: put_loc_check reads the slot for the TDZ test,
+    // so the marker stays (the read makes the slot live), and
+    // check-form stores are never candidates (their observable TDZ
+    // error must survive). push_i32 5 re-shortens to push_5 under P6.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_i32(1, 5);   // push_i32 5
+        b.op_u16(98, 4);  // put_loc_check 4
+        b.op(188);        // push_2
+        b.op(40);         // return
+        b.stack_size = 1;
+        b.finish(5);
+        expect_code("p16 tdz-check-store", &b,
+                    "60 04 00 bf 62 04 00 bc 28");
     }
 }
 
@@ -1328,6 +1502,7 @@ void test_roundtrip_exception_lines() {
 
 int main() {
     test_peephole_goldens();
+    test_p16_dead_store_goldens();
     test_fail_closed_matrix();
     test_cpool_kept();
     test_p2_gates();

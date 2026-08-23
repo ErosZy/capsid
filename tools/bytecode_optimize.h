@@ -37,6 +37,12 @@ namespace bytecode {
 // P14' is a byte-identical substitute for P14, and P11'/P12'/P13'/P15
 // fired nowhere (P13' hoisted nothing even on the LICM anchor
 // fixture). Full adjudication in docs/bytecode-aot-optimizer.md §11.
+// Tier-2b (tier-2b plan, docs/plans/tier-2b-tdz-sound-dce.md): P12''
+// returned as P16, a TDZ-sound dead-store elimination that replaces
+// the archived P12' whole-slot TDZ guard with precise backward slot
+// liveness (set_loc_uninitialized writes the JS_UNINITIALIZED marker
+// as the slot value, so plain value liveness is sound). Adjudicated in
+// docs/bytecode-aot-optimizer.md §11 (tier-2b).
 // The format passes (P6 re-shorten, compaction, verification) always
 // run when the optimizer runs and are not separately measurable.
 enum PassFlags : uint32_t {
@@ -51,7 +57,12 @@ enum PassFlags : uint32_t {
     kPassP14 = 1u << 3, // literal get_field fold: OP_object construction
                         // sequences + slot binding, fold get_loc t +
                         // get_field x to the field's known value
-    kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14,
+    kPassP16 = 1u << 4, // TDZ-sound dead store elimination (tier-2b):
+                        // removes stores and set_loc_uninitialized
+                        // markers to slots dead after the store (plain
+                        // backward slot liveness; captured slots and
+                        // check-form stores excluded)
+    kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassP16,
 };
 
 // Optimizes `in` (a serialized quickjs-ng bytecode buffer) into `out`.

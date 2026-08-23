@@ -1037,6 +1037,7 @@ struct RewriteStats {
     uint64_t folds_p2 = 0;    // P2: cross-BB constant propagation replaces
     uint64_t folds_p11 = 0;   // P11: dead stores removed via copy propagation
     uint64_t folds_p14 = 0;   // P14: literal get_field folds
+    uint64_t folds_p16 = 0;   // P16: dead stores + TDZ markers removed
     uint64_t shrinks = 0;     // short-form re-encodings
     uint64_t insns_before = 0;
     uint64_t insns_after = 0;
@@ -1697,6 +1698,342 @@ bool apply_tier2_direct(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     if ((passes & kPassP14) &&
         apply_lit_fold(insns, dead, var_count, captured, stats))
         changed = true;
+    return changed;
+}
+
+// ---- P16: TDZ-sound dead store elimination (tier-2b) ----
+// Removes stores to slots that are never read again on any path, and
+// the set_loc_uninitialized TDZ markers that precede them. Sound
+// because quickjs-ng stores the JS_UNINITIALIZED marker as the slot
+// VALUE (get_loc_check throws when it reads the marker), so a store is
+// deletable exactly when the slot is dead after it on every path:
+// plain backward slot liveness, no special TDZ reasoning needed. The
+// archived tier-2 P12' (commit 4465f36) never fired because its guard
+// excluded every slot that held a marker write; this replaces that
+// whole-slot guard with the precise liveness.
+//
+// Deletions are limited to:
+//  - non-check put_loc-family stores (put_loc/put_loc8/put_loc0-3),
+//    together with an immediately preceding side-effect-free pure-push
+//    producer (push +1, put -1: net stack effect 0, so compaction's
+//    jump-target redirect stays height-equivalent); check forms
+//    (put_loc_check/put_loc_check_init) can throw on a marker and are
+//    never touched;
+//  - set_loc_uninitialized markers (net stack effect 0);
+//  - captured slots are excluded (their closure can read them at any
+//    time, invisible to this function's instruction stream).
+//
+// Liveness reads include put_loc_check/put_loc_check_init: they READ
+// the slot's current value to decide whether to throw a TDZ error, so
+// deleting the marker in front of one would change observable
+// exceptions. (The tier-2b plan §5.1 listed only get_loc_check; the
+// grep mandated by plan §5.1 turns up the check-store read, and
+// fail-closed soundness requires it.)
+//
+// Gate: functions containing dynamic-scope or frame-aliasing constructs
+// are skipped entirely — eval/with/apply_eval (dynamic name binding),
+// OP_special_object (creates the `arguments` object or the var object,
+// which capture the frame; quickjs-ng has no dedicated OP_arguments,
+// it is emitted as OP_special_object), and the reference ops
+// (make_loc_ref/make_arg_ref/make_var_ref/make_var_ref_ref and
+// get_ref_value/put_ref_value), whose escaping references could alias
+// a slot invisibly to this intra-function analysis. Deviation from the
+// plan's gate list: the plan also gated on the get_arg family, but the
+// arg ops are ordinary slot reads/writes per loc_index/is_loc_read/
+// is_loc_write (the same helpers P2 and P11 track them with), so
+// liveness covers them and no gate is needed. Slot universe is
+// var_count (P2's lattice size), not the plan's stack_size: every
+// existing slot pass bounds loc indices against var_count, and any
+// out-of-range index is unanalyzable and therefore never deleted.
+// Forward declarations: the loc/arg slot helpers live in the P2
+// section below (they are shared with the v1 lattice passes).
+static bool is_loc_read(uint8_t op);
+static int32_t loc_index(const Insn& in);
+static bool is_loc_write(uint8_t op);
+
+// Value producers that may be deleted along with the store they feed:
+// side-effect-free pure pushes only (small ints, cpool consts, atoms,
+// undefined/null/false/true). Explicitly excluded: push_this (reads
+// the frame's this slot) and any op that reads the stack or a slot
+// (dup, get_loc, ...) — deleting such a producer would change the
+// stack contents the surrounding code depends on.
+static bool p16_is_pure_push(uint8_t op) {
+    return is_small_int_push(op) || op == OP_push_const ||
+           op == OP_push_const8 || op == OP_push_atom_value ||
+           op == OP_undefined || op == OP_null || op == OP_push_false ||
+           op == OP_push_true;
+}
+
+bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
+                          uint32_t var_count,
+                          const std::vector<uint8_t>& captured,
+                          RewriteStats* stats) {
+    const size_t n = insns->size();
+    if (n == 0 || var_count == 0) return false;
+
+    for (size_t i = 0; i < n; i++) {
+        uint8_t op = (*insns)[i].op;
+        // The with_* ops are already inside is_slot_alias_barrier; the
+        // tier-2b plan's OP_with_jump does not exist in this VM (the
+        // with statement compiles to the with_get_var/... family).
+        if (is_slot_alias_barrier(op) || op == OP_apply_eval ||
+            op == OP_special_object || op == OP_make_loc_ref ||
+            op == OP_make_arg_ref || op == OP_make_var_ref ||
+            op == OP_make_var_ref_ref || op == OP_get_ref_value ||
+            op == OP_put_ref_value) {
+            return false;
+        }
+    }
+
+    // Leaders and blocks: same construction as apply_crossbb (entry,
+    // every jump target, post-gosub return points).
+    std::vector<uint8_t> is_leader(n, 0);
+    is_leader[0] = 1;
+    for (size_t i = 0; i < n; i++) {
+        const Insn& in = (*insns)[i];
+        if (in.target >= 0) is_leader[static_cast<size_t>(in.target)] = 1;
+        if (in.op == OP_gosub) {
+            is_leader[next_live(*insns, *dead, i + 1)] = 1;
+        }
+    }
+    std::vector<int32_t> block_id(n, -1);
+    size_t nb = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (is_leader[i]) block_id[i] = static_cast<int32_t>(nb++);
+    }
+    if (nb == 0) return false;
+    for (size_t i = 1; i < n; i++) {
+        if (block_id[i] < 0) block_id[i] = block_id[i - 1];
+    }
+    std::vector<size_t> bstart(nb), bend(nb);
+    for (size_t b = 0; b < nb; b++) {
+        size_t i = 0;
+        while (i < n && block_id[i] != static_cast<int32_t>(b)) i++;
+        bstart[b] = i;
+        while (i < n && block_id[i] == static_cast<int32_t>(b)) i++;
+        bend[b] = i;
+    }
+    // Successor edges from the block's last live instruction (a block
+    // whose members are all tombstones from this round's earlier passes
+    // is transparent: control flows through it linearly). A terminator
+    // that falls through inside its own block cannot be the last live
+    // instruction — its fallthrough insn would share the block id — so
+    // the fallthrough edge always lands on the next block.
+    auto last_live_in = [&](size_t b) -> size_t {
+        size_t i = bend[b];
+        while (i > bstart[b]) {
+            i--;
+            if (!(*dead)[i]) return i;
+        }
+        return n;  // sentinel: no live insns
+    };
+    std::vector<std::vector<size_t>> succ(nb), pred(nb);
+    for (size_t b = 0; b < nb; b++) {
+        size_t t = last_live_in(b);
+        if (t != n) {
+            uint8_t op = (*insns)[t].op;
+            switch (op) {
+            case OP_return: case OP_return_undef: case OP_return_async:
+            case OP_throw: case OP_throw_error: case OP_ret:
+            case OP_tail_call: case OP_tail_call_method:
+                break;  // terminators: no successor
+            case OP_goto: case OP_goto8: case OP_goto16:
+                succ[b].push_back(
+                    static_cast<size_t>(block_id[(*insns)[t].target]));
+                break;
+            case OP_if_true: case OP_if_false: case OP_if_true8:
+            case OP_if_false8:
+            case OP_catch:
+            case OP_gosub:  // falls through to its return point
+                succ[b].push_back(
+                    static_cast<size_t>(block_id[(*insns)[t].target]));
+                if (b + 1 < nb) succ[b].push_back(b + 1);
+                break;
+            default:
+                if (b + 1 < nb) succ[b].push_back(b + 1);
+                break;
+            }
+        } else if (b + 1 < nb) {
+            succ[b].push_back(b + 1);
+        }
+        for (size_t s : succ[b]) pred[s].push_back(b);
+    }
+
+    // Backward slot liveness, block worklist fixpoint. Live sets only
+    // grow (union transfer), so iteration terminates; when a block's
+    // entry set grows, its predecessors must be revisited.
+    // read (gen): loc reads incl. get_loc_check and the arg family,
+    //   put_loc_check/put_loc_check_init (they read the slot to test
+    //   the TDZ marker), in-place inc/dec/add_loc and close_loc
+    //   (read+write; the close moves the value out).
+    // write (kill): all loc/arg stores, set_loc_uninitialized, and the
+    //   in-place mutators.
+    // Ops outside these sets (var_ref family, stack ops, calls, ...)
+    // never touch a loc slot: the var_ref family addresses the closure
+    // environment (captured slots only, which are excluded from
+    // deletion anyway), so they need no liveness effect.
+    std::vector<uint8_t> live_in(nb * var_count, 0);
+    std::vector<uint8_t> in_wl(nb, 0);
+    std::vector<size_t> worklist;
+    for (size_t b = 0; b < nb; b++) {
+        in_wl[b] = 1;
+        worklist.push_back(b);
+    }
+    while (!worklist.empty()) {
+        size_t b = worklist.back();
+        worklist.pop_back();
+        in_wl[b] = 0;
+        std::vector<uint8_t> live(var_count, 0);
+        for (size_t s : succ[b]) {
+            const uint8_t* p = &live_in[s * var_count];
+            for (uint32_t k = 0; k < var_count; k++) live[k] |= p[k];
+        }
+        for (size_t i = bend[b]; i > bstart[b];) {
+            i--;
+            if ((*dead)[i]) continue;
+            const Insn& in = (*insns)[i];
+            uint8_t op = in.op;
+            if (op == OP_get_loc0_loc1) {
+                // Fused read of slots 0 and 1.
+                if (var_count > 0) live[0] = 1;
+                if (var_count > 1) live[1] = 1;
+                continue;
+            }
+            bool reads = is_loc_read(op) || op == OP_put_loc_check ||
+                         op == OP_put_loc_check_init ||
+                         op == OP_inc_loc || op == OP_dec_loc ||
+                         op == OP_add_loc || op == OP_close_loc;
+            bool writes = is_loc_write(op) ||
+                          op == OP_set_loc_uninitialized ||
+                          op == OP_inc_loc || op == OP_dec_loc ||
+                          op == OP_add_loc || op == OP_close_loc;
+            if (reads || writes) {
+                int32_t s = loc_index(in);
+                // Out-of-range slot: unanalyzable. It is never deleted
+                // (the deletion guards re-check the bound) and cannot
+                // alias a tracked slot, so it has no liveness effect.
+                if (s >= 0 && static_cast<uint32_t>(s) < var_count) {
+                    // Read+write ops (put_loc_check, inc/dec/add_loc,
+                    // close_loc) read the slot before overwriting it:
+                    // the write kills earlier producers, but the read
+                    // still makes the slot live in, so the gen must
+                    // win (write first, then read).
+                    if (writes) live[static_cast<size_t>(s)] = 0;
+                    if (reads) live[static_cast<size_t>(s)] = 1;
+                }
+            }
+        }
+        uint8_t* out = &live_in[b * var_count];
+        bool grew = false;
+        for (uint32_t k = 0; k < var_count; k++) {
+            if (live[k] && !out[k]) {
+                out[k] = 1;
+                grew = true;
+            }
+        }
+        if (grew) {
+            for (size_t p : pred[b]) {
+                if (!in_wl[p]) {
+                    in_wl[p] = 1;
+                    worklist.push_back(p);
+                }
+            }
+        }
+    }
+
+    // Second phase: replay the backward transfer once per block to
+    // record the live-out at every decision point (store or marker),
+    // then decide deletions in a forward sweep. Deletion decisions
+    // never perturb the liveness they were derived from: live-out is
+    // computed on the original (plus this round's earlier tombstones)
+    // stream. A store is removed only together with its pure-push
+    // producer; a marker is removed alone. Both rules are independent:
+    // the arith-rt shape (marker runs plus separate push/put pairs) is
+    // covered either way, and a read in between keeps whatever it
+    // reads.
+    struct Decision {
+        size_t insn;         // store or marker index
+        uint8_t is_marker;
+        uint8_t s;           // slot index (guarded < var_count)
+        uint8_t dead_slot;   // slot not live after this insn
+    };
+    std::vector<Decision> decisions;
+    {
+        std::vector<uint8_t> live(var_count, 0);
+        for (size_t b = 0; b < nb; b++) {
+            std::fill(live.begin(), live.end(), 0);
+            for (size_t s : succ[b]) {
+                const uint8_t* p = &live_in[s * var_count];
+                for (uint32_t k = 0; k < var_count; k++) live[k] |= p[k];
+            }
+            for (size_t i = bend[b]; i > bstart[b];) {
+                i--;
+                if ((*dead)[i]) continue;
+                const Insn& in = (*insns)[i];
+                uint8_t op = in.op;
+                if (op == OP_put_loc || op == OP_put_loc8 ||
+                    (op >= OP_put_loc0 && op <= OP_put_loc3) ||
+                    op == OP_set_loc_uninitialized) {
+                    int32_t s = loc_index(in);
+                    if (s >= 0 && static_cast<uint32_t>(s) < var_count) {
+                        decisions.push_back(
+                            {i, static_cast<uint8_t>(
+                                    op == OP_set_loc_uninitialized ? 1 : 0),
+                             static_cast<uint8_t>(s),
+                             static_cast<uint8_t>(
+                                 live[static_cast<size_t>(s)] ? 0 : 1)});
+                    }
+                }
+                if (op == OP_get_loc0_loc1) {
+                    if (var_count > 0) live[0] = 1;
+                    if (var_count > 1) live[1] = 1;
+                    continue;
+                }
+                bool reads = is_loc_read(op) || op == OP_put_loc_check ||
+                             op == OP_put_loc_check_init ||
+                             op == OP_inc_loc || op == OP_dec_loc ||
+                             op == OP_add_loc || op == OP_close_loc;
+                bool writes = is_loc_write(op) ||
+                              op == OP_set_loc_uninitialized ||
+                              op == OP_inc_loc || op == OP_dec_loc ||
+                              op == OP_add_loc || op == OP_close_loc;
+                if (reads || writes) {
+                    int32_t s = loc_index(in);
+                    if (s >= 0 && static_cast<uint32_t>(s) < var_count) {
+                        // Same order as the fixpoint transfer: the gen
+                        // of a read+write op wins over its kill.
+                        if (writes) live[static_cast<size_t>(s)] = 0;
+                        if (reads) live[static_cast<size_t>(s)] = 1;
+                    }
+                }
+            }
+        }
+    }
+    // Forward sweep: apply the recorded decisions.
+    bool changed = false;
+    for (const Decision& d : decisions) {
+        if ((*dead)[d.insn]) continue;
+        if (!d.dead_slot) continue;
+        if (d.s >= captured.size() || captured[d.s]) continue;
+        if (d.is_marker) {
+            (*dead)[d.insn] = 1;
+            stats->folds_p16 += 1;
+            changed = true;
+            continue;
+        }
+        // Store: deletable only together with a preceding pure push.
+        size_t prev = d.insn;
+        while (prev > 0) {
+            prev--;
+            if (!(*dead)[prev]) break;
+        }
+        if (prev < d.insn && p16_is_pure_push((*insns)[prev].op)) {
+            (*dead)[prev] = 1;
+            (*dead)[d.insn] = 1;
+            stats->folds_p16 += 2;
+            changed = true;
+        }
+    }
     return changed;
 }
 
@@ -2759,6 +3096,15 @@ bool rewrite_function(const FuncRecord& f,
                                passes, stats)) {
             round_changed = true;
         }
+        // P16 (tier-2b): TDZ-sound dead store elimination. Runs after
+        // the tier-2 direct passes so their dead-store materializations
+        // are already visible; it only deletes instructions, so it
+        // cannot feed the lattice and the fixpoint still terminates.
+        if ((passes & kPassP16) &&
+            apply_dead_store_p16(&insns, &dead, f.var_count, f.captured,
+                                 stats)) {
+            round_changed = true;
+        }
         if ((passes & kPassP2) &&
             apply_crossbb(&insns, &dead, f.var_count, stats)) {
             round_changed = true;
@@ -2965,7 +3311,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
             std::fprintf(stderr,
                          "bytecode optimize: %llu -> %llu insns, %llu -> "
                          "%llu code bytes; folds P2 %llu P3.1 %llu "
-                         "P11 %llu P14 %llu, shrinks %llu\n",
+                         "P11 %llu P14 %llu P16 %llu, shrinks %llu\n",
                          static_cast<unsigned long long>(stats.insns_before),
                          static_cast<unsigned long long>(stats.insns_after),
                          static_cast<unsigned long long>(stats.bytes_before),
@@ -2974,6 +3320,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
                          static_cast<unsigned long long>(stats.folds_p31),
                          static_cast<unsigned long long>(stats.folds_p11),
                          static_cast<unsigned long long>(stats.folds_p14),
+                         static_cast<unsigned long long>(stats.folds_p16),
                          static_cast<unsigned long long>(stats.shrinks));
         }
         return true;
@@ -3002,7 +3349,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
         std::fprintf(stderr,
                      "bytecode optimize: %llu -> %llu insns, %llu -> %llu "
                      "code bytes; folds P2 %llu P3.1 %llu "
-                     "P11 %llu P14 %llu, shrinks %llu\n",
+                     "P11 %llu P14 %llu P16 %llu, shrinks %llu\n",
                      static_cast<unsigned long long>(stats.insns_before),
                      static_cast<unsigned long long>(stats.insns_after),
                      static_cast<unsigned long long>(stats.bytes_before),
@@ -3011,6 +3358,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
                      static_cast<unsigned long long>(stats.folds_p31),
                      static_cast<unsigned long long>(stats.folds_p11),
                      static_cast<unsigned long long>(stats.folds_p14),
+                     static_cast<unsigned long long>(stats.folds_p16),
                      static_cast<unsigned long long>(stats.shrinks));
     }
     return true;
