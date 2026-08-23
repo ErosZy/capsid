@@ -1099,8 +1099,9 @@ bool apply_peepholes(std::vector<Insn>* insns,
 // Loc-slot access helpers. Only check-form and short-form loc ops
 // participate: the compiler emits these only for slots it proved are
 // not captured by closures, so no opaque user code can mutate them
-// behind our back. get_loc0_loc1 reads two slots and is treated as an
-// opaque read (never participates, never invalidates).
+// behind our back. get_loc0_loc1 reads two slots; apply_copyprop
+// counts it as a reader of both 0 and 1, and P2 reads both lattice
+// cells.
 bool is_get_loc_op(uint8_t op) {
     return op == OP_get_loc || op == OP_get_loc8 || op == OP_get_loc_check ||
            (op >= OP_get_loc0 && op <= OP_get_loc3);
@@ -1210,14 +1211,21 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     // first_get[t] = position of the first (un-aliased) read of t, or
     // n when t is never read. Precomputed on the original stream so a
     // read before a candidate store disqualifies it (loop-back edges).
+    // get_loc0_loc1 is a fused read of slots 0 and 1 and counts for
+    // both (a plain get_loc read of either is folded into it by the
+    // compiler's peephole, so excluding it would undercount readers).
     std::vector<size_t> first_get(var_count, n);
     for (size_t i = 0; i < n; i++) {
         if ((*dead)[i]) continue;
         const Insn& in = (*insns)[i];
         uint32_t sl;
-        if (is_get_loc_op(in.op) && slot_of(in, &sl) &&
-            first_get[sl] == n)
+        if (in.op == OP_get_loc0_loc1) {
+            if (first_get[0] == n) first_get[0] = i;
+            if (first_get[1] == n) first_get[1] = i;
+        } else if (is_get_loc_op(in.op) && slot_of(in, &sl) &&
+                   first_get[sl] == n) {
             first_get[sl] = i;
+        }
     }
     auto clear_alias_to = [&alias](uint32_t s) {
         for (size_t j = 0; j < alias.size(); j++)
@@ -1231,8 +1239,12 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
         if ((*dead)[i]) continue;
         const Insn& in = (*insns)[i];
         if (is_slot_alias_barrier(in.op)) {
+            // Barrier ops (eval/with/fclosure) can never write loc
+            // slots — the compiler emits loc ops only for slots it
+            // proved are not captured — so aliases stay valid and,
+            // crucially, later reads must still attribute to stores
+            // before the barrier (last_put_idx must NOT be reset).
             clear_all_alias();
-            last_put_idx.assign(var_count, n);
             continue;
         }
         uint32_t sl;
@@ -1269,6 +1281,18 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 clear_alias_to(sl);
                 alias[sl] = -1;
                 last_put_idx[sl] = n;
+            }
+            continue;
+        }
+        if (in.op == OP_get_loc0_loc1) {
+            // Fused read of slots 0 and 1: a real reader of both; it
+            // keeps the most recent stores of 0 and 1 alive (never
+            // renamed — the fused form cannot be rewritten to a
+            // different slot pair).
+            for (uint32_t k = 0; k <= 1; k++) {
+                size_t lp = last_put_idx[k];
+                if (lp < n && read_attr[lp] < cands.size())
+                    reads_after[read_attr[lp]]++;
             }
             continue;
         }

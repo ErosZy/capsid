@@ -556,6 +556,129 @@ void test_p2_gates() {
 }
 
 
+void test_p11_folds() {
+    // P11 copy propagation + dead store materialization. The final
+    // reshrink collapses surviving get_loc 0 to get_loc0 (0xcb).
+    //
+    // Chain: get_loc a; put_loc b; get_loc b; put_loc c; get_loc c;
+    // return. b and c are dead (all reads renamed to a), so both
+    // (get,put) pairs vanish -> get_loc a; return.
+    {
+        Builder b;
+        b.op_u16(0x57, 0);  // get_loc 0
+        b.op_u16(0x58, 1);  // put_loc 1
+        b.op_u16(0x57, 1);  // get_loc 1
+        b.op_u16(0x58, 2);  // put_loc 2
+        b.op_u16(0x57, 2);  // get_loc 2
+        b.op(0x28);         // return
+        b.stack_size = 1;
+        b.finish(3);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP11));
+        const std::uint8_t expect[] = {0xcb, 0x28};  // get_loc0; return
+        CHECK(code.size() == sizeof(expect));
+        if (code.size() == sizeof(expect)) {
+            CHECK(std::memcmp(code.data(), expect, sizeof(expect)) == 0);
+        }
+    }
+    // Rename + surviving self-store: get_loc a; put_loc b; get_loc b
+    // (renamed to a); put_loc a (same slot, not a candidate); get_loc a;
+    // return. Only the first pair dies; the renamed read and the
+    // same-slot store survive.
+    {
+        Builder b;
+        b.op_u16(0x57, 0);  // get_loc a
+        b.op_u16(0x58, 1);  // put_loc b
+        b.op_u16(0x57, 1);  // get_loc b -> renamed to get_loc 0
+        b.op_u16(0x58, 0);  // put_loc a (s == sl, not a candidate)
+        b.op_u16(0x57, 0);  // get_loc a
+        b.op(0x28);
+        b.stack_size = 1;
+        b.finish(2);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP11));
+        const std::uint8_t expect[] = {0xcb, 0xcf, 0xcb, 0x28};
+        CHECK(code.size() == sizeof(expect));
+        if (code.size() == sizeof(expect)) {
+            CHECK(std::memcmp(code.data(), expect, sizeof(expect)) == 0);
+        }
+    }
+}
+
+void test_p11_gates() {
+    // Barrier (eval) between the store and the read: the alias dies, the
+    // read touches b, and the (get,put) pair must survive (0x58 stays).
+    // eval is op 50 + argc u16 + scope_idx u16; the get_loc before it
+    // is the eval callee.
+    {
+        Builder b;
+        b.op_u16(0x57, 0);  // get_loc 0
+        b.op_u16(0x58, 1);  // put_loc 1
+        b.op_u16(0x57, 0);  // get_loc 0 (callee)
+        b.op(50);           // eval
+        put_u16(&b.code, 0);
+        put_u16(&b.code, 0);
+        b.op_u16(0x57, 1);  // get_loc 1 (after barrier)
+        b.op(0x28);
+        b.stack_size = 2;
+        b.finish(2);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP11));
+        bool has_put = false;
+        for (std::uint8_t x : code) {
+            // 0x58 = put_loc; 0xcf..0xd2 = put_loc0..put_loc3 after
+            // the final reshrink.
+            if (x == 0x58 || (x >= 0xcf && x <= 0xd2)) has_put = true;
+        }
+        CHECK(has_put);
+    }
+    // Loop-back shape: a read of b before the store disqualifies the
+    // pair (the value could be carried around a back edge).
+    {
+        Builder b;
+        b.op_u16(0x57, 1);  // get_loc 1 (read before store)
+        b.op_u16(0x57, 0);  // get_loc 0
+        b.op_u16(0x58, 1);  // put_loc 1
+        b.op(0x28);
+        b.stack_size = 2;
+        b.finish(2);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP11));
+        bool has_put = false;
+        for (std::uint8_t x : code) {
+            // 0x58 = put_loc; 0xcf..0xd2 = put_loc0..put_loc3 after
+            // the final reshrink.
+            if (x == 0x58 || (x >= 0xcf && x <= 0xd2)) has_put = true;
+        }
+        CHECK(has_put);
+    }
+    // Fused read: get_loc0_loc1 (0xca) reads slots 0 and 1. A store of
+    // slot 1 before it has a real reader and must survive. The fused
+    // read pushes both; one value is returned, one dropped.
+    {
+        Builder b;
+        b.op_u16(0x57, 0);  // get_loc 0
+        b.op_u16(0x58, 1);  // put_loc 1
+        b.op(0xca);         // get_loc0_loc1 (pushes slots 0, 1)
+        b.op(0x0e);         // drop
+        b.op(0x28);         // return (slot 0's value)
+        b.stack_size = 2;
+        b.finish(2);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassP11));
+        bool has_put = false;
+        for (std::uint8_t x : code) {
+            if (x == 0x58 || (x >= 0xcf && x <= 0xd2)) has_put = true;
+        }
+        CHECK(has_put);
+    }
+}
+
 void test_p14_folds() {
     // Object literal: object; push_1; define_field a; put_loc0; then
     // get_loc0; get_field a folds to push_1 (get_loc0 replaced, get_field
@@ -1055,6 +1178,52 @@ void test_roundtrip_values() {
     JS_FreeRuntime(rt);
 }
 
+void test_p11_semantics() {
+    // P11 differential: copy chains, dead-store elimination, and the
+    // barriers must keep raw and optimized execution identical.
+    JSRuntime* rt = JS_NewRuntime();
+    CHECK(rt != nullptr);
+    JSContext* ctx = JS_NewContext(rt);
+    CHECK(ctx != nullptr);
+    if (ctx == nullptr) return;
+
+    const char* sources[] = {
+        // Copy chain with dead intermediates.
+        "let a = 5, b = a, c = b, d = c; globalThis.__r = d;",
+        // Dead store: b = a is overwritten before any read.
+        "let a = 5, b = a; b = 3; globalThis.__r = a + b;",
+        // Loop-carried copy with a real read keeps the store alive.
+        "let x = 1; for (let i = 0; i < 100; i++) { const t = x; x = t; }"
+        "globalThis.__r = x;",
+        // Barrier (closure creation) between store and read.
+        "let a = 1, b = a, c = 0; const g = () => 0; c = b;"
+        "globalThis.__r = a + c;",
+        // Alias read renamed across a loop pre-header.
+        "let base = 10, alias = base; let acc = 0;"
+        "for (let i = 0; i < 100; i++) acc += alias;"
+        "globalThis.__r = acc;",
+        // Reverse-alias invalidation: y copies x, then x is overwritten
+        // from s; the read of y must see the old x (1), not s (5).
+        "let x = 1, s = 5, y = x; x = s; globalThis.__r = y;",
+    };
+    for (const char* src : sources) {
+        RtResult base = run_roundtrip(ctx, src, "p11.js", false);
+        RtResult opt = run_roundtrip(ctx, src, "p11.js", true);
+        CHECK(base.ok == opt.ok);
+        if (base.ok) {
+            CHECK(base.value == opt.value);
+        }
+        if (base.value != opt.value || base.ok != opt.ok) {
+            std::fprintf(stderr, "  source: %s\n", src);
+            std::fprintf(stderr, "    base=%s/%s opt=%s/%s\n",
+                         base.ok ? "ok" : "fail", base.value.c_str(),
+                         opt.ok ? "ok" : "fail", opt.value.c_str());
+        }
+    }
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+
 void test_p14_semantics() {
     // P14-specific differential: the literal folds (and their gates)
     // must keep raw and optimized execution identical. Covers the
@@ -1157,12 +1326,15 @@ int main() {
     test_fail_closed_matrix();
     test_cpool_kept();
     test_p2_gates();
+    test_p11_folds();
+    test_p11_gates();
     test_p14_folds();
     test_p14_gates();
     test_debug_block_remap();
     test_determinism_and_idempotence();
     test_roundtrip_values();
     test_p14_semantics();
+    test_p11_semantics();
     test_roundtrip_exception_lines();
     if (g_failures != 0) {
         std::fprintf(stderr, "test_bytecode_optimizer: %d failure(s)\n",
