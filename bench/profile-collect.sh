@@ -15,6 +15,10 @@ COMPILE=${COMPILE:-$BUILD/capsid-bytecode-compile}
 THROUGHPUT=${THROUGHPUT:-bench/bin/exec-throughput}
 SUT_CPUSET=${SUT_CPUSET:-0-3}
 FIXTURES=${FIXTURES:-"arith-rt cascade-rt matrix-rt sieve-rt string-rt fib-rt json-rt prop-loop-rt prop-hoist-rt copy-chain-rt branch-const-rt cse-loop-rt licm-rt v8-suite-rt"}
+# Self-benchmarking suites whose output scores are timing-derived
+# (ops/sec over a fixed window): source vs opt bodies differ by run noise,
+# so byte equality is meaningless; they get a structural check instead.
+TIMING=${TIMING:-"v8-suite-rt v8-suite-mod"}
 
 echo "fixtures: $FIXTURES" | tee "$OUT/manifest.txt"
 {
@@ -41,13 +45,35 @@ for name in $FIXTURES; do
         --rounds 1 --warmup 0 \
         >"$OUT/$name.source.jsonl" 2>"$OUT/$name.source.profile.jsonl" || {
         echo "$name: source mode failed" >&2; continue; }
-    body=$(grep -o '"body":"[^"]*"' "$OUT/$name.source.jsonl" |
-           head -1 | sed 's/"body":"\(.*\)"/\1/')
+    # exec-throughput writes the body with literal newlines inside the JSON
+    # string (not \n escapes), so per-line grep cannot see the closing
+    # quote; extract with a dotall regex instead (works for single-line
+    # bodies too, e.g. the numeric-response fixtures).
+    body=$(python3 -c 'import re,sys; d=sys.stdin.read(); m=re.search(r"\"body\":\"(.*)\",\"ok\":true\}", d, re.S); print(m.group(1) if m else "")' \
+        < "$OUT/$name.source.jsonl")
+    expect_arg=()
+    if [[ " $TIMING " != *" $name "* ]]; then
+        expect_arg=(--expect-body "$body")
+    fi
     taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
         --mode opt --input "$opt_qjsb" --source-name "$source_name" \
-        --rounds 1 --warmup 0 --expect-body "$body" \
+        --rounds 1 --warmup 0 "${expect_arg[@]}" \
         >"$OUT/$name.opt.jsonl" 2>"$OUT/$name.opt.profile.jsonl" || {
         echo "$name: opt mode failed" >&2; continue; }
+    if [[ " $TIMING " == *" $name "* ]]; then
+        # Structural check for timing-based fixtures: the opt run must
+        # report the same benchmark lines as the source run (a missing
+        # line would mean a crash or a broken benchmark, e.g. a null
+        # field access aborting DeltaBlue).
+        src_marks=$(grep -cE '^[A-Za-z]+: [0-9]+' \
+            "$OUT/$name.source.jsonl" || true)
+        opt_marks=$(grep -cE '^[A-Za-z]+: [0-9]+' \
+            "$OUT/$name.opt.jsonl" || true)
+        if [[ "$src_marks" != "$opt_marks" ]]; then
+            echo "$name: benchmark line count mismatch (source $src_marks, opt $opt_marks)" >&2
+            continue
+        fi
+    fi
     src_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v1"' \
         "$OUT/$name.source.profile.jsonl" || true)
     opt_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v1"' \
