@@ -238,7 +238,15 @@ if(CAPSID_ENABLE_LTO)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT CAPSID_IPO_SUPPORTED OUTPUT CAPSID_IPO_ERROR)
     if(CAPSID_IPO_SUPPORTED)
-        set_property(TARGET capsid_runtime PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+        # LTO is a production-target optimization (the flag above is the
+        # documented intent). Debug links non-LTO test objects against the
+        # LTO archive members, and GCC 13 then drops always_inline
+        # libstdc++ ctors from the LTO partitions ("undefined reference to
+        # std::_Vector_base<...>::_Vector_impl_data()"); at -O0 LTO gains
+        # nothing anyway, so Debug builds stay LTO-free.
+        if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set_property(TARGET capsid_runtime PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+        endif()
     else()
         message(WARNING
             "CAPSID_ENABLE_LTO requested but unsupported: ${CAPSID_IPO_ERROR}")
