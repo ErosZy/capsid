@@ -62,7 +62,18 @@ enum PassFlags : uint32_t {
                         // markers to slots dead after the store (plain
                         // backward slot liveness; captured slots and
                         // check-form stores excluded)
-    kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassP16,
+    // Tier-3 (tier-3 plan docs/quickjs-ng-opcode-optimization.md):
+    // P17/P18 Lane 1 guard-free emission, candidate (a): forward
+    // slot-initialization lattice proves every reaching path to a
+    // get_loc_check/put_loc_check site has initialized the slot; the
+    // check (uninitialized-marker test + ReferenceError branch) can then
+    // never fire, so the site is rewritten to the plain op. Existing
+    // opcodes only — zero format change; the emitted plain ops are
+    // re-shortened by P6 as usual. Functions with unmodeled CFG gates
+    // (with_*/eval/catch/gosub/ret) are skipped whole.
+    kPassTier3Lane1 = 1u << 5,
+    kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassP16 |
+               kPassTier3Lane1,
 };
 
 // Optimizes `in` (a serialized quickjs-ng bytecode buffer) into `out`.

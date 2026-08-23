@@ -326,6 +326,18 @@ string and evaluated at runtime — AOT static analysis sees zero sites in it
 (3 functions, 1 skipped on the with/eval gate). Interpreter work on that
 corpus is invisible to every AOT pass, static or not.
 
+### 4.2 A4 go/no-go (2026-08-23): decision record
+
+| Candidate | Cost (A2) | Provable density (A3) | Handler delta | Verdict |
+| --- | --- | --- | --- | --- |
+| TDZ-check elimination | 25.9% of opt-mode dispatch (strict modules) | 100% on all 14 analyzable fixtures (236+43 sites), non-vacuous negative control | `get_loc_check`→`get_loc`, `put_loc_check`→`put_loc`: removes the uninitialized-marker test + ReferenceError branch from every proven site; existing opcodes, same width pre-shrink, zero format change | **GO — Lane 1, zero format risk; C1 lands before B1** |
+| `get_array_el` specialization | 4.39% dispatch, 100% generic-path execs (313M) | 3/3 full (literal array + const index), 3 obj-only (proven array, index needs guard) | Full sites fold via v1 P14 (const index + literal) or need a guarded op that skips the generic `JS_GetPropertyValue` path | **GO conditional on BC27 — the obj-only remainder is exactly Lane 2A's shape; B1+C2 after C1** |
+
+B1 is now authorized (§6) for the get_array_el guard work: a measured Lane 1
+win must land first so ext_id 253/254 are earned, not speculative. The
+Lane 1 win is TDZ elimination — it proves the pipeline on existing
+opcodes before any format change. Stop conditions in §11 still apply.
+
 ## 5. Lane 1 and Lane 2 Emission
 
 ### 5.1 Lane 1: guard-free

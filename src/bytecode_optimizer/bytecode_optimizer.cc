@@ -1038,6 +1038,8 @@ struct RewriteStats {
     uint64_t folds_p11 = 0;   // P11: dead stores removed via copy propagation
     uint64_t folds_p14 = 0;   // P14: literal get_field folds
     uint64_t folds_p16 = 0;   // P16: dead stores + TDZ markers removed
+    uint64_t tdz_checks_removed = 0;  // tier-3 Lane 1: proven TDZ checks
+                                      // rewritten to plain loc ops
     uint64_t shrinks = 0;     // short-form re-encodings
     uint64_t insns_before = 0;
     uint64_t insns_after = 0;
@@ -1739,9 +1741,10 @@ bool apply_tier2_direct(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
 // get_ref_value/put_ref_value), whose escaping references could alias
 // a slot invisibly to this intra-function analysis. Deviation from the
 // plan's gate list: the plan also gated on the get_arg family, but the
-// arg ops are ordinary slot reads/writes per loc_index/is_loc_read/
-// is_loc_write (the same helpers P2 and P11 track them with), so
-// liveness covers them and no gate is needed. Slot universe is
+// arg ops address a separate frame store (arg_buf, with its own index
+// space) and loc_index maps them to -1, so they can never alias a var
+// slot; liveness over var slots covers them and no gate is needed.
+// Slot universe is
 // var_count (P2's lattice size), not the plan's stack_size: every
 // existing slot pass bounds loc indices against var_count, and any
 // out-of-range index is unanalyzable and therefore never deleted.
@@ -1858,6 +1861,29 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
         }
         for (size_t s : succ[b]) pred[s].push_back(b);
     }
+    // Mid-block conditional edges: a conditional that is not the block's
+    // last live insn (its fall-through continues the block) still has a
+    // real jump-taken edge to its target. These edges are absent from
+    // succ[] — the seed must stay the fall-through state at the block
+    // exit — but they join the pred[] graph so a later growth of the
+    // target's live_in re-queues this block; the walks themselves merge
+    // live_in[target] at the conditional site.
+    for (size_t b = 0; b < nb; b++) {
+        size_t t = last_live_in(b);
+        if (t == n) continue;
+        for (size_t i = bstart[b]; i < t; i++) {
+            if ((*dead)[i]) continue;
+            const Insn& in = (*insns)[i];
+            uint8_t op = in.op;
+            if ((op == OP_if_true || op == OP_if_false ||
+                 op == OP_if_true8 || op == OP_if_false8 ||
+                 op == OP_catch || op == OP_gosub) &&
+                in.target >= 0) {
+                pred[static_cast<size_t>(block_id[in.target])]
+                    .push_back(b);
+            }
+        }
+    }
 
     // Backward slot liveness, block worklist fixpoint. Live sets only
     // grow (union transfer), so iteration terminates; when a block's
@@ -1888,11 +1914,31 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
             const uint8_t* p = &live_in[s * var_count];
             for (uint32_t k = 0; k < var_count; k++) live[k] |= p[k];
         }
+        size_t last = last_live_in(b);
         for (size_t i = bend[b]; i > bstart[b];) {
             i--;
             if ((*dead)[i]) continue;
             const Insn& in = (*insns)[i];
             uint8_t op = in.op;
+            if (i < last &&
+                (op == OP_if_true || op == OP_if_false ||
+                 op == OP_if_true8 || op == OP_if_false8 ||
+                 op == OP_catch || op == OP_gosub) &&
+                in.target >= 0) {
+                // Mid-block conditional: its jump-taken edge reaches the
+                // target with the live state at the target's entry, which
+                // the linear walk never passes through (the fall-through
+                // path can kill/overwrite the slots the target reads, as
+                // in `if (c) { x = 1; }` — the true-path store kills x
+                // for the false-path read of the marker). Merge the
+                // target's entry liveness. Conservative: merging only
+                // adds live bits, so a decision can only flip from
+                // delete to keep.
+                const uint8_t* p =
+                    &live_in[static_cast<size_t>(block_id[in.target]) *
+                             var_count];
+                for (uint32_t k = 0; k < var_count; k++) live[k] |= p[k];
+            }
             if (op == OP_get_loc0_loc1) {
                 // Fused read of slots 0 and 1.
                 if (var_count > 0) live[0] = 1;
@@ -1966,11 +2012,26 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 const uint8_t* p = &live_in[s * var_count];
                 for (uint32_t k = 0; k < var_count; k++) live[k] |= p[k];
             }
+            size_t last = last_live_in(b);
             for (size_t i = bend[b]; i > bstart[b];) {
                 i--;
                 if ((*dead)[i]) continue;
                 const Insn& in = (*insns)[i];
                 uint8_t op = in.op;
+                if (i < last &&
+                    (op == OP_if_true || op == OP_if_false ||
+                     op == OP_if_true8 || op == OP_if_false8 ||
+                     op == OP_catch || op == OP_gosub) &&
+                    in.target >= 0) {
+                    // Same mid-block merge as the fixpoint walk, against
+                    // the converged live_in (the replay makes its keep/
+                    // delete decisions on this walk's live sets).
+                    const uint8_t* p =
+                        &live_in[static_cast<size_t>(block_id[in.target]) *
+                                 var_count];
+                    for (uint32_t k = 0; k < var_count; k++)
+                        live[k] |= p[k];
+                }
                 if (op == OP_put_loc || op == OP_put_loc8 ||
                     (op >= OP_put_loc0 && op <= OP_put_loc3) ||
                     op == OP_set_loc_uninitialized) {
@@ -2169,18 +2230,26 @@ static bool is_loc_read(uint8_t op) {
            op == OP_get_arg ||
            (op >= OP_get_arg0 && op <= OP_get_arg3);
 }
-// Slot index for a loc/arg access. Operand-less short forms carry the
-// index in the opcode itself; every other loc/arg op carries it in aux.
-// Never imm: imm holds push immediates (the decoder keeps the two
-// operand spaces separate), and the P2 lattice must not alias slots.
+// Slot index for a loc access, or -1 for the arg family. The VM frame
+// keeps arguments and locals in separate stores with separate index
+// spaces (arg_buf vs var_buf = local_buf + arg_allocated_size), so an
+// arg index must never alias a var slot: every consumer (P2's lattice,
+// P16's liveness, tier-3's slot-init states) guards s >= 0 and treats
+// -1 as "no effect". Args are call-initialized and opaque to the
+// intra-function analysis, so untracking them loses no folds.
+// Operand-less short forms carry the index in the opcode itself; every
+// other loc op carries it in aux. Never imm: imm holds push immediates
+// (the decoder keeps the two operand spaces separate), and the P2
+// lattice must not alias slots.
 static int32_t loc_index(const Insn& in) {
     const uint8_t op = in.op;
     if (op >= OP_get_loc0 && op <= OP_get_loc3) return op - OP_get_loc0;
     if (op >= OP_put_loc0 && op <= OP_put_loc3) return op - OP_put_loc0;
     if (op >= OP_set_loc0 && op <= OP_set_loc3) return op - OP_set_loc0;
-    if (op >= OP_get_arg0 && op <= OP_get_arg3) return op - OP_get_arg0;
-    if (op >= OP_put_arg0 && op <= OP_put_arg3) return op - OP_put_arg0;
-    if (op >= OP_set_arg0 && op <= OP_set_arg3) return op - OP_set_arg0;
+    if (op >= OP_get_arg0 && op <= OP_get_arg3) return -1;
+    if (op >= OP_put_arg0 && op <= OP_put_arg3) return -1;
+    if (op >= OP_set_arg0 && op <= OP_set_arg3) return -1;
+    if (op == OP_get_arg || op == OP_put_arg || op == OP_set_arg) return -1;
     return static_cast<int32_t>(in.aux);
 }
 static bool is_loc_write(uint8_t op) {
@@ -2344,6 +2413,29 @@ bool apply_crossbb(std::vector<Insn>* insns,
         in_wl[b] = 1;
         worklist.push_back(b);
     }
+    // Last live insn per block: a conditional jump whose fall-through
+    // continues the same block is mid-block, yet its jump-taken edge is
+    // real — the target is reached with the slot state AT the jump, not
+    // with the block-exit state the propagation below attaches to the
+    // last live insn. Dropping that edge lets a join block adopt the
+    // fall-through exit state wholesale and fold reads on state that
+    // never reached the join on the jump-taken path (`if (c) { x = 1; }
+    // y = x + 1;` folded y on the false path, where x kept its old
+    // value). Soundness fix: snapshot the state at every mid-block
+    // conditional and propagate it to the target alongside the exit
+    // edges.
+    std::vector<size_t> block_last(nb, 0);
+    for (size_t b = 0; b < nb; b++) {
+        for (size_t i = bend[b]; i-- > bstart[b];) {
+            if (!(*dead)[i]) { block_last[b] = i; break; }
+        }
+    }
+    // One snapshot per mid-block conditional in the current block:
+    // (jump target, slot state at the jump).
+    struct MidJump {
+        int32_t target;
+        std::vector<P2Val> state;
+    };
 
     while (!worklist.empty()) {
         size_t b = worklist.back();
@@ -2351,6 +2443,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
         in_wl[b] = 0;
         std::vector<P2Val> vals(in_val.begin() + b * var_count,
                                 in_val.begin() + (b + 1) * var_count);
+        std::vector<MidJump> mid_jumps;
         P2Val top = kP2Unknown;
         P2Val prev = kP2Unknown;  // slot below top: enables [K_INT, K_INT,
                                   // binop] folding inside the dataflow so
@@ -2432,6 +2525,20 @@ bool apply_crossbb(std::vector<Insn>* insns,
                     top = kP2Unknown;
                 }
                 prev = kP2Unknown;
+            } else if (op == OP_if_true || op == OP_if_false ||
+                       op == OP_if_true8 || op == OP_if_false8 ||
+                       op == OP_catch || op == OP_gosub) {
+                // Pure conditional: no barrier, no stack lattice. If the
+                // jump is not the block's last live insn, its jump-taken
+                // edge reaches the target with the state at this point;
+                // the exit propagation below covers only the last live
+                // insn, so snapshot the edge for the propagation phase.
+                if (i < block_last[b]) {
+                    mid_jumps.push_back(
+                        {in.target, std::vector<P2Val>(vals)});
+                }
+                prev = kP2Unknown;
+                top = kP2Unknown;
             } else if (p2_op_barrier(op, loc_index(in), top,
                                      prev, vals, var_count)) {
                 // Opaque op: user code may run between the last slot
@@ -2448,6 +2555,44 @@ bool apply_crossbb(std::vector<Insn>* insns,
                 prev = kP2Unknown;
                 top = kP2Unknown;
             }
+        }
+        // One edge contribution: meet `st` into the target block's entry
+        // lattice and re-queue it when the entry changed.
+        auto contribute = [&](int32_t s, const std::vector<P2Val>& st) {
+            if (s < 0 || static_cast<size_t>(s) >= n) return;
+            int32_t sb = block_id[static_cast<size_t>(s)];
+            if (sb < 0) return;
+            P2Val* entry = &in_val[static_cast<size_t>(sb) * var_count];
+            bool changed = false;
+            if (!in_seen[static_cast<size_t>(sb)]) {
+                // First predecessor: adopt its exit state wholesale —
+                // the join of the unseen (bottom) entry with anything is
+                // that anything. Marked seen even when the contribution
+                // is all-unknown, so a later, more precise predecessor
+                // meets with it (absorbing to unknown) instead of
+                // overwriting — p2_meet(unknown, x) == unknown is the
+                // correct join for a block reachable on both paths.
+                for (uint32_t v = 0; v < var_count; v++) {
+                    if (p2_set(st[v], &entry[v])) changed = true;
+                }
+                in_seen[static_cast<size_t>(sb)] = 1;
+            } else {
+                for (uint32_t v = 0; v < var_count; v++) {
+                    if (p2_set(p2_meet(entry[v], st[v]), &entry[v])) {
+                        changed = true;
+                    }
+                }
+            }
+            if (changed && !in_wl[static_cast<size_t>(sb)]) {
+                in_wl[static_cast<size_t>(sb)] = 1;
+                worklist.push_back(static_cast<size_t>(sb));
+            }
+        };
+        // Mid-block conditional jump-taken edges first: the target is
+        // reached with the state at the jump, not with the block-exit
+        // state (the unsound fold above would otherwise happen).
+        for (const MidJump& mj : mid_jumps) {
+            contribute(mj.target, mj.state);
         }
         // Propagate to the block's successors (last live insn's edges).
         const Insn& l = (*insns)[last];
@@ -2477,35 +2622,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
             break;
         }
         for (int si = 0; si < nsucc; si++) {
-            int32_t s = succs[si];
-            if (s < 0 || static_cast<size_t>(s) >= n) continue;
-            int32_t sb = block_id[static_cast<size_t>(s)];
-            if (sb < 0) continue;
-            P2Val* entry = &in_val[static_cast<size_t>(sb) * var_count];
-            bool changed = false;
-            if (!in_seen[static_cast<size_t>(sb)]) {
-                // First predecessor: adopt its exit state wholesale —
-                // the join of the unseen (bottom) entry with anything is
-                // that anything. Marked seen even when the contribution
-                // is all-unknown, so a later, more precise predecessor
-                // meets with it (absorbing to unknown) instead of
-                // overwriting — p2_meet(unknown, x) == unknown is the
-                // correct join for a block reachable on both paths.
-                for (uint32_t v = 0; v < var_count; v++) {
-                    if (p2_set(vals[v], &entry[v])) changed = true;
-                }
-                in_seen[static_cast<size_t>(sb)] = 1;
-            } else {
-                for (uint32_t v = 0; v < var_count; v++) {
-                    if (p2_set(p2_meet(entry[v], vals[v]), &entry[v])) {
-                        changed = true;
-                    }
-                }
-            }
-            if (changed && !in_wl[static_cast<size_t>(sb)]) {
-                in_wl[static_cast<size_t>(sb)] = 1;
-                worklist.push_back(static_cast<size_t>(sb));
-            }
+            contribute(succs[si], vals);
         }
     }
 
@@ -3036,6 +3153,13 @@ void encode_pc2line(const std::vector<Pc2LineEntry>& entries,
 // -> pc2line remap.
 // ---------------------------------------------------------------------------
 
+// Defined in the tier-3 section below; run after the fixpoint converges
+// so the proof reflects the exact stream being emitted. Captured slots
+// need no special casing: the emitter never emits loc ops for them (it
+// uses var_ref forms), so they can never be proven INIT in this stream.
+static bool tier3_apply_lane1(std::vector<Insn>* insns, uint32_t var_count,
+                              RewriteStats* stats);
+
 bool rewrite_function(const FuncRecord& f,
                       const uint8_t* data,
                       std::vector<uint8_t>* new_code,
@@ -3120,6 +3244,13 @@ bool rewrite_function(const FuncRecord& f,
             *error = "bytecode optimize: optimization did not converge";
             return false;
         }
+    }
+    // Tier-3 P18 (Lane 1): provably-safe TDZ check elimination, run
+    // after the fixpoint (the proof reflects the emitted stream) and
+    // before the final reshrink (emitted plain ops shorten as usual).
+    if ((passes & kPassTier3Lane1) &&
+        tier3_apply_lane1(&insns, f.var_count, stats)) {
+        // fall through; reshrink + emit below handle the rewritten ops
     }
     apply_reshrink(&insns, stats);
 
@@ -3444,6 +3575,16 @@ static void tier3_cfg(const std::vector<Insn>& insns,
     *reachable = std::move(vis);
 }
 
+// One candidate-(a) site in the original instruction stream. Phase 2 of
+// the slot-init analysis records every get_loc_check/put_loc_check with
+// the verdict its converged entry state gives; P18 rewrites exactly the
+// reducible ones, in stream order, so indices stay valid.
+struct Tier3Site {
+    size_t idx;
+    uint8_t op;  // OP_get_loc_check or OP_put_loc_check
+    bool reducible;
+};
+
 // Candidate (a): forward slot-initialization lattice over the CFG.
 // Transfer is monotone (UNINIT -> INIT via any write; only
 // set_loc_uninitialized regresses), so a worklist sweep to fixpoint
@@ -3451,9 +3592,15 @@ static void tier3_cfg(const std::vector<Insn>& insns,
 // Unlike the P2 value lattice, user code can never reset a slot's
 // initialization state: closures write through var_ref storage, not this
 // function's loc slots, and a call cannot resurrect a TDZ marker.
+// `st` counts sites (analyze-only reporting); `sites`, when non-null,
+// additionally records every site's verdict for P18 emission. The
+// rewritten plain ops have no transfer in this lattice, so one sweep of
+// verdicts from the original stream is sound: no verdict depends on any
+// other site's rewrite.
 static void tier3_slotinit(const std::vector<Insn>& insns,
                            uint32_t var_count,
-                           Tier3Stats* st) {
+                           Tier3Stats* st,
+                           std::vector<Tier3Site>* sites = nullptr) {
     const size_t n = insns.size();
     if (n == 0 || var_count == 0) return;
 
@@ -3512,13 +3659,13 @@ static void tier3_slotinit(const std::vector<Insn>& insns,
                 // Read+write with TDZ check: count the site, and the write
                 // initializes the slot regardless of the verdict.
                 int32_t s = loc_index(in);
+                bool red = s >= 0 && static_cast<size_t>(s) < var_count &&
+                           state[static_cast<size_t>(s)] == SI_INIT;
                 if (cnt) {
                     cnt->put_loc_check++;
-                    if (s >= 0 && static_cast<size_t>(s) < var_count &&
-                        state[static_cast<size_t>(s)] == SI_INIT) {
-                        cnt->put_loc_check_red++;
-                    }
+                    if (red) cnt->put_loc_check_red++;
                 }
+                if (sites) sites->push_back({i, OP_put_loc_check, red});
                 if (s >= 0 && static_cast<size_t>(s) < var_count) {
                     state[static_cast<size_t>(s)] = SI_INIT;
                 }
@@ -3533,13 +3680,13 @@ static void tier3_slotinit(const std::vector<Insn>& insns,
                 }
             } else if (op == OP_get_loc_check) {
                 int32_t s = loc_index(in);
+                bool red = s >= 0 && static_cast<size_t>(s) < var_count &&
+                           state[static_cast<size_t>(s)] == SI_INIT;
                 if (cnt) {
                     cnt->get_loc_check++;
-                    if (s >= 0 && static_cast<size_t>(s) < var_count &&
-                        state[static_cast<size_t>(s)] == SI_INIT) {
-                        cnt->get_loc_check_red++;
-                    }
+                    if (red) cnt->get_loc_check_red++;
                 }
+                if (sites) sites->push_back({i, OP_get_loc_check, red});
             }
             if (edges && in.target >= 0) {
                 // Jump edge: carry the state as of the jump itself, so a
@@ -3609,6 +3756,41 @@ static void tier3_slotinit(const std::vector<Insn>& insns,
         sweep(b, state, st, nullptr);
     }
 }
+
+// P18 Lane 1 emission, candidate (a): rewrite every provably-safe TDZ
+// check site to the plain op. The proof runs on the exact stream the
+// optimizer is about to emit (post-fixpoint), so its verdicts reflect
+// the code that actually runs; the rewritten ops have no transfer in the
+// slot-init lattice, so no verdict depends on another site's rewrite and
+// one sweep is sound. Same-width opcode change (op byte only), so jump
+// targets and pc2line PCs are untouched here; the caller's final
+// reshrink converts get_loc/put_loc to their short forms as usual.
+// Returns true if any site was rewritten.
+// Lives in the anonymous namespace (matching its forward declaration
+// next to rewrite_function): the P18 hook is called from inside the
+// optimizer's internal namespace while the tier-3 section below sits at
+// bytecode-namespace scope.
+namespace {
+static bool tier3_apply_lane1(std::vector<Insn>* insns,
+                              uint32_t var_count,
+                              RewriteStats* stats) {
+    if (var_count == 0) return false;
+    if (tier3_has_unmodeled_cfg(*insns)) return false;
+    std::vector<Tier3Site> sites;
+    tier3_slotinit(*insns, var_count, nullptr, &sites);
+    bool changed = false;
+    for (size_t i = 0; i < sites.size(); i++) {
+        const Tier3Site& s = sites[i];
+        if (!s.reducible) continue;
+        Insn& in = (*insns)[s.idx];
+        if (in.op != s.op) continue;  // safety: index/op agreement
+        in.op = (s.op == OP_get_loc_check) ? OP_get_loc : OP_put_loc;
+        changed = true;
+        stats->tdz_checks_removed++;
+    }
+    return changed;
+}
+}  // namespace
 
 // Candidate (b): forward stack lattice tracking provable arrays and
 // provable ints. The stack abstraction is the top-2 classes (top = the
@@ -3942,7 +4124,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
             std::fprintf(stderr,
                          "bytecode optimize: %llu -> %llu insns, %llu -> "
                          "%llu code bytes; folds P2 %llu P3.1 %llu "
-                         "P11 %llu P14 %llu P16 %llu, shrinks %llu\n",
+                         "P11 %llu P14 %llu P16 %llu T3 %llu, "
+                         "shrinks %llu\n",
                          static_cast<unsigned long long>(stats.insns_before),
                          static_cast<unsigned long long>(stats.insns_after),
                          static_cast<unsigned long long>(stats.bytes_before),
@@ -3952,6 +4135,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
                          static_cast<unsigned long long>(stats.folds_p11),
                          static_cast<unsigned long long>(stats.folds_p14),
                          static_cast<unsigned long long>(stats.folds_p16),
+                         static_cast<unsigned long long>(
+                             stats.tdz_checks_removed),
                          static_cast<unsigned long long>(stats.shrinks));
         }
         return true;
@@ -3980,7 +4165,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
         std::fprintf(stderr,
                      "bytecode optimize: %llu -> %llu insns, %llu -> %llu "
                      "code bytes; folds P2 %llu P3.1 %llu "
-                     "P11 %llu P14 %llu P16 %llu, shrinks %llu\n",
+                     "P11 %llu P14 %llu P16 %llu T3 %llu, "
+                     "shrinks %llu\n",
                      static_cast<unsigned long long>(stats.insns_before),
                      static_cast<unsigned long long>(stats.insns_after),
                      static_cast<unsigned long long>(stats.bytes_before),
@@ -3990,6 +4176,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
                      static_cast<unsigned long long>(stats.folds_p11),
                      static_cast<unsigned long long>(stats.folds_p14),
                      static_cast<unsigned long long>(stats.folds_p16),
+                     static_cast<unsigned long long>(
+                         stats.tdz_checks_removed),
                      static_cast<unsigned long long>(stats.shrinks));
     }
     return true;

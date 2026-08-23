@@ -240,10 +240,11 @@ struct Builder {
     }
 };
 
-void expect_code(const char* name, Builder* b, const char* hex) {
+void expect_code(const char* name, Builder* b, const char* hex,
+                 std::uint32_t passes = 0xffffffffu) {
     std::vector<std::uint8_t> code;
     std::string err;
-    if (!b->optimize_and_code(&code, &err, 0xffffffffu)) {
+    if (!b->optimize_and_code(&code, &err, passes)) {
         std::fprintf(stderr, "FAIL %s: optimize error: %s\n", name,
                      err.c_str());
         g_failures++;
@@ -372,7 +373,10 @@ void test_p16_dead_store_goldens() {
     // stays; the marker is overwritten by the store before any read
     // (dead) and is removed. push_atom_value (not push_i32: P2 tracks
     // push_i32 as an exact K_INT and would fold the read away before
-    // P16 runs) is a K_ATOM the lattice never folds.
+    // P16 runs) is a K_ATOM the lattice never folds. With tier-3
+    // Lane 1 (kPassTier3Lane1) the slot is provably INIT at the read, so
+    // the check is additionally rewritten to get_loc and shortened to
+    // get_loc8 (61 04 00 -> c7 04).
     {
         Builder b;
         b.op_u16(96, 4);  // set_loc_uninitialized 4
@@ -384,7 +388,7 @@ void test_p16_dead_store_goldens() {
         b.stack_size = 1;
         b.finish(5);
         expect_code("p16 tdz-keep-read-after", &b,
-                    "04 00 00 00 00 c8 04 61 04 00 28");
+                    "04 00 00 00 00 c8 04 c7 04 28");
     }
     // tdz-keep-marker-live: the get_loc_check between marker and store
     // reads the marker value, so the marker stays; the trailing store
@@ -406,7 +410,11 @@ void test_p16_dead_store_goldens() {
     // iteration, so the entry store is live across the backedge and
     // stays; the marker is overwritten by the store before any read and
     // is removed. if_false8 at byte 11 targets byte 6:
-    // operand_start = 12, diff = -6 (0xfa).
+    // operand_start = 12, diff = -6 (0xfa). With tier-3 Lane 1 the slot
+    // is INIT on every path into the check (entry store + backedge
+    // re-store), so the check is rewritten to put_loc and shortened to
+    // put_loc8; the loop body shrinks by one byte and the backedge
+    // becomes -5 (0xfb).
     {
         Builder b;
         b.op_u16(96, 4);  // set_loc_uninitialized 4
@@ -423,7 +431,7 @@ void test_p16_dead_store_goldens() {
         b.stack_size = 1;
         b.finish(5);
         expect_code("p16 loop-carried-keep", &b,
-                    "ba c8 04 ba 62 04 00 bb f0 fa bc 28");
+                    "ba c8 04 ba c8 04 bb f0 fb bc 28");
     }
     // captured-keep: slot 4 is captured (vardef flag 0x40), so the
     // marker and store are never deleted even though slot 4 is dead.
@@ -494,6 +502,96 @@ void test_p16_dead_store_goldens() {
         b.finish(5);
         expect_code("p16 tdz-check-store", &b,
                     "60 04 00 bf 62 04 00 bc 28");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tier-3 Lane 1 (kPassTier3Lane1): P18 TDZ-check elimination. The pass is
+// a pure opcode rewrite of provably-safe get_loc_check/put_loc_check
+// sites to the plain loc ops (which P6 then shortens). Soundness relies
+// on the A3 slot-init lattice: a site is rewritten only when every
+// reaching path into it has initialized the slot.
+// ---------------------------------------------------------------------------
+void test_tier3_lane1_goldens() {
+    // t3 merge-maybe-stays: the entry marker sets UNINIT; the branch
+    // true-path stores (INIT) but the false-path jumps straight to the
+    // merge, so the get_loc_check sees MAYBE and must keep its check.
+    // push_atom_value 0 is the condition (a K_ATOM: P2's constant
+    // lattice never folds it, unlike push_0/push_i32). The store value
+    // is pushed after the branch (both paths reach the merge at height
+    // 0; get_loc_check then pushes to 1). if_false8 at byte 8 targets
+    // byte 13 (target = pc+1+diff = 9+4).
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_i32(4, 0);   // push_atom_value 0 (condition)
+        b.op(240);        // if_false8 -> merge (byte 13)
+        b.op(0x04);
+        b.op(186);        // push_0 (store value, true path)
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op_u16(97, 4);  // get_loc_check 4
+        b.op(40);         // return
+        b.stack_size = 1;
+        b.finish(5);
+        expect_code("t3 merge-maybe-stays", &b,
+                    "60 04 00 04 00 00 00 00 f0 04 ba c8 04 61 04 00 28");
+    }
+    // t3 uninit-read-stays: the get_loc_check reads the live marker
+    // (nothing wrote the slot since set_loc_uninitialized), so the check
+    // must survive. Same stream as p16 tdz-keep-marker-live.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_u16(97, 4);  // get_loc_check 4
+        b.op_i32(1, 5);   // push_i32 5
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op(40);         // return
+        b.stack_size = 2;
+        b.finish(5);
+        expect_code("t3 uninit-read-stays", &b, "60 04 00 61 04 00 28");
+    }
+    // t3 eval-gate-skips-whole: the slot is provably INIT (store before
+    // the read) but the function contains eval, an unmodeled CFG gate —
+    // the whole function is skipped, so the check stays. eval is 5
+    // bytes (opcode + u16 argc + u16 scope) and consumes argc+1 stack
+    // values; a second push_0 provides the dummy callable.
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op(186);        // push_0
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op(186);        // push_0 (dummy callable for eval)
+        b.op(50);         // eval argc=0, scope=0
+        b.op(0);
+        b.op(0);
+        b.op(0);
+        b.op(0);
+        b.op_u16(97, 4);  // get_loc_check 4
+        b.op(40);         // return
+        b.stack_size = 2;  // get_loc_check pushes to height 2
+        b.finish(5);
+        expect_code("t3 eval-gate-skips-whole", &b,
+                    "60 04 00 ba c8 04 ba 32 00 00 00 00 61 04 00 28");
+    }
+    // t3 pass-off: the identical stream that tdz-keep-read-after rewrites
+    // keeps its check when the tier-3 bit is off — the pass is
+    // independently switchable (G4 attribution discipline).
+    {
+        Builder b;
+        b.op_u16(96, 4);  // set_loc_uninitialized 4
+        b.op_i32(4, 0);   // push_atom_value 0
+        b.op(200);        // put_loc8 4
+        b.op(4);
+        b.op_u16(97, 4);  // get_loc_check 4
+        b.op(40);         // return
+        b.stack_size = 1;
+        b.finish(5);
+        expect_code("t3 pass-off", &b,
+                    "04 00 00 00 00 c8 04 61 04 00 28",
+                    0xffffffffu & ~capsid::bytecode::kPassTier3Lane1);
     }
 }
 
@@ -1503,6 +1601,7 @@ void test_roundtrip_exception_lines() {
 int main() {
     test_peephole_goldens();
     test_p16_dead_store_goldens();
+    test_tier3_lane1_goldens();
     test_fail_closed_matrix();
     test_cpool_kept();
     test_p2_gates();
