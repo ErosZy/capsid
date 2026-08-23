@@ -35,7 +35,8 @@ Capsid documentation is organized around selection → integration → configura
   [bytecode-aot-optimizer.md](bytecode-aot-optimizer.md) ·
   [plans/tier-2b-tdz-sound-dce.md](plans/tier-2b-tdz-sound-dce.md) ·
   [plans/quickjs-ng-deep-opcode-specialization.md](plans/quickjs-ng-deep-opcode-specialization.md) ·
-  [plans/quickjs-ng-opcode-profiling-aot-pgo.md](plans/quickjs-ng-opcode-profiling-aot-pgo.md)
+  [plans/quickjs-ng-opcode-profiling-aot-pgo.md](plans/quickjs-ng-opcode-profiling-aot-pgo.md) ·
+  [plans/quickjs-ng-opcode-profiling-aot-pgo-review.md](plans/quickjs-ng-opcode-profiling-aot-pgo-review.md)
 
 ## Maintenance Rules
 
