@@ -19,9 +19,11 @@ optimizer:
 - exposes pass switches only through the internal API for attribution; the
   production compiler always uses `kPassAll`.
 
-It is not a JIT, a partial evaluator, or a general SSA optimizer. Proposed VM
-and format changes are isolated in
-[QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md).
+It is not a JIT, a partial evaluator, or a general SSA optimizer. The completed
+opcode-profile phase is recorded in
+[QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md); new VM,
+format, CFG+SSA, shape-IC, and fusion work is isolated in the active
+[CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).
 
 Implementation ownership is intentionally separate from command-line tooling:
 
@@ -187,15 +189,16 @@ proxies, iterators, suspension, and dynamic scope force a sound analysis to
 discard most facts needed to eliminate those costs. Maintaining a general SSI
 framework is therefore not justified by the measured incremental benefit.
 
-SSI is not forbidden as a technique. A future measured opcode candidate may
-use candidate-specific CFG/type dataflow and, only when needed, a local sparse
-SSA/SSI representation. Profiling selects the expensive operation first; the
-analysis is then the minimum proof machinery required to emit its specialized
-form. test262 and differential tests judge correctness, while corpus
-attribution and paired runtime measurements judge whether that machinery is
-worth keeping.
+The result does not reject the active full-stack SSA project. The retired suite
+lowered back to the unchanged BC26 vocabulary and could only rediscover direct
+propagation/deletion wins. The successor SSA instead forms guarded regions and
+lowers them into new ext opcodes, where it can share guards, remove multiple
+dispatches, and avoid intermediate VM-stack materialization. Profiling still
+selects expensive regions first; test262 and differential tests judge
+correctness, while corpus attribution and paired runtime measurements judge
+whether each region and cache is worth keeping.
 
 Further gains inside BC26 should be proposed only with an analyze-only ceiling
 and a new corpus class. Work that changes opcode cost or introduces runtime
-specialization belongs to the separately gated
-[QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md) design.
+specialization belongs to the separately gated active
+[CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).

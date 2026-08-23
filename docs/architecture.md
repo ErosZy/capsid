@@ -2,7 +2,7 @@
 
 Capsid Runtime is a process-isolated JavaScript runtime built from a pinned txiki.js vendor tree. It targets embedded HTTP hosts and provides a versioned Minimum Common Web API subset; it does not claim full ECMA-429 conformance. Capsid is the only product name; external organization names are used only to identify standard sources and historical internal implementation.
 
-The trusted-bytecode compiler consumes the independent `src/bytecode_optimizer/` library specified in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md). It runs P2 (cross-BB constant propagation), P3.1 (constant folding), P11 (copy propagation), P14 (literal property folding), and P16 (TDZ-sound dead-store elimination) over standard BC26 output. Proposed VM/opcode/PGO changes are separately gated in [QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md).
+The trusted-bytecode compiler consumes the independent `src/bytecode_optimizer/` library specified in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md). It runs P2 (cross-BB constant propagation), P3.1 (constant folding), P11 (copy propagation), P14 (literal property folding), and P16 (TDZ-sound dead-store elimination) over standard BC26 output. The completed opcode-profiling phase is recorded in [QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md); the active BC27, CFG+SSA, shape-IC, fusion, and quickening architecture is gated by [QuickJS-ng CFG+SSA, Shape IC, and Extended Opcodes](quickjs-ng-cfg-ssa-shape-ic.md).
 
 ## Deliverables and Application Model
 

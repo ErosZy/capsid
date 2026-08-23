@@ -1,9 +1,9 @@
 # QuickJS-ng Opcode Profiling, AOT Specialization, and PGO
 
-> Status: design only. A0 may start immediately; production VM or bytecode
-> format work is forbidden until A4 selects at least one viable candidate.
-> This is the single maintained tier-3 plan and is self-contained for an
-> implementation agent.
+> Status: completed bytecode-only profiling/AOT phase and evidence record.
+> A0-A4, C1, C2, and D1 are complete. The 2026-08-24 product decision opens
+> BC27, full CFG+SSA, shape IC, GC integration, fusion, and quickening under
+> the successor [CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).
 
 ## 1. Goal, Limits, and Expected Benefit
 
@@ -12,31 +12,26 @@ direct rewrites are useful but that a general SSI/SCCP/GVN/LICM layer added only
 0.016% on the measured corpus. Tier 3 therefore profiles actual interpreter
 cost before deciding whether to add specialized opcodes.
 
-Active scope (product decision 2026-08-23): **bytecode-level measures only,
-no IC/GC**. Lane 1 and Lane 2A are in scope; Lane 2B (sparse cache) and Lane 3
-(runtime quickening) are deferred — they require runtime state and are
-IC-adjacent. Every emitted instruction must preserve the zero-state contract:
-the generic handler remains authoritative for every miss, and no runtime field,
-allocation, or GC root exists for any in-scope lane.
+The 2026-08-23 scope was **bytecode-level measures only, no IC/GC**. It is now
+closed: Lane 1 and Lane 2A were implemented, measured, and converged. The
+2026-08-24 decision explicitly supersedes that product boundary; stateful work
+continues only under the successor plan's rollback and resource contract.
 
 The implementation order is deliberately conservative:
 
 | Lane | Mechanism | Runtime state | Status |
 | --- | --- | --- | --- |
-| 1 | Candidate-specific AOT type proof; emit a guard-free specialized opcode | None | In scope |
-| 2A | PGO-selected stateless guard, branch layout, or fused instruction | None | In scope |
-| 2B | PGO-selected sparse shape/property/callee cache | Hot sites only | Deferred (IC-shaped) |
-| 3 | Runtime quickening for residual stable hotspots | Hot functions/sites | Deferred (runtime state) |
+| 1 | Candidate-specific AOT type proof; emit a guard-free specialized opcode | None | Completed |
+| 2A | PGO-selected stateless guard, branch layout, or fused instruction | None | Completed |
+| 2B | PGO-selected sparse shape/property/callee cache | Hot sites only | Moved to successor plan |
+| 3 | Runtime quickening for residual stable hotspots | Hot functions/sites | Moved to successor plan |
 
-This is an opcode-cost plan, not a restart of the retired generic P9-P15' SSI
-suite. Dynamic opcode/site evidence selects a candidate first. Lane 1 then
-builds only the CFG and full-stack type dataflow needed to prove that candidate;
-Lane 2A uses guarded or fused bytecode forms and does not require SSI. A local
-sparse SSA/SSI representation is allowed only when a selected candidate cannot
-be proved without use-position refinement and its analyze-only ceiling already
-clears the benefit gate.
+This phase was an opcode-cost plan, not a restart of the retired generic
+P9-P15' SSI suite. Its 0.016% result applies to lowering back to the unchanged
+BC26 vocabulary. It does not reject the successor plan's full-stack SSA and
+guarded region lowering into new ext opcodes.
 
-Prior ranges, not promises (bytecode-only subset):
+Historical priors for the completed bytecode-only subset:
 
 | Mechanism | Broad workloads | Isolated hotspot |
 | --- | ---: | ---: |
@@ -48,11 +43,12 @@ Prior ranges, not promises (bytecode-only subset):
 pass every correctness, RSS, and per-workload gate. `15%..25%` is only a
 multi-round ceiling. No candidate means no BC27.
 
-Out of scope: JIT/baseline native compiler, NaN-boxing redesign, decoded
-16-bit IR, AST HIR, call inlining, profile-driven instruction reordering,
-inline caches, and GC-related work.
+This completed phase excluded inline caches and GC-related work. Those items
+are now authorized only by the successor plan. JIT/native codegen, NaN-boxing
+redesign, arbitrary serialized IR, and speculative unknown-call inlining
+remain out of scope.
 
-Execution status (2026-08-23): A0 baseline is largely in place — the
+Execution result: A0 established the
 interpreter-ceiling reference (quickjs-ng 1.95x behind V8 jitless on v8-suite)
 and the DSE +2.6% paired A/B are archived under `bench/results/`. A1 is
 delivered: overlay patch 0036 (`CONFIG_OPCODE_PROFILE`), capsid option
@@ -66,7 +62,9 @@ candidates `get_array_el` specialization + TDZ-check elimination. A3 is
 delivered: analyze-only density proof (§4.1) — 100% TDZ density on all 14
 analyzable fixtures with an honest negative control, and shape-bound
 `get_array_el` density (3/3 full, 3 obj-only) that Lane 2A guards are
-designed to extend. A4 go/no-go is the next gate; B1/C1/C2 follow in order.
+designed to extend. A4, C1, C2, and the D1 residual re-profile are complete;
+their evidence authorizes the successor plan without erasing the negative
+results recorded here.
 
 ## 2. Verified Baseline Facts
 
@@ -458,10 +456,10 @@ changes (get_array_el specialization, 4.39% dispatch — the only
 structurally-higher ceiling left, because its generic path is a
 function call, not a predicted branch). No candidate has ≥1% attributed
 broad gain and no measurement shows >2% regression (−0.62% is inside
-noise). Per the stop condition, the bytecode-only loop stops here:
-**Lane 2B/3 and B1 remain deferred, not cancelled**; the gate that
-would re-open them is a re-profile of the released output (D1) or a
-product decision to allow BC27/VM-state changes.
+noise). Per the stop condition, the bytecode-only loop stopped here. At this
+decision point Lane 2B/3 and B1 remained deferred; re-opening required D1 or a
+product decision allowing BC27/VM state. D1 and that product decision are now
+complete, so execution moved to the successor plan.
 
 ### 4.5 D1 head-to-head vs sablejs (2026-08-24): residual re-profile
 
@@ -543,10 +541,12 @@ must demonstrate a concrete difference such as float-first ordering, one guard
 shared by a fused sequence, or removed dispatches. Stability alone is not a
 reason to emit it.
 
-### 5.3 Lane 2B: sparse cache (deferred 2026-08-23)
+### 5.3 Lane 2B: sparse cache (moved to successor plan)
 
-Exact shape, property offset, and closure identity require runtime state. If
-product policy allows them, allocate state only for PGO-selected hot sites:
+Exact shape, property offset, and closure identity require runtime state. The
+authoritative identity, cache ownership, GC, memory, and rollback design is now
+in the [successor plan](quickjs-ng-cfg-ssa-shape-ic.md). The original
+requirements retained from this phase were:
 
 - no cold-site fields, roots, or allocations;
 - at most two observed variants per site;
@@ -560,9 +560,10 @@ product policy allows them, allocate state only for PGO-selected hot sites:
 This is a PGO-filtered sparse IC, not a zero-state IC. If zero runtime state is
 a product red line, remove 2B and accept the lower benefit ceiling.
 
-## 6. B1: BC27 and Opcode Space
+## 6. B1 Foundation: BC27 and Opcode Space
 
-Only A4 may authorize this section.
+A4 authorized the direction; implementation and rollback details now belong to
+the successor plan. This section remains the original opcode registry record.
 
 ```text
 252  OP_ext prefix
@@ -607,14 +608,14 @@ slots stay invalid.
 An upstream move to wire version 27 requires re-baseline and an explicit format
 identity decision; the bare byte is never assumed globally unique.
 
-## 7. Lane 3: Runtime Quickening (gate met 2026-08-24, deferred by decision)
+## 7. Lane 3: Runtime Quickening (gate met; moved to successor plan)
 
 Lane 3 begins only after Lane 1/2 land and re-profiling still shows a residual
 site with at least 2% tick coverage and a 90% Wilson-lower-bound dominant class.
 Status: Lane 1/2 landed (§4.3/§4.4); the D1 residual re-profile (§4.5) shows
 `get_array_el` at 4.39% tick coverage with a 100%-generic dominant class —
-the gate is **met**. Investment remains a product decision; the direction
-stays deferred, not cancelled.
+the gate is **met**. The 2026-08-24 product decision authorizes investment
+under the successor plan's state, GC, test, and rollback gates.
 
 Use a runtime-only saturating function score and hot-function side table. No
 runtime field is serialized. Only functions containing adaptive ext sites pay
@@ -765,9 +766,8 @@ dispatch consumes the predicted win, if optimized-test262 finds a semantic
 gap, if sparse state repeats upstream IC's memory/regression distribution, or
 if the production deployment floors fail.
 
-Status: **A0-A4** complete (A4 go/no-go recorded §4.2); **C1** landed and
-measured (§4.3); **C2** landed and measured (§4.4); **B1/C3** not started.
-The bytecode-only loop stopped per the 2026-08-23 directive: the
-convergence round re-profiled the released output and the termination
-report is recorded in §4.4 — no candidate with ≥1% attributed broad gain,
-no >2% regression. Lane 2B/3 and B1 remain deferred, not cancelled.
+Status: **A0-A4, C1, C2, and D1 complete**. The bytecode-only loop stopped
+after the released output was re-profiled: no remaining state-free candidate
+had >=1% attributed broad gain and no retained candidate regressed a workload
+above 2%. B1, Lane 2B, full CFG+SSA, and Lane 3 now execute under the
+[successor plan](quickjs-ng-cfg-ssa-shape-ic.md), not this evidence record.
