@@ -41,6 +41,9 @@
 //            every entry ends with sleb128(col_delta); the base
 //            line/col are the function record's debug line/col fields.
 #include "bytecode_optimizer/bytecode_optimizer.h"
+// I0 CFG bridge (below) adapts the strict reader's FuncRecord tree into
+// ir::FuncInfo; the IR types and entry points live in cfg.h.
+#include "bytecode_optimizer/ir/cfg.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -4815,6 +4818,76 @@ bool optimize(const std::vector<std::uint8_t>& in,
                          stats.to_propkey_removed),
                      static_cast<unsigned long long>(stats.shrinks));
     }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// I0 CFG bridge (docs/quickjs-ng-cfg-ssa-shape-ic.md §3.1): adapts the
+// strict bundle reader's FuncRecord tree into the IR's FuncInfo tree.
+// Kept in this TU so ir/cfg.cc stays a decoder-only module; the identity
+// gate then exercises both decode stacks on every corpus bundle.
+// ---------------------------------------------------------------------------
+
+namespace ir {
+
+bool read_functions(const uint8_t* data,
+                    size_t size,
+                    std::vector<FuncInfo>* out,
+                    std::string* error) {
+    error->clear();
+    out->clear();
+    std::vector<FuncRecord> functions;
+    if (!parse_buffer(data, size, &functions, error)) return false;
+    struct Conv {
+        void run(const FuncRecord& f, std::vector<FuncInfo>* out) {
+            FuncInfo fi;
+            fi.code_off = f.code_off;
+            fi.code_len = f.code_len;
+            fi.dbg_pc2line_off = f.dbg_pc2line_off;
+            fi.dbg_pc2line_len = f.dbg_pc2line_len;
+            fi.dbg_line = f.dbg_line;
+            fi.dbg_col = f.dbg_col;
+            fi.stack_size = f.stack_size;
+            fi.children.reserve(f.children.size());
+            for (size_t i = 0; i < f.children.size(); i++) {
+                run(f.children[i], &fi.children);
+            }
+            out->push_back(fi);
+        }
+    } conv;
+    for (size_t i = 0; i < functions.size(); i++) {
+        conv.run(functions[i], out);
+    }
+    return true;
+}
+
+}  // namespace ir
+
+// Public I0 identity-gate entry (analyze-only; the production pipeline
+// never calls it). Runs the bridge + per-function decode -> CFG ->
+// verify -> emit_identity over the whole bundle and reports coverage to
+// stderr. Returns false when a decodable function's re-emission
+// diverges from the original bytes (fail-closed); functions the CFG
+// cannot model are counted as rejected coverage and reported.
+bool cfg_identity_round_trip(const std::vector<std::uint8_t>& in,
+                             std::string* error) {
+    error->clear();
+    ir::IdentityReport rep;
+    if (!ir::identity_round_trip(in.data(), in.size(), &rep, error)) {
+        if (error->empty()) {
+            *error = "bytecode cfg: identity round trip failed";
+        }
+        return false;
+    }
+    std::fprintf(stderr,
+                 "bytecode cfg: identity gate: %llu functions, %llu insns "
+                 "decoded, rejected %llu functions / %llu insns, "
+                 "missing pc2line %llu\n",
+                 static_cast<unsigned long long>(rep.functions),
+                 static_cast<unsigned long long>(rep.insns),
+                 static_cast<unsigned long long>(rep.rejected_functions),
+                 static_cast<unsigned long long>(rep.rejected_insns),
+                 static_cast<unsigned long long>(rep.missing_pc2line));
     return true;
 }
 

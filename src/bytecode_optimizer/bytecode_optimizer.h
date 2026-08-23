@@ -107,6 +107,16 @@ bool optimize(const std::vector<std::uint8_t>& in,
 bool analyze_only(const std::vector<std::uint8_t>& in,
                   std::string* error);
 
+// I0 identity gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
+// §3.2): decodes every function of `in` into the bring-up CFG IR and
+// re-emits it byte-for-byte identical — code blobs, pc2line tables,
+// checksum, bundle. Analyze-only: the production pipeline never calls
+// this; functions the CFG cannot model are counted as rejected coverage
+// and reported, never skipped silently. Returns false on any identity
+// divergence or parse failure, same contract as optimize().
+bool cfg_identity_round_trip(const std::vector<std::uint8_t>& in,
+                             std::string* error);
+
 }  // namespace bytecode
 }  // namespace capsid
 

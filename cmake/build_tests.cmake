@@ -263,6 +263,41 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_optimizer PROPERTIES TIMEOUT 60)
 
+            # I0 CFG gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
+            # §3.2): synthetic malformed-function matrix (each decoder /
+            # CFG builder / verifier failure mode must abort fail-closed),
+            # hand-built canonical BC26 functions that must round-trip
+            # byte-for-byte, and the identity gate over the real fixture
+            # corpus (every fixture compiled through the real compiler
+            # path must decode -> CFG -> emit identical).
+            add_executable(
+                test-bytecode-cfg
+                tests/bytecode_optimizer/test_cfg.cc)
+            target_link_libraries(
+                test-bytecode-cfg PRIVATE
+                capsid_bytecode_opt
+                tjs)
+            set_target_properties(
+                test-bytecode-cfg PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-bytecode-cfg PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-bytecode-cfg PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(
+                NAME bytecode_cfg
+                COMMAND test-bytecode-cfg)
+            set_tests_properties(
+                bytecode_cfg PROPERTIES TIMEOUT 120)
+
             # Differential gate: every fixture runs through
             # the real deployment path — compiler (optimizer on) →
             # trusted-bytecode worker load — and the response must match

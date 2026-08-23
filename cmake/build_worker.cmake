@@ -337,7 +337,11 @@ if(CAPSID_BUILD_WORKER)
     # product source consumed by the compiler, tests, benchmarks, and fuzzers;
     # it never changes the vendored VM or bytecode compatibility identity.
     add_library(capsid_bytecode_opt STATIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/bytecode_optimizer.cc")
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/bytecode_optimizer.cc"
+        # I0 bring-up CFG (tier-3 plan): analyze-only until the identity
+        # gate passes on the corpus; the production pipeline never
+        # invokes it, and unmodeled functions stay byte-for-byte BC26.
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/cfg.cc")
     target_include_directories(capsid_bytecode_opt
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
         PRIVATE
