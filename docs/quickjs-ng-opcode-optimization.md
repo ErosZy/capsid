@@ -387,6 +387,82 @@ measured with the same A/B discipline — get_array_el's generic path is a
 *function call* (JS_GetPropertyValue), not a predicted branch, so its
 ceiling is structurally higher.
 
+### 4.4 C2 landed + measured (2026-08-23/24): Lane 2A to_propkey evidence
+
+C2 (commit bd1cd1a) shipped kPassTier3Lane2 — to_propkey elimination in
+three provable forms — plus the read-only-capture analysis that widens
+form C to captured-slot bases, the vardef-mask alignment fix the review
+surfaced, and the Builder-based golden-byte gates.
+
+Forms (all zero-format, stack-neutral deletions; the transform re-runs
+the same sweep the counting uses, so counts and deletions agree by
+construction):
+
+- **form A**: provably-int key — the interpreter no-ops INT keys, the
+  instruction is pure dispatch overhead;
+- **form A2**: key-of-key (result of an earlier to_propkey, or a stored
+  key) — the interpreter no-ops INT/STRING/SYMBOL;
+- **form C**: provably non-null base (class OBJECT/ARRAY, e.g. an
+  array_from or call_constructor result, incl. through slots) with only
+  pure stack shuffles / constant pushes / provably no-op conversions
+  between site and consumer — the consumer (get/put_array_el) converts
+  non-int keys internally with the same result.
+
+Read-only capture: quickjs-ng materializes a captured slot's var_ref
+with pvalue pointing INTO the owner's live frame slot, so the static
+function tree contains every possible writer (direct eval is the one
+escape, treated as opaque). A bottom-up walk marks each function's
+captured slots that some capturing descendant writes; only provably
+read-only captured slots keep their class in the sweep. Bundle roots
+are never upgraded (module exports / global scope are externally
+writable). On v8-suite-mod: 152 captured slots, 117 provably read-only
+— the hot guarded-array-store host's base slot among them.
+
+Static attribution:
+
+| corpus | to_propkey sites before/after | P18 folds | bundle |
+| --- | --- | --- | --- |
+| v8-suite-mod | 220 / 206 | 14 (−6.4%; 3 of the 14 from the read-only widening; the hot guard site, ~1.27% dispatch share per A2 profile, among them) | 309,992 / 309,989 B |
+| 15-fixture bench corpus | — | sieve-rt 1, every other fixture 0 | — |
+| remaining candidates (measured) | to_propkey2: 23 sites in 10 funcs (~0.007% of bundle — far below the G4 ≥1% attribution gate); push_atom_value adjacent to a to_propkey: 0 sites | — | — |
+
+Correctness gates: bytecode_optimizer (incl. 3 read-only-capture golden
+tests: read-only child deletes the guard site, closure-write child and
+eval-opaque child keep it — the closure-write case pins the arg_count+s
+vardef-order mask indexing) + differential (13 fixtures) + round-trip +
+attestation + build identity — 7/7 green. Fuzz: 22,000 ASan/UBSan
+mutation runs over the 34-file corpus (incl. fresh compiler seeds from
+the current commit): no crashes; fail-closed / fixed-point /
+determinism invariants held.
+
+Dynamic A/B (v8-suite-mod, paired alternating runs, taskset 2-3, 3×3
+rounds after warmup, median, body shape cross-checked on all 20
+records): baseline p18 bundle **17,412.1 ms** vs read-only p18 bundle
+**17,520.4 ms** — a −0.62% point estimate (ro nominally slower), inside
+the ±6% round noise. **Dynamic effect at the noise floor**, exactly the
+Lane 1 pattern.
+
+Verdict record — Lane 2A is a **static-elimination win (6.4% of
+to_propkey sites, zero format change) with a dynamic effect below the
+noise floor**. This is the second independent confirmation of the
+G5 ceiling explanation: dispatch-share on a perfectly-predicted tag
+check does not convert to wall-clock, even for the single hottest site
+(1.27% dispatch share → unmeasurable). The pass is kept for the static
+win (bundle bytes, I-cache pressure) under the same terms as Lane 1.
+
+**Termination report (bytecode-only loop)**: after C2, the remaining
+in-scope candidates were re-measured — to_propkey2 sites (23, ≈0.007%
+static), string-atom-key adjacency (0), and everything else in the A2
+ranking is either below the 1% attribution gate or requires BC27/VM
+changes (get_array_el specialization, 4.39% dispatch — the only
+structurally-higher ceiling left, because its generic path is a
+function call, not a predicted branch). No candidate has ≥1% attributed
+broad gain and no measurement shows >2% regression (−0.62% is inside
+noise). Per the stop condition, the bytecode-only loop stops here:
+**Lane 2B/3 and B1 remain deferred, not cancelled**; the gate that
+would re-open them is a re-profile of the released output (D1) or a
+product decision to allow BC27/VM-state changes.
+
 ## 5. Lane 1 and Lane 2 Emission
 
 ### 5.1 Lane 1: guard-free
@@ -626,10 +702,9 @@ dispatch consumes the predicted win, if optimized-test262 finds a semantic
 gap, if sparse state repeats upstream IC's memory/regression distribution, or
 if the production deployment floors fail.
 
-Status: **A0** baseline evidence archived (interpreter ceiling, DSE paired A/B);
-**A1** in progress as overlay patch 0036; A2-A4, B1, C1, C2 not started.
-C2 is the final in-scope lane; after it lands, a convergence round re-profiles
-the released output. The bytecode-only loop stops (per the 2026-08-23
-directive) when re-profiling shows no candidate with at least 1% attributed
-broad gain and no >2% regression — that verdict, positive or negative, is
-recorded as the termination report. Lane 2B/3 remain deferred, not cancelled.
+Status: **A0-A4** complete (A4 go/no-go recorded §4.2); **C1** landed and
+measured (§4.3); **C2** landed and measured (§4.4); **B1/C3** not started.
+The bytecode-only loop stopped per the 2026-08-23 directive: the
+convergence round re-profiled the released output and the termination
+report is recorded in §4.4 — no candidate with ≥1% attributed broad gain,
+no >2% regression. Lane 2B/3 and B1 remain deferred, not cancelled.
