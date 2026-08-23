@@ -172,6 +172,39 @@ byte-identical (0% static ceiling). The two moving fixtures are const-chain-dens
 loops — the pipeline's target population; the wall-clock gain tracks the insn
 removal rate (see G5 in the optimizer doc for the dispatch-amortization reading).
 
+### Tier-2 final-config run (2026-08-23, commit 8078d04)
+
+Same protocol, 13 fixtures, post-G4-trim deployed pipeline (P2+P3.1+P11+P14 +
+format passes; the tier-2 SSI suite was measured and deleted — see
+[Bytecode AOT Optimizer](bytecode-aot-optimizer.md) §11 for the full G4
+attribution table). Raw samples, compiler reports, manifest, and sha256 are in
+`bench/results/exec-throughput-20260823T140906/`.
+
+| fixture | source ms | raw ms | opt ms | opt vs raw | load_noise |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| arith-rt | 46.984 | 47.083 | 28.103 | +40.31% | -0.21% |
+| cascade-rt | 16.665 | 16.605 | 11.409 | +31.29% | 0.36% |
+| matrix-rt | 4.739 | 4.666 | 4.720 | -1.16% | 1.54% |
+| sieve-rt | 25.106 | 25.677 | 25.936 | -1.01% | -2.27% |
+| string-rt | 0.452 | 0.457 | 0.448 | +1.97% | -1.11% |
+| fib-rt | 15.627 | 15.726 | 15.434 | +1.86% | -0.63% |
+| json-rt | 2.124 | 1.799 | 1.791 | +0.44% | 15.30% |
+| prop-loop-rt | 34.012 | 33.705 | 31.194 | +7.45% | 0.90% |
+| prop-hoist-rt | 6.026 | 6.005 | 3.498 | +41.75% | 0.35% |
+| copy-chain-rt | 7.654 | 7.754 | 6.723 | +13.30% | -1.31% |
+| branch-const-rt | 4.305 | 4.375 | 4.200 | +4.00% | -1.63% |
+| cse-loop-rt | 7.378 | 7.547 | 7.501 | +0.61% | -2.29% |
+| licm-rt | 4.600 | 4.690 | 4.596 | +2.00% | -1.96% |
+
+Static reductions (compiler report, final config): arith-rt 145→85 /
+297→240; cascade-rt 100→76 / 225→205; prop-hoist-rt and prop-loop-rt 53→46 /
+124→99 (P14 literal-get_field folds + downstream P3.1 cascade); copy-chain-rt
+48→44 / 102→93 (P11 copy-prop); the other eight fixtures are byte-identical
+(0% static ceiling). prop-hoist's +41.75% on a 13.2% insn removal shows the
+removed instructions are expensive `get_field` lookups, not cheap dispatches
+(G5 in the optimizer doc). The G4 attribution matrix and the SSI suite's
+0.016% corpus contribution are in the optimizer doc's §11.
+
 ## 6. Retired Checkpoints
 
 The previous 2026-08-18 AMD Ryzen 3 3300X checkpoint (`c943e35`, `four-qps-final-20260818T131300`, `four-qps-profile-20260818T132600`, and `cold-start-20260818T134435`) was superseded by the clean rc.07 run above. The 2026-08-18 Intel i5-12400F 6C/12T conclusion-adjacent tables (commit `b39acee`/`build-win`) and the 2026-08-14 4C tables are also retired. They remain available in git history and in the raw artifacts under `bench/results/` referenced by the older revisions of this document.

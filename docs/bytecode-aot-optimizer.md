@@ -160,10 +160,13 @@ Verifier (after every pass + final output): every op decodes, all label targets 
 on op boundaries, per-pc stack height consistent, no underflow, max ≤ stored stack_size
 ```
 
-As built after the G4 trim (2026-08-23, §11): the deployed pipeline is P0-P2 +
-P3① + P6-P8. P3②-⑦, P4, and P5 were deleted — each attributed <1% on the
-committed corpus, and quickjs-ng's `resolve_labels` already covers push+drop,
-dup/swap/rot3, and same-block constant conditions.
+As built after the G4 trims (2026-08-23, §11): the deployed pipeline is P0-P2 +
+P3① + P11 + P14 + P6-P8. P3②-⑦, P4, and P5 were deleted at the v1 G4 — each
+attributed <1% on the committed corpus, and quickjs-ng's `resolve_labels`
+already covers push+drop, dup/swap/rot3, and same-block constant conditions.
+The tier-2 SSI suite (P9-P15') was built, measured, and deleted at the tier-2
+G4 (commit 8078d04); P11 (copy propagation + dead-store materialization) and
+P14 (literal `get_field` fold) are the surviving tier-2 passes — see §11.
 
 ## 6. Soundness and Correctness
 
@@ -270,7 +273,7 @@ Tracked against the implementation order in the plan (`/home/eroszhao/.claude/pl
 | 6. Fixpoint + report mode + pass switches | done | always-on report; corpus green |
 | 7. Differential + ctest + fuzzer | done (2026-08-23) | 10/10 ctest gates; fuzzer 20k runs under ASan/UBSan |
 | 8. Benchmarks + G1-G5 verdict + docs | done (2026-08-23) | this section |
-| 9. Tier-2 decision | decided (2026-08-23): not started | §11 below |
+| 9. Tier-2 decision | reversed (2026-08-23): built + adjudicated | §11 below: SSI suite trimmed at G4, P11/P14 kept |
 
 ### As-built pipeline (post-G4 trim, commit 47b9369)
 
@@ -402,3 +405,175 @@ If the corpus changes (new compute-dense bundles) the pass switches
 (`kPassP2`/`kPassP31`, attribution via report mode) make any single-pass
 re-measurement a one-line harness change; nothing in the frozen CLI or format
 contract needs to change to revisit this.
+
+### Step 9 reversed — tier-2 built and adjudicated (2026-08-23)
+
+The "not started" decision above was reversed by the user the same day, with
+two explicit instructions: (1) follow the sablejs reference pipeline shape
+(fixed-order PassManager: constant folding → constant branches → unreachable
+code → **SSA SCCP** → **SSA copy propagation** → **LICM** → **GVN** → SSA DCE →
+peephole rerun); (2) **build and measure the complete HIR/MIR/SSA flow before
+any trimming decision** — pass trimming happens after measurement (G4), not
+before. The full tier-2 plan is archived at
+`/home/eroszhao/.claude/plans/swirling-cooking-rose.md`.
+
+### Tier-2 as-built pipeline (commit 4465f36)
+
+```
+P0 parse → P1 decode/CFG (HIR role)
+├─ direct layer: P11 copy-prop + dead-store materialization → P14 literal
+│  get_field/get_array_el fold (both kept)
+├─ SSI layer (P9 build → P10 SCCP → P11' copy prop → P12' SSA DCE →
+│  P13' LICM (stack-neutral subset) → P14' form-(b) fold → P15 slot-read CSE)
+│  — naming-only SSI: slot versions + join-named stack values, never changes
+│  the stack layout, so every rewrite is stack-neutral (built and deleted)
+└─ v1 tail: P2/P3.1/P6 fixpoint + verifier + per-pass report line
+```
+
+The SSI model names per-block slot versions and join-resident stack values
+(Soot-Shimple style); no de-SSA pass is needed because naming never moves
+values. Soundness gates carried over from P2's precedent: dynamic scope
+(with/eval) disables the suite; captured slots are BOTTOM; `set_loc_uninitialized`
+(TDZ marker) slots are excluded from store removal — the TDZ marker is an
+observable effect that value-flow liveness cannot see.
+
+### Tier-2 G1 Correctness — PASS (hard gate)
+
+- 9/9 fixture differential bodies byte-identical vs source workers; 10/10
+  ctest gates incl. the frozen RED `runtime_bytecode_compiler_round_trip`
+  (bit-for-bit determinism over optimized output); 40k fuzzer runs under
+  ASan/UBSan, no invariant violations.
+- TDZ bug found and fixed during G1: P12' deleted `dst = 0` init stores whose
+  value was only read after an in-loop rewrite, leaving the TDZ marker behind
+  so the first `put_loc_check` threw ("dst is not initialized"). Fix: any slot
+  with a `set_loc_uninitialized` anywhere in the function is excluded from
+  store removal entirely (commit 4465f36).
+- ver_uses vs v_uses kept distinct throughout (slot-version space vs stack-value
+  space); a debug disassembler in /tmp misdecoded 1-byte loc8 operands as
+  varints — tool-only, no optimizer impact.
+
+### Tier-2 G2 No regression — PASS (hard gate)
+
+- Zero vendor/runtime/format changes by construction, as in v1; only code
+  blobs of standard BC_VERSION 26 output are rewritten; build-identity and
+  attestation matrix green on the final tree.
+- Non-target fixtures byte-identical (fib/string/json/matrix/sieve at full
+  config; matrix differs from raw only inside noise). A -19.74% cse-loop-rt
+  reading was traced to machine interference (a leftover bisect worker at
+  98.7% CPU); after kill, interleaved A/B showed parity, and the final-config
+  run shows +0.61%.
+
+### Tier-2 G3 Effectiveness — PASS (go/no-go)
+
+Final run `bench/results/exec-throughput-20260823T140906` (commit 8078d04 —
+post-G4-trim deployed pipeline, Release, taskset 0-3, 1 warmup + 5 rounds,
+median; manifest + sha256 recorded). Threshold = max(3%, 50% × measured static
+ceiling from the compiler report):
+
+| fixture | raw ms | opt ms | G3 | static insns | ceiling | threshold | verdict |
+| --- | ---: | ---: | ---: | --- | --- | --- | --- |
+| arith-rt | 47.083 | 28.103 | **+40.31%** | 145→85 (41.4%) | 41.4% | 20.7% | PASS 1.9× |
+| cascade-rt | 16.605 | 11.409 | **+31.29%** | 100→76 (24.0%) | 24.0% | 12.0% | PASS 2.6× |
+| prop-hoist-rt | 6.005 | 3.498 | **+41.75%** | 53→46 (13.2%) | 13.2% | 6.6% | PASS 6.3× |
+| copy-chain-rt | 7.754 | 6.723 | **+13.30%** | 48→44 (8.3%) | 8.3% | 4.2% | PASS 3.2× |
+| prop-loop-rt | 33.705 | 31.194 | **+7.45%** | 53→46 (13.2%) | 13.2% | 6.6% | PASS 1.1× |
+| matrix-rt | 4.666 | 4.720 | -1.16% | 0% | 0% | 3% | ceiling-limited, noise |
+| sieve-rt | 25.677 | 25.936 | -1.01% | 0% | 0% | 3% | ceiling-limited, noise |
+| string-rt | 0.457 | 0.448 | +1.97% | 0% | 0% | 3% | ceiling-limited, sub-ms noise |
+| fib-rt | 15.726 | 15.434 | +1.86% | 0% | 0% | 3% | ceiling-limited, noise |
+| json-rt | 1.799 | 1.791 | +0.44% | 0% | 0% | 3% | ceiling-limited, noise |
+| branch-const-rt | 4.375 | 4.200 | +4.00% | 0% | 0% | 3% | ceiling-limited, noise |
+| cse-loop-rt | 7.547 | 7.501 | +0.61% | 0% | 0% | 3% | ceiling-limited, noise |
+| licm-rt | 4.690 | 4.596 | +2.00% | 0% | 0% | 3% | ceiling-limited, noise |
+
+The five moving fixtures all clear their thresholds. licm-rt's 0% ceiling is
+itself the tier-2 headline: the fixture was built as the P13' LICM anchor, and
+the pass hoisted nothing (see G4). The pre-trim full-config run
+(`exec-throughput-20260823T135432`, commit 4465f36) is equivalent on every
+moving fixture except sieve-rt (±2 insns, noise-band).
+
+### Tier-2 G4 Per-pass attribution — trim executed
+
+Final measurement (26-bundle corpus — the original 20 plus prop-loop-rt,
+prop-hoist-rt, copy-chain-rt, branch-const-rt, cse-loop-rt, licm-rt — 12,645
+raw insns; every bundle counted via the always-on report, per-pass via the
+pass-switch API):
+
+| mask | corpus insns | attribution |
+| --- | ---: | --- |
+| raw | 12,645 | — |
+| full (0xFFF, v1 + tier-2) | 12,513 | 1.04% total |
+| v1-only + direct (0x00F = P2\|P31\|P11\|P14) | 12,515 | 1.03% |
+| SSI suite net | — | **2 insns (0.016%)** |
+
+| pass | corpus attribution | verdict |
+| --- | --- | --- |
+| P11 copy-prop + dead-store materialization | 4 insns (0.032%), copy-chain-rt only | **kept** — direct layer; no substitute; drives copy-chain's G3 |
+| P14 literal get_field fold | 0 net alone (P14' is a byte-identical substitute) | **kept** — the pair's joint effect is 14 insns / 50 bytes on prop-loop + prop-hoist; P14 carries it in the deployed pipeline; trimming the pair zeroes both G3 wins (P3.1-precedent) |
+| P10 SCCP | 2 insns (0.016%), sieve-rt only | trimmed — 22 of its arith-rt folds duplicate P2's (identical 145→85 with P10 off) |
+| P9 SSI construction | prerequisite of P10; materializes 0.016% | trimmed with the suite |
+| P11' SSA copy prop | 0.00% | trimmed |
+| P12' SSA DCE | 0.00% — fires nowhere in the corpus; its only unique behavior is the synthetic p2-crossbb dead store, which the golden now keeps | trimmed |
+| P13' LICM | 0.00% — **zero hoists even on the licm-rt anchor fixture** | trimmed — the stack-neutral subset is empty in practice (plan's risk table named this outcome) |
+| P14' form-(b) fold | 0.00% net — byte-identical substitute of P14 (both 53→46, md5 equal) | trimmed — carries no unique effect in production (P14 on) |
+| P15 slot-read CSE | 0.00% insns; -2 bytes on cse-loop-rt | trimmed |
+
+Both numbers the plan asked for are reported: static corpus attribution for
+the static classes, and the dynamic share for the pure-dynamic classes
+(P13'/P14') — which is 0 by construction, since with the substitute pass
+enabled (P14) or with nothing hoisting (P13'), the output is byte-identical
+and the dynamic instruction stream is unchanged.
+
+Execution: commit 8078d04 deleted the 1,696-line SSI suite (P9-P15' incl.
+their section) from the tree, trimmed `PassFlags` to
+`kPassAll = P2|P31|P11|P14`, and reverted the p2-crossbb golden to
+`bb cf bc 28` (the dead store x=1 stays — removing it was P12's unique
+synthetic-buffer effect). The full suite remains in git history (4465f36) for
+re-measurement on any changed corpus; the pass-switch API keeps the four
+deployed passes individually measurable.
+
+### Tier-2 G5 Ceiling explanation — PASS
+
+- Opcode-frequency histograms (`bench/tools/ophist.py`, raw vs optimized,
+  final config; module bootstrap excluded — constant 9 insns both states):
+
+  | fixture | raw | opt | removed | residue composition |
+  | --- | --- | --- | --- | --- |
+  | arith-rt | 136 | 76 | all 21 arith ops (add/mul/shl/sar/and/xor/sub/or) → 17 push_i32 | 32 dead-store scaffolding insns (18 set_loc_uninitialized + 14 put_loc8, TDZ-guarded), 7 loop-carried (get_loc/put_loc/dup/drop/add), 4 loop control, 2 calls |
+  | cascade-rt | 91 | 67 | add ×6 → push_i32; 17 push_i32 total | 7 set_loc_uninitialized, 6 if_false8 (branch chain kept), 3 strict_eq, loop control |
+  | prop-hoist-rt | 44 | 37 | get_field ×3 (P14), add ×3 (P3.1 cascade) | 3 define_field (object rebuild per iteration), loop control |
+
+  The wall-clock ↔ static gap: in optimized arith-rt the loop body is 76
+  insns of which 32 are dead init stores (every `let x = <folded const>`
+  still emits set_loc_uninitialized + push + put_loc8). Removing them needs
+  store-removal (P12'), which the G4 trim deleted for 0.016% corpus effect;
+  the dispatch floor after folding is the ~13-insn loop-carried skeleton
+  (get_loc/put_loc/dup/drop/add + lt/if_false/goto16/post_inc), not the
+  arithmetic. The remaining gap is therefore *not* dispatch amortization
+  but dead-store scaffolding on a fold-shaped corpus — the ceiling the
+  histogram was built to locate.
+- prop-hoist-rt removes 13.2% of insns but gains +41.75% wall-clock: the
+  removed instructions are `get_field` property lookups on hoisted literals —
+  the most expensive dispatch in the loop — so elimination translates
+  >>1:1 there (v1's arith/cascade 1:1 reading holds for cheap ops; P14's
+  removals are expensive ops).
+- P14's 3 folds on prop-hoist are the whole fixture's story: without the
+  P14/P14' pair the output is byte-identical to raw (53 insns), and the
+  downstream 2 P3.1 folds exist only because P14's rewrite made the binop
+  operands adjacent constants — a fold cascade, not independent work.
+- The SSI suite's 0.016% net confirms the §8 prior quantitatively: SCCP
+  duplicates the P2 lattice on this corpus, GVN's materialized form is dup
+  (byte-neutral), and LICM's stack-neutral subset is empty. The "direction
+  question" the tier-2 plan was built to answer is answered with measured
+  data: **on this corpus, the remaining value is the direct layer (P11/P14),
+  and the SSA layer adds nothing measurable** — a corpus of compute-dense
+  const-chain loops and literal-property loops, not register-starved
+  algorithms. New corpus classes (e.g. accessor-heavy loops, inlined
+  collection traversals) would re-open the measurement via the API switches
+  and git-history suite, not by uncommitted experimentation.
+
+### Deployed pipeline (post tier-2 G4, commit 8078d04)
+
+P0 parse → P1 decode/CFG → P11 → P14 → P2/P3.1/P6 fixpoint (≤16 rounds) →
+P7 pc2line remap → P8 splice/checksum → verifier. `kPassAll` = P2|P31|P11|P14;
+the report line covers P2/P3.1/P11/P14 folds + shrinks.
