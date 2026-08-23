@@ -197,6 +197,7 @@ struct FuncRecord {
     uint32_t code_off;             // start of the code blob
     uint32_t code_len;
     uint32_t stack_size;
+    uint32_t arg_count;            // args precede vars in vardef order
     uint32_t var_count;
     uint32_t dbg_off;              // start of debug block (0 if absent)
     uint32_t dbg_pc2line_len_off;  // offset of the pc2line_len leb128
@@ -218,6 +219,20 @@ struct FuncRecord {
     // live frame), invisible to this function's own instruction stream,
     // so every slot-based pass must treat it as opaque.
     std::vector<uint8_t> captured;
+    // closure_var entries: (var_idx, flags). flags low 3 bits =
+    // JSClosureTypeEnum (LOCAL/ARG: var_idx is a slot of the parent
+    // frame; REF/GLOBAL_REF: var_idx indexes the parent's closure_var
+    // array, i.e. the parent's function-object var_refs). P18's
+    // read-only-capture analysis consumes this.
+    std::vector<std::pair<uint32_t, uint8_t>> closure_var;
+    // Effective closure-writable mask over the same positions as
+    // `captured`: the subset of captured slots some capturing descendant
+    // provably writes (via put_var_ref-family opcodes), plus all captured
+    // slots when the function or a descendant is opaque (direct eval /
+    // eval-scope ref machinery). For bundle roots it equals `captured`
+    // (module exports and the shared global scope are externally
+    // writable). P18 alone consumes this; other passes keep `captured`.
+    std::vector<uint8_t> cwritable;
 };
 
 // ---------------------------------------------------------------------------
@@ -460,11 +475,17 @@ public:
         }
         // closure vars: per entry atom, leb128 var_idx, leb128 flags
         // (count is closure_var_count from the header; the flags field
-        // is LEB128 — bc_put_leb128(s, flags), not a u8).
+        // is LEB128 — bc_put_leb128(s, flags), not a u8). Low 3 bits of
+        // flags = JSClosureTypeEnum (bc_set_flags order: closure_type
+        // first, then is_const, is_lexical, var_kind).
+        std::vector<std::pair<uint32_t, uint8_t>> closure_var_entries;
+        closure_var_entries.reserve(closure_var_count);
         for (uint32_t i = 0; i < closure_var_count; i++) {
             if (!skip_atom()) return false;
             uint32_t var_idx, cflags;
             if (!leb128(&var_idx) || !leb128(&cflags)) return false;
+            closure_var_entries.emplace_back(var_idx,
+                                             static_cast<uint8_t>(cflags));
         }
         // cpool first: cpool_count values, recursing into children.
         // Child function bytecodes appear here in order.
@@ -486,6 +507,7 @@ public:
         rec.code_off = code_off;
         rec.code_len = byte_code_len;
         rec.stack_size = stack_size;
+        rec.arg_count = arg_count;
         rec.var_count = var_count;
         rec.dbg_off = 0;
         rec.dbg_pc2line_len_off = 0;
@@ -514,6 +536,7 @@ public:
         }
         rec.fn_end = rec.dbg_end;
         rec.captured = std::move(captured_slots);
+        rec.closure_var = std::move(closure_var_entries);
         rec.child_spans.clear();
         rec.children.assign(children->begin() + child_base, children->end());
         children->resize(child_base);
@@ -1039,6 +1062,8 @@ struct RewriteStats {
     uint64_t folds_p14 = 0;   // P14: literal get_field folds
     uint64_t folds_p16 = 0;   // P16: dead stores + TDZ markers removed
     uint64_t tdz_checks_removed = 0;  // tier-3 Lane 1: proven TDZ checks
+    uint64_t to_propkey_removed = 0;  // tier-3 Lane 2: proven-redundant
+                                      // to_propkey sites deleted
                                       // rewritten to plain loc ops
     uint64_t shrinks = 0;     // short-form re-encodings
     uint64_t insns_before = 0;
@@ -3212,6 +3237,14 @@ void encode_pc2line(const std::vector<Pc2LineEntry>& entries,
 static bool tier3_apply_lane1(std::vector<Insn>* insns, uint32_t var_count,
                               RewriteStats* stats);
 
+// P18 Lane 2: to_propkey elimination (same tier-3 section, same
+// post-fixpoint protocol).
+static bool tier3_apply_to_propkey(std::vector<Insn>* insns,
+                                   const std::vector<uint8_t>& captured,
+                                   uint32_t arg_count,
+                                   uint32_t var_count,
+                                   RewriteStats* stats);
+
 bool rewrite_function(const FuncRecord& f,
                       const uint8_t* data,
                       std::vector<uint8_t>* new_code,
@@ -3303,6 +3336,21 @@ bool rewrite_function(const FuncRecord& f,
     if ((passes & kPassTier3Lane1) &&
         tier3_apply_lane1(&insns, f.var_count, stats)) {
         // fall through; reshrink + emit below handle the rewritten ops
+    }
+    // Tier-3 P18 (Lane 2): provably-redundant to_propkey deletion, same
+    // post-fixpoint protocol; deletions are stack-neutral, and the
+    // final reshrink + emit below handle the shifted stream. The
+    // closure-writable mask (from the bundle-wide read-only capture
+    // analysis, computed before the pass loop) replaces the captured
+    // mask: captured-but-readonly slots keep their class, which is what
+    // lets form C fire on guarded accesses whose base is an object held
+    // in a captured slot. Falls back to `captured` if the analysis did
+    // not run (defensive; it always runs in optimize/analyze_only).
+    if ((passes & kPassTier3Lane2) &&
+        tier3_apply_to_propkey(&insns,
+                               f.cwritable.empty() ? f.captured : f.cwritable,
+                               f.arg_count, f.var_count, stats)) {
+        // fall through
     }
     apply_reshrink(&insns, stats);
 
@@ -3468,6 +3516,19 @@ struct Tier3Stats {
     uint64_t get_array_el = 0;
     uint64_t get_array_el_red = 0;  // obj provably array AND idx provably int
     uint64_t get_array_el_arr = 0;  // obj provably array, idx not proven
+    // to_propkey sites (computed access `a[k]`; the interpreter no-ops for
+    // INT/STRING/SYMBOL keys, so the instruction is pure dispatch overhead
+    // there — 2.5% of real-load dispatch on v8-suite):
+    uint64_t to_propkey = 0;
+    uint64_t to_propkey_red = 0;   // key provably int32 -> deletable (A)
+    uint64_t to_propkey_key = 0;   // key provably the result of an earlier
+                                   // to_propkey (or a stored key) -> the
+                                   // conversion is a provable no-op (A2)
+    uint64_t to_propkey_obj = 0;   // base provably object + clean between
+                                   // the site and its consumer (C)
+    uint64_t to_propkey_obj_all = 0;  // base provably object, not clean
+    uint64_t captured_total = 0;   // captured slots across the bundle
+    uint64_t captured_readonly = 0;  // captured slots no descendant writes
 };
 
 // Slot initialization states for candidate (a). Meet: equal states meet to
@@ -3483,7 +3544,17 @@ static uint8_t slot_meet(uint8_t a, uint8_t b) {
 // themselves, anything else is UNKNOWN. The class proves "is an array" /
 // "is an int32", never identity: array mutation does not change the
 // class, only a write of a different-class value does.
-enum StackClass { SC_UNKNOWN = 0, SC_INT = 1, SC_ARRAY = 2 };
+enum StackClass {
+    SC_UNKNOWN = 0,
+    SC_INT = 1,
+    SC_ARRAY = 2,
+    SC_OBJECT = 3,  // call_constructor result: [[Construct]] returns an
+                    // object or throws, so the value is provably non-null
+                    // and non-undefined
+    SC_KEY = 4,     // to_propkey result: always int32/string/symbol, so a
+                    // second to_propkey on it is a provable no-op (the
+                    // interpreter tag-checks exactly these three)
+};
 static uint8_t stack_meet(uint8_t a, uint8_t b) {
     if (a == b) return a;
     return SC_UNKNOWN;
@@ -3822,6 +3893,119 @@ static void tier3_slotinit(const std::vector<Insn>& insns,
 // next to rewrite_function): the P18 hook is called from inside the
 // optimizer's internal namespace while the tier-3 section below sits at
 // bytecode-namespace scope.
+// Forward declaration (defined below): P18 Lane 2's proof, shared with
+// the analyze-only density counting.
+static void tier3_arrayidx(const std::vector<Insn>& insns,
+                           const std::vector<uint8_t>& captured,
+                           uint32_t arg_count,
+                           uint32_t var_count,
+                           Tier3Stats* st,
+                           std::vector<size_t>* to_propkey_del);
+
+// JSClosureTypeEnum values (quickjs.c:678-688), spelled out to keep the
+// optimizer vendor-independent. Only the four emitted by ordinary code
+// matter here; the *_DECL/GLOBAL variants are eval-code-only.
+static const uint8_t CLOSURE_LOCAL = 0;  // var_idx: slot in parent frame
+static const uint8_t CLOSURE_ARG = 1;    // var_idx: arg in parent frame
+static const uint8_t CLOSURE_REF = 2;    // var_idx: parent's closure_var idx
+static const uint8_t CLOSURE_GLOBAL_REF = 3;  // same, module-global var
+
+// P18 (Lane 2) read-only-capture analysis: a captured slot of a function
+// F can be written from outside F only by var_ref opcodes compiled into
+// the capturing functions' code. quickjs-ng materializes a captured slot's
+// var_ref with pvalue pointing INTO F's live frame slot (get_var_ref,
+// quickjs.c:17066-17112), so a closure's put_var_ref writes the same
+// memory as F's own put_loc — and the static function tree contains every
+// possible writer (closures capture only lexically enclosing scopes;
+// direct eval is the one escape, treated as opaque). Bottom-up:
+//   info.obj_writes[i] — some code in this function's subtree writes its
+//                        function-object var_refs[i] (closure_var index)
+//   rec.cwritable[p]    — some capturing descendant writes vardef slot p
+// Child C's REF/GLOBAL_REF entry (var_idx=j) aliases F's var_refs[j], so
+// C.obj_writes[j] marks F.obj_writes[j]; C's LOCAL/ARG entry (var_idx=v,
+// vardef position arg_count+v or v) aliases F's slot v, so C.obj_writes[j]
+// marks F.cwritable[v]. Opaque code (OP_eval / OP_apply_eval / the
+// make_var_ref eval-scope machinery) can write everything it can reach.
+// Decode failure fails closed to opaque. Bundle roots are never upgraded
+// (module exports and the shared global scope are externally writable).
+struct CapInfo {
+    std::vector<uint8_t> obj_writes;  // over closure_var indices
+    bool opaque = false;
+};
+
+static CapInfo cap_compute(const uint8_t* data, FuncRecord* f) {
+    CapInfo info;
+    info.obj_writes.assign(f->closure_var.size(), 0);
+    // Start all-not-writable; only the three writer paths below set bits
+    // (own opaque code, children's LOCAL/ARG entries with obj_writes,
+    // and the opaque propagation). Every captured slot has at least one
+    // child LOCAL/ARG entry (capture_var on F fires exactly when a child
+    // references the var), so this yields the provable-writable subset.
+    f->cwritable.assign(f->captured.size(), 0);
+    std::vector<Insn> insns;
+    std::string err;
+    if (decode_code(data + f->code_off, f->code_len, &insns, &err)) {
+        for (size_t i = 0; i < insns.size(); i++) {
+            uint8_t op = insns[i].op;
+            if (op == OP_put_var_ref || op == OP_set_var_ref ||
+                op == OP_put_var_ref_check || op == OP_put_var_ref_check_init) {
+                if (insns[i].aux < info.obj_writes.size()) {
+                    info.obj_writes[insns[i].aux] = 1;
+                }
+            } else if ((op >= OP_put_var_ref0 && op <= OP_put_var_ref3) ||
+                       (op >= OP_set_var_ref0 && op <= OP_set_var_ref3)) {
+                // none_var_ref operand: implicit index 0-3.
+                uint32_t idx = (op >= OP_set_var_ref0) ? op - OP_set_var_ref0
+                                                       : op - OP_put_var_ref0;
+                if (idx < info.obj_writes.size()) info.obj_writes[idx] = 1;
+            } else if (op == OP_eval || op == OP_apply_eval ||
+                       op == OP_make_var_ref || op == OP_make_var_ref_ref) {
+                info.opaque = true;
+            }
+        }
+    } else {
+        info.opaque = true;  // fail closed: cannot prove anything
+    }
+    for (size_t c = 0; c < f->children.size(); c++) {
+        CapInfo ci = cap_compute(data, &f->children[c]);
+        for (size_t j = 0; j < f->children[c].closure_var.size(); j++) {
+            uint32_t v = f->children[c].closure_var[j].first;
+            uint8_t t = f->children[c].closure_var[j].second & 0x7;
+            if (t == CLOSURE_REF || t == CLOSURE_GLOBAL_REF) {
+                // The child's var_refs[j] aliases my var_refs[v].
+                if (ci.obj_writes[j] && v < info.obj_writes.size()) {
+                    info.obj_writes[v] = 1;
+                }
+            } else {
+                // LOCAL/ARG: the child's var_refs[j] aliases my slot v.
+                size_t pos = (t == CLOSURE_ARG) ? v : f->arg_count + v;
+                if (ci.obj_writes[j] && pos < f->cwritable.size()) {
+                    f->cwritable[pos] = 1;
+                }
+            }
+        }
+    }
+    if (info.opaque) {
+        std::fill(info.obj_writes.begin(), info.obj_writes.end(), 1);
+        std::fill(f->cwritable.begin(), f->cwritable.end(), 1);
+    }
+    return info;
+}
+
+// Entry point: compute cwritable for every nested function. Roots keep
+// captured (conservative: module exports / global scope are writable by
+// code outside the record tree).
+static void tier3_readonly_capture(const uint8_t* data,
+                                   std::vector<FuncRecord>* functions) {
+    for (size_t i = 0; i < functions->size(); i++) {
+        FuncRecord& f = (*functions)[i];
+        f.cwritable = f.captured;
+        for (size_t c = 0; c < f.children.size(); c++) {
+            (void)cap_compute(data, &f.children[c]);
+        }
+    }
+}
+
 namespace {
 static bool tier3_apply_lane1(std::vector<Insn>* insns,
                               uint32_t var_count,
@@ -3842,6 +4026,38 @@ static bool tier3_apply_lane1(std::vector<Insn>* insns,
     }
     return changed;
 }
+
+// P18 Lane 2 emission, candidate (c): delete provably-redundant
+// OP_to_propkey sites (forms A/A2/C, see the sweep's counting code).
+// Same protocol as Lane 1: the proof runs on the exact post-fixpoint
+// stream, and each deletion is individually sound on the original code
+// (deleting a to_propkey only moves the key conversion to the
+// consumer's internal conversion, never changes it), so one sweep
+// suffices. to_propkey is a zero-stack-effect in-place conversion with
+// no aux, so deletion is stack-neutral; the caller's compact_insns
+// remaps jump targets (a target landing on a deleted site is
+// equivalent to landing on the next instruction — the site's whole
+// stack effect is gone). Returns true if any site was deleted.
+static bool tier3_apply_to_propkey(std::vector<Insn>* insns,
+                                   const std::vector<uint8_t>& captured,
+                                   uint32_t arg_count,
+                                   uint32_t var_count,
+                                   RewriteStats* stats) {
+    if (var_count == 0) return false;
+    if (tier3_has_unmodeled_cfg(*insns)) return false;
+    std::vector<size_t> del;
+    tier3_arrayidx(*insns, captured, arg_count, var_count, nullptr, &del);
+    if (del.empty()) return false;
+    std::vector<uint8_t> dead(insns->size(), 0);
+    for (size_t i = 0; i < del.size(); i++) {
+        if (dead[del[i]]) continue;  // sweep visits each site once, but
+                                     // be defensive against duplicates
+        dead[del[i]] = 1;
+    }
+    stats->to_propkey_removed += del.size();
+    compact_insns(insns, dead);
+    return true;
+}
 }  // namespace
 
 // Candidate (b): forward stack lattice tracking provable arrays and
@@ -3851,16 +4067,23 @@ static bool tier3_apply_lane1(std::vector<Insn>* insns,
 // operands, whichever order they were pushed in, and the transfer resets
 // top/prev to unknown on every unmodeled op — so only within-block
 // produced values and slot-carried classes are ever claimed. Slot
-// classes are tracked per var/arg slot (captured slots excluded — their
-// closures can write them at any time) and are the only state propagated
-// across blocks, like P2's value lattice. Class semantics are sound
-// because array-ness survives element mutation; only a write of a
-// different-class value changes a slot's class, and every such write is
-// a modeled put_loc-family op.
+// classes are tracked per var/arg slot — the caller passes the
+// closure-writable mask (tier3_readonly_capture), not the raw captured
+// mask: captured slots whose capturing descendants provably never write
+// keep their class, closure-writable slots stay opaque. The mask is
+// vardef-ordered (args precede vars, size arg_count+var_count); var-slot
+// index s reads mask[arg_count+s]. Slot classes are the only state
+// propagated across blocks, like P2's value lattice.
+// Class semantics are sound because array-ness survives element
+// mutation; only a write of a different-class value changes a slot's
+// class, and every such write is a modeled put_loc-family op or a
+// closure write, which the mask accounts for.
 static void tier3_arrayidx(const std::vector<Insn>& insns,
                            const std::vector<uint8_t>& captured,
+                           uint32_t arg_count,
                            uint32_t var_count,
-                           Tier3Stats* st) {
+                           Tier3Stats* st,
+                           std::vector<size_t>* to_propkey_del) {
     const size_t n = insns.size();
     if (n == 0 || var_count == 0) return;
 
@@ -3884,9 +4107,14 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
     in_wl[0] = 1;
     worklist.push_back(0);
 
+    // The captured mask is vardef-ordered (args precede vars, size
+    // arg_count+var_count), while s is a var-slot index (0..var_count-1);
+    // the mask offset is arg_count + s.
     auto slot_class = [&](const uint8_t* cls, int32_t s) -> uint8_t {
         if (s < 0 || static_cast<size_t>(s) >= var_count) return SC_UNKNOWN;
-        if (static_cast<size_t>(s) >= captured.size() || captured[static_cast<size_t>(s)]) {
+        if (static_cast<size_t>(arg_count) + static_cast<size_t>(s) >=
+                captured.size() ||
+            captured[static_cast<size_t>(arg_count) + static_cast<size_t>(s)]) {
             return SC_UNKNOWN;  // captured: closure-writable at any time
         }
         return cls[static_cast<size_t>(s)];
@@ -3894,46 +4122,100 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
 
     auto sweep = [&](size_t b, std::vector<uint8_t>& cls,
                      Tier3Stats* cnt,
+                     std::vector<size_t>* del,
                      std::vector<std::pair<size_t, std::vector<uint8_t>>>* edges) {
-        uint8_t top = SC_UNKNOWN;
+        // Three-class window: (p2, prev, top) are the classes of the top
+        // three stack values. Two classes cannot prove the guarded-access
+        // shape [.., base, key]: the emitter's post_inc pushes the new
+        // value ABOVE the old one (interpreter: sp[0] = val+1; sp++) and
+        // the following put_loc then pops it, so the base sits at depth 3
+        // through that pair — and the guard's dup pushes a third copy on
+        // top. The depth-3 slot carries the base through both.
+        uint8_t p2 = SC_UNKNOWN;
         uint8_t prev = SC_UNKNOWN;
+        uint8_t top = SC_UNKNOWN;
         for (size_t i = bstart[b]; i < bend[b]; i++) {
             const Insn& in = insns[i];
             uint8_t op = in.op;
             if (is_small_int_push(op)) {
+                p2 = prev;
                 prev = top;
                 top = SC_INT;
             } else if (op == OP_push_true || op == OP_push_false) {
                 // Booleans are int32 on the quickjs stack.
+                p2 = prev;
                 prev = top;
                 top = SC_INT;
             } else if (op == OP_array_from) {
                 // Pops the element values (count in aux), pushes a fresh
                 // array: provably an array; everything below is opaque.
+                p2 = SC_UNKNOWN;
                 prev = SC_UNKNOWN;
                 top = SC_ARRAY;
+            } else if (op == OP_call_constructor) {
+                // [[Construct]] returns an object or throws: the result is
+                // provably non-null/non-undefined (covers `new Array(n)`
+                // and any other construction).
+                p2 = SC_UNKNOWN;
+                prev = SC_UNKNOWN;
+                top = SC_OBJECT;
             } else if (op == OP_and || op == OP_or || op == OP_xor ||
                        op == OP_shl || op == OP_sar || op == OP_shr ||
-                       op == OP_lnot || op == OP_lt || op == OP_lte ||
-                       op == OP_gt || op == OP_gte || op == OP_eq ||
-                       op == OP_neq || op == OP_strict_eq ||
-                       op == OP_strict_neq || op == OP_is_undefined ||
+                       op == OP_lt || op == OP_lte || op == OP_gt ||
+                       op == OP_gte || op == OP_eq || op == OP_neq ||
+                       op == OP_strict_eq || op == OP_strict_neq) {
+                // Binary pop-push (pop 2, push 1): the element below the
+                // two operands (old p2) surfaces as prev. Results are
+                // always int32.
+                top = SC_INT;
+                prev = p2;
+                p2 = SC_UNKNOWN;
+            } else if (op == OP_lnot || op == OP_is_undefined ||
                        op == OP_is_null || op == OP_is_undefined_or_null ||
                        op == OP_typeof_is_undefined) {
-                // Bitwise and comparison results are always int32.
-                prev = SC_UNKNOWN;
+                // Unary pop-push (pop 1, push 1): the value under the
+                // operand survives as prev. Results are always int32.
                 top = SC_INT;
-            } else if (op == OP_dup || op == OP_dup1 || op == OP_dup2 ||
-                       op == OP_dup3 || op == OP_insert2 || op == OP_insert3) {
-                // dup (a -> a a) and the dup1..3/insert2..3 rearrangements
-                // all leave the top two classes in place.
+            } else if (op == OP_swap) {
+                // a b -> b a: exact in the two-class model.
+                uint8_t t = top;
+                top = prev;
+                prev = t;
+            } else if (op == OP_dup) {
+                // a -> a a: the copy lands below the top, so the window
+                // becomes (prev, top, top).
+                p2 = prev;
+                prev = top;
+            } else if (op == OP_dup1 || op == OP_dup2 || op == OP_dup3 ||
+                       op == OP_insert2 || op == OP_insert3) {
+                // a b c -> a b b c (dup1): the old prev moves into p2.
+                // a b c -> a c b c ... (dup2: a b -> a b a b, insert2:
+                // obj a -> a obj a): the old top moves into p2.
+                if (op == OP_dup1) {
+                    p2 = prev;   // (p2, p, t) -> (p, p, t)
+                } else if (op == OP_dup2 || op == OP_insert2) {
+                    p2 = top;    // (p2, p, t) -> (t, p, t)
+                }
+                // dup3 and insert3 copy/rotate entirely below the
+                // three-class window: no change.
+            } else if (op == OP_if_true || op == OP_if_false ||
+                       op == OP_if_true8 || op == OP_if_false8) {
+                // Conditional jump pops the condition: the tracked window
+                // drops one slot (fall-through is the linear continuation;
+                // the jump edge carries only slot classes, so the target
+                // block re-derives stack classes conservatively).
+                top = prev;
+                prev = p2;
+                p2 = SC_UNKNOWN;
             } else if (op == OP_get_loc0_loc1) {
+                p2 = top;
                 prev = slot_class(cls.data(), 0);
                 top = slot_class(cls.data(), 1);
             } else if (is_loc_read(op)) {
                 // A loc read pushes: the old top becomes prev, the slot's
                 // class becomes top.
                 int32_t s = loc_index(in);
+                p2 = prev;
                 prev = top;
                 top = slot_class(cls.data(), s);
             } else if (op == OP_set_loc || op == OP_set_loc8 ||
@@ -3944,8 +4226,11 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
                 // the class, the stack classes survive.
                 int32_t s = loc_index(in);
                 if (s >= 0 && static_cast<size_t>(s) < var_count &&
-                    (static_cast<size_t>(s) >= captured.size() ||
-                     !captured[static_cast<size_t>(s)])) {
+                    (static_cast<size_t>(arg_count) +
+                             static_cast<size_t>(s) >=
+                         captured.size() ||
+                     !captured[static_cast<size_t>(arg_count) +
+                               static_cast<size_t>(s)])) {
                     cls[static_cast<size_t>(s)] = top;
                 }
             } else if (op == OP_set_loc_uninitialized) {
@@ -3958,25 +4243,285 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
                 }
             } else if (op == OP_put_loc_check || op == OP_put_loc_check_init ||
                        is_loc_write(op)) {
+                // put_loc pops the value into the slot: the slot takes
+                // the class, the tracked window drops one (the value
+                // under it becomes the top). set_* was handled above
+                // (pop-and-repush: window-neutral), so everything left
+                // here is a genuine pop.
                 int32_t s = loc_index(in);
                 if (s >= 0 && static_cast<size_t>(s) < var_count &&
-                    (static_cast<size_t>(s) >= captured.size() ||
-                     !captured[static_cast<size_t>(s)])) {
+                    (static_cast<size_t>(arg_count) +
+                             static_cast<size_t>(s) >=
+                         captured.size() ||
+                     !captured[static_cast<size_t>(arg_count) +
+                               static_cast<size_t>(s)])) {
                     cls[static_cast<size_t>(s)] = top;
                 }
-                prev = SC_UNKNOWN;
+                top = prev;
+                prev = p2;
+                p2 = SC_UNKNOWN;
+            } else if (op == OP_post_inc || op == OP_post_dec) {
+                // Pushes the incremented/decremented value ABOVE the old
+                // one (interpreter: sp[0] = val+1; sp++), so the old top
+                // survives as prev. int32 overflow promotes to float64,
+                // so the pushed result is class-unknown.
+                p2 = prev;
+                prev = top;
                 top = SC_UNKNOWN;
             } else if (op == OP_inc_loc || op == OP_dec_loc ||
                        op == OP_add_loc) {
                 // In-place slot arithmetic: int32 overflow promotes to
                 // float64, so the slot's class is lost. inc/dec have no
-                // stack effect; add_loc pops the RHS.
+                // stack effect (slot only); add_loc pops the RHS and
+                // leaves the element below it as the new top.
                 int32_t s = loc_index(in);
                 if (s >= 0 && static_cast<size_t>(s) < var_count) {
                     cls[static_cast<size_t>(s)] = SC_UNKNOWN;
                 }
-                prev = SC_UNKNOWN;
-                top = SC_UNKNOWN;
+                if (op == OP_add_loc) {
+                    top = prev;
+                    prev = p2;
+                    p2 = SC_UNKNOWN;
+                }
+            } else if (op == OP_to_propkey) {
+                // Computed-access key conversion. The interpreter no-ops
+                // INT/STRING/SYMBOL keys, so a provably-int key makes the
+                // instruction pure dispatch overhead — deletable (form A).
+                // Form C: a base provably OBJECT (incl. ARRAY) can never
+                // be null/undefined, and the consumers (get_array_el,
+                // put_array_el) convert non-int keys internally with the
+                // same result — so the to_propkey is redundant whenever
+                // nothing observable (a call, a property op, a slot read
+                // that could observe a toString side effect, a jump)
+                // sits between it and the consumer. The lookahead below
+                // checks exactly that; the transform will use the same
+                // test.
+                bool clean = false;
+                if (prev == SC_OBJECT || prev == SC_ARRAY) {
+                    // Form C lookahead: simulate the code between the site
+                    // and its consumer with the three-class window plus
+                    // the base's depth (2 at the site: [.., base, key]).
+                    // Only pure stack shuffles, constant pushes and
+                    // provably no-op to_propkeys (SC_KEY/SC_INT input)
+                    // may separate them, and the base must still sit at
+                    // the consumer's base slot when it arrives. The
+                    // transform re-runs this exact simulation, so the
+                    // counts and the deletion decision are the same test.
+                    uint8_t s_top = SC_KEY;  // the converted key
+                    uint8_t s_prev = prev;   // the provably-object base
+                    uint8_t s_p2 = p2;       // the slot under the base
+                    int s_dep = 2;
+                    for (size_t j = i + 1; j < n && j < i + 8; j++) {
+                        uint8_t nop = insns[j].op;
+                        if (insns[j].target >= 0 || tier3_is_terminator(nop))
+                            break;  // consumer may not run / not reached
+                        if (nop == OP_get_array_el || nop == OP_get_array_el2) {
+                            if (s_dep == 2) clean = true;
+                            break;
+                        }
+                        if (nop == OP_put_array_el) {
+                            if (s_dep == 3) clean = true;
+                            break;
+                        }
+                        bool stop = false;
+                        switch (nop) {
+                        case OP_swap: {
+                            uint8_t t = s_top;
+                            s_top = s_prev;
+                            s_prev = t;
+                            break;
+                        }
+                        case OP_dup:
+                            s_p2 = s_prev;
+                            s_prev = s_top;
+                            s_dep++;
+                            break;
+                        case OP_dup1:
+                            s_p2 = s_prev;  // (p2, p, t) -> (p, p, t)
+                            s_dep++;
+                            break;
+                        case OP_dup2: case OP_insert2:
+                            s_p2 = s_top;   // (p2, p, t) -> (t, p, t)
+                            s_dep++;
+                            break;
+                        case OP_dup3: case OP_insert3:
+                            s_dep++;        // below the three-class window
+                            break;
+                        case OP_perm3:
+                            // obj a b -> a obj b: depth 2 and 3 swap.
+                            {
+                                uint8_t t = s_p2;
+                                s_p2 = s_prev;
+                                s_prev = t;
+                            }
+                            if (s_dep == 2) s_dep = 3;
+                            else if (s_dep == 3) s_dep = 2;
+                            break;
+                        case OP_perm4: case OP_perm5:
+                            // obj prop a b -> a obj prop b (and the 5-op
+                            // variant): the element under the window
+                            // (depth 4/5) lands at depth 2/3 — unknown.
+                            s_prev = s_p2;
+                            s_p2 = SC_UNKNOWN;
+                            if (s_dep == 2) s_dep = 4;
+                            else if (s_dep == 3) s_dep = 2;
+                            break;
+                        case OP_rot3l:
+                            // x a b -> a b x: depths rotate 1->2->3->1.
+                            {
+                                uint8_t t = s_p2;
+                                s_p2 = s_prev;
+                                s_prev = s_top;
+                                s_top = t;
+                            }
+                            if (s_dep == 1) s_dep = 2;
+                            else if (s_dep == 2) s_dep = 3;
+                            else if (s_dep == 3) s_dep = 1;
+                            break;
+                        case OP_rot3r:
+                            // a b x -> x a b: depths rotate 1->3->2->1.
+                            {
+                                uint8_t t = s_top;
+                                s_top = s_prev;
+                                s_prev = s_p2;
+                                s_p2 = t;
+                            }
+                            if (s_dep == 1) s_dep = 3;
+                            else if (s_dep == 2) s_dep = 1;
+                            else if (s_dep == 3) s_dep = 2;
+                            break;
+                        case OP_nip:
+                            if (s_dep == 2) stop = true;  // base removed
+                            s_dep--;
+                            s_top = s_prev;
+                            s_prev = s_p2;
+                            s_p2 = SC_UNKNOWN;
+                            break;
+                        case OP_nip1:
+                            if (s_dep == 3) stop = true;  // base removed
+                            s_dep--;
+                            s_top = s_prev;
+                            s_prev = s_p2;
+                            s_p2 = SC_UNKNOWN;
+                            break;
+                        case OP_to_propkey:
+                            if (!(s_top == SC_INT || s_top == SC_KEY))
+                                stop = true;  // conversion may be observable
+                            break;
+                        case OP_get_loc_check:
+                            // TDZ check can throw: a throw between the
+                            // site and its consumer changes the order of
+                            // the conversion's side effects.
+                            stop = true;
+                            break;
+                        case OP_post_inc:
+                        case OP_post_dec:
+                            // Pushes the new value above the old one:
+                            // pure for ints and keys (no user code; even
+                            // the INT32_MAX overflow path converts a
+                            // plain int32), but the result class is
+                            // unknown, and the base sinks one deeper.
+                            if (s_top == SC_INT || s_top == SC_KEY) {
+                                s_p2 = s_prev;
+                                s_prev = s_top;
+                                s_top = SC_UNKNOWN;
+                                s_dep++;
+                            } else {
+                                stop = true;  // user code may run
+                            }
+                            break;
+                        case OP_get_loc0_loc1:
+                            s_p2 = s_prev;
+                            s_prev = slot_class(cls.data(), 0);
+                            s_top = slot_class(cls.data(), 1);
+                            s_dep += 2;
+                            break;
+                        default:
+                            if (is_small_int_push(nop) || nop == OP_push_true ||
+                                nop == OP_push_false) {
+                                s_p2 = s_prev;
+                                s_prev = s_top;
+                                s_top = SC_INT;
+                                s_dep++;
+                            } else if (is_loc_read(nop)) {
+                                // Unchecked slot/arg read: side-effect
+                                // free (never throws; get_loc_check is
+                                // handled above). The pushed class is the
+                                // sweep's slot class — unknown for args
+                                // and captured slots, conservative.
+                                int32_t s = loc_index(insns[j]);
+                                uint8_t c = (s < 0)
+                                    ? static_cast<uint8_t>(SC_UNKNOWN)
+                                    : slot_class(cls.data(), s);
+                                s_p2 = s_prev;
+                                s_prev = s_top;
+                                s_top = c;
+                                s_dep++;
+                            } else if (nop == OP_put_loc || nop == OP_put_loc8 ||
+                                       (nop >= OP_put_loc0 &&
+                                        nop <= OP_put_loc3) ||
+                                       nop == OP_put_arg ||
+                                       (nop >= OP_put_arg0 &&
+                                        nop <= OP_put_arg3)) {
+                                // Stores the top value: storing the
+                                // converted key would make the slot's
+                                // later value depend on the deletion
+                                // (converted vs raw) — observable.
+                                // Storing an unrelated value is harmless
+                                // (an int32 key converts to itself, so
+                                // SC_INT tops are safe). Pops the stack.
+                                if (s_top == SC_KEY) stop = true;
+                                s_top = s_prev;
+                                s_prev = s_p2;
+                                s_p2 = SC_UNKNOWN;
+                                s_dep--;
+                            } else if (nop == OP_set_loc || nop == OP_set_loc8 ||
+                                       (nop >= OP_set_loc0 &&
+                                        nop <= OP_set_loc3) ||
+                                       nop == OP_set_arg ||
+                                       (nop >= OP_set_arg0 &&
+                                        nop <= OP_set_arg3)) {
+                                // Pop-and-repush store: same rule, but
+                                // stack-neutral.
+                                if (s_top == SC_KEY) stop = true;
+                            } else {
+                                stop = true;  // observable or unknown
+                            }
+                            break;
+                        }
+                        if (stop) break;
+                    }
+                }
+                if (cnt) {
+                    cnt->to_propkey++;
+                    if (top == SC_INT) {
+                        cnt->to_propkey_red++;
+                    } else if (top == SC_KEY) {
+                        // Input is a provable no-op target: the result of
+                        // an earlier to_propkey (or a stored key). The
+                        // interpreter tag-checks INT/STRING/SYMBOL and
+                        // does nothing for all three.
+                        cnt->to_propkey_key++;
+                    } else if (prev == SC_OBJECT || prev == SC_ARRAY) {
+                        cnt->to_propkey_obj_all++;
+                        if (clean) cnt->to_propkey_obj++;
+                    }
+                }
+                if (del && (top == SC_INT || top == SC_KEY ||
+                            ((prev == SC_OBJECT || prev == SC_ARRAY) &&
+                             clean))) {
+                    // The same tests the counting above splits into
+                    // forms A/A2/C: all three justify unconditional
+                    // deletion of this site (the transform re-runs this
+                    // sweep, so the two agree by construction).
+                    del->push_back(i);
+                }
+                // Transfer: the result is always a valid property key.
+                // Int keys pass through untouched (the interpreter no-ops
+                // them), everything else converts to a string/symbol
+                // atom, so the class SC_KEY is provable on the stack
+                // (and in a slot if stored). prev (the base) survives.
+                top = (top == SC_INT) ? SC_INT : SC_KEY;
             } else if (op == OP_get_array_el || op == OP_get_array_el2) {
                 // Pops obj idx (either push order): specializable iff one
                 // operand is provably an array and the other provably an
@@ -3992,13 +4537,15 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
                         cnt->get_array_el_arr++;
                     }
                 }
-                prev = SC_UNKNOWN;
                 top = SC_UNKNOWN;
+                prev = p2;
+                p2 = SC_UNKNOWN;
             } else {
                 // Every other op makes the stack top opaque; slot classes
                 // survive — no frame-local slot is written by any op not
                 // enumerated above, and calls/property ops only move
                 // values through the stack.
+                p2 = SC_UNKNOWN;
                 prev = SC_UNKNOWN;
                 top = SC_UNKNOWN;
             }
@@ -4028,7 +4575,7 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
         std::vector<uint8_t> cls(in_cls.begin() + b * var_count,
                                  in_cls.begin() + (b + 1) * var_count);
         std::vector<std::pair<size_t, std::vector<uint8_t>>> edges;
-        sweep(b, cls, nullptr, &edges);
+        sweep(b, cls, nullptr, nullptr, &edges);
 
         // Propagate along every jump edge (snapshot at the jump) and the
         // last-insn fall-through.
@@ -4063,7 +4610,7 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
         if (!reachable[b]) continue;
         std::vector<uint8_t> cls(in_cls.begin() + b * var_count,
                                  in_cls.begin() + (b + 1) * var_count);
-        sweep(b, cls, st, nullptr);
+        sweep(b, cls, st, to_propkey_del, nullptr);
     }
 }
 
@@ -4079,11 +4626,21 @@ static bool tier3_function(const FuncRecord& f,
         return false;
     }
     st->funcs++;
+    // Read-only capture accounting: captured slots whose capturing
+    // descendants provably never write (cwritable bit cleared) keep
+    // their class in the Lane 2 sweep.
+    for (size_t s = 0; s < f.captured.size() && s < f.cwritable.size();
+         s++) {
+        if (!f.captured[s]) continue;
+        st->captured_total++;
+        if (!f.cwritable[s]) st->captured_readonly++;
+    }
     if (tier3_has_unmodeled_cfg(insns)) {
         st->funcs_skipped++;
     } else {
         tier3_slotinit(insns, f.var_count, st);
-        tier3_arrayidx(insns, f.captured, f.var_count, st);
+        tier3_arrayidx(insns, f.cwritable.empty() ? f.captured : f.cwritable,
+                       f.arg_count, f.var_count, st, nullptr);
     }
     for (size_t i = 0; i < f.children.size(); i++) {
         if (!tier3_function(f.children[i], data, st, error)) return false;
@@ -4097,6 +4654,7 @@ bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
     if (!parse_buffer(in.data(), in.size(), &functions, error)) return false;
     FoldStats st;
     Tier3Stats t3;
+    tier3_readonly_capture(in.data(), &functions);
     for (size_t i = 0; i < functions.size(); i++) {
         if (!scan_function(functions[i], in.data(), &st)) {
             *error = "bytecode optimize: invalid opcode in function";
@@ -4125,6 +4683,9 @@ bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
                  "bytecode tier3: get_loc_check %llu/%llu reducible (%.2f%%), "
                  "put_loc_check %llu/%llu reducible (%.2f%%), get_array_el "
                  "%llu/%llu specializable (%.2f%%, obj-only %llu), "
+                 "to_propkey %llu total, %llu int-key (%.2f%%), "
+                 "%llu key-of-key (%.2f%%), %llu/%llu object-base clean "
+                 "(%.2f%%/%.2f%%), captured %llu (read-only %llu), "
                  "funcs %llu (%llu skipped)\n",
                  static_cast<unsigned long long>(t3.get_loc_check_red),
                  static_cast<unsigned long long>(t3.get_loc_check),
@@ -4142,6 +4703,21 @@ bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
                                        t3.get_array_el
                                  : 0.0,
                  static_cast<unsigned long long>(t3.get_array_el_arr),
+                 static_cast<unsigned long long>(t3.to_propkey),
+                 static_cast<unsigned long long>(t3.to_propkey_red),
+                 t3.to_propkey ? 100.0 * t3.to_propkey_red / t3.to_propkey
+                               : 0.0,
+                 static_cast<unsigned long long>(t3.to_propkey_key),
+                 t3.to_propkey ? 100.0 * t3.to_propkey_key / t3.to_propkey
+                               : 0.0,
+                 static_cast<unsigned long long>(t3.to_propkey_obj),
+                 static_cast<unsigned long long>(t3.to_propkey_obj_all),
+                 t3.to_propkey ? 100.0 * t3.to_propkey_obj / t3.to_propkey
+                               : 0.0,
+                 t3.to_propkey ? 100.0 * t3.to_propkey_obj_all / t3.to_propkey
+                               : 0.0,
+                 static_cast<unsigned long long>(t3.captured_total),
+                 static_cast<unsigned long long>(t3.captured_readonly),
                  static_cast<unsigned long long>(t3.funcs),
                  static_cast<unsigned long long>(t3.funcs_skipped));
     return true;
@@ -4160,6 +4736,9 @@ bool optimize(const std::vector<std::uint8_t>& in,
                  "function record";
         return false;
     }
+    // P18 Lane 2 read-only capture: bundle-wide, before any function is
+    // rewritten (the pass loop below reads f.cwritable).
+    tier3_readonly_capture(in.data(), &functions);
     const FuncRecord& root = functions[0];
     FuncRewrite rw;
     bool any_changed = false;
@@ -4176,8 +4755,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
             std::fprintf(stderr,
                          "bytecode optimize: %llu -> %llu insns, %llu -> "
                          "%llu code bytes; folds P2 %llu P3.1 %llu "
-                         "P11 %llu P14 %llu P16 %llu T3 %llu, "
-                         "shrinks %llu\n",
+                         "P11 %llu P14 %llu P16 %llu T3 %llu "
+                         "P18 %llu, shrinks %llu\n",
                          static_cast<unsigned long long>(stats.insns_before),
                          static_cast<unsigned long long>(stats.insns_after),
                          static_cast<unsigned long long>(stats.bytes_before),
@@ -4189,6 +4768,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
                          static_cast<unsigned long long>(stats.folds_p16),
                          static_cast<unsigned long long>(
                              stats.tdz_checks_removed),
+                         static_cast<unsigned long long>(
+                             stats.to_propkey_removed),
                          static_cast<unsigned long long>(stats.shrinks));
         }
         return true;
@@ -4217,8 +4798,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
         std::fprintf(stderr,
                      "bytecode optimize: %llu -> %llu insns, %llu -> %llu "
                      "code bytes; folds P2 %llu P3.1 %llu "
-                     "P11 %llu P14 %llu P16 %llu T3 %llu, "
-                     "shrinks %llu\n",
+                     "P11 %llu P14 %llu P16 %llu T3 %llu "
+                     "P18 %llu, shrinks %llu\n",
                      static_cast<unsigned long long>(stats.insns_before),
                      static_cast<unsigned long long>(stats.insns_after),
                      static_cast<unsigned long long>(stats.bytes_before),
@@ -4230,6 +4811,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
                      static_cast<unsigned long long>(stats.folds_p16),
                      static_cast<unsigned long long>(
                          stats.tdz_checks_removed),
+                     static_cast<unsigned long long>(
+                         stats.to_propkey_removed),
                      static_cast<unsigned long long>(stats.shrinks));
     }
     return true;

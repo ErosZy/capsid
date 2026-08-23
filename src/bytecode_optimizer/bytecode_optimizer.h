@@ -72,8 +72,20 @@ enum PassFlags : uint32_t {
     // re-shortened by P6 as usual. Functions with unmodeled CFG gates
     // (with_*/eval/catch/gosub/ret) are skipped whole.
     kPassTier3Lane1 = 1u << 5,
+    // P18 Lane 2, candidate (c): to_propkey elimination. The interpreter
+    // no-ops INT/STRING/SYMBOL keys, so a provably-int key (form A) or a
+    // provable key-of-key (form A2) makes the instruction pure dispatch
+    // overhead — deletable unconditionally. With a provably non-null
+    // base (form C: base class OBJECT/ARRAY from call_constructor) the
+    // conversion is redundant with the consumer's internal conversion
+    // whenever only pure stack shuffles / constant pushes / provable
+    // no-op conversions sit between site and consumer — also deletable.
+    // to_propkey has zero stack effect (converts in place) and no aux,
+    // so deletion is stack-neutral with no target fixups beyond the
+    // standard compaction remap.
+    kPassTier3Lane2 = 1u << 6,
     kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassP16 |
-               kPassTier3Lane1,
+               kPassTier3Lane1 | kPassTier3Lane2,
 };
 
 // Optimizes `in` (a serialized quickjs-ng bytecode buffer) into `out`.

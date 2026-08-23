@@ -94,6 +94,61 @@ std::uint32_t bc_csum(const std::uint8_t* p, std::size_t n) {
     return h;
 }
 
+// Serialized nested function record (BC_TAG_FUNCTION_BYTECODE + header +
+// vardefs + closure vars + cpool + code; no debug block — the allow_debug
+// flag is clear). Field order mirrors JS_WriteFunctionBytecode
+// (quickjs.c:37971-38041): flags u16, strict u8, name atom, 8 lebs
+// (arg/var/defined_arg/stack/var_ref/closure_var/cpool/code_len),
+// vardef count + entries (arg-first; captured bit 0x40 adds a
+// var_ref_idx leb), closure entries (name atom + var_idx + flags),
+// cpool, code. closure_entries are (var_idx, flags) pairs with the
+// closure type in the low 3 bits of flags.
+std::vector<std::uint8_t> make_child_record(
+    std::uint32_t arg_count, std::uint32_t var_count,
+    std::uint32_t stack_size, const std::vector<std::uint8_t>& code,
+    const std::vector<std::pair<std::uint32_t, std::uint8_t>>&
+        closure_entries = {},
+    const std::vector<std::uint8_t>* captured = nullptr,
+    std::uint32_t var_ref_count = 0,
+    const std::vector<std::uint8_t>* cpool = nullptr,
+    std::uint32_t cpool_count = 0) {
+    std::vector<std::uint8_t> b;
+    b.push_back(12);  // BC_TAG_FUNCTION_BYTECODE
+    put_u16(&b, 0);   // flags
+    b.push_back(1);   // strict
+    put_leb(&b, 0);   // function name atom
+    put_leb(&b, arg_count);
+    put_leb(&b, var_count);
+    put_leb(&b, 0);  // defined_arg_count
+    put_leb(&b, stack_size);
+    put_leb(&b, var_ref_count);
+    put_leb(&b, static_cast<std::uint32_t>(closure_entries.size()));
+    put_leb(&b, cpool_count);
+    put_leb(&b, static_cast<std::uint32_t>(code.size()));
+    put_leb(&b, arg_count + var_count);
+    for (std::uint32_t i = 0; i < arg_count + var_count; i++) {
+        put_leb(&b, 0);  // atom, scope_level, scope_next, flags
+        put_leb(&b, 0);
+        put_leb(&b, 0);
+        const bool cap =
+            captured != nullptr &&
+            static_cast<size_t>(i) < captured->size() &&
+            (*captured)[static_cast<size_t>(i)] != 0;
+        b.push_back(cap ? 0x40 : 0);
+        if (cap) put_leb(&b, 0);  // var_ref_idx
+    }
+    for (const auto& e : closure_entries) {
+        put_leb(&b, 0);         // var_name atom
+        put_leb(&b, e.first);   // var_idx
+        put_leb(&b, e.second);  // flags (closure type in low 3 bits)
+    }
+    if (cpool != nullptr) {
+        b.insert(b.end(), cpool->begin(), cpool->end());
+    }
+    b.insert(b.end(), code.begin(), code.end());
+    return b;
+}
+
 struct Builder {
     std::vector<std::uint8_t> buf;
     std::vector<std::uint8_t> code;
@@ -138,7 +193,9 @@ struct Builder {
 
     void finish(int var_count, std::uint16_t flags = 0,
                 const std::vector<std::uint8_t>* debug = nullptr,
-                const std::vector<std::uint8_t>* captured = nullptr) {
+                const std::vector<std::uint8_t>* captured = nullptr,
+                std::uint32_t var_ref_count = 0,
+                std::uint32_t arg_count = 0) {
         buf.push_back(26);  // BC_VERSION
         put_u32(&buf, 0);   // checksum, patched below
         put_leb(&buf, 1);   // atom count
@@ -155,16 +212,17 @@ struct Builder {
         put_u16(&buf, flags);
         buf.push_back(1);   // strict
         put_leb(&buf, 0);   // function name atom
-        put_leb(&buf, 0);   // arg_count
+        put_leb(&buf, arg_count);
         put_leb(&buf, static_cast<std::uint32_t>(var_count));
         put_leb(&buf, 0);   // defined_arg_count
         put_leb(&buf, stack_size);
-        put_leb(&buf, 0);   // var_ref_count
+        put_leb(&buf, var_ref_count);
         put_leb(&buf, 0);   // closure_var_count
         put_leb(&buf, cpool_count);
         put_leb(&buf, static_cast<std::uint32_t>(code.size()));
-        put_leb(&buf, static_cast<std::uint32_t>(var_count));
-        for (int i = 0; i < var_count; i++) {
+        // vardefs are arg-first: arg_count entries, then var_count.
+        put_leb(&buf, static_cast<std::uint32_t>(arg_count + var_count));
+        for (std::uint32_t i = 0; i < arg_count + var_count; i++) {
             put_leb(&buf, 0);  // atom, scope_level, scope_next, flags
             put_leb(&buf, 0);
             put_leb(&buf, 0);
@@ -187,22 +245,28 @@ struct Builder {
         buf[4] = static_cast<std::uint8_t>(c >> 24);
     }
 
+    bool run_optimize(std::vector<std::uint8_t>* out, std::string* err,
+                      std::uint32_t passes) {
+        if (!capsid::bytecode::optimize(buf, out, passes, false, err)) {
+            return false;
+        }
+        CHECK(out->size() > 5);
+        // Header checksum must match an independent recompute.
+        std::uint32_t stored = static_cast<std::uint32_t>((*out)[1]) |
+                               (static_cast<std::uint32_t>((*out)[2]) << 8) |
+                               (static_cast<std::uint32_t>((*out)[3]) << 16) |
+                               (static_cast<std::uint32_t>((*out)[4]) << 24);
+        CHECK(stored == bc_csum(out->data() + 5, out->size() - 5));
+        return true;
+    }
+
+    // Parse the root function record (the module's own function) to its
+    // code blob (layout fixed for this builder: atom 0, no closure vars,
+    // cpool allowed but all root-code tests here use none).
     bool optimize_and_code(std::vector<std::uint8_t>* out_code,
                            std::string* err, std::uint32_t passes) {
         std::vector<std::uint8_t> out;
-        if (!capsid::bytecode::optimize(buf, &out, passes, false, err)) {
-            return false;
-        }
-        CHECK(out.size() > 5);
-        // Header checksum must match an independent recompute.
-        std::uint32_t stored = static_cast<std::uint32_t>(out[1]) |
-                               (static_cast<std::uint32_t>(out[2]) << 8) |
-                               (static_cast<std::uint32_t>(out[3]) << 16) |
-                               (static_cast<std::uint32_t>(out[4]) << 24);
-        CHECK(stored == bc_csum(out.data() + 5, out.size() - 5));
-        // Parse the function record to the code blob (layout fixed for
-        // this builder: atom 0, no closure vars, cpool allowed but all
-        // tests here use none).
+        if (!run_optimize(&out, err, passes)) return false;
         std::size_t p = 5;
         while (out[p++] & 0x80) { /* atom count leb128 */ }
         p += 1 + 4;  // atom 0 const
@@ -224,7 +288,7 @@ struct Builder {
             }
             vals[f] = x;
         }
-        std::uint32_t vc = vals[1];
+        std::uint32_t vc = vals[0] + vals[1];
         while (out[p++] & 0x80) { /* vardefs count */ }
         for (std::uint32_t i = 0; i < vc; i++) {
             for (int k = 0; k < 3; k++) {
@@ -238,18 +302,97 @@ struct Builder {
                          out.end());
         return true;
     }
+
+    // Navigate to the nested function under test: Root (the module's
+    // function) has cpool [F], F has cpool [child]. Skips Root's header,
+    // vardefs and closure vars, then F's header, vardefs and closure
+    // vars, then the child record in full; returns F's code blob (its
+    // code_len from F's header, since no debug block follows).
+    bool optimize_and_fcode(std::vector<std::uint8_t>* out_code,
+                            std::string* err, std::uint32_t passes) {
+        std::vector<std::uint8_t> out;
+        if (!run_optimize(&out, err, passes)) return false;
+        std::size_t p = 5;
+        auto leb32 = [&out, &p]() -> std::uint32_t {
+            std::uint32_t x = 0;
+            int shift = 0;
+            for (;;) {
+                x |= static_cast<std::uint32_t>(out[p] & 0x7f) << shift;
+                if (!(out[p++] & 0x80)) break;
+                shift += 7;
+            }
+            return x;
+        };
+        while (out[p++] & 0x80) { /* atom count */ }
+        p += 1 + 4;  // atom 0 const
+        p += 1 + 1;  // module tag + name atom
+        for (int k = 0; k < 4; k++) leb32();
+        p += 1;  // has_tla
+        // Root record: fn tag + flags + strict + name + 8 header lebs.
+        p += 1 + 2 + 1;
+        leb32();
+        std::uint32_t rvals[8] = {0};
+        for (int f = 0; f < 8; f++) rvals[f] = leb32();
+        leb32();  // vardefs count
+        for (std::uint32_t i = 0; i < rvals[0] + rvals[1]; i++) {
+            leb32();
+            leb32();
+            leb32();
+            if (out[p++] & 0x40) leb32();
+        }
+        for (std::uint32_t i = 0; i < rvals[5]; i++) {
+            leb32();
+            leb32();
+            leb32();
+        }
+        // Root cpool holds exactly F.
+        CHECK(rvals[6] == 1);
+        p += 1 + 2 + 1;  // F: fn tag + flags + strict
+        leb32();         // F name atom
+        std::uint32_t fvals[8] = {0};
+        for (int f = 0; f < 8; f++) fvals[f] = leb32();
+        leb32();  // F vardefs count
+        for (std::uint32_t i = 0; i < fvals[0] + fvals[1]; i++) {
+            leb32();
+            leb32();
+            leb32();
+            if (out[p++] & 0x40) leb32();
+        }
+        for (std::uint32_t i = 0; i < fvals[5]; i++) {
+            leb32();
+            leb32();
+            leb32();
+        }
+        // F cpool holds exactly the capturing child; skip it whole.
+        CHECK(fvals[6] == 1);
+        p += 1 + 2 + 1;  // child: fn tag + flags + strict
+        leb32();         // child name atom
+        std::uint32_t cvals[8] = {0};
+        for (int f = 0; f < 8; f++) cvals[f] = leb32();
+        leb32();  // child vardefs count
+        for (std::uint32_t i = 0; i < cvals[0] + cvals[1]; i++) {
+            leb32();
+            leb32();
+            leb32();
+            if (out[p++] & 0x40) leb32();
+        }
+        for (std::uint32_t i = 0; i < cvals[5]; i++) {
+            leb32();
+            leb32();
+            leb32();
+        }
+        CHECK(cvals[6] == 0);  // child has no cpool of its own
+        p += cvals[7];         // child code (no debug block)
+        // F's code follows immediately.
+        out_code->assign(out.begin() + static_cast<std::ptrdiff_t>(p),
+                         out.begin() + static_cast<std::ptrdiff_t>(p) +
+                             fvals[7]);
+        return true;
+    }
 };
 
-void expect_code(const char* name, Builder* b, const char* hex,
-                 std::uint32_t passes = 0xffffffffu) {
-    std::vector<std::uint8_t> code;
-    std::string err;
-    if (!b->optimize_and_code(&code, &err, passes)) {
-        std::fprintf(stderr, "FAIL %s: optimize error: %s\n", name,
-                     err.c_str());
-        g_failures++;
-        return;
-    }
+void check_code(const char* name, const std::vector<std::uint8_t>& code,
+                const char* hex) {
     // Expected bytes are space-separated hex.
     std::vector<std::uint8_t> want;
     const char* cur = hex;
@@ -272,6 +415,34 @@ void expect_code(const char* name, Builder* b, const char* hex,
         std::fprintf(stderr, "\n");
         g_failures++;
     }
+}
+
+void expect_code(const char* name, Builder* b, const char* hex,
+                 std::uint32_t passes = 0xffffffffu) {
+    std::vector<std::uint8_t> code;
+    std::string err;
+    if (!b->optimize_and_code(&code, &err, passes)) {
+        std::fprintf(stderr, "FAIL %s: optimize error: %s\n", name,
+                     err.c_str());
+        g_failures++;
+        return;
+    }
+    check_code(name, code, hex);
+}
+
+// expect_code for the nested-function layout: Root's cpool holds F (the
+// function under test), F's cpool holds the capturing child.
+void expect_fcode(const char* name, Builder* b, const char* hex,
+                  std::uint32_t passes = 0xffffffffu) {
+    std::vector<std::uint8_t> code;
+    std::string err;
+    if (!b->optimize_and_fcode(&code, &err, passes)) {
+        std::fprintf(stderr, "FAIL %s: optimize error: %s\n", name,
+                     err.c_str());
+        g_failures++;
+        return;
+    }
+    check_code(name, code, hex);
 }
 
 // ---------------------------------------------------------------------------
@@ -592,6 +763,106 @@ void test_tier3_lane1_goldens() {
         expect_code("t3 pass-off", &b,
                     "04 00 00 00 00 c8 04 61 04 00 28",
                     0xffffffffu & ~capsid::bytecode::kPassTier3Lane1);
+    }
+}
+
+// P18 (Lane 2) read-only-capture gate: the base's slot class survives
+// form-C analysis only when the capturing subtree provably never writes
+// the captured slot. Layout: Root (module function) -> cpool F -> cpool
+// child. F has arg 0 (get_arg: class-unknown by design — the guard
+// site's key can only be deleted through form C) and captured var 0
+// (base). The child's closure entry is (var_idx 0, CLOSURE_LOCAL), so a
+// put_var_ref0 in the child marks F.cwritable[arg_count+0]. F's code is
+// the sieve-rt guarded-array-store shape: entering [x, base, key],
+// `swap dup is_undefined_or_null if_true8` tests the base, both paths
+// converge at the merge swap with [x, key, base], and the merge site's
+// to_propkey runs in a block whose entry stack classes are all-unknown
+// (conservative) — so only the guard site can ever fold.
+void test_p18_readonly_capture_goldens() {
+    // 0: array_from 0; 3: put_loc 0 (slot0=base); 6: push_1 (x);
+    // 7: get_loc 0; 10: get_arg 0 (key; re-shortens to get_arg0); 13: swap dup
+    // is_undefined_or_null if_true8 -> merge; 18: swap to_propkey swap
+    // (guard site); 21: swap (merge); 22: push_1 swap to_propkey swap
+    // (merge site); 26: put_array_el; 27: return_undef.
+    const std::vector<std::uint8_t> f_code = {
+        38, 0, 0,    // array_from 0
+        88, 0, 0,    // put_loc 0
+        187,         // push_1
+        87, 0, 0,    // get_loc 0
+        90, 0, 0,    // get_arg 0
+        27,          // swap
+        17,          // dup
+        175,         // is_undefined_or_null
+        241, 4,      // if_true8 -> byte 17 (merge swap)
+        27,          // swap
+        113,         // to_propkey   (guard site)
+        27,          // swap
+        27,          // swap         (merge target)
+        187,         // push_1
+        27,          // swap
+        113,         // to_propkey   (merge site)
+        27,          // swap
+        72,          // put_array_el
+        41,          // return_undef
+    };
+    const std::vector<std::uint8_t> f_captured = {0, 1, 0, 0};
+    // readonly-keep: the capturing child only reads the captured slot
+    // (get_var_ref0; pop), so F.cwritable stays clear, the base's ARRAY
+    // class survives the get_loc, and form C deletes the guard site.
+    // P6 re-shortens put_loc 0 / get_loc 0 to put_loc0 / get_loc0; the
+    // merge swap moves up one byte so the if_true8 diff becomes 3.
+    {
+        const std::vector<std::uint8_t> child_code = {227, 14, 41};
+        std::vector<std::uint8_t> child =
+            make_child_record(0, 0, 1, child_code, {{0, 0}});
+        std::vector<std::uint8_t> f = make_child_record(
+            1, 3, 4, f_code, {}, &f_captured, 1, &child, 1);
+        Builder b;
+        b.cpool = std::move(f);
+        b.cpool_count = 1;
+        b.code = {41};  // root: return_undef
+        b.finish(0);
+        expect_fcode("p18 readonly-capture keep", &b,
+                     "26 00 00 cf bb cb d7 1b 11 af f1 03 1b 1b 1b"
+                     " bb 1b 71 1b 48 29");
+    }
+    // closure-write-keep: the child writes the captured slot
+    // (put_var_ref0), so F.cwritable[arg_count+0] is set, the base's
+    // class is lost at the get_loc, and neither site folds. Output is
+    // the input after P6's re-shorten only.
+    {
+        const std::vector<std::uint8_t> child_code = {194, 1, 231, 41};
+        std::vector<std::uint8_t> child =
+            make_child_record(0, 0, 1, child_code, {{0, 0}});
+        std::vector<std::uint8_t> f = make_child_record(
+            1, 3, 4, f_code, {}, &f_captured, 1, &child, 1);
+        Builder b;
+        b.cpool = std::move(f);
+        b.cpool_count = 1;
+        b.code = {41};
+        b.finish(0);
+        expect_fcode("p18 closure-write keep", &b,
+                     "26 00 00 cf bb cb d7 1b 11 af f1 04 1b 71 1b"
+                     " 1b bb 1b 71 1b 48 29");
+    }
+    // opaque-eval-keep: the child contains OP_eval, which can write
+    // anything it reaches — the subtree is opaque, F.cwritable fills,
+    // and neither site folds (same bytes as closure-write-keep).
+    {
+        const std::vector<std::uint8_t> child_code = {194, 1, 50, 0, 0, 0,
+                                                      0,   14, 41};
+        std::vector<std::uint8_t> child =
+            make_child_record(0, 0, 1, child_code, {{0, 0}});
+        std::vector<std::uint8_t> f = make_child_record(
+            1, 3, 4, f_code, {}, &f_captured, 1, &child, 1);
+        Builder b;
+        b.cpool = std::move(f);
+        b.cpool_count = 1;
+        b.code = {41};
+        b.finish(0);
+        expect_fcode("p18 opaque-eval keep", &b,
+                     "26 00 00 cf bb cb d7 1b 11 af f1 04 1b 71 1b"
+                     " 1b bb 1b 71 1b 48 29");
     }
 }
 
@@ -1602,6 +1873,7 @@ int main() {
     test_peephole_goldens();
     test_p16_dead_store_goldens();
     test_tier3_lane1_goldens();
+    test_p18_readonly_capture_goldens();
     test_fail_closed_matrix();
     test_cpool_kept();
     test_p2_gates();
