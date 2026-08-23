@@ -4648,6 +4648,22 @@ if(BUILD_TESTING)
         )
         set_tests_properties(tjs_shared_loop PROPERTIES TIMEOUT 20)
 
+        # E0 §2 directed tests for the BC27/OP_ext runtime foundation
+        # (0037-capsid-ext-foundation + 0038-capsid-ext-get-array-el).
+        # RED: fails on a patchless runtime (BC27 is rejected as an
+        # unsupported bytecode version).
+        add_executable(
+            test-ext-bytecode
+            tests/test_ext_bytecode.cc
+        )
+        target_link_libraries(test-ext-bytecode PRIVATE tjs)
+        add_test(
+            NAME ext_bytecode_directed
+            COMMAND test-ext-bytecode
+        )
+        set_tests_properties(ext_bytecode_directed
+            PROPERTIES TIMEOUT 30)
+
         # Binding v1 §7.6: the neutral-value structured clone between the
         # User and Binding Runtimes.
         add_executable(
