@@ -31,6 +31,9 @@ Capsid documentation is organized around selection → integration → configura
   [framework-compatibility/README.md](framework-compatibility/README.md)
 - Test gate: [testing.md](testing.md)
 - Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
+- Bytecode AOT optimizer design and tier-2b plan:
+  [bytecode-aot-optimizer.md](bytecode-aot-optimizer.md) ·
+  [plans/tier-2b-tdz-sound-dce.md](plans/tier-2b-tdz-sound-dce.md)
 
 ## Maintenance Rules
 

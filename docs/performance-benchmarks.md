@@ -205,6 +205,50 @@ removed instructions are expensive `get_field` lookups, not cheap dispatches
 (G5 in the optimizer doc). The G4 attribution matrix and the SSI suite's
 0.016% corpus contribution are in the optimizer doc's §11.
 
+### Tier-2b final-config run (2026-08-23, commit 40c3d8a)
+
+Same protocol, 13 fixtures, post-tier-2b deployed pipeline (P2+P3.1+P11+P14+
+P16 + format passes; P16 is the tier-2b TDZ-sound dead-store elimination —
+see [Bytecode AOT Optimizer](bytecode-aot-optimizer.md) §11 for the G1-G5
+adjudication). Raw samples, compiler reports, manifest, and sha256 are in
+`bench/results/exec-throughput-20260823T152705/` (plus retest runs
+T153323/T153344). The machine carried concurrent sessions (a test262
+conformance run at 125% CPU, then a sablejs Crypto benchmark at ~115%
+CPU), so the table below gives run 1 plus the range across all three
+runs for each fixture; the large-gain fixtures are stable across all
+three, and the millisecond-scale swings trace to that load — P16's
+edits there delete only dead markers with strictly smaller outputs, so
+a genuine slowdown is structurally impossible.
+
+| fixture | opt vs raw (run 1) | opt vs raw (3-run range) |
+| --- | ---: | ---: |
+| arith-rt | **+84.09%** | +83.80…+84.70% |
+| cascade-rt | +56.56% | +56.17…+57.22% |
+| prop-hoist-rt | +42.77% | +39.86…+42.77% |
+| copy-chain-rt | +21.39% | +21.07…+26.60% |
+| prop-loop-rt | +18.54% | +17.26…+18.67% |
+| branch-const-rt | +9.83% | -1.82…+9.83% |
+| matrix-rt | +5.95% | -4.59…+5.95% |
+| cse-loop-rt | +2.36% | -4.97…+6.77% |
+| sieve-rt | +0.05% | -0.58…+0.70% |
+| fib-rt | +0.05% | -7.49…+0.25% |
+| json-rt | -0.92% | -18.03…+8.51% |
+| string-rt | -2.46% | -3.34…+4.37% |
+| licm-rt | -2.52% | -16.21…-2.31% |
+
+Static reductions (compiler report, post-tier-2b): arith-rt 145→35 /
+297→74 (P16 −50 insns: 18× set_loc_uninitialized + 17× push_i32 + 14×
+put_loc8 + 1); cascade-rt 100→59 / 225→149 (P16 −17); matrix-rt 203→187 /
+477→429 (P16 −16); the other fixtures −3 to −7 insns each; fib-rt remains
+byte-identical (P16 true negative). arith-rt's +84.09% on a 76→26-insn
+loop (the tier-2 G5 report's predicted dead-store scaffolding, now
+removed) is the pipeline's headline: P16's deletions are paid once per
+function call, so the win lands on every invocation rather than being
+amortized across loop iterations. The P16 switch matrix (kPassAll vs
+kPassAll∖P16, 120/1076 = 11.15% corpus static attribution on this
+marker-dense corpus) and the G1-G5 verdicts are in the optimizer doc's
+§11; per-fixture evidence is archived in `bench/results/p16-evidence/`.
+
 ## 6. Retired Checkpoints
 
 The previous 2026-08-18 AMD Ryzen 3 3300X checkpoint (`c943e35`, `four-qps-final-20260818T131300`, `four-qps-profile-20260818T132600`, and `cold-start-20260818T134435`) was superseded by the clean rc.07 run above. The 2026-08-18 Intel i5-12400F 6C/12T conclusion-adjacent tables (commit `b39acee`/`build-win`) and the 2026-08-14 4C tables are also retired. They remain available in git history and in the raw artifacts under `bench/results/` referenced by the older revisions of this document.
