@@ -1269,6 +1269,36 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     // get_loc0_loc1 is a fused read of slots 0 and 1 and counts for
     // both (a plain get_loc read of either is folded into it by the
     // compiler's peephole, so excluding it would undercount readers).
+    //
+    // Loop-carried writes: a read inside a loop re-executes after the
+    // loop body's stores, so the linear order is not the execution
+    // order. A candidate whose slot t is stored again anywhere after
+    // the put (by any put/set/mut op) is therefore rename-safe only in
+    // functions without backedges — otherwise the renamed read would
+    // see the later store's value on the next iteration. (Real-world
+    // trigger: a loop counter copied into a slot, read and stored again
+    // inside the loop; renaming the read corrupted the counter and the
+    // loop ran with a stale value.)
+    bool has_backedge = false;
+    for (size_t i = 0; i < n; i++) {
+        if ((*dead)[i]) continue;
+        const Insn& in = (*insns)[i];
+        if (in.target >= 0 && static_cast<size_t>(in.target) < i) {
+            has_backedge = true;
+            break;
+        }
+    }
+    // last_store[t] = index of the last store of t in the stream.
+    std::vector<size_t> last_store(var_count, n);
+    for (size_t i = 0; i < n; i++) {
+        if ((*dead)[i]) continue;
+        const Insn& in = (*insns)[i];
+        uint32_t sl;
+        if ((is_put_loc_op(in.op) || is_set_loc_op(in.op) ||
+             is_slot_mut_op(in.op)) &&
+            slot_of(in, &sl))
+            last_store[sl] = i;
+    }
     std::vector<size_t> first_get(var_count, n);
     for (size_t i = 0; i < n; i++) {
         if ((*dead)[i]) continue;
@@ -1315,7 +1345,11 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 uint32_t s;
                 if (slot_of((*insns)[prev], &s) && s != sl &&
                     !captured[s] && !captured[sl] && alias[sl] < 0 &&
-                    first_get[sl] >= i) {
+                    first_get[sl] >= i &&
+                    // No later store of t: in a loop the next iteration
+                    // reads that store before this put's value (see the
+                    // has_backedge/last_store note above).
+                    (!has_backedge || last_store[sl] == i)) {
                     size_t c = cands.size();
                     cands.push_back({i, prev});
                     cand_slot.push_back(sl);
@@ -1358,6 +1392,24 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 // no longer touches t, so it does not keep the store
                 // alive (reads_after stays 0).
                 uint32_t s = static_cast<uint32_t>(alias[sl]);
+                // Short-form slot reads (get_loc0..3) encode the slot in
+                // the opcode and are emitted without an aux operand, and
+                // the loc8 form's 1-byte aux cannot hold a slot above
+                // 255. In both cases promote the read to the aux-carrying
+                // form wide enough for s — otherwise the emitted byte
+                // stream still reads the original slot t (or a truncated
+                // index), whose store this pass just deleted, and the
+                // read observes a stale value. (Real-world trigger:
+                // v8-suite DeltaBlue — loop-body copies of an object slot
+                // into loc1/loc2 renamed the reads, the stores were
+                // deleted, and the loop-exit reads saw the pre-loop null,
+                // crashing on a null field access.)
+                uint8_t op = (*insns)[i].op;
+                if (op >= OP_get_loc0 && op <= OP_get_loc3)
+                    op = (s <= 255) ? OP_get_loc8 : OP_get_loc;
+                else if (op == OP_get_loc8 && s > 255)
+                    op = OP_get_loc;
+                (*insns)[i].op = op;
                 (*insns)[i].aux = s;
                 (*insns)[i].has_aux = true;
             } else {
