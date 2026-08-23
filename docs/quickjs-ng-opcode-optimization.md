@@ -338,6 +338,55 @@ win must land first so ext_id 253/254 are earned, not speculative. The
 Lane 1 win is TDZ elimination — it proves the pipeline on existing
 opcodes before any format change. Stop conditions in §11 still apply.
 
+### 4.3 C1 landed + measured (2026-08-23): Lane 1 evidence
+
+C1 (commit f791dc3) shipped kPassTier3Lane1 plus the three soundness
+fixes its validation surfaced (P2 mid-block jump-edge drop, arg/loc
+slot-index collision, P16 mid-block liveness merge; regression fixtures
+p2-midblock-join.js / p16-midblock-merge.js join the differential suite).
+Gates: bytecode_optimizer + differential (11 fixtures) + round-trip +
+attestation + build identity matrix — 12/12 green.
+
+Static attribution (16-fixture bench corpus, ON vs OFF mask A/B, exact
+code-section sums):
+
+| fixture | T3 sites | code bytes on/off | bundle on/off |
+| --- | --- | --- | --- |
+| matrix-rt | 56 | 349 / 429 (−18.6%) | 1661 / 1741 |
+| sieve-rt | 30 | 163 / 212 (−23.1%) | 924 / 973 |
+| json-rt | 15 | 155 / 187 (−17.1%) | 728 / 760 |
+| string-rt | 15 | 113 / 143 (−21.0%) | 608 / 638 |
+| cse-loop-rt | 10 | 68 / 88 (−22.7%) | 412 / 432 |
+| branch-const-rt | 9 | 77 / 95 (−18.9%) | 496 / 514 |
+| licm-rt | 9 | 66 / 84 (−21.4%) | 442 / 460 |
+| copy-chain-rt | 8 | 62 / 78 (−20.5%) | 456 / 472 |
+| arith-rt / arrlocal-rt / cascade-rt / fib-rt / prop-hoist-rt / prop-loop-rt / tdz-check-rt (control) | 6-6-6-6-6-6-5 | −16.2 / −14.8 / −8.1 / −14.3 / −13.3 / −13.3 / −13.3 % | −12 B each |
+| **corpus total (15 fixtures)** | **193 sites** | **1614 / 1959 (T3 = −345 B, −17.6%)** | **10,182 / 10,528** |
+
+(Plus a synthetic worst-case probe `t3max` — loop body of pure let-slot
+traffic, 8 sites, −19.5% code — used only for the dynamic bracketing
+below. v8-suite-rt: 0 sites, runtime-eval'd string corpus.)
+
+Dynamic A/B (paired alternating runs, taskset 0-3, 9 rounds median ×3):
+**wall-clock at the noise floor** — matrix +1.4% (best), arith +0.3%,
+cascade −1.2%, and the worst-case check-fraction loop (1.4M check
+executions removed per fetch, pure let-slot arithmetic body): flat
+(3.503 vs 3.500 ms). Decisive negative evidence: the
+`unlikely(JS_IsUninitialized())` branch is perfectly predicted and
+shares the dispatch machinery with the plain op, so its marginal cost is
+sub-nanosecond; removing it changes dispatch count zero.
+
+Verdict record — Lane 1 is a **static-elimination win (17.7% of code,
+G4 ≥1% threshold passed at 17×) with a dynamic effect below the noise
+floor** on this corpus. That is exactly what the A2 ranking could not
+predict (dispatch-execution share overstates a perfectly-predicted
+branch's cost). The pass is zero-format, zero-regression, and keeps the
+code bytes budget under control; it is kept for the static win and the
+I-cache pressure it removes on strict-module handlers. B1/C2 must be
+measured with the same A/B discipline — get_array_el's generic path is a
+*function call* (JS_GetPropertyValue), not a predicted branch, so its
+ceiling is structurally higher.
+
 ## 5. Lane 1 and Lane 2 Emission
 
 ### 5.1 Lane 1: guard-free
