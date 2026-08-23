@@ -54,9 +54,19 @@ inline caches, and GC-related work.
 
 Execution status (2026-08-23): A0 baseline is largely in place — the
 interpreter-ceiling reference (quickjs-ng 1.95x behind V8 jitless on v8-suite)
-and the DSE +2.6% paired A/B are archived under `bench/results/`. A1 is in
-progress as overlay patch 0036 (`CONFIG_OPCODE_PROFILE`). A2-A4, B1, C1, C2
-follow in order.
+and the DSE +2.6% paired A/B are archived under `bench/results/`. A1 is
+delivered: overlay patch 0036 (`CONFIG_OPCODE_PROFILE`), capsid option
+`CAPSID_ENABLE_OPCODE_PROFILE` (worker dumps one JSON object per runtime to
+stderr before each `TJS_FreeRuntime`), and the zero-tax proof — the OFF
+configuration is byte-identical to the patchless build at both the non-LTO
+object level and the fully LTO-linked binary level (section-name line-number
+metadata from `-ffunction-sections` is the only observable difference of
+unlinked LTO objects). A2 is delivered: corpus profiling and ranking (§3.4a),
+candidates `get_array_el` specialization + TDZ-check elimination. A3 is
+delivered: analyze-only density proof (§4.1) — 100% TDZ density on all 14
+analyzable fixtures with an honest negative control, and shape-bound
+`get_array_el` density (3/3 full, 3 obj-only) that Lane 2A guards are
+designed to extend. A4 go/no-go is the next gate; B1/C1/C2 follow in order.
 
 ## 2. Verified Baseline Facts
 
@@ -172,6 +182,36 @@ numeric/compare, property/index, call, and fusion categories. Each must cover
 at least 2% of sampled interpreter ticks. Fewer qualified candidates means
 fewer prototypes; none ends the project after the no-go report.
 
+### 3.4a First-round evidence (2026-08-23)
+
+Corpus: the 13 bench fixtures (ES-module, strict) + v8-suite
+(`bench/fixtures/v8-suite-rt.js`, sablejs adaptation, sloppy) — 14 profiles
+per mode, 7.13B dynamic executions (source), archived under
+`bench/results/opcode-profile-*` with `bench/profile-collect.sh` and
+`bench/profile-aggregate.py` (slow-path ranking weights only genuine slow
+class buckets: arith `other`, property `slow`; fast int/float buckets count
+at dispatch floor).
+
+| Rank (source corpus) | Candidate | Dynamic exec | Dispatch share | Slow-path cost (20x) |
+| --- | --- | ---: | ---: | ---: |
+| 1 | `get_array_el` (every exec takes the generic `JS_GetPropertyValue` path) | 313M | 4.39% | 6.27B |
+| 2 | `call_method` | 58M | 0.81% | 1.16B |
+| 3 | `mul` `other` (overflow/float-mixed) | 36M | 0.51% | 0.72B |
+| 4 | `add` `other` (int32-accumulator overflow, mixed int/float) | 43M | 0.60% | 0.86B |
+| 5 | `swap` (sloppy-eval stack rotation, dispatch floor only) | 547M | 7.67% | — |
+
+The strict-module corpus (bench fixtures) shows a second distinct signal:
+`get_loc_check`+`put_loc_check` are 25.9% of opt-mode dispatch, every exec
+carrying a TDZ check. Sloppy v8-suite executes zero of them — the candidate
+is production-shaped (Capsid applications are strict modules), not
+universal.
+
+A4 preliminary go: two candidates qualify for A3 density proof —
+(a) `get_array_el` specialization (object-proven array + int index,
+skipping the generic property path) and (b) TDZ-check elimination
+(`get_loc_check`→`get_loc`, slot initialization proof, existing opcodes,
+zero format change). Both are static, state-free, and within Lane 1.
+
 ## 4. A3-A4: Analyze-Only Static Proof
 
 A3 is candidate-specific and emits nothing. For an int-int candidate, the
@@ -214,6 +254,77 @@ caller. Bundle visibility is not a closed-world guarantee.
 A4 combines dynamic cost, A3's provable dynamic share, and an instruction-level
 explanation of what the new handler omits relative to the existing generic fast
 path. B1 is authorized only if at least one candidate passes.
+
+### 4.1 A3 execution (2026-08-23): density evidence
+
+Implemented in `src/bytecode_optimizer/bytecode_optimizer.cc` as analyze-only
+mode (first stderr line preserved, `bytecode tier3:` summary as second line;
+report to stderr only; zero bytecode output — the optimizer's OFF path is
+unchanged). Two candidate-specific analyses, both fail-closed:
+
+**TDZ-check elimination** (`get_loc_check`→`get_loc`, `put_loc_check`→`put_loc`):
+SlotInit lattice `{SI_UNINIT, SI_INIT, SI_MAYBE}` with forward monotone
+transfer and worklist fixpoint. Two-phase protocol: phase 1 propagates entry
+states to convergence (count=nullptr, worklist from entry block only,
+copy-or-meet over state-snapshot jump edges captured mid-block — a
+`a && (x = 5)` mid-block conditional must not leak block-end state into the
+merge); phase 2 sweeps every reachable block once with its converged entry,
+counting each site exactly once. CFG reachability closes over all jump
+targets inside a block. `set_loc_uninitialized`→UNINIT, `put_loc_check*`/
+`is_loc_write`→INIT, `inc/dec/add_loc`→INIT, get_loc_check counts only.
+Functions containing `with_*`/eval/catch/gosub/ret/nip_catch are skipped
+whole (conservative boundary, unmodeled CFG gates).
+
+**`get_array_el` specialization** (skip generic property path for proven
+array+int-index): ArrayIdx lattice — `top`/`prev` stack-class abstraction at
+P2 precision, per-slot class lattice `{SC_UNKNOWN, SC_INT, SC_ARRAY}`,
+captured slots excluded. Slot reads push (`prev = top; top = slot_class`).
+Counts `specializable` (both operands proven) and `obj-only` (array side
+proven, index needs a guard — Lane 2A territory).
+
+Density over the 16-fixture corpus (13 bench + tdz negative control + v8
+suite, strict modules; `bench/results/a3-density/*.tier3.txt`, gitignored):
+
+| Fixture | get_loc_check | put_loc_check | get_array_el |
+| --- | ---: | ---: | ---: |
+| arith-rt | 26/26 | 2/2 | 0/0 |
+| arrlocal-rt | 7/7 | 2/2 | **3/3 specializable** |
+| branch-const-rt | 6/6 | 3/3 | 0/0 |
+| cascade-rt | 18/18 | 2/2 | 0/0 |
+| copy-chain-rt | 8/8 | 2/2 | 0/0 |
+| cse-loop-rt | 8/8 | 2/2 | 0/0 |
+| fib-rt | 4/4 | 2/2 | 0/0 |
+| json-rt | 13/13 | 2/2 | 0/1 |
+| licm-rt | 6/6 | 3/3 | 0/0 |
+| matrix-rt | 47/47 | 9/9 | 0/6 (3 obj-only) |
+| prop-hoist-rt | 7/7 | 2/2 | 0/0 |
+| prop-loop-rt | 7/7 | 2/2 | 0/0 |
+| sieve-rt | 25/25 | 5/5 | 0/2 |
+| string-rt | 11/11 | 4/4 | 0/0 |
+| tdz-check-rt (negative control) | **4/5** | **2/3** | 0/0 |
+| v8-suite-rt | 0/0 | 0/0 | 0/0 (1 func skipped) |
+
+Totals: 236/236 get_loc_check and 43/43 put_loc_check reducible across the 14
+analyzable fixtures — TDZ-check elimination is shape-independent at 100%
+density on this corpus. `get_array_el` specialization density is shape-bound:
+literal-array + constant-index shapes fully prove (arrlocal 3/3); object side
+alone proves for computed-index loops over proven arrays (matrix 3 obj-only);
+`new Array(n)`/call-built arrays and indices advanced by `++` after an inc
+stay UNKNOWN — an honest lattice ceiling that Lane 2A (stateless guards)
+exists to cover, not a missed case.
+
+Negative control (`bench/fixtures/tdz-check-rt.js`, compile-only, throws):
+binding access before the init store (`s += x; let x;` and `y = 7; let y;`).
+`let x;` alone compiles to `undefined; put_loc1` — the declaration writes
+undefined immediately, so reads after it are always safe; genuine TDZ
+exposure only exists *before* the init store. The analysis refuses exactly
+the two exposed sites (80% / 66.7%) while keeping all control-reducible
+sites — proof the lattice is non-vacuous and the transfers are correct.
+
+Architecture boundary (by design, not a gap): v8-suite code is embedded as a
+string and evaluated at runtime — AOT static analysis sees zero sites in it
+(3 functions, 1 skipped on the with/eval gate). Interpreter work on that
+corpus is invisible to every AOT pass, static or not.
 
 ## 5. Lane 1 and Lane 2 Emission
 

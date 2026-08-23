@@ -3253,14 +3253,622 @@ bool verify_tree(const FuncRecord& f, const uint8_t* data, std::string* error) {
 // Public API.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// A3 (tier-3 plan §4): analyze-only density proofs for the two candidates
+// selected by the A2 ranking (docs/quickjs-ng-opcode-optimization.md §3.4a).
+// Emits nothing — this is the go/no-go density measurement.
+//
+//   (a) TDZ-check elimination: get_loc_check / put_loc_check whose slot is
+//       provably initialized on every reaching path degrade to
+//       get_loc / put_loc. Existing opcodes, zero format change.
+//   (b) get_array_el specialization: sites whose object operand is a
+//       provable array (array_from construction) and whose index operand is
+//       a provable int could skip the generic JS_GetPropertyValue path.
+//
+// Both analyses are conservative and state-free. Functions containing a
+// dynamic environment or an exception/finally edge (with_*, eval,
+// catch/gosub/ret/nip_catch) are skipped — the exception-edge model is
+// not built — and reported separately so the density number is not
+// polluted by unknown CFG shapes. Everywhere the model under-approximates
+// the CFG it undercounts, never overcounts: missing edges only suppress
+// reducibility claims, and the monotone meet absorbs any contribution
+// computed from a weaker-than-true entry state.
+// ---------------------------------------------------------------------------
+
+struct Tier3Stats {
+    uint64_t funcs = 0;
+    uint64_t funcs_skipped = 0;
+    uint64_t get_loc_check = 0;
+    uint64_t get_loc_check_red = 0;
+    uint64_t put_loc_check = 0;
+    uint64_t put_loc_check_red = 0;
+    uint64_t get_array_el = 0;
+    uint64_t get_array_el_red = 0;  // obj provably array AND idx provably int
+    uint64_t get_array_el_arr = 0;  // obj provably array, idx not proven
+};
+
+// Slot initialization states for candidate (a). Meet: equal states meet to
+// themselves, UNINIT ^ INIT = MAYBE. A slot whose state is MAYBE on any
+// reaching path is never claimed reducible.
+enum SlotInit { SI_UNINIT = 0, SI_INIT = 1, SI_MAYBE = 2 };
+static uint8_t slot_meet(uint8_t a, uint8_t b) {
+    if (a == b) return a;
+    return SI_MAYBE;
+}
+
+// Stack value classes for candidate (b). Meet: equal classes meet to
+// themselves, anything else is UNKNOWN. The class proves "is an array" /
+// "is an int32", never identity: array mutation does not change the
+// class, only a write of a different-class value does.
+enum StackClass { SC_UNKNOWN = 0, SC_INT = 1, SC_ARRAY = 2 };
+static uint8_t stack_meet(uint8_t a, uint8_t b) {
+    if (a == b) return a;
+    return SC_UNKNOWN;
+}
+
+// Exception/finally edges and dynamic scope are not modeled: a function
+// containing any of these ops is skipped by both analyses (undercount,
+// never unsound). with_* ops can re-bind any local name; direct eval can
+// read/write the whole frame; catch/gosub/ret/nip_catch create edges that
+// are not part of the explicit CFG.
+static bool tier3_has_unmodeled_cfg(const std::vector<Insn>& insns) {
+    for (size_t i = 0; i < insns.size(); i++) {
+        uint8_t op = insns[i].op;
+        if (is_with_jump(op) || op == OP_eval || op == OP_apply_eval ||
+            op == OP_catch || op == OP_gosub || op == OP_ret ||
+            op == OP_nip_catch) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// True for ops that transfer control without a fall-through: the block
+// ends there, and the next block is entered only via the op's own target
+// (for goto) or not at all (return/throw). Same set as the leader rule.
+static bool tier3_is_terminator(uint8_t op) {
+    switch (op) {
+    case OP_goto: case OP_goto8: case OP_goto16:
+    case OP_return: case OP_return_undef: case OP_return_async:
+    case OP_throw: case OP_throw_error: case OP_ret:
+    case OP_tail_call: case OP_tail_call_method:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Edges of a block's last insn (P2's model; fall-through is the next
+// block). with_*/catch/gosub never appear here — their functions were
+// skipped by the unmodeled-CFG gate.
+static void tier3_succs(const Insn& l,
+                        size_t fallthrough,
+                        int32_t* succs,
+                        int* nsucc) {
+    switch (l.op) {
+    case OP_tail_call: case OP_tail_call_method:
+    case OP_return: case OP_return_undef: case OP_return_async:
+    case OP_throw: case OP_throw_error: case OP_ret:
+        break;
+    case OP_goto: case OP_goto8: case OP_goto16:
+        succs[(*nsucc)++] = l.target;
+        break;
+    case OP_if_true: case OP_if_false:
+    case OP_if_true8: case OP_if_false8:
+    case OP_catch: case OP_gosub:
+        succs[(*nsucc)++] = l.target;
+        succs[(*nsucc)++] = static_cast<int32_t>(fallthrough);
+        break;
+    default:
+        succs[(*nsucc)++] = static_cast<int32_t>(fallthrough);
+        break;
+    }
+}
+
+// CFG construction: leaders are the entry, every jump target, and every
+// position after an unconditional control transfer (goto/return/throw/
+// ret/tail_call). Code between an unconditional transfer and the next
+// leader is unreachable; carving it into its own block keeps its writes
+// out of the live path's state — its contribution is still met into the
+// next block, but the real-path contribution (via the transfer's own
+// edge) is always there too, so the meet absorbs the dead claims.
+static void tier3_cfg(const std::vector<Insn>& insns,
+                      std::vector<int32_t>* block_id,
+                      std::vector<size_t>* bstart,
+                      std::vector<size_t>* bend,
+                      std::vector<uint8_t>* reachable) {
+    const size_t n = insns.size();
+    std::vector<uint8_t> is_leader(n, 0);
+    is_leader[0] = 1;
+    for (size_t i = 0; i < n; i++) {
+        if (insns[i].target >= 0) {
+            is_leader[static_cast<size_t>(insns[i].target)] = 1;
+        }
+        switch (insns[i].op) {
+        case OP_goto: case OP_goto8: case OP_goto16:
+        case OP_return: case OP_return_undef: case OP_return_async:
+        case OP_throw: case OP_throw_error: case OP_ret:
+        case OP_tail_call: case OP_tail_call_method:
+            if (i + 1 < n) is_leader[i + 1] = 1;
+            break;
+        default:
+            break;
+        }
+    }
+    std::vector<int32_t> bid(n, -1);
+    size_t nb = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (is_leader[i]) bid[i] = static_cast<int32_t>(nb++);
+    }
+    for (size_t i = 1; i < n; i++) {
+        if (bid[i] < 0) bid[i] = bid[i - 1];
+    }
+    std::vector<size_t> bs(nb), be(nb);
+    for (size_t b = 0; b < nb; b++) {
+        size_t i = 0;
+        while (i < n && bid[i] != static_cast<int32_t>(b)) i++;
+        bs[b] = i;
+        while (i < n && bid[i] == static_cast<int32_t>(b)) i++;
+        be[b] = i;
+    }
+    // Reachability: entry block plus the closure over all jump targets
+    // inside each block and the last-insn edges. Mid-block conditional
+    // targets (short-circuit `&&`/`||` chains) are blocks too; the
+    // analysis propagates per-jump edge states, so the closure must
+    // include them or their sites would silently drop from the counts.
+    std::vector<uint8_t> vis(nb, 0);
+    std::vector<size_t> wl;
+    vis[0] = 1;
+    wl.push_back(0);
+    while (!wl.empty()) {
+        size_t b = wl.back();
+        wl.pop_back();
+        auto mark = [&](int32_t s) {
+            if (s < 0 || static_cast<size_t>(s) >= n) return;
+            int32_t sb = bid[static_cast<size_t>(s)];
+            if (sb < 0 || vis[static_cast<size_t>(sb)]) return;
+            vis[static_cast<size_t>(sb)] = 1;
+            wl.push_back(static_cast<size_t>(sb));
+        };
+        for (size_t i = bs[b]; i < be[b]; i++) {
+            if (insns[i].target >= 0) mark(insns[i].target);
+        }
+        int32_t succs[2];
+        int nsucc = 0;
+        tier3_succs(insns[be[b] - 1], be[b], succs, &nsucc);
+        for (int si = 0; si < nsucc; si++) mark(succs[si]);
+    }
+    *block_id = std::move(bid);
+    *bstart = std::move(bs);
+    *bend = std::move(be);
+    *reachable = std::move(vis);
+}
+
+// Candidate (a): forward slot-initialization lattice over the CFG.
+// Transfer is monotone (UNINIT -> INIT via any write; only
+// set_loc_uninitialized regresses), so a worklist sweep to fixpoint
+// terminates; per-block entry states meet predecessor exit states.
+// Unlike the P2 value lattice, user code can never reset a slot's
+// initialization state: closures write through var_ref storage, not this
+// function's loc slots, and a call cannot resurrect a TDZ marker.
+static void tier3_slotinit(const std::vector<Insn>& insns,
+                           uint32_t var_count,
+                           Tier3Stats* st) {
+    const size_t n = insns.size();
+    if (n == 0 || var_count == 0) return;
+
+    std::vector<int32_t> block_id;
+    std::vector<size_t> bstart, bend;
+    std::vector<uint8_t> reachable;
+    tier3_cfg(insns, &block_id, &bstart, &bend, &reachable);
+    const size_t nb = bstart.size();
+    if (nb == 0) return;
+
+    // Per-block entry lattice; meet-only transfer, worklist fixpoint.
+    // Phase 1 propagates states to the fixpoint without counting; phase 2
+    // sweeps each reachable block once against the converged entries, so
+    // every site is counted exactly once and with the final (most
+    // conservative) entry. Only the entry block starts in the worklist —
+    // every other block is processed only after a real predecessor
+    // contribution (its first contribution is copied wholesale, later
+    // ones meet; the lattice has no top, so the first real path state is
+    // adopted in full). Placeholder-derived exits are never computed, so
+    // they can never weaken a successor through the meet: the fixpoint is
+    // the meet over all modeled paths, with no floor artifact.
+    std::vector<uint8_t> in_state(nb * var_count, SI_MAYBE);
+    std::vector<uint8_t> in_seen(nb, 0);
+    std::vector<uint8_t> in_wl(nb, 0);
+    std::vector<size_t> worklist;
+    in_seen[0] = 1;  // the entry block's initial state is its real state
+    in_wl[0] = 1;
+    worklist.push_back(0);
+
+    // The entry block's initial state is genuinely all-MAYBE (var/arg
+    // slots are initialized, let/const slots are UNINIT until their
+    // set_loc_uninitialized; the two are indistinguishable here, and
+    // MAYBE is the sound join).
+    auto sweep = [&](size_t b, std::vector<uint8_t>& state,
+                     Tier3Stats* cnt,
+                     std::vector<std::pair<size_t, std::vector<uint8_t>>>* edges) {
+        for (size_t i = bstart[b]; i < bend[b]; i++) {
+            const Insn& in = insns[i];
+            uint8_t op = in.op;
+            if (op == OP_set_loc_uninitialized) {
+                int32_t s = loc_index(in);
+                if (s >= 0 && static_cast<size_t>(s) < var_count) {
+                    state[static_cast<size_t>(s)] = SI_UNINIT;
+                }
+            } else if (op == OP_inc_loc || op == OP_dec_loc ||
+                       op == OP_add_loc) {
+                // In-place slot arithmetic is only ever peepholed from
+                // plain get_loc/put_loc patterns (quickjs.c emit_peephole),
+                // i.e. for var slots — never for TDZ-checked let/const —
+                // so the slot is initialized afterwards.
+                int32_t s = loc_index(in);
+                if (s >= 0 && static_cast<size_t>(s) < var_count) {
+                    state[static_cast<size_t>(s)] = SI_INIT;
+                }
+            } else if (op == OP_put_loc_check) {
+                // Read+write with TDZ check: count the site, and the write
+                // initializes the slot regardless of the verdict.
+                int32_t s = loc_index(in);
+                if (cnt) {
+                    cnt->put_loc_check++;
+                    if (s >= 0 && static_cast<size_t>(s) < var_count &&
+                        state[static_cast<size_t>(s)] == SI_INIT) {
+                        cnt->put_loc_check_red++;
+                    }
+                }
+                if (s >= 0 && static_cast<size_t>(s) < var_count) {
+                    state[static_cast<size_t>(s)] = SI_INIT;
+                }
+            } else if (op == OP_put_loc_check_init || is_loc_write(op)) {
+                // Any write initializes. put_loc_check_init marks the
+                // let/const binding's first store (never a check site);
+                // put_loc/set_loc and the arg forms write var/param slots
+                // that are already initialized — both leave the slot INIT.
+                int32_t s = loc_index(in);
+                if (s >= 0 && static_cast<size_t>(s) < var_count) {
+                    state[static_cast<size_t>(s)] = SI_INIT;
+                }
+            } else if (op == OP_get_loc_check) {
+                int32_t s = loc_index(in);
+                if (cnt) {
+                    cnt->get_loc_check++;
+                    if (s >= 0 && static_cast<size_t>(s) < var_count &&
+                        state[static_cast<size_t>(s)] == SI_INIT) {
+                        cnt->get_loc_check_red++;
+                    }
+                }
+            }
+            if (edges && in.target >= 0) {
+                // Jump edge: carry the state as of the jump itself, so a
+                // mid-block conditional (e.g. an assignment inside an
+                // `&&` chain) cannot smuggle the block-end state into
+                // its target and overclaim on the merge below.
+                int32_t tb = block_id[static_cast<size_t>(in.target)];
+                if (tb >= 0 && reachable[static_cast<size_t>(tb)]) {
+                    edges->push_back({static_cast<size_t>(tb), state});
+                }
+            }
+        }
+        if (edges && !tier3_is_terminator(insns[bend[b] - 1].op) &&
+            bend[b] < n) {
+            // Fall-through edge: the state at the block's last insn.
+            int32_t tb = block_id[bend[b]];
+            if (tb >= 0 && reachable[static_cast<size_t>(tb)]) {
+                edges->push_back({static_cast<size_t>(tb), state});
+            }
+        }
+    };
+
+    while (!worklist.empty()) {
+        size_t b = worklist.back();
+        worklist.pop_back();
+        in_wl[b] = 0;
+        if (!reachable[b]) continue;  // never entered: no counting, no state
+        std::vector<uint8_t> state(in_state.begin() + b * var_count,
+                                   in_state.begin() + (b + 1) * var_count);
+        std::vector<std::pair<size_t, std::vector<uint8_t>>> edges;
+        sweep(b, state, nullptr, &edges);
+
+        // Propagate along every jump edge (snapshot at the jump) and the
+        // last-insn fall-through.
+        for (auto& e : edges) {
+            size_t sb = e.first;
+            uint8_t* dst = &in_state[sb * var_count];
+            const uint8_t* src = e.second.data();
+            if (!in_seen[sb]) {
+                // First predecessor: adopt its exit state wholesale.
+                std::memcpy(dst, src, var_count);
+                in_seen[sb] = 1;
+                in_wl[sb] = 1;
+                worklist.push_back(sb);
+            } else {
+                bool ch = false;
+                for (size_t j = 0; j < var_count; j++) {
+                    uint8_t m = slot_meet(dst[j], src[j]);
+                    if (m != dst[j]) {
+                        dst[j] = m;
+                        ch = true;
+                    }
+                }
+                if (ch && !in_wl[sb]) {
+                    in_wl[sb] = 1;
+                    worklist.push_back(sb);
+                }
+            }
+        }
+    }
+
+    // Phase 2: count each site exactly once against the converged entries.
+    for (size_t b = 0; b < nb; b++) {
+        if (!reachable[b]) continue;
+        std::vector<uint8_t> state(in_state.begin() + b * var_count,
+                                   in_state.begin() + (b + 1) * var_count);
+        sweep(b, state, st, nullptr);
+    }
+}
+
+// Candidate (b): forward stack lattice tracking provable arrays and
+// provable ints. The stack abstraction is the top-2 classes (top = the
+// value that would be popped first, prev = the one below), exactly P2's
+// top/prev level of precision: get_array_el pops its object and index
+// operands, whichever order they were pushed in, and the transfer resets
+// top/prev to unknown on every unmodeled op — so only within-block
+// produced values and slot-carried classes are ever claimed. Slot
+// classes are tracked per var/arg slot (captured slots excluded — their
+// closures can write them at any time) and are the only state propagated
+// across blocks, like P2's value lattice. Class semantics are sound
+// because array-ness survives element mutation; only a write of a
+// different-class value changes a slot's class, and every such write is
+// a modeled put_loc-family op.
+static void tier3_arrayidx(const std::vector<Insn>& insns,
+                           const std::vector<uint8_t>& captured,
+                           uint32_t var_count,
+                           Tier3Stats* st) {
+    const size_t n = insns.size();
+    if (n == 0 || var_count == 0) return;
+
+    std::vector<int32_t> block_id;
+    std::vector<size_t> bstart, bend;
+    std::vector<uint8_t> reachable;
+    tier3_cfg(insns, &block_id, &bstart, &bend, &reachable);
+    const size_t nb = bstart.size();
+    if (nb == 0) return;
+
+    // Per-block entry slot-class lattice; same two-phase copy-or-meet
+    // protocol as the slot analysis (phase 1: fixpoint from the entry
+    // block, no counting; phase 2: one counting sweep per block against
+    // the converged entries). The entry block starts all-unknown:
+    // arguments can carry anything.
+    std::vector<uint8_t> in_cls(nb * var_count, SC_UNKNOWN);
+    std::vector<uint8_t> in_seen(nb, 0);
+    std::vector<uint8_t> in_wl(nb, 0);
+    std::vector<size_t> worklist;
+    in_seen[0] = 1;
+    in_wl[0] = 1;
+    worklist.push_back(0);
+
+    auto slot_class = [&](const uint8_t* cls, int32_t s) -> uint8_t {
+        if (s < 0 || static_cast<size_t>(s) >= var_count) return SC_UNKNOWN;
+        if (static_cast<size_t>(s) >= captured.size() || captured[static_cast<size_t>(s)]) {
+            return SC_UNKNOWN;  // captured: closure-writable at any time
+        }
+        return cls[static_cast<size_t>(s)];
+    };
+
+    auto sweep = [&](size_t b, std::vector<uint8_t>& cls,
+                     Tier3Stats* cnt,
+                     std::vector<std::pair<size_t, std::vector<uint8_t>>>* edges) {
+        uint8_t top = SC_UNKNOWN;
+        uint8_t prev = SC_UNKNOWN;
+        for (size_t i = bstart[b]; i < bend[b]; i++) {
+            const Insn& in = insns[i];
+            uint8_t op = in.op;
+            if (is_small_int_push(op)) {
+                prev = top;
+                top = SC_INT;
+            } else if (op == OP_push_true || op == OP_push_false) {
+                // Booleans are int32 on the quickjs stack.
+                prev = top;
+                top = SC_INT;
+            } else if (op == OP_array_from) {
+                // Pops the element values (count in aux), pushes a fresh
+                // array: provably an array; everything below is opaque.
+                prev = SC_UNKNOWN;
+                top = SC_ARRAY;
+            } else if (op == OP_and || op == OP_or || op == OP_xor ||
+                       op == OP_shl || op == OP_sar || op == OP_shr ||
+                       op == OP_lnot || op == OP_lt || op == OP_lte ||
+                       op == OP_gt || op == OP_gte || op == OP_eq ||
+                       op == OP_neq || op == OP_strict_eq ||
+                       op == OP_strict_neq || op == OP_is_undefined ||
+                       op == OP_is_null || op == OP_is_undefined_or_null ||
+                       op == OP_typeof_is_undefined) {
+                // Bitwise and comparison results are always int32.
+                prev = SC_UNKNOWN;
+                top = SC_INT;
+            } else if (op == OP_dup || op == OP_dup1 || op == OP_dup2 ||
+                       op == OP_dup3 || op == OP_insert2 || op == OP_insert3) {
+                // dup (a -> a a) and the dup1..3/insert2..3 rearrangements
+                // all leave the top two classes in place.
+            } else if (op == OP_get_loc0_loc1) {
+                prev = slot_class(cls.data(), 0);
+                top = slot_class(cls.data(), 1);
+            } else if (is_loc_read(op)) {
+                // A loc read pushes: the old top becomes prev, the slot's
+                // class becomes top.
+                int32_t s = loc_index(in);
+                prev = top;
+                top = slot_class(cls.data(), s);
+            } else if (op == OP_set_loc || op == OP_set_loc8 ||
+                       (op >= OP_set_loc0 && op <= OP_set_loc3) ||
+                       op == OP_set_arg ||
+                       (op >= OP_set_arg0 && op <= OP_set_arg3)) {
+                // set_loc pops the value and re-pushes it: the slot takes
+                // the class, the stack classes survive.
+                int32_t s = loc_index(in);
+                if (s >= 0 && static_cast<size_t>(s) < var_count &&
+                    (static_cast<size_t>(s) >= captured.size() ||
+                     !captured[static_cast<size_t>(s)])) {
+                    cls[static_cast<size_t>(s)] = top;
+                }
+            } else if (op == OP_set_loc_uninitialized) {
+                // TDZ marker: the slot holds no value yet. No stack
+                // effect (the marker precedes the binding's own store),
+                // so top/prev survive untouched.
+                int32_t s = loc_index(in);
+                if (s >= 0 && static_cast<size_t>(s) < var_count) {
+                    cls[static_cast<size_t>(s)] = SC_UNKNOWN;
+                }
+            } else if (op == OP_put_loc_check || op == OP_put_loc_check_init ||
+                       is_loc_write(op)) {
+                int32_t s = loc_index(in);
+                if (s >= 0 && static_cast<size_t>(s) < var_count &&
+                    (static_cast<size_t>(s) >= captured.size() ||
+                     !captured[static_cast<size_t>(s)])) {
+                    cls[static_cast<size_t>(s)] = top;
+                }
+                prev = SC_UNKNOWN;
+                top = SC_UNKNOWN;
+            } else if (op == OP_inc_loc || op == OP_dec_loc ||
+                       op == OP_add_loc) {
+                // In-place slot arithmetic: int32 overflow promotes to
+                // float64, so the slot's class is lost. inc/dec have no
+                // stack effect; add_loc pops the RHS.
+                int32_t s = loc_index(in);
+                if (s >= 0 && static_cast<size_t>(s) < var_count) {
+                    cls[static_cast<size_t>(s)] = SC_UNKNOWN;
+                }
+                prev = SC_UNKNOWN;
+                top = SC_UNKNOWN;
+            } else if (op == OP_get_array_el || op == OP_get_array_el2) {
+                // Pops obj idx (either push order): specializable iff one
+                // operand is provably an array and the other provably an
+                // int.
+                bool arr = (top == SC_ARRAY && prev == SC_INT) ||
+                           (top == SC_INT && prev == SC_ARRAY);
+                if (cnt) {
+                    cnt->get_array_el++;
+                    if (arr) {
+                        cnt->get_array_el_red++;
+                    } else if (top == SC_ARRAY || prev == SC_ARRAY) {
+                        // index would need a guard (int32 range unknown)
+                        cnt->get_array_el_arr++;
+                    }
+                }
+                prev = SC_UNKNOWN;
+                top = SC_UNKNOWN;
+            } else {
+                // Every other op makes the stack top opaque; slot classes
+                // survive — no frame-local slot is written by any op not
+                // enumerated above, and calls/property ops only move
+                // values through the stack.
+                prev = SC_UNKNOWN;
+                top = SC_UNKNOWN;
+            }
+            if (edges && in.target >= 0) {
+                // Jump edge: carry the slot classes as of the jump itself
+                // (see the slot analysis for the mid-block rationale).
+                int32_t tb = block_id[static_cast<size_t>(in.target)];
+                if (tb >= 0 && reachable[static_cast<size_t>(tb)]) {
+                    edges->push_back({static_cast<size_t>(tb), cls});
+                }
+            }
+        }
+        if (edges && !tier3_is_terminator(insns[bend[b] - 1].op) &&
+            bend[b] < n) {
+            int32_t tb = block_id[bend[b]];
+            if (tb >= 0 && reachable[static_cast<size_t>(tb)]) {
+                edges->push_back({static_cast<size_t>(tb), cls});
+            }
+        }
+    };
+
+    while (!worklist.empty()) {
+        size_t b = worklist.back();
+        worklist.pop_back();
+        in_wl[b] = 0;
+        if (!reachable[b]) continue;
+        std::vector<uint8_t> cls(in_cls.begin() + b * var_count,
+                                 in_cls.begin() + (b + 1) * var_count);
+        std::vector<std::pair<size_t, std::vector<uint8_t>>> edges;
+        sweep(b, cls, nullptr, &edges);
+
+        // Propagate along every jump edge (snapshot at the jump) and the
+        // last-insn fall-through.
+        for (auto& e : edges) {
+            size_t sb = e.first;
+            uint8_t* dst = &in_cls[sb * var_count];
+            const uint8_t* src = e.second.data();
+            if (!in_seen[sb]) {
+                std::memcpy(dst, src, var_count);
+                in_seen[sb] = 1;
+                in_wl[sb] = 1;
+                worklist.push_back(sb);
+            } else {
+                bool ch = false;
+                for (size_t j = 0; j < var_count; j++) {
+                    uint8_t m = stack_meet(dst[j], src[j]);
+                    if (m != dst[j]) {
+                        dst[j] = m;
+                        ch = true;
+                    }
+                }
+                if (ch && !in_wl[sb]) {
+                    in_wl[sb] = 1;
+                    worklist.push_back(sb);
+                }
+            }
+        }
+    }
+
+    // Phase 2: count each site exactly once against the converged entries.
+    for (size_t b = 0; b < nb; b++) {
+        if (!reachable[b]) continue;
+        std::vector<uint8_t> cls(in_cls.begin() + b * var_count,
+                                 in_cls.begin() + (b + 1) * var_count);
+        sweep(b, cls, st, nullptr);
+    }
+}
+
+// Analyze one function record and its children for the A3 density proofs.
+// Mirrors scan_function's recursion shape so the tier3 numbers cover the
+// same function set as the foldability line.
+static bool tier3_function(const FuncRecord& f,
+                           const uint8_t* data,
+                           Tier3Stats* st,
+                           std::string* error) {
+    std::vector<Insn> insns;
+    if (!decode_code(data + f.code_off, f.code_len, &insns, error)) {
+        return false;
+    }
+    st->funcs++;
+    if (tier3_has_unmodeled_cfg(insns)) {
+        st->funcs_skipped++;
+    } else {
+        tier3_slotinit(insns, f.var_count, st);
+        tier3_arrayidx(insns, f.captured, f.var_count, st);
+    }
+    for (size_t i = 0; i < f.children.size(); i++) {
+        if (!tier3_function(f.children[i], data, st, error)) return false;
+    }
+    return true;
+}
+
 bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
     error->clear();
     std::vector<FuncRecord> functions;
     if (!parse_buffer(in.data(), in.size(), &functions, error)) return false;
     FoldStats st;
+    Tier3Stats t3;
     for (size_t i = 0; i < functions.size(); i++) {
         if (!scan_function(functions[i], in.data(), &st)) {
             *error = "bytecode optimize: invalid opcode in function";
+            return false;
+        }
+        if (!tier3_function(functions[i], in.data(), &t3, error)) {
             return false;
         }
     }
@@ -3279,6 +3887,29 @@ bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
                  static_cast<unsigned long long>(st.foldable_bytes +
                                                 st.shrinkable_bytes),
                  bytes_pct);
+    std::fprintf(stderr,
+                 "bytecode tier3: get_loc_check %llu/%llu reducible (%.2f%%), "
+                 "put_loc_check %llu/%llu reducible (%.2f%%), get_array_el "
+                 "%llu/%llu specializable (%.2f%%, obj-only %llu), "
+                 "funcs %llu (%llu skipped)\n",
+                 static_cast<unsigned long long>(t3.get_loc_check_red),
+                 static_cast<unsigned long long>(t3.get_loc_check),
+                 t3.get_loc_check ? 100.0 * t3.get_loc_check_red /
+                                        t3.get_loc_check
+                                  : 0.0,
+                 static_cast<unsigned long long>(t3.put_loc_check_red),
+                 static_cast<unsigned long long>(t3.put_loc_check),
+                 t3.put_loc_check ? 100.0 * t3.put_loc_check_red /
+                                        t3.put_loc_check
+                                  : 0.0,
+                 static_cast<unsigned long long>(t3.get_array_el_red),
+                 static_cast<unsigned long long>(t3.get_array_el),
+                 t3.get_array_el ? 100.0 * t3.get_array_el_red /
+                                       t3.get_array_el
+                                 : 0.0,
+                 static_cast<unsigned long long>(t3.get_array_el_arr),
+                 static_cast<unsigned long long>(t3.funcs),
+                 static_cast<unsigned long long>(t3.funcs_skipped));
     return true;
 }
 
