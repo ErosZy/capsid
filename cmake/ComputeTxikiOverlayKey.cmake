@@ -190,7 +190,10 @@ function(capsid_compute_txiki_overlay_key)
     # 0036 CONFIG_OPCODE_PROFILE opcode counters (measurement build only;
     #      compiled out of production builds — zero-tax verified at the
     #      object and linked-binary level for the OFF configuration).
-    if(NOT CTOK_PATCH_COUNT EQUAL 37)
+    # 0037 BC27/OP_ext format foundation (ext table, dual reader, stack
+    #      verifier, dispatch stub; catalog empty, emission off).
+    # 0038 EXT_get_array_el handler + canonical BC27 writer selection.
+    if(NOT CTOK_PATCH_COUNT EQUAL 39)
         message(FATAL_ERROR
             "expected 37 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()

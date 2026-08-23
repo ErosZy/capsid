@@ -1,0 +1,383 @@
+diff --git a/deps/quickjs/quickjs-ext-opcode.h b/deps/quickjs/quickjs-ext-opcode.h
+new file mode 100644
+index 0000000..531c74c
+--- /dev/null
++++ b/deps/quickjs/quickjs-ext-opcode.h
+@@ -0,0 +1,35 @@
++/*
++ * QuickJS extended opcode table (BC27).
++ *
++ * An extended opcode is encoded as:
++ *
++ *     u8  OP_ext (252)
++ *     u8  ext_id
++ *     ... payload per the EXT_DEF size
++ *
++ * Like quickjs-opcode.h this file has no include guard: it is included
++ * once per macro context (EXT_FMT/EXT_DEF are redefined between includes).
++ * Every consumer (the interpreter dispatch, the bytecode readers and
++ * atom-free walk, the stack verifier, the dumps, and the capsid AOT
++ * optimizer) derives its tables from this single definition; ext_id 0,
++ * reserved ids, unknown ids, truncated payloads, recursive ext prefixes
++ * and targets inside payloads fail closed in every consumer.
++ *
++ * The format column values are collected by the EXT_FMT macro (one
++ * EXT_FMT(fmt) line per distinct value, mirroring quickjs-opcode.h).
++ *
++ * Catalog rules (docs/quickjs-ng-cfg-ssa-shape-ic.md §4.2):
++ *   - id 0 is reserved and always invalid;
++ *   - ids are contiguous from 1 and never renumbered;
++ *   - an id is added only together with its handler, verifier metadata,
++ *     malformed-input tests and canonical serializer support;
++ *   - a removed id stays reserved and rejected (keep the row, size 0).
++ */
++#ifndef EXT_DEF
++#error "quickjs-ext-opcode.h requires EXT_DEF to be defined"
++#endif
++
++EXT_FMT(none)
++
++/* ext_id, name, size (incl. OP_ext prefix + ext_id), n_pop, n_push, fmt */
++EXT_DEF(0, invalid, 0, 0, 0, none) /* reserved: never a valid id */
+diff --git a/deps/quickjs/quickjs-opcode.h b/deps/quickjs/quickjs-opcode.h
+index ec2a5ad..2cb2c56 100644
+--- a/deps/quickjs/quickjs-opcode.h
++++ b/deps/quickjs/quickjs-opcode.h
+@@ -25,6 +25,7 @@
+ 
+ #ifdef FMT
+ FMT(none)
++FMT(ext)
+ FMT(none_int)
+ FMT(none_loc)
+ FMT(none_arg)
+@@ -371,6 +372,7 @@ DEF(   is_undefined, 1, 1, 1, none)
+ DEF(        is_null, 1, 1, 1, none)
+ DEF(typeof_is_undefined, 1, 1, 1, none)
+ DEF( typeof_is_function, 1, 1, 1, none)
++DEF(            ext, 2, 0, 0, ext) /* u8 OP_ext, u8 ext_id, payload; see quickjs-ext-opcode.h (BC27) */
+ 
+ #undef DEF
+ #undef def
+diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
+index 7fc7dde..fada34d 100644
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -1192,6 +1192,65 @@ typedef enum OPCodeEnum {
+     OP_TEMP_END,
+ } OPCodeEnum;
+ 
++
++/* Extended opcodes (BC27): u8 OP_ext prefix, u8 ext_id, payload. The
++   definition table in quickjs-ext-opcode.h is the single source of truth
++   for every consumer: interpreter dispatch, serialization readers, the
++   atom-free walk, the dumps, and the capsid AOT optimizer. ext_id 0 and
++   unknown ids fail closed everywhere. */
++typedef enum {
++#define EXT_FMT(f) EXT_FMT_##f,
++#define EXT_DEF(id, name, size, n_pop, n_push, fmt)
++#include "quickjs-ext-opcode.h"
++#undef EXT_DEF
++#undef EXT_FMT
++} ExtFmt;
++
++enum {
++#define EXT_FMT(f)
++#define EXT_DEF(id, name, size, n_pop, n_push, fmt) EXT_##name = (id),
++#include "quickjs-ext-opcode.h"
++#undef EXT_DEF
++#undef EXT_FMT
++    EXT_COUNT
++};
++
++typedef struct JSExtOpcodeInfo {
++#ifdef ENABLE_DUMPS // JS_DUMP_BYTECODE_*
++    const char *name;
++#endif
++    uint8_t size; /* total instruction size: OP_ext prefix + ext_id + payload */
++    uint8_t n_pop;
++    uint8_t n_push;
++    uint8_t fmt;
++} JSExtOpcodeInfo;
++
++static const JSExtOpcodeInfo ext_opcode_info[EXT_COUNT] = {
++    /* every slot invalid by default: zeroed entries (size 0) are rejected
++       by ext_opcode_info_or_invalid() so holes and removed ids can never
++       be reached through the size gate */
++    [ 0 ... EXT_COUNT - 1 ] = { 0 },
++#define EXT_FMT(f)
++#ifdef ENABLE_DUMPS // JS_DUMP_BYTECODE_*
++#define EXT_DEF(id, name, size, n_pop, n_push, fmt) [ EXT_##name ] = { #name, size, n_pop, n_push, EXT_FMT_##fmt },
++#else
++#define EXT_DEF(id, name, size, n_pop, n_push, fmt) [ EXT_##name ] = { size, n_pop, n_push, EXT_FMT_##fmt },
++#endif
++#include "quickjs-ext-opcode.h"
++#undef EXT_DEF
++#undef EXT_FMT
++};
++
++/* NULL for invalid ext ids (0, reserved, holes and beyond EXT_COUNT). */
++static inline const JSExtOpcodeInfo *ext_opcode_info_or_invalid(int ext_id) {
++    if (ext_id > 0 && ext_id < EXT_COUNT) {
++        const JSExtOpcodeInfo *ei = &ext_opcode_info[ext_id];
++        if (ei->size != 0)   /* holes stay zeroed and fail closed */
++            return ei;
++    }
++    return NULL;
++}
++
+ #ifdef CONFIG_OPCODE_PROFILE
+ typedef struct JSOpcodeProfile {
+     uint64_t exec[OP_COUNT];
+@@ -17849,6 +17908,28 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+ #define CASE(op)        case_ ## op
+ #define DEFAULT         case_default
+ #define BREAK           SWITCH(pc)
++    __extension__ static const void * const ext_dispatch_table[256] = {
++        /* every slot invalid by default: a hole or removed id can never
++           reach a stale handler label */
++        [ 0 ... 255 ] = &&case_ext_invalid,
++#define EXT_FMT(f)
++#define EXT_DEF(id, name, size, n_pop, n_push, fmt) [ EXT_##name ] = &&case_ext_ ## name,
++#include "quickjs-ext-opcode.h"
++#undef EXT_DEF
++#undef EXT_FMT
++    };
++#endif
++
++/* Extended opcode labels: direct builds jump through ext_dispatch_table,
++   switch builds dispatch on ext_id inside a nested switch. */
++#if DIRECT_DISPATCH
++#define EXT_CASE(id, name) case_ext_ ## name:
++#define EXT_DEFAULT        case_ext_invalid
++#define EXT_BREAK          BREAK
++#else
++#define EXT_CASE(id, name) case EXT_##name:
++#define EXT_DEFAULT        default
++#define EXT_BREAK          break
+ #endif
+ 
+     if (js_poll_interrupts(caller_ctx))
+@@ -19668,6 +19749,33 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+             }
+             BREAK;
+ 
++        CASE(OP_ext):
++            {
++                int ext_id = pc[0];
++                const JSExtOpcodeInfo *ei = ext_opcode_info_or_invalid(ext_id);
++                if (unlikely(ei == NULL)) {
++                    JS_ThrowInternalError(ctx,
++                                          "invalid ext opcode: pc=%u ext_id=0x%02x",
++                                          (int)(pc - b->byte_code_buf - 1), ext_id);
++                    goto exception;
++                }
++                pc += ei->size - 1;
++#if DIRECT_DISPATCH
++                goto *ext_dispatch_table[ext_id];
++#else
++                switch (ext_id) {
++#endif
++        EXT_DEFAULT:
++            JS_ThrowInternalError(ctx,
++                                  "invalid ext opcode: pc=%u ext_id=0x%02x",
++                                  (int)(pc - b->byte_code_buf - 1), ext_id);
++            goto exception;
++#if !DIRECT_DISPATCH
++                }
++                BREAK;
++#endif
++            }
++
+         CASE(OP_get_ref_value):
+             {
+                 JSValue val;
+@@ -32489,6 +32597,17 @@ static void free_bytecode_atoms(JSRuntime *rt,
+             oi = &opcode_info[op];
+ 
+         len = oi->size;
++        if (oi->fmt == OP_FMT_ext) {
++            /* extended opcode: walk by the ext table; invalid ids stop the
++               walk (the reader rejects them before a function exists) */
++            const JSExtOpcodeInfo *ei;
++            if (pos + 1 >= bc_len)
++                break;
++            ei = ext_opcode_info_or_invalid(bc_buf[pos + 1]);
++            if (ei == NULL)
++                break;
++            len = ei->size;
++        }
+         switch(oi->fmt) {
+         case OP_FMT_atom:
+         case OP_FMT_atom_u8:
+@@ -32624,6 +32743,15 @@ static void dump_byte_code(JSContext *ctx, int pass,
+         else
+             oi = &opcode_info[op];
+         pos_next = pos + oi->size;
++        if (oi->fmt == OP_FMT_ext) {
++            const JSExtOpcodeInfo *ei;
++            if (pos + 1 >= len)
++                break;
++            ei = ext_opcode_info_or_invalid(tab[pos + 1]);
++            if (ei == NULL)
++                break;
++            pos_next = pos + ei->size;
++        }
+         if (op < OP_COUNT) {
+             switch (oi->fmt) {
+             case OP_FMT_label8:
+@@ -32696,6 +32824,19 @@ static void dump_byte_code(JSContext *ctx, int pass,
+         else
+             oi = &opcode_info[op];
+         size = oi->size;
++        if (oi->fmt == OP_FMT_ext) {
++            const JSExtOpcodeInfo *ei;
++            if (pos + 1 >= len) {
++                printf("truncated ext opcode\n");
++                break;
++            }
++            ei = ext_opcode_info_or_invalid(tab[pos + 1]);
++            if (ei == NULL) {
++                printf("invalid ext opcode (0x%02x)\n", tab[pos + 1]);
++                break;
++            }
++            size = ei->size;
++        }
+         if (pos + size > len) {
+             printf("truncated opcode (0x%02x)\n", op);
+             break;
+@@ -32718,7 +32859,12 @@ static void dump_byte_code(JSContext *ctx, int pass,
+         } else {
+             printf("        ");
+         }
+-        printf("%-15s", oi->name);  /* align opcode arguments */
++        if (oi->fmt == OP_FMT_ext) {
++            const JSExtOpcodeInfo *ei = ext_opcode_info_or_invalid(tab[pos + 1]);
++            printf("%-15s", ei != NULL ? ei->name : "ext");
++        } else {
++            printf("%-15s", oi->name);  /* align opcode arguments */
++        }
+         pos++;
+         switch(oi->fmt) {
+         case OP_FMT_none_int:
+@@ -36169,7 +36315,7 @@ static __exception int compute_stack_size(JSContext *ctx,
+                                           int *pstack_size)
+ {
+     StackSizeState s_s, *s = &s_s;
+-    int i, diff, n_pop, pos_next, stack_len, pos, op, catch_pos, catch_level;
++    int i, diff, n_pop, n_push, pos_next, stack_len, pos, op, catch_pos, catch_level;
+     const JSOpCode *oi;
+     const uint8_t *bc_buf;
+ 
+@@ -36210,11 +36356,30 @@ static __exception int compute_stack_size(JSContext *ctx,
+             printf("%5d: %10s %5d %5d\n", pos, oi->name, stack_len, catch_pos);
+ #endif
+         pos_next = pos + oi->size;
++        n_pop = oi->n_pop;
++        n_push = oi->n_push;
++        if (oi->fmt == OP_FMT_ext) {
++            /* extended opcode: size and stack effect come from the ext
++               table; unknown, reserved and truncated ids fail closed */
++            const JSExtOpcodeInfo *ei;
++            if (pos + 1 >= s->bc_len) {
++                JS_ThrowInternalError(ctx, "invalid ext opcode (pc=%d)", pos);
++                goto fail;
++            }
++            ei = ext_opcode_info_or_invalid(bc_buf[pos + 1]);
++            if (ei == NULL) {
++                JS_ThrowInternalError(ctx, "invalid ext opcode (ext_id=0x%02x pc=%d)",
++                                      bc_buf[pos + 1], pos);
++                goto fail;
++            }
++            pos_next = pos + ei->size;
++            n_pop = ei->n_pop;
++            n_push = ei->n_push;
++        }
+         if (pos_next > s->bc_len) {
+             JS_ThrowInternalError(ctx, "bytecode buffer overflow (op=%d, pc=%d)", op, pos);
+             goto fail;
+         }
+-        n_pop = oi->n_pop;
+         /* call pops a variable number of arguments */
+         if (oi->fmt == OP_FMT_npop || oi->fmt == OP_FMT_npop_u16) {
+             n_pop += get_u16(bc_buf + pos + 1);
+@@ -36226,7 +36391,7 @@ static __exception int compute_stack_size(JSContext *ctx,
+             JS_ThrowInternalError(ctx, "stack underflow (op=%d, pc=%d)", op, pos);
+             goto fail;
+         }
+-        stack_len += oi->n_push - n_pop;
++        stack_len += n_push - n_pop;
+         if (stack_len > s->stack_len_max) {
+             s->stack_len_max = stack_len;
+             if (s->stack_len_max > JS_STACK_SIZE_MAX) {
+@@ -37944,6 +38109,10 @@ typedef enum BCTagEnum {
+ } BCTagEnum;
+ 
+ #define BC_VERSION 26
++/* BC27: the capsid AOT compiler emits this version when an OP_ext
++   instruction is present in the bundle. New VMs read both versions;
++   the compiler itself always emits BC26. */
++#define BC_VERSION_EXT 27
+ 
+ typedef struct BCWriterState {
+     JSContext *ctx;
+@@ -38788,6 +38957,9 @@ typedef struct BCReaderState {
+     bool allow_sab;
+     bool allow_bytecode;
+     bool allow_reference;
++    /* bundle version read by JS_ReadObjectAtoms; gates ext acceptance
++       (BC26 rejects OP_ext, BC27 accepts only canonical known ids) */
++    uint8_t byte_code_version;
+     /* object references */
+     JSObject **objects;
+     int objects_count;
+@@ -39043,9 +39215,31 @@ static int JS_ReadFunctionBytecode(BCReaderState *s, JSFunctionBytecode *b,
+ 
+     pos = 0;
+     while (pos < bc_len) {
++        const JSOpCode *oi;
+         op = bc_buf[pos];
+-        len = short_opcode_info(op).size;
+-        switch(short_opcode_info(op).fmt) {
++        oi = &short_opcode_info(op);
++        if (oi->fmt == OP_FMT_ext) {
++            /* extended opcode: size comes from the ext table; unknown or
++               truncated ids fail closed, and BC26 rejects ext entirely */
++            const JSExtOpcodeInfo *ei;
++            if (s->byte_code_version == BC_VERSION) {
++                JS_ThrowSyntaxError(s->ctx, "invalid ext opcode in BC26 bytecode");
++                return -1;
++            }
++            if (pos + 1 >= bc_len) {
++                b->byte_code_len = pos;
++                return -1;
++            }
++            ei = ext_opcode_info_or_invalid(bc_buf[pos + 1]);
++            if (ei == NULL || ei->size > bc_len - pos) {
++                b->byte_code_len = pos;
++                return -1;
++            }
++            len = ei->size;
++        } else {
++            len = oi->size;
++        }
++        switch(oi->fmt) {
+         case OP_FMT_atom:
+         case OP_FMT_atom_u8:
+         case OP_FMT_atom_u16:
+@@ -39946,11 +40140,12 @@ static int JS_ReadObjectAtoms(BCReaderState *s)
+ 
+     if (bc_get_u8(s, &v8))
+         return -1;
+-    if (v8 != BC_VERSION) {
+-        JS_ThrowSyntaxError(s->ctx, "invalid version (%d expected=%d)",
+-                            v8, BC_VERSION);
++    if (v8 != BC_VERSION && v8 != BC_VERSION_EXT) {
++        JS_ThrowSyntaxError(s->ctx, "invalid version (%d expected=%d or %d)",
++                            v8, BC_VERSION, BC_VERSION_EXT);
+         return -1;
+     }
++    s->byte_code_version = v8;
+     if (bc_get_u32(s, &h))
+         return -1;
+     // allow UINT32_MAX as an escape hatch, otherwise updating
