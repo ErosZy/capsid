@@ -853,3 +853,104 @@ only, not stack underflow (documented in the test header).
 - Reader failure contract: every gate (version, checksum, BC26-ext, unknown
   ext id, truncation) returns −1 / JS_EXCEPTION from `JS_ReadObject` —
   `JS_IsException` on the read result is the correct load-failure check.
+
+## 12. E1 Baseline Record (2026-08-24)
+
+Status: **E1 complete**. Pin, native test262, optimizer/differential/fuzz
+baselines, binary/layout/RSS measurements, and patchless hashes are archived
+below (commit `5d3c8779`, tree clean at measurement time). I0 proceeds from
+these numbers.
+
+### 12.1 Pinned environment
+
+| Item | Value |
+| --- | --- |
+| Capsid commit (measurements) | `5d3c8779c64ea52ecf8abac47b02b2e0d70d888b` (clean tree) |
+| Vendor txiki.js | `1a230d31183f062fae7a6c4fd2cff466cecc1787` (v26.6.0) |
+| Vendor quickjs | `bf8988fc401e737f9946cd10a3463b48aab0fd7e` (v0.15.1-11-gbf8988f) |
+| Overlay key / manifest | `4873bb31…810c` / `d548779e…1b887` (0037/0038 locked) |
+| CPU / affinity | 12th Gen Intel i5-12400F, WSL2 (Linux 6.18.33.2-microsoft-standard-WSL2), `taskset -c 2-3` |
+| v8-suite measurement | `bench/results/e1-v8suite-20260824T022121/` (per-artifact `sha256sums.txt` archived) |
+| Post-measurement fix | `9936974` (Debug-LTO link fix; Release flags unchanged — E1 binaries unaffected) |
+
+### 12.2 Native test262 (patchless native build, pinned suite)
+
+`make test262` in the pristine vendor tree: **96/81152 errors, 4925 excluded,
+5954 skipped**. Error-list parity: `run-test262 -m -c test262.conf -E -a`
+→ "Result: 96/96 errors", exit 0.
+
+### 12.3 Optimizer / differential / fuzz baselines
+
+- `ctest` union subset (13/13, build-dev): `ext_bytecode_directed`
+  (11-scenario E0 matrix), `runtime_bytecode_compiler_round_trip` (RED
+  differential), `bytecode_opt_differential`, `bytecode_optimizer`,
+  `runtime_build_identity`, `worker_build_identity_matrix`, the three
+  host-managed bytecode/attestation tests, and the two host-admin round-trips.
+- Fuzz: **20,000 cases, no crash** via the standalone gcc ASan+UBSan driver
+  (`/tmp/fuzz-bytecode-opt-standalone`, deterministic xorshift seed, corpus
+  `tests/fuzz/corpus/bytecode_opt`, `-max_len` equivalent 65536). clang/
+  libFuzzer is unavailable on this machine; the CI clang gate
+  (`-runs=10000 -max_len=65536`) remains the fuzz release gate.
+
+### 12.4 v8-suite three-state throughput (taskset 2-3, rounds=5, median)
+
+| Suite | source ms | raw ms | opt ms | opt_vs_raw | load_noise |
+| --- | --- | --- | --- | --- | --- |
+| v8-suite-rt | 17394.614 | 17571.633 | 16778.503 | **+4.51%** | −1.02% |
+| v8-suite-mod | 17270.959 | 17258.121 | 17292.552 | −0.20% | +0.07% |
+
+Structural body check (same benchmark-name set across source/raw/opt) passed
+for both suites. These are the pre-I0 optimizer baseline; every later gate
+re-measures against them. mod's −0.20% is inside run noise (consistent with
+the v1 finding that optimizer wins concentrate in compute-heavy fixtures);
+rt's +4.51% reproduces the v1-scale win on the deterministic compute fixture.
+**Noise note for the §9.2 ±0.5% gate**: v8-suite's own load_noise band spans
+−1.02%…+0.07%, so the F0 patchless-vs-OFF A/B cannot be resolved on this
+vehicle alone — the F0 A/B must also use deterministic fixtures (arith-rt
+class, which support `--expect-body`) alongside v8-suite.
+
+### 12.5 Binary / layout / RSS (build-release)
+
+| Artifact | Size (bytes) | SHA-256 |
+| --- | --- | --- |
+| capsid-worker | 16,705,128 | `2f70ee50…` |
+| capsid-bytecode-compile | 1,406,112 | `83a04bc0…` |
+| libtjs_core.a | 4,451,460 | — |
+| libcapsid_runtime.a | 1,833,118 | — |
+| libcapsid_host_core.a | 6,837,192 | — |
+| libcapsid_bytecode_opt.a | 226,080 | — |
+
+Worker peak RSS: **13,980 KB** (v8-suite-mod source mode, 2 rounds + 1
+warmup, taskset 2-3).
+
+### 12.6 Patchless hashes (zero-tax reference archive)
+
+The pristine vendor tree's native build (no capsid patches) is the patchless
+reference:
+
+| Artifact | Size (bytes) | SHA-256 |
+| --- | --- | --- |
+| deps/quickjs/build/qjs | 1,364,928 | `d89f070d…` |
+| deps/quickjs/build/run-test262 | 1,369,160 | `a4c842cd…` |
+| deps/quickjs/build/libqjs.a | 1,532,308 | `5f130168…` |
+| quickjs.c (patchless source) | — | `ddab0544…` |
+| quickjs.c (overlay source) | — | `39c1105b…` |
+
+**Zero-tax argument (G2, constructive)**: the overlay compiler cannot emit
+OP_ext and the writer bumps BC_VERSION_EXT only when `has_ext_op`, so every
+compiler-produced bundle is BC26 byte-identical to a patchless compiler's
+output — the overlay's `raw.qjsb` hashes in the E1 archive are that corpus.
+The runtime-side patchless-vs-OFF throughput A/B lands at the F0 gate
+(12.4's noise note governs its resolution); the archive pins both
+compiler-side and patchless artifacts for the comparison.
+
+### 12.7 Environment caveats (not E1-gate failures)
+
+- `worker_package_smoke` / `worker_package_reproducibility` cannot pass on
+  this machine: `libssl-dev` is not installed (nested reproducibility
+  configure fails `Could NOT find OpenSSL`), and miniconda's `libcrypto.so.3`
+  leaks into the packaged binaries (smoke allowlist rejects it). Both are
+  environmental and pre-existing; no E1 gate touches them.
+- Debug + `CAPSID_ENABLE_LTO` mixed-link breakage (GCC 13 dropping
+  `always_inline` libstdc++ ctors in LTO partitions) was fixed separately in
+  `9936974`; Release builds were already unaffected.
