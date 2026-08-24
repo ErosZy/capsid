@@ -247,6 +247,8 @@ if(BUILD_TESTING)
                 CXX_STANDARD 20
                 CXX_STANDARD_REQUIRED ON
                 CXX_EXTENSIONS OFF)
+            # R0: the test TU sees CAPSID_AOT_EMIT_EXT via the library's
+            # INTERFACE compile definitions (same kPassAll as the lib).
             if(CAPSID_STRICT_WARNINGS)
                 if(MSVC)
                     target_compile_options(

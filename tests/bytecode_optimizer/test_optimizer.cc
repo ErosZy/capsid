@@ -1556,6 +1556,83 @@ void test_determinism_and_idempotence() {
 }
 
 // ---------------------------------------------------------------------------
+// R0 BC27 ext emission (tier-3 plan §5.3.1/§10 item 9): kPassExtFastArrayGet
+// converts every get_array_el of the final stream to the OP_ext +
+// EXT_get_array_el template (quickjs-ext-opcode.h: ext id 1, pop 2 push 1,
+// size 2 — the same stack effect as get_array_el, +1 byte/site). Emission
+// builds produce canonical BC27; emission-OFF builds stay byte-identical
+// BC26 (§7 rollback). BC27 output is never re-optimized (ext sites have
+// no foldability consumer).
+// ---------------------------------------------------------------------------
+void test_r0_ext_emission() {
+    // Array read with runtime-dependent receiver and index, so no pass
+    // folds the site away: get_loc0; get_loc1; get_array_el; return.
+    Builder b;
+    b.op(0xcb);  // get_loc0
+    b.op(0xcc);  // get_loc1
+    b.op(0x46);  // get_array_el
+    b.op(0x28);  // return
+    b.stack_size = 2;
+    b.finish(2);
+    std::vector<std::uint8_t> o1, o2;
+    std::string err;
+    CHECK(capsid::bytecode::optimize(b.buf, &o1, capsid::bytecode::kPassAll,
+                                     false, &err));
+    CHECK(capsid::bytecode::optimize(b.buf, &o2, capsid::bytecode::kPassAll,
+                                     false, &err));
+    CHECK(o1 == o2);  // deterministic
+    CHECK(bc_csum(o1.data() + 5, o1.size() - 5) ==
+          (static_cast<std::uint32_t>(o1[1]) |
+           (static_cast<std::uint32_t>(o1[2]) << 8) |
+           (static_cast<std::uint32_t>(o1[3]) << 16) |
+           (static_cast<std::uint32_t>(o1[4]) << 24)));
+#if defined(CAPSID_AOT_EMIT_EXT)
+    // Emission on: the site is the ext template and the bundle is BC27.
+    CHECK(o1[0] == 27);
+    std::vector<std::uint8_t> code;
+    CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassAll));
+    const std::uint8_t want[] = {0xcb, 0xcc, 0xfc, 0x01, 0x28};
+    CHECK(code.size() == sizeof(want));
+    CHECK(std::memcmp(code.data(), want, sizeof(want)) == 0);
+    // Canonical BC27: the F0 dual reader accepts it end to end.
+    CHECK(capsid::bytecode::ext_round_trip(o1, &err));
+    // get_array_el2 stays BC26 (no ext template): a mixed stream converts
+    // only the first form.
+    {
+        Builder m;
+        m.op(0xcb);  // get_loc0
+        m.op(0xcc);  // get_loc1
+        m.op(0x46);  // get_array_el
+        m.op(0xcb);  // get_loc0
+        m.op(0xcc);  // get_loc1
+        m.op(0x47);  // get_array_el2
+        m.op(0x28);  // return
+        m.stack_size = 3;
+        m.finish(2);
+        std::vector<std::uint8_t> mo;
+        CHECK(m.run_optimize(&mo, &err, capsid::bytecode::kPassAll));
+        CHECK(mo[0] == 27);
+        std::vector<std::uint8_t> mcode;
+        CHECK(m.optimize_and_code(&mcode, &err, capsid::bytecode::kPassAll));
+        const std::uint8_t mwant[] = {0xcb, 0xcc, 0xfc, 0x01,
+                                      0xcb, 0xcc, 0x47, 0x28};
+        CHECK(mcode.size() == sizeof(mwant));
+        CHECK(std::memcmp(mcode.data(), mwant, sizeof(mwant)) == 0);
+    }
+    // BC27 output is never re-optimized: ext sites have no foldability
+    // consumer (fail closed, out untouched).
+    std::vector<std::uint8_t> o3;
+    CHECK(!capsid::bytecode::optimize(o1, &o3, capsid::bytecode::kPassAll,
+                                      false, &err));
+    CHECK(o3.empty());
+#else
+    // Emission off: byte-identical BC26 — no OP_ext anywhere.
+    CHECK(o1[0] == 26);
+    CHECK(o1 == b.buf);
+#endif
+}
+
+// ---------------------------------------------------------------------------
 // Part B: full round-trip through the real runtime.
 // ---------------------------------------------------------------------------
 
@@ -1883,6 +1960,7 @@ int main() {
     test_p14_gates();
     test_debug_block_remap();
     test_determinism_and_idempotence();
+    test_r0_ext_emission();
     test_roundtrip_values();
     test_p14_semantics();
     test_p11_semantics();

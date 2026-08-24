@@ -368,6 +368,15 @@ if(CAPSID_BUILD_WORKER)
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF)
+    # R0: BC27 ext emission (kPassExtFastArrayGet enters kPassAll). OFF
+    # by default — an emission-OFF build is byte-identical BC26.
+    # INTERFACE (not PRIVATE): every consumer TU that passes kPassAll
+    # (capsid-bytecode-compile, bench tools, tests) must see the same
+    # mask as the library, or the emission bit silently never fires.
+    if(CAPSID_AOT_EMIT_EXT)
+        target_compile_definitions(capsid_bytecode_opt INTERFACE
+            CAPSID_AOT_EMIT_EXT=1)
+    endif()
     if(CAPSID_STRICT_WARNINGS)
         if(MSVC)
             target_compile_options(capsid_bytecode_opt PRIVATE /W4 /WX)

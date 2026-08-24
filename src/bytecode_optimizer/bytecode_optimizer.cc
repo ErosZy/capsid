@@ -999,6 +999,12 @@ bool decode_code(const uint8_t* code,
         in.aux = 0;
         in.has_aux = false;
         switch (op) {
+        case OP_ext:
+            // R0 verifier: the ext id rides in aux so verify_code can
+            // apply the ext-table stack effects (the BC27 scan path
+            // discards the stream, so this was unused before).
+            in.aux = code[pc + 1];
+            break;
         case OP_push_minus1: in.imm = -1; break;
         case OP_push_0: case OP_push_1: case OP_push_2: case OP_push_3:
         case OP_push_4: case OP_push_5: case OP_push_6: case OP_push_7:
@@ -1172,6 +1178,9 @@ struct RewriteStats {
     uint64_t to_propkey_removed = 0;  // tier-3 Lane 2: proven-redundant
                                       // to_propkey sites deleted
                                       // rewritten to plain loc ops
+    uint64_t ext_emitted = 0;  // R0: get_array_el sites converted to the
+                               // BC27 fast-array/int-index ext template
+                               // (kPassExtFastArrayGet; 0 in OFF builds)
     uint64_t shrinks = 0;     // short-form re-encodings
     uint64_t insns_before = 0;
     uint64_t insns_after = 0;
@@ -2944,6 +2953,20 @@ bool fit_jump_form(uint16_t* op, int64_t dist) {
     return false;  // catch/gosub: fixed size
 }
 
+// R0: ext-table instruction size (quickjs-ext-opcode.h, single source
+// of truth). The 0-pop/0-push OP_ext prefix row in quickjs-opcode.h
+// only names the prefix; the total size and stack effects come from
+// the ext table (ext_lookup rejects id 0/holes/unknowns, and decode
+// has already validated every id by the time emission runs).
+uint8_t insn_size(const Insn& in) {
+    if (in.op == OP_ext) {
+        ExtInfo ei;
+        if (ext_lookup(static_cast<uint8_t>(in.aux), &ei)) return ei.size;
+        return 0;  // unreachable: decode rejects invalid ext ids
+    }
+    return short_opcode_info(in.op).size;
+}
+
 // Emit the optimized code blob: opcodes plus re-encoded operands
 // (jump offsets are self-relative from the operand start). Fills
 // new_offs[i] = final byte offset of each instruction (used by the
@@ -2966,7 +2989,7 @@ bool emit_code(const std::vector<Insn>& insns,
             (*new_offs)[i] = off;
             off += is_jump_op(work[i].op) || is_with_jump(work[i].op)
                        ? static_cast<uint32_t>(jump_form(work[i].op))
-                       : short_opcode_info(work[i].op).size;
+                       : static_cast<uint32_t>(insn_size(work[i]));
         }
         for (size_t i = 0; i < work.size(); i++) {
             Insn& in = work[i];
@@ -2990,13 +3013,18 @@ bool emit_code(const std::vector<Insn>& insns,
         (*new_offs)[i] = off;
         off += is_jump_op(work[i].op) || is_with_jump(work[i].op)
                    ? static_cast<uint32_t>(jump_form(work[i].op))
-                   : short_opcode_info(work[i].op).size;
+                   : static_cast<uint32_t>(insn_size(work[i]));
     }
     out->reserve(out->size() + off);
     for (size_t i = 0; i < work.size(); i++) {
         const Insn& in = work[i];
         out->push_back(static_cast<uint8_t>(in.op));
         switch (in.op) {
+        case OP_ext:
+            // R0 BC27 emission: OP_ext prefix + ext id (aux). The
+            // ext-table payload (none today) follows verbatim.
+            out->push_back(static_cast<uint8_t>(in.aux));
+            break;
         case OP_push_minus1: case OP_push_0: case OP_push_1:
         case OP_push_2: case OP_push_3: case OP_push_4:
         case OP_push_5: case OP_push_6: case OP_push_7:
@@ -3124,9 +3152,10 @@ bool emit_code(const std::vector<Insn>& insns,
 bool verify_code(const uint8_t* code,
                  size_t len,
                  uint32_t recorded_stack_size,
-                 std::string* error) {
+                 std::string* error,
+                 bool allow_ext = false) {
     std::vector<Insn> insns;
-    if (!decode_code(code, len, &insns, error)) return false;
+    if (!decode_code(code, len, &insns, error, allow_ext)) return false;
     if (insns.empty()) {
         *error = "bytecode optimize: empty code blob";
         return false;
@@ -3158,19 +3187,35 @@ bool verify_code(const uint8_t* code,
         worklist.pop_back();
         const Insn& in = insns[idx];
         int32_t h = heights[idx];
-        const OpInfo& oi = short_opcode_info(in.op);
-        int32_t n_pop = oi.n_pop;
-        if (oi.fmt == OP_FMT_npop || oi.fmt == OP_FMT_npop_u16) {
-            n_pop += static_cast<int32_t>(in.aux);
-        } else if (oi.fmt == OP_FMT_npopx) {
-            n_pop += static_cast<int32_t>(in.op) - OP_call0;
+        int32_t n_pop;
+        int32_t n_push;
+        if (in.op == OP_ext) {
+            // R0: BC27 ext sites carry ext-table stack effects (the
+            // OP_ext prefix row in quickjs-opcode.h is 0-pop/0-push
+            // and is never advertised to any stack verifier).
+            ExtInfo ei;
+            if (!ext_lookup(static_cast<uint8_t>(in.aux), &ei)) {
+                *error = "bytecode optimize: invalid ext id in function";
+                return false;
+            }
+            n_pop = ei.n_pop;
+            n_push = ei.n_push;
+        } else {
+            const OpInfo& oi = short_opcode_info(in.op);
+            n_pop = oi.n_pop;
+            if (oi.fmt == OP_FMT_npop || oi.fmt == OP_FMT_npop_u16) {
+                n_pop += static_cast<int32_t>(in.aux);
+            } else if (oi.fmt == OP_FMT_npopx) {
+                n_pop += static_cast<int32_t>(in.op) - OP_call0;
+            }
+            n_push = oi.n_push;
         }
         if (h < n_pop) {
             *error = "bytecode optimize: stack underflow at instruction " +
                      std::to_string(idx);
             return false;
         }
-        int32_t post = h - n_pop + oi.n_push;
+        int32_t post = h - n_pop + n_push;
         if (post > max_h) max_h = post;
         switch (in.op) {
         case OP_tail_call: case OP_tail_call_method:
@@ -3461,6 +3506,27 @@ bool rewrite_function(const FuncRecord& f,
     }
     apply_reshrink(&insns, stats);
 
+    // R0 (tier-3 plan §5.3.1/§10 item 9): emit the measured
+    // fast-array/int-index ext template at every get_array_el site of
+    // the final stream. Semantics-preserving at every site — the
+    // interpreter's guard set (tag object + tag int + the exact
+    // js_get_fast_array_element class/bounds predicate) is precise,
+    // and a miss executes the identical generic property operation —
+    // so the conversion's measured cost is +1 byte per site (R0 A/B).
+    // get_array_el2 stays BC26 (no ext template); the wire form is
+    // OP_ext + ext id 1 (quickjs-ext-opcode.h), pop 2 push 1, same
+    // stack effect, so no CFG/verifier target fixups are needed and
+    // pc2line remap below simply maps the site to its new offset.
+    if ((passes & kPassExtFastArrayGet)) {
+        for (size_t i = 0; i < insns.size(); i++) {
+            if (insns[i].op == OP_get_array_el) {
+                insns[i].op = OP_ext;
+                insns[i].aux = 1;  // EXT_get_array_el
+                stats->ext_emitted++;
+            }
+        }
+    }
+
     // Emit.
     std::vector<uint32_t> new_offs;
     if (!emit_code(insns, code, new_code, &new_offs, error)) return false;
@@ -3468,9 +3534,11 @@ bool rewrite_function(const FuncRecord& f,
     stats->insns_after += insns.size();
     stats->bytes_after += new_code->size();
 
-    // Verify the rewritten code against the same rules.
+    // Verify the rewritten code against the same rules. The emitted
+    // stream may contain ext sites (R0); allow them through the same
+    // decode + ext-table stack effects the reader enforces.
     if (!verify_code(new_code->data(), new_code->size(), f.stack_size,
-                     error)) {
+                     error, /*allow_ext=*/(passes & kPassExtFastArrayGet) != 0)) {
         return false;
     }
 
@@ -3575,12 +3643,14 @@ void emit_record(const FuncRecord& f,
     }
 }
 
-bool verify_tree(const FuncRecord& f, const uint8_t* data, std::string* error) {
-    if (!verify_code(data + f.code_off, f.code_len, f.stack_size, error)) {
+bool verify_tree(const FuncRecord& f, const uint8_t* data, std::string* error,
+                 bool allow_ext = false) {
+    if (!verify_code(data + f.code_off, f.code_len, f.stack_size, error,
+                     allow_ext)) {
         return false;
     }
     for (size_t i = 0; i < f.children.size(); i++) {
-        if (!verify_tree(f.children[i], data, error)) return false;
+        if (!verify_tree(f.children[i], data, error, allow_ext)) return false;
     }
     return true;
 }
@@ -4757,13 +4827,14 @@ static bool tier3_function(const FuncRecord& f,
 
 bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
     error->clear();
-    // F0: BC27 is read by the ext/identity analysis stack only; the
+    // F0/R0: BC27 is produced (R0 ext emission) and read by the
+    // ext/identity analysis stack, but never consumed here: the
     // production foldability model has no ext consumer and must not
-    // silently treat ext sites as ordinary BC26 code (no production
-    // emission).
+    // silently treat ext sites as ordinary BC26 code (re-analyzing an
+    // emitted BC27 stream has no foldability consumer).
     if (!in.empty() && in[0] == BC_VERSION_EXT) {
-        *error = "bytecode optimize: BC27 input is analyze-only (ext "
-                 "foundation; no production emission)";
+        *error = "bytecode optimize: BC27 input is not re-analyzable "
+                 "(ext sites have no foldability consumer)";
         return false;
     }
     std::vector<FuncRecord> functions;
@@ -4845,13 +4916,14 @@ bool optimize(const std::vector<std::uint8_t>& in,
               bool report,
               std::string* error) {
     error->clear();
-    // F0: BC27 is analyze-only. The production pipeline emits BC26;
+    // F0/R0: BC27 is produced (R0 ext emission) but never re-optimized:
     // accepting ext input would silently run the v1 passes over
-    // instructions whose stack effects only the ext table knows (no
-    // production emission).
+    // instructions whose stack effects only the ext table knows — there
+    // is no foldability consumer for ext sites (re-optimization of an
+    // emitted BC27 stream is not supported).
     if (!in.empty() && in[0] == BC_VERSION_EXT) {
-        *error = "bytecode optimize: BC27 input is analyze-only (ext "
-                 "foundation; no production emission)";
+        *error = "bytecode optimize: BC27 input is not re-optimizable "
+                 "(ext sites have no foldability consumer)";
         return false;
     }
     std::vector<FuncRecord> functions;
@@ -4881,7 +4953,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
                          "bytecode optimize: %llu -> %llu insns, %llu -> "
                          "%llu code bytes; folds P2 %llu P3.1 %llu "
                          "P11 %llu P14 %llu P16 %llu T3 %llu "
-                         "P18 %llu, shrinks %llu\n",
+                         "P18 %llu, shrinks %llu, ext %llu\n",
                          static_cast<unsigned long long>(stats.insns_before),
                          static_cast<unsigned long long>(stats.insns_after),
                          static_cast<unsigned long long>(stats.bytes_before),
@@ -4895,7 +4967,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
                              stats.tdz_checks_removed),
                          static_cast<unsigned long long>(
                              stats.to_propkey_removed),
-                         static_cast<unsigned long long>(stats.shrinks));
+                         static_cast<unsigned long long>(stats.shrinks),
+                         static_cast<unsigned long long>(stats.ext_emitted));
         }
         return true;
     }
@@ -4909,11 +4982,19 @@ bool optimize(const std::vector<std::uint8_t>& in,
     (*out)[2] = static_cast<uint8_t>(csum >> 8);
     (*out)[3] = static_cast<uint8_t>(csum >> 16);
     (*out)[4] = static_cast<uint8_t>(csum >> 24);
+    // R0: a stream containing ext sites is BC27 by definition
+    // (canonicality: BC27 must contain at least one ext instruction).
+    // The version byte is outside the checksummed range, so this patch
+    // is safe after the checksum write. Emission-OFF builds always have
+    // ext_emitted == 0 and stay BC26 (byte-identical rollback).
+    if (stats.ext_emitted != 0) (*out)[0] = BC_VERSION_EXT;
     // Final self-check: full reparse (validates version, checksum, atom
     // table, all records) plus per-function stack verification.
     std::vector<FuncRecord> check;
     if (!parse_buffer(out->data(), out->size(), &check, error)) return false;
-    if (check.size() != 1 || !verify_tree(check[0], out->data(), error)) {
+    if (check.size() != 1 ||
+        !verify_tree(check[0], out->data(), error,
+                     /*allow_ext=*/stats.ext_emitted != 0)) {
         if (error->empty()) {
             *error = "bytecode optimize: internal verification failed";
         }
@@ -4924,7 +5005,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
                      "bytecode optimize: %llu -> %llu insns, %llu -> %llu "
                      "code bytes; folds P2 %llu P3.1 %llu "
                      "P11 %llu P14 %llu P16 %llu T3 %llu "
-                     "P18 %llu, shrinks %llu\n",
+                     "P18 %llu, shrinks %llu, ext %llu\n",
                      static_cast<unsigned long long>(stats.insns_before),
                      static_cast<unsigned long long>(stats.insns_after),
                      static_cast<unsigned long long>(stats.bytes_before),
@@ -4938,7 +5019,8 @@ bool optimize(const std::vector<std::uint8_t>& in,
                          stats.tdz_checks_removed),
                      static_cast<unsigned long long>(
                          stats.to_propkey_removed),
-                     static_cast<unsigned long long>(stats.shrinks));
+                     static_cast<unsigned long long>(stats.shrinks),
+                     static_cast<unsigned long long>(stats.ext_emitted));
     }
     return true;
 }

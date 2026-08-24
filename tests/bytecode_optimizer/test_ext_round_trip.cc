@@ -327,8 +327,8 @@ void test_a10_bc27_pc2line() {
 }
 
 // a11: production gates — optimize() and analyze_only() reject BC27
-// input outright (analyze-only, no production emission) and keep
-// accepting BC26.
+// input outright (R0 can emit BC27, but ext sites have no foldability
+// consumer: re-optimization is not supported) and keep accepting BC26.
 void test_a11_production_gates() {
     std::string err;
     std::vector<std::uint8_t> b27 =
@@ -336,10 +336,10 @@ void test_a11_production_gates() {
     std::vector<std::uint8_t> out;
     CHECK(!capsid::bytecode::optimize(b27, &out, capsid::bytecode::kPassAll,
                                       false, &err));
-    CHECK(err.find("analyze-only") != std::string::npos);
+    CHECK(err.find("not re-optimizable") != std::string::npos);
     std::string err2;
     CHECK(!capsid::bytecode::analyze_only(b27, &err2));
-    CHECK(err2.find("analyze-only") != std::string::npos);
+    CHECK(err2.find("not re-analyzable") != std::string::npos);
 
     std::string err3;
     std::vector<std::uint8_t> b26 = make_bundle({186, 41}, 1, 26);

@@ -93,6 +93,13 @@ if(CAPSID_ENABLE_SHAPE_GUARD_IC AND NOT CAPSID_ENABLE_SHAPE_GUARD_ID32)
     message(FATAL_ERROR
         "CAPSID_ENABLE_SHAPE_GUARD_IC requires CAPSID_ENABLE_SHAPE_GUARD_ID32 (IC guards are ID32 shape ids)")
 endif()
+# R0 (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md §5.3.1/§10 item 9):
+# optimizer BC27 ext emission. Compile-gated in the optimizer only —
+# the vendored VM's dual reader accepts BC27 unconditionally. An
+# emission-OFF build stays byte-identical BC26 (§7 rollback contract).
+# The A/B arms the R0 measurement uses are exactly these two builds.
+option(CAPSID_AOT_EMIT_EXT
+    "Build the bytecode optimizer with R0 BC27 ext emission (kPassExtFastArrayGet in kPassAll)" OFF)
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY
