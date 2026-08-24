@@ -1107,3 +1107,181 @@ generic-authoritative results all verified by the 50-row matrix. **Proceed
 to R0/R1/R2 sequencing as planned**; MONO enabling (R2) remains conditional
 on SHADOW clearing the same hit-rate/memory gates in production-shaped
 bundles, not on these synthetic microcases.
+
+## 15. R0 Fast-Array/Int-Index Ext Template Record (2026-08-24)
+
+Status: **R0 measured — negative result archived**. The emission was built,
+verified, and A/B'd exactly as specced (§10 item 9); the paired measurement
+rejects the template's premise on this runtime. Full evidence below, per the
+tier-3 "measure first, decide later" discipline.
+
+### 15.1 Deliverables (§10 item 9)
+
+- **Optimizer emission** (commit `3be7c0b`): `kPassExtFastArrayGet = 1u<<7`
+  converts every `get_array_el` of the final stream to `OP_ext` +
+  `EXT_get_array_el` (quickjs-ext-opcode.h id 1; pop 2 / push 1 — identical
+  stack effect, +1 byte/site measured). Gated by `CAPSID_AOT_EMIT_EXT`
+  (INTERFACE compile definition on `capsid_bytecode_opt` so every kPassAll
+  consumer — compiler, bench tools, tests — sees the same mask; default OFF).
+- **BC27 output contract**: an emission-ON build emits canonical BC27 (≥1
+  ext; version byte 27 is outside the checksummed range and is patched after
+  the checksum write). BC27 input fails closed in both `optimize()` and
+  `analyze_only()` ("ext sites have no foldability consumer"); `get_array_el2`
+  stays BC26. An emission-OFF build is byte-identical BC26 (§7 rollback —
+  verified byte-identical in tests and fuzz gates; `arrlocal-rt` control
+  sizes are 361/361).
+- **Runtime**: no new overlay patch. The ext dispatch (0037 ext foundation,
+  0038 ext-get-array-el handler, 0040 cacheability predicate) has been in the
+  overlay since F0/S1. Overlay key unchanged (`23da3ce9…` / manifest
+  `595da218…`).
+- **Tests** (Debug, ON and OFF builds, 11/11 suites green): `test_r0_ext_emission`
+  (ON/OFF goldens, BC27 reparse round-trip, `get_array_el2` preservation,
+  BC27-input rejection, determinism), `bytecode_ext_round_trip` (updated
+  fail-closed messages), `bytecode_opt_differential` (BC27 bodies byte-for-
+  byte match), `runtime_bytecode_compiler_round_trip`, `ext_bytecode_directed`,
+  and the fuzz gate (BC27 outputs must fail closed on every re-entry).
+- **Bench tooling**: `bench/r0-paired-ab.sh` — paired A/B runner: two
+  compiler builds (CAPSID_AOT_EMIT_EXT on/off) produce the opt26/opt27
+  bundles; the SAME worker binary (dual reader accepts 26/27) executes both;
+  ≥7 interleaved ABBA/BAAB samples per arm; medians; `--expect-body`
+  byte-for-byte cross-check doubles as correctness; manifest records binary
+  hashes.
+
+### 15.2 Ext site census (17 fixtures)
+
+| ext sites | fixtures |
+| --- | --- |
+| 209 | `v8-suite-mod` (module-level suite code) |
+| 6 | `matrix-rt` |
+| 2 | `sieve-rt` |
+| 1 | `json-rt` |
+| 0 | the other 13 (arith, arrlocal, branch-const, cascade, copy-chain, cse-loop, fib, licm, prop-hoist, prop-loop, string, tdz-check, v8-suite-rt) |
+
+Two structural zeros worth recording: `arrlocal-rt` has 0 because P14 folds
+every literal-index access before R0 sees the stream (foldability consumes
+the sites — no residual); `v8-suite-rt` has 0 because the suite is
+`eval`'d from a string at runtime — the optimizer sees only the 141-byte
+top-level wrapper (`52 -> 52 insns, 141 -> 141 code bytes`), so that fixture
+can never exercise ext emission by construction. `v8-suite-mod` is the
+module-level (non-eval) variant and carries the real 209-site surface.
+
+### 15.3 Paired A/B results (Release, `taskset -c 2-3`, 7 pairs ABBA/BAAB, median of 14 samples/arm)
+
+| Fixture | ext | ver26/27 | size26 → 27 | opt26 ms | opt27 ms | Δ% (BC27 vs BC26) |
+| --- | --- | --- | --- | --- | --- | --- |
+| matrix-rt | 6 | 26/27 | 1661 → 1667 | 4.712 | 5.310 | **−12.69%** |
+| sieve-rt | 2 | 26/27 | 923 → 925 | 23.744 | 24.170 | −1.79% |
+| json-rt | 1 | 26/27 | 728 → 729 | 1.763 | 1.734 | +1.65% (noise) |
+| arrlocal-rt | 0 (control) | 26/26 | 361 → 361 | 3.175 | 3.195 | −0.63% (noise) |
+| v8-suite-mod | 209 | 26/27 | 309989 → 310202 | 17481.7 | 17018.4 | +2.65% (wall; inconclusive) |
+
+- **Independent reproduction**: an earlier 7-pair run on the same method
+  measured matrix-rt −12.858% (4.993 vs 5.635) — the two runs agree within
+  0.2 pp. The matrix-rt sample distributions barely overlap (arm26 4.562–
+  6.392 ms, arm27 5.082–7.132 ms) with interleaved sampling, so the −12.7%
+  is not drift or noise.
+- **v8-suite-mod is inconclusive at the ±2–3% level and reported with both
+  of its conflicting signals**: wall time favors BC27 (+2.65% by the
+  runner's median, +2.2% by my re-extraction), but the suite's *own*
+  per-benchmark self-scores — the direct measurement of hot-loop speed
+  (the suite runs each benchmark in 1 s time slices and scores runs/sec) —
+  favor BC26 by −2.0% (medians 1476 vs 1446, interquartile ranges
+  non-overlapping, 11/14 arm26 samples above arm27's median). The suite's
+  time-budgeted design makes wall time a weak proxy (budgeted seconds are
+  wall-invariant; the wall difference lives in the non-budgeted fraction
+  and its direction is unexplained by the dispatch model), so the direct
+  score signal is the one to read: at 209 low-density sites the direction
+  matches matrix-rt (−2% vs −12.7%), consistent with per-site dispatch
+  overhead scaling with site density in hot loops. The body varies run to
+  run by design (self-timing), so byte-for-byte expect-body is unavailable;
+  the runner uses a structural marker check and interleaved samples.
+
+### 15.4 Root cause — the generic path already is the fast path
+
+The R0 design premise: an inlined tag-specialized template at `get_array_el`
+sites avoids the generic entry's call + tag-check cost. Measurement rejects
+that premise on this runtime:
+
+- The generic path (`CASE(OP_get_array_el)`, quickjs.c:20512) direct-
+  dispatches into `JS_GetPropertyValue` (quickjs.c:10637), whose entry
+  already contains the identical fast path: `tag == JS_TAG_OBJECT` and
+  index tag `JS_TAG_INT` → `js_get_fast_array_element` (quickjs.c:10651) →
+  immediate return. The savings the template was designed to capture do not
+  exist.
+- The ext site (`CASE(OP_ext)`, quickjs.c:20544) pays per execution:
+  `ext_opcode_info_or_invalid(ext_id)` (bounds-checked table lookup, quickjs.c:1351)
+  + `pc += ei->size - 1` + `goto *ext_dispatch_table[ext_id]` (a second
+  indirect jump) — then re-runs the identical predicate with a retained
+  generic fallback.
+- matrix-rt's inner loop hits the fast path at ~100% of its ext sites and
+  still measures **−12.7%**: even at a perfect hit rate, the ext dispatch
+  indirection is pure overhead against the direct-dispatched generic. The
+  template cannot win at any hit rate on this runtime, because the
+  "generic entry" it beats around is already a direct dispatch into the
+  fast path.
+
+### 15.5 Correctness evidence
+
+- `--expect-body` byte-for-byte: matrix/sieve/json/arrlocal both arms —
+  BC26 and BC27 executions produce identical bodies (the A/B doubles as a
+  correctness check).
+- `bytecode_opt_differential` (BC27 bodies byte-identical), directed ext
+  matrix, fuzz BC27 fail-closed invariants, `test_r0_ext_emission` goldens —
+  all green on both ON and OFF builds.
+- **Native test262 on the overlay runtime** (the build containing the ext
+  dispatch 0037/0038/0040): `make test262` → **96/81152 errors, 4925
+  excluded, 5954 skipped — exactly the E1 pristine-tree baseline** (§12.2);
+  error-list parity `run-test262 -m -c test262.conf -E -a` → "Result:
+  96/96 errors", exit 0 (same as §12.2). The ext runtime adds zero test262
+  regressions. (test262 cannot exercise BC27 itself — its harness compiles
+  source JS with the pristine compiler — but it bounds the runtime side of
+  the emission.)
+
+### 15.6 Reproducibility (bench/results is gitignored; archives live on disk)
+
+- First matrix-rt run (7 pairs): `bench/results/r0-paired/` (matrix-rt −12.858%).
+- Four-fixture run (7 pairs): `bench/results/r0-paired-full/` (matrix-rt
+  −12.691%, arrlocal-rt −0.630%, sieve-rt −1.794%, json-rt +1.645%).
+- v8-suite-mod run (7 pairs): `bench/results/r0-paired-mod/`.
+- Runner: `bench/r0-paired-ab.sh` sha256 `df5d9a54…60a64` (the committed
+  version; it produced the v8-suite-mod numbers and reproduces the others —
+  each dir's manifest records the exact revision that ran: the first run and
+  the four-fixture run used earlier revisions whose only differences are the
+  body-extraction and fixture-guard changes described in the bench commit;
+  the expect-body measurement path is behavior-identical across them).
+- test262 overlay run: `bench/results/test262-overlay-r0.console.log`
+  ("Result: 96/81152 errors, 4925 excluded, 5954 skipped").
+- Compiler/worker/throughput hashes per run are in each dir's `manifest.txt`.
+
+### 15.7 Verdict — R0 premise rejected by measurement
+
+§9 gates: ≥7 interleaved ABBA/BAAB samples ✓; emission-OFF rollback
+byte-identical ✓ (sizes, bodies, control arm); candidate improvement ≥1%
+broad / ≥5% target ✗ — the target fixture measures **−12.69%** (matrix-rt,
+6 sites, ~100% fast-path hit rate), sieve −1.79% (2 sites), v8-suite-mod
+inconclusive at ±2% with the direct self-score signal at −2.0% (209 sites),
+json +1.65% (within noise on 1.76 ms runs, 1 site), control −0.63% (noise).
+
+**The fast-array/int-index ext template is slower than the generic opcode on
+this runtime, at any hit rate**, because quickjs-ng's generic path already
+inlines the identical fast path and direct dispatch reaches it without the
+ext table lookup + second indirect jump. R0 is a measured negative; the
+evidence is archived per the tier-3 discipline ("不论结果如何" — the number,
+not the hoped sign, is the deliverable). The negative scales with site
+density in hot loops (−12.7% at 6 high-density sites, −2.0% self-score at
+209 low-density sites) and is zero at the control (−0.63%, identical
+binaries), which is exactly the signature of a per-execution dispatch tax,
+not of fixture noise.
+
+What R0 leaves behind (positive infrastructure, validated end-to-end):
+the BC27 contract (version outside the checksummed range, canonicality,
+dual reader, fail-closed re-entry), the ext emission path, and the paired
+A/B tooling — all reusable for any future ext template.
+
+**R1/R2 implications**: a guarded serve of the same fast path (SHADOW MONO,
+§10 items 10-11) shares R0's fate — a guard pays dispatch overhead to serve
+work the generic already does for free. Any future template must do
+something the generic path does not (eliminate checks the generic cannot,
+serve shapes its fast path misses, or cut a cost beyond the entry), and must
+re-run this paired A/B before acceptance. Recommendation: do not proceed to
+R1/R2 in their planned form.
