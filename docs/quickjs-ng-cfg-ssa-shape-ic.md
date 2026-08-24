@@ -1669,3 +1669,161 @@ not another copy of its dispatch.
 
 Evidence is archived under `bench/results/ext34-classic-ab-20260825T014012/`
 (per-program pair gains, summary.json; bench/results is gitignored).
+
+## 18. Corrected Full-Suite Profile + Candidate Re-Rank Record (2026-08-25)
+
+Status: **the ranked candidate pool is exhausted — no candidate clears the
+direct-binary gate; the optimization loop terminates with R1 (ext34) as the
+last kept item.** This section archives the corrected profile and the
+re-ranking that supports that verdict.
+
+### 18.1 Why a corrected collection (task #74)
+
+The first collection (`bench/results/classic-profile-20260825/`) failed two
+ways: `--profile-tool` pointed at the non-profile binary (every program:
+"`--opcode-profile` requires a CONFIG_OPCODE_PROFILE build"), and `--passes
+0xffffffff` profiled the candidate's BC27 output — which the 45-patch
+profile qjs cannot read — instead of the deployed mask `0x7f` (BC26). The
+corrected run (`bench/classic-profile-collect.sh`, commit `bba6f60`)
+profiles the **deployed pipeline**: the production compiler
+(`bench/bin/classic-bytecode`) at the shipped `kPassAll` 0x7f, executed by
+a separate CONFIG_OPCODE_PROFILE runner (`bench/bin/
+classic-bytecode-profile`) so instrumented timing is never a performance
+result. A fail-fast probe (one pinned-cpuset profile of
+sunspider-math-partial-sums) runs before collection so a wrong binary
+cannot silently produce 53 error files again.
+
+### 18.2 Collection facts
+
+54 of 55 programs completed within the per-program caps on `taskset -c
+2-3`. `kraken-imaging-gaussian-blur` exceeds 600 s of instrumented
+execution and was recovered at 1800 s (12 min); `octane-mandreel` exceeds
+even 1800 s (30 min) and was retried at 3600 s. Mandreel is outside the
+A/B corpus (§17.4), so its absence cannot change the §18.7 verdict; the
+final archive state is recorded in the results manifest
+(`bench/results/classic-profile-20260825T015948/manifest.json`).
+Aggregate on the completed dumps: 66,624,971,999 dynamic opcode
+executions across 19,967 functions, 849,458 instruction sites.
+
+### 18.3 Opcode aggregate (dispatch cost)
+
+| rank | opcode | execs | share |
+| ---: | --- | ---: | ---: |
+| 1 | get_loc8 | 7,196,809,648 | 10.80% |
+| 2 | swap | 5,896,907,130 | 8.85% |
+| 3 | push_0 | 5,298,090,728 | 7.95% |
+| 4 | or | 3,941,706,487 | 5.92% |
+| 5 | get_array_el | 2,839,775,100 | 4.26% |
+| 6 | add | 2,830,132,542 | 4.25% |
+| 7 | put_loc8 | 2,644,091,309 | 3.97% |
+| 8 | sar | 2,404,645,764 | 3.61% |
+| 9 | to_propkey | 1,946,251,103 | 2.92% |
+| 10 | push_2 | 1,911,708,835 | 2.87% |
+| 11 | push_1 | 1,694,061,975 | 2.54% |
+| 12 | get_var_ref0 | 1,603,706,109 | 2.41% |
+
+Slow-path ranking (dispatch + 20× slow) is led by call_method (3.11B),
+get_array_el (1.27B), add (761M), get_field2 (642M), sub (436M),
+tail_call_method (309M).
+
+### 18.4 Concentration: octane-zlib dominates every hot opcode
+
+Zlib-only aggregate (its single profile dump) as a share of the
+suite-wide count:
+
+| opcode | zlib execs | suite execs | zlib share |
+| --- | ---: | ---: | ---: |
+| or | 3,886,697,304 | 3,941,706,487 | 98.6% |
+| push_0 | 5,156,264,079 | 5,298,090,728 | 97.3% |
+| sar | 2,265,136,719 | 2,404,645,764 | 94.2% |
+| put_loc8 | 2,286,302,129 | 2,644,091,309 | 86.5% |
+| get_loc8 | 5,484,476,413 | 7,196,809,648 | 76.2% |
+| add | 2,145,788,973 | 2,830,132,542 | 75.8% |
+| get_array_el | 2,128,851,967 | 2,839,775,100 | 75.0% |
+| swap | 4,233,590,472 | 5,896,907,130 | 71.8% |
+
+One program — octane-zlib's inflate/crc loops — is 72-99% of every hot
+opcode in the entire suite. The suite's opcode mix is not a balanced
+picture; it is zlib's bit-manipulation loops over the other 54 programs.
+
+### 18.5 Sequence census (adjacent windows, exact PC)
+
+**2-len windows** (cross-program; ext_saved = 0 for all — see the census
+tool's dispatch model): get_loc8>add 369M/20 programs, push_1>sub
+332M/28, push_1>add 291M/33, get_loc8>get_array_el 214M/21,
+get_loc8>get_field 205M/20, get_loc2>get_field 169M/15, mul>add
+168M/16, get_field>get_field 147M/20, get_arg0>get_field 143M/16,
+get_array_el>get_loc8 137M/16, push_2>add 123M/15, get_array_el>add
+106M/19, get_loc0>get_field 103M/20, add>put_loc8 67M/20.
+
+**3-4 len windows** (ext_saved > 0 — these are the only dispatch-saving
+shapes): every top rank is an octane-zlib site artifact.
+
+| rank | pattern | region exec | programs | top site |
+| ---: | --- | ---: | ---: | --- |
+| 1 | get_array_el > push_0 > or | 1,700M | 3 | zlib f52:pc382 |
+| 2 | add > push_0 > or | 1,192M | 3 | zlib f52:pc368 |
+| 3 | push_2 > sar > get_array_el | 1,128M | 4 | zlib f49:pc2361 |
+| 4 | push_0 > or > put_loc8 | 960M | 3 | zlib f52:pc369 |
+| 5 | add > push_1 > sar | 376M | 4 | zlib f52:pc931 |
+| 6 | push_1 > shl > add | 325M | 3 | zlib f52:pc929 |
+| 7 | or > put_loc8 > get_loc8 | 258M | 6 | zlib f49:pc2577 |
+
+**Non-zlib 3-4 len census** (52-dump re-run, zlib removed): the survivors
+are (a) ext34's own target shapes — get_loc8-run + get_array_el windows
+(66.7M/13 programs, 41.6M/6), which appear here because the deployed
+0x7f mask does not carry the kept ext bits; this is exactly the already
+implemented, already measured R1 fusion — and (b) windows whose fused
+handlers would have to embed a generic slow path: mul > swap > to_propkey
+> swap (41.2M/4, navier-stokes top site), get_array_el > swap >
+to_propkey > swap (37.1M/14), get_loc8 > mul > get_loc8 (56.1M/5,
+octane-crypto JSBN), set_loc8 > push_i8 > sar > get_loc8 (47.6M,
+octane-crypto), mul > add > put_loc8 > get_loc2 (47.9M, octane-crypto).
+
+### 18.6 Why no ranked candidate clears the direct-binary gate
+
+1. **Corpus coverage.** The A/B corpus (§17.4) is eight programs:
+   audio-beat-detection, audio-fft, audio-oscillator, imaging-darkroom,
+   box2d, gameboy, navier-stokes, richards. octane-zlib — the sole source
+   of every top 3+ len window — is not among them, nor are mandreel or
+   gaussian-blur (the other two profile-dominant programs). A fusion aimed
+   at those windows would be measured as noise on the corpus.
+2. **Spread 2-len windows save zero dispatches.** Fusing `[A, B]` into
+   `OP_ext + ext_id` costs two dispatch slots either way (the census
+   model: ext_saved = 0 at 2-len). The only residual gain would be
+   dispatch-table overhead, and the structurally identical
+   `get_locN + get_field` catalog was already rejected in §16 on the same
+   cost model with a measured negative (−1.28% combined).
+3. **Generic-path duplication measures negative.** Every surviving
+   non-zlib 3+ len candidate requires the fused handler to embed a
+   generic slow path — `js_mul` (valueOf/-0/object operands),
+   `ToPropertyKey` (ToPrimitive can run user code and throw), or
+   `get_array_el`'s own generic machinery. That is precisely the
+   structure that measured −12.7% (R0's blanket get_array_el rewrite) and
+   −1.28% (arg0>get_field ext): the dispatch is removed but the generic
+   work is still executed, inside a longer handler. R2's note in §17.5 is
+   the same conclusion: the next step must *remove* the generic path, not
+   copy its dispatch — and removing it requires provable shapes, i.e. an
+   inline cache, which was explored in S1 (SHADOW IC) and stopped.
+4. **call_method** — the only spread opcode-level opportunity (155M,
+   0.23% of execs) — is a runtime IC concern, not a bytecode-shape
+   concern; it was explored and stopped earlier.
+
+### 18.7 Verdict — the loop terminates with R1 as the last kept item
+
+The corrected profile answers the tier-2 question directly: the deployed
+BC26 stream's remaining hot shapes are either zlib-single-site artifacts
+(unmeasurable on the A/B corpus), 2-len windows with zero dispatch
+saving, or shapes that require embedding a generic slow path — the exact
+structure that has measured negative in both prior ext attempts. R1
+(ext34) is the last item that cleared the gate (+0.66% geomean, kept).
+"Direction exhausted" is the honest result the methodology expects: the
+facts above are the evidence, and the next opportunity, if any, is a
+corpus/measurement decision (adding zlib-class workloads to the A/B
+corpus) before any new implementation — not an implementation decision
+made blind.
+
+Evidence is archived under
+`bench/results/classic-profile-20260825T015948/` (53 dump + 2 retried
+dumps, manifest.json; bench/results is gitignored); collection harness
+`bench/classic-profile-collect.sh`; ranking tool `bench/profile_sequences.py`.
