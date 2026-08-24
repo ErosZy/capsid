@@ -35,7 +35,10 @@ done
 # must succeed. The probe uses the pinned cpuset, matching the run.
 probe=/tmp/capsid-profile-probe.qjsb
 probe_out="$OUT/.probe.profile.jsonl"
-"$COMPILER" compile --input bench/fixtures/arith-rt.js \
+# The probe must be a classic script (the production compiler rejects
+# module syntax): the -rt.js fixtures are modules, so use a small
+# corpus file instead.
+"$COMPILER" compile --input "$CORPUS/sunspider-math-partial-sums.js" \
     --source-name file:///probe.js --output "$probe" \
     --optimize --passes 0x7f 2>"$OUT/.probe.compile.err"
 if ! taskset -c "$CPUSET" "$PROFILE_TOOL" run --input "$probe" \
