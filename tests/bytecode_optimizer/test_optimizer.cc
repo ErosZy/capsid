@@ -1706,6 +1706,237 @@ void test_determinism_and_idempotence() {
 }
 
 // ---------------------------------------------------------------------------
+// R1: BC27 ext loc-array fusion (ext ids 2/3).
+//
+// The fused ext reads its locals directly (n_pop=0), so its stack effect
+// (+1 / +2) is exactly the window's; the verifier, the runtime's own BC27
+// stack check, and the handlers all share the ext table. Targets strictly
+// inside a window block fusion; a target at the window start is allowed
+// (it lands on the fused ext, identical behavior).
+// ---------------------------------------------------------------------------
+
+void test_ext34_fusion_goldens() {
+    // id 2 (kPassExtFuse34): [get_loc8 4][get_loc8 5][get_array_el] ->
+    // [OP_ext, 2, 4, 5]; BC27 version byte; ext round trip accepts the
+    // emitted bundle; a second optimize() must fail closed.
+    {
+        Builder b;
+        b.op(199); b.op(4);  // get_loc8 4
+        b.op(199); b.op(5);  // get_loc8 5
+        b.op(70);            // get_array_el
+        b.op(41);            // return_undef
+        b.stack_size = 3;
+        b.finish(6);
+        std::vector<std::uint8_t> out;
+        std::string err;
+        CHECK(capsid::bytecode::optimize(
+            b.buf, &out, capsid::bytecode::kPassExtFuse34, false, &err));
+        CHECK(out[0] == 27);  // BC_VERSION_EXT
+        std::vector<std::uint8_t> code;
+        CHECK(b.optimize_and_code(&code, &err,
+                                  capsid::bytecode::kPassExtFuse34));
+        const std::uint8_t expected[] = {252, 2, 4, 5, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+        // BC27 is not re-optimizable (no foldability consumer for ext
+        // sites), and the I0 ext round trip still reads it.
+        std::vector<std::uint8_t> again;
+        std::string re_err;
+        CHECK(!capsid::bytecode::optimize(out, &again, 0xffffffffu, false,
+                                          &re_err));
+        CHECK(re_err.find("not re-optimizable") != std::string::npos);
+        std::string rt_err;
+        CHECK(capsid::bytecode::ext_round_trip(out, &rt_err));
+    }
+    // id 3 (kPassExtFuse4): 3 get_loc8s + get_array_el -> id 3, payload
+    // [leftover, object, index]; net +2.
+    {
+        Builder b;
+        b.op(199); b.op(4);  // get_loc8 4 (leftover)
+        b.op(199); b.op(5);  // get_loc8 5 (object)
+        b.op(199); b.op(6);  // get_loc8 6 (index)
+        b.op(70);            // get_array_el
+        b.op(41);            // return_undef
+        b.stack_size = 4;
+        b.finish(7);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassExtFuse4));
+        const std::uint8_t expected[] = {252, 3, 4, 5, 6, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // get_loc0_loc1 forms: the quickjs emitter coalesces get_loc(0)
+    // get_loc(1) into one 2-slot read, so `a[i]` with a=loc0, i=loc1
+    // is a 2-insn window. id 2 payload {0, 1}.
+    {
+        Builder b;
+        b.op(202);   // get_loc0_loc1
+        b.op(70);    // get_array_el
+        b.op(41);    // return_undef
+        b.stack_size = 2;
+        b.finish(6);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err,
+                                  capsid::bytecode::kPassExtFuse34));
+        const std::uint8_t expected[] = {252, 2, 0, 1, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // id 3 with a fused pair: [leftover loc][get_loc0_loc1][array] ->
+    // payload {leftover, 0, 1}.
+    {
+        Builder b;
+        b.op(199); b.op(4);  // get_loc8 4 (leftover)
+        b.op(202);           // get_loc0_loc1 (object, index)
+        b.op(70);            // get_array_el
+        b.op(41);            // return_undef
+        b.stack_size = 3;
+        b.finish(6);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassExtFuse4));
+        const std::uint8_t expected[] = {252, 3, 4, 0, 1, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // Mixed run: [get_loc0_loc1][get_loc8 5][array] is a 3-slot run ->
+    // id 3 payload {0, 1, 5}.
+    {
+        Builder b;
+        b.op(202);           // get_loc0_loc1 (leftover pair)
+        b.op(199); b.op(5);  // get_loc8 5 (index)
+        b.op(70);            // get_array_el
+        b.op(41);            // return_undef
+        b.stack_size = 3;
+        b.finish(6);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassExtFuse4));
+        const std::uint8_t expected[] = {252, 3, 0, 1, 5, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // Precedence: with both bits, the 4-insn window wins over the
+    // 3-insn prefix.
+    {
+        Builder b;
+        b.op(199); b.op(4);
+        b.op(199); b.op(5);
+        b.op(199); b.op(6);
+        b.op(70);
+        b.op(41);
+        b.stack_size = 4;
+        b.finish(7);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(
+            &code, &err, capsid::bytecode::kPassExtFuse34 |
+                             capsid::bytecode::kPassExtFuse4));
+        const std::uint8_t expected[] = {252, 3, 4, 5, 6, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // OFF (deployed kPassAll = 0x7f): byte-identical BC26 output.
+    {
+        Builder b;
+        b.op(199); b.op(4);
+        b.op(199); b.op(5);
+        b.op(70);
+        b.op(41);
+        b.stack_size = 3;
+        b.finish(6);
+        std::vector<std::uint8_t> out;
+        std::string err;
+        CHECK(capsid::bytecode::optimize(
+            b.buf, &out, capsid::bytecode::kPassAll, false, &err));
+        CHECK(out == b.buf);
+        CHECK(out[0] == 26);
+    }
+    // A jump strictly inside a window blocks fusion. Loop back-edge
+    // landing on the second get_loc8 of an id2 window (heights: entry
+    // h0 -> loc(h1) -> loc(h2) -> array(h1); the back-edge pops one,
+    // landing at h1, consistent with the fallthrough).
+    {
+        Builder b;
+        b.op(199); b.op(4);       // get_loc8 4  (window start)
+        b.op(199); b.op(5);       // get_loc8 5  (loop target, mid-window)
+        b.op(70);                 // get_array_el
+        b.op(14);                 // drop
+        b.op(10);                 // push_true
+        b.op(10);                 // push_true
+        b.op(241); b.op(0xF9);    // if_true8 -7 -> index 1
+        b.op(41);                 // return_undef
+        b.stack_size = 2;
+        b.finish(6);
+        std::vector<std::uint8_t> out;
+        std::string err;
+        CHECK(capsid::bytecode::optimize(
+            b.buf, &out, capsid::bytecode::kPassExtFuse34 |
+                             capsid::bytecode::kPassExtFuse4, false, &err));
+        if (out != b.buf) {
+            std::fprintf(stderr, "  in:  ");
+            for (std::size_t k = 0; k < b.buf.size(); k++)
+                std::fprintf(stderr, "%02x ", b.buf[k]);
+            std::fprintf(stderr, "\n  out: ");
+            for (std::size_t k = 0; k < out.size(); k++)
+                std::fprintf(stderr, "%02x ", out[k]);
+            std::fprintf(stderr, "\n  err: %s\n", err.c_str());
+        }
+        CHECK(out == b.buf);
+        CHECK(out[0] == 26);
+    }
+    // A target at the window start is allowed and fuses: the loop
+    // back-edge lands on the fused ext, whose behavior is identical to
+    // the window's at any height.
+    {
+        Builder b;
+        b.op(199); b.op(4);       // get_loc8 4  (window start, loop target)
+        b.op(199); b.op(5);       // get_loc8 5
+        b.op(70);                 // get_array_el
+        b.op(14);                 // drop
+        b.op(10);                 // push_true
+        b.op(241); b.op(0xF8);    // if_true8 -8 -> index 0
+        b.op(41);                 // return_undef
+        b.stack_size = 2;
+        b.finish(6);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(
+            &code, &err, capsid::bytecode::kPassExtFuse34 |
+                             capsid::bytecode::kPassExtFuse4));
+        const std::uint8_t expected[] = {252, 2, 4, 5, 14, 10, 241, 0xF9, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // Determinism: the same input optimizes byte-identically twice.
+    {
+        Builder b;
+        b.op(199); b.op(4);
+        b.op(199); b.op(5);
+        b.op(70);
+        b.op(41);
+        b.stack_size = 3;
+        b.finish(6);
+        std::vector<std::uint8_t> o1, o2;
+        std::string e1, e2;
+        CHECK(capsid::bytecode::optimize(
+            b.buf, &o1, capsid::bytecode::kPassExtFuse34, false, &e1));
+        CHECK(capsid::bytecode::optimize(
+            b.buf, &o2, capsid::bytecode::kPassExtFuse34, false, &e2));
+        CHECK(o1 == o2);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Part B: full round-trip through the real runtime.
 // ---------------------------------------------------------------------------
 
@@ -2017,6 +2248,81 @@ void test_roundtrip_exception_lines() {
     JS_FreeRuntime(rt);
 }
 
+// R1 ext semantics: f's body is an id2 window (get_loc a; get_loc i;
+// get_array_el), g's an id3 window (get_loc k; get_loc a; get_loc i;
+// get_array_el). With 0xffffffff both bits are on, so the optimized run
+// executes the ext handlers; every branch — fast path, non-int index
+// slow path, fast miss, leftover form, and the null exception — must
+// agree with the unoptimized control run.
+void test_ext34_semantics() {
+    JSRuntime* rt = JS_NewRuntime();
+    CHECK(rt != nullptr);
+    JSContext* ctx = JS_NewContext(rt);
+    CHECK(ctx != nullptr);
+    if (ctx == nullptr) return;
+
+    const char* src =
+        "function f(a, i) { return a[i]; }\n"
+        "function g(a, i) { const k = 7; return k + a[i]; }\n"
+        "let s = '';\n"
+        "s += f([1, 2, 3], 1) + ',';\n"   // id2 fast path
+        "s += f([1, 2, 3], 5) + ',';\n"   // id2 fast miss -> undefined
+        "s += f({ x: 9 }, 'x') + ',';\n"  // id2 non-int index slow path
+        "s += f([1, 2, 3], '1') + ',';\n" // id2 coerced slow path
+        "s += g([10, 20], 1) + ',';\n"    // id3 fast path
+        "s += g({ x: 5 }, 'x') + ',';\n"  // id3 slow path
+        "s += g([10, 20], 9) + ',';\n"    // id3 miss -> 7 + undefined
+        "try { f(null, 0); s += 'no-throw'; }\n"
+        "catch (e) { s += e.name + ':' + e.message; }\n"
+        "globalThis.__r = s;\n";
+    RtResult base = run_roundtrip(ctx, src, "ext34.js", false);
+    RtResult opt = run_roundtrip(ctx, src, "ext34.js", true);
+    CHECK(base.ok);
+    CHECK(opt.ok);
+    // Prove the optimized run really executed the ext handlers: the
+    // real compiler output must have fused and therefore emit BC27
+    // (the round trip above would have failed otherwise — the BC27
+    // reader is the only path that accepts it).
+    {
+        JSValue module = JS_Eval(ctx, src, std::strlen(src), "ext34.js",
+                                 JS_EVAL_TYPE_MODULE |
+                                     JS_EVAL_FLAG_COMPILE_ONLY);
+        CHECK(!JS_IsException(module));
+        if (!JS_IsException(module)) {
+            std::size_t size = 0;
+            std::uint8_t* data = JS_WriteObject(
+                ctx, &size, module, JS_WRITE_OBJ_BYTECODE);
+            JS_FreeValue(ctx, module);
+            CHECK(data != nullptr);
+            if (data != nullptr) {
+                std::vector<std::uint8_t> buf(data, data + size);
+                js_free(ctx, data);
+                std::vector<std::uint8_t> opt2;
+                std::string err;
+                bool ok2 = capsid::bytecode::optimize(buf, &opt2, 0xffffffffu,
+                                                      false, &err);
+                if (!ok2 || opt2[0] != 27) {
+                    std::fprintf(stderr, "  optimize ok=%d err=%s\n", ok2,
+                                 err.c_str());
+                    std::fprintf(stderr, "  raw: ");
+                    for (std::size_t k = 0; k < size && k < 260; k++)
+                        std::fprintf(stderr, "%02x ", buf[k]);
+                    std::fprintf(stderr, "\n");
+                }
+                CHECK(ok2);
+                CHECK(opt2[0] == 27);  // BC_VERSION_EXT
+            }
+        }
+    }
+    CHECK(base.value == opt.value);
+    if (base.value != opt.value) {
+        std::fprintf(stderr, "  base: %s\n  opt:  %s\n",
+                     base.value.c_str(), opt.value.c_str());
+    }
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+
 }  // namespace
 
 int main() {
@@ -2038,6 +2344,8 @@ int main() {
     test_p14_semantics();
     test_p11_semantics();
     test_roundtrip_exception_lines();
+    test_ext34_fusion_goldens();
+    test_ext34_semantics();
     if (g_failures != 0) {
         std::fprintf(stderr, "test_bytecode_optimizer: %d failure(s)\n",
                      g_failures);
