@@ -1,8 +1,11 @@
 // F0 ext foundation gate. R0's single-op array specialization regressed the
 // paired benchmark and is retired: ext id 1 is a permanent size-zero hole.
-// Until a profile-weighted multi-instruction template clears the evidence
-// gates, the only canonical output is BC26 and every BC27 input fails closed.
-// This test locks that reserved-id policy plus the production BC26-only gate.
+// The R1 fusion templates (ids 2/3, loc-read + get_array_el) are kept
+// behind pass bits outside the deployed mask, so the only canonical
+// product output remains BC26; a BC27 input is accepted only for the
+// known ids 2/3 (with their exact payload sizes) and fails closed
+// otherwise. This test locks the reserved-id policy (0 and 1), the
+// unknown-id rejection, and the production BC26-only gate.
 
 #include "bytecode_optimizer/bytecode_optimizer.h"
 #include "bytecode_optimizer/ir/cfg.h"
@@ -166,12 +169,15 @@ void test_a3_bc27_reserved_r0_id() {
 }
 
 // a4: BC27 with an unknown ext id fails closed at the reader.
+// Id 2 is now a valid R1 template, so the unknown-id example must use a
+// genuinely unknown id (4) — a stale pick here would silently assert
+// that a kept template is invalid.
 void test_a4_bc27_unknown_id() {
-    const std::vector<std::uint8_t> code = {252, 2, 186, 41};
+    const std::vector<std::uint8_t> code = {252, 4, 186, 41};
     std::string err;
     ir::ExtRoundTripReport rep;
     CHECK(!ext_blob(code, 1, 27, &rep, &err));
-    CHECK(err.find("invalid ext id 2") != std::string::npos);
+    CHECK(err.find("invalid ext id 4") != std::string::npos);
 }
 
 // a5: ext id 0 is the reserved invalid id — rejected.
