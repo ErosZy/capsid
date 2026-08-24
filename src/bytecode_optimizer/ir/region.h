@@ -1,7 +1,7 @@
 // I2 region census (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
 // §4): matches candidate fusion regions on the SSA form and reports
-// weighted coverage, guard requirements, slow-path duplication, and
-// predicted cost to stderr. Analyze-only — nothing is emitted and the
+// static and dynamic-profile-weighted coverage, guard requirements,
+// slow-path duplication, and predicted cost. Analyze-only — nothing is emitted and the
 // production pipeline never calls this. The census's job is to answer
 // "which templates, on this corpus, justify the cost of a guarded
 // region" before any lowering work; it selects at most two first
@@ -10,7 +10,9 @@
 // Region rules (§4.3): single-basic-block, maximum eight original
 // instructions, never crossing a call, an unknown heap effect, an
 // exception handler boundary, a suspension, a backedge, or a
-// safepoint. The matched chain is a maximal run of template-matching
+// safepoint. A candidate contains at least two original operations; a
+// single heavy opcode belongs to quickening/IC, not OP_ext fusion. The
+// matched chain is a maximal run of template-matching
 // SSA nodes; the fast body is the chain, the slow path is the
 // original sequence retained verbatim (its byte size is the
 // duplication cost).
@@ -64,6 +66,20 @@ struct RegionCandidate {
     int64_t predicted;   // §4.1 score, dispatch-equivalent units
 };
 
+// Exact dynamic execution evidence for a serialized function/site. Function
+// ids are the preorder indices used by read_functions; pc is the original
+// bytecode offset. A region's execution weight is the minimum count of its
+// member sites (the conservative path bottleneck).
+struct RegionSiteExecution {
+    uint32_t function;
+    uint32_t pc;
+    uint64_t executions;
+};
+
+struct RegionExecutionProfile {
+    std::vector<RegionSiteExecution> sites;
+};
+
 // Aggregate census over one bundle. Per-template totals plus the
 // selection. The reject counters follow the ssa_round_trip contract:
 // functions the pipeline cannot analyze are reported, never skipped.
@@ -76,6 +92,14 @@ struct RegionCensusReport {
     uint64_t slow_bytes[static_cast<size_t>(Template::COUNT)];
     int64_t predicted_total[static_cast<size_t>(Template::COUNT)];
     int64_t predicted_best[static_cast<size_t>(Template::COUNT)];
+    // Dynamic totals are zero for the legacy static entry point. They count
+    // actual region executions, covered instruction executions, and weighted
+    // predicted benefit from an exact-site RegionExecutionProfile.
+    uint64_t dynamic_candidates[static_cast<size_t>(Template::COUNT)];
+    uint64_t dynamic_insns_covered[static_cast<size_t>(Template::COUNT)];
+    int64_t dynamic_predicted_total[static_cast<size_t>(Template::COUNT)];
+    uint64_t missing_profile_sites;
+    bool has_dynamic_profile;
     // The at-most-two selection, in order; Template::COUNT = none.
     Template first_templates[2];
     uint64_t first_candidates[2];
@@ -90,6 +114,16 @@ bool region_round_trip(const uint8_t* data,
                        size_t size,
                        RegionCensusReport* out,
                        std::string* error);
+
+// Dynamic decision entry point. Static candidates are still reported, but
+// template selection uses dynamic_predicted_total. A member missing from the
+// supplied exact-site profile gives that region weight zero and increments
+// missing_profile_sites; evidence never silently falls back to static counts.
+bool region_round_trip_profiled(const uint8_t* data,
+                                size_t size,
+                                const RegionExecutionProfile& profile,
+                                RegionCensusReport* out,
+                                std::string* error);
 
 }  // namespace ir
 }  // namespace bytecode

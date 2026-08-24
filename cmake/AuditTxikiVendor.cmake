@@ -3,7 +3,7 @@
 # This audit verifies:
 #   1. Vendor checkout is clean (no untracked or modified files).
 #   2. Vendor HEAD matches the expected tag (if configured).
-#   3. All 39 patches apply in sequence to a fresh vendor copy, using the
+#   3. All 45 patches apply in sequence to a fresh vendor copy, using the
 #      same tool and flags as the build (git apply -p1 --ignore-whitespace
 #      — PrepareTxiki.cmake).
 #   4. The overlay stamp matches the key computed from the shared function.
@@ -156,11 +156,14 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # probe for per-token reclaim decisions; 0035 fixes libwebsockets cookie
 # attribute indices so Secure/HttpOnly cannot overwrite the name/value.
 # Arbitrary parked Promise reactions are deliberately not a completion signal.
-# 0039 S0 shape-guard A/B backends; 0040 S1 SHADOW IC sidecars (both
-# compile-gated measurement backends, OFF by default — zero tax).
-if(NOT CAPSID_PATCH_COUNT EQUAL 41)
+# 0039 S0 shape-guard A/B backends; 0040 S1 SHADOW IC sidecars; 0041
+# exact-PC monomorphic get_field quickening and retired ext-id reservation;
+# 0042 adds source provenance to the diagnostic opcode profile; 0043 keeps
+# mixed int/float multiplication on the numeric interpreter fast path; 0044
+# preserves the reader's pending-exception contract for rejected ext forms.
+if(NOT CAPSID_PATCH_COUNT EQUAL 45)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 41 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 45 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------

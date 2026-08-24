@@ -4,7 +4,7 @@
 // This is the reproducible re-run of the Step 0 ceiling measurement on
 // the committed fixture set.
 //
-// Usage: analyze <in.qjsb>
+// Usage: analyze [--regions] <in.qjsb>
 #include "bytecode_optimizer/bytecode_optimizer.h"
 
 #include <cstdio>
@@ -12,13 +12,15 @@
 #include <vector>
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::fprintf(stderr, "usage: %s <in.qjsb>\n", argv[0]);
+    const bool regions = argc == 3 && std::string(argv[1]) == "--regions";
+    if ((!regions && argc != 2) || (regions && argc != 3)) {
+        std::fprintf(stderr, "usage: %s [--regions] <in.qjsb>\n", argv[0]);
         return 2;
     }
-    FILE* f = std::fopen(argv[1], "rb");
+    const char* input = argv[regions ? 2 : 1];
+    FILE* f = std::fopen(input, "rb");
     if (!f) {
-        std::fprintf(stderr, "cannot open: %s\n", argv[1]);
+        std::fprintf(stderr, "cannot open: %s\n", input);
         return 2;
     }
     std::fseek(f, 0, SEEK_END);
@@ -31,7 +33,9 @@ int main(int argc, char** argv) {
     }
     std::fclose(f);
     std::string error;
-    if (!capsid::bytecode::analyze_only(buf, &error)) {
+    const bool ok = regions ? capsid::bytecode::region_census(buf, &error)
+                            : capsid::bytecode::analyze_only(buf, &error);
+    if (!ok) {
         std::fprintf(stderr, "%s\n", error.c_str());
         return 1;
     }

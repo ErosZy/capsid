@@ -247,8 +247,6 @@ if(BUILD_TESTING)
                 CXX_STANDARD 20
                 CXX_STANDARD_REQUIRED ON
                 CXX_EXTENSIONS OFF)
-            # R0: the test TU sees CAPSID_AOT_EMIT_EXT via the library's
-            # INTERFACE compile definitions (same kPassAll as the lib).
             if(CAPSID_STRICT_WARNINGS)
                 if(MSVC)
                     target_compile_options(
@@ -370,15 +368,10 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_regions PROPERTIES TIMEOUT 120)
 
-            # F0 ext foundation (tier-3 plan §2/§4.4): the BC27 dual
-            # reader, table-generated OP_ext decode (sizes + stack
-            # effects from quickjs-ext-opcode.h), the reader's ext
-            # policy (BC26 rejects OP_ext; BC27 must be canonical),
-            # CFG/identity round trips on BC27 bundles, the production
-            # BC26-only gates, and the malformed-input matrix (unknown
-            # ext ids, id 0, truncation, noncanonical BC27, recursive
-            # prefixes). Analyze-only — the test asserts acceptance and
-            # fail-closed behavior, never emissions.
+            # Retained BC27/OP_ext foundation: production remains BC26-only;
+            # the retired R0 id 1 is a permanent hole, so all current BC27
+            # input must fail closed until a multi-instruction template
+            # clears the profile-weighted evidence gates.
             add_executable(
                 test-ext-round-trip
                 tests/bytecode_optimizer/test_ext_round_trip.cc)
@@ -446,9 +439,9 @@ if(BUILD_TESTING)
             endif()
 
             if(CAPSID_ENABLE_SHAPE_GUARD_IC)
-                # S1 measurement gate (§5.2/§5.2.1): drives the SHADOW IC
-                # through the locality microcases and hit-rate/memory
-                # adjudication. The IC guards are ID32 shape ids.
+                # Exact-PC SHADOW/adaptive field-IC gate: locality, state
+                # transitions, quicken/dequicken, fallback semantics, and
+                # serialization canonicalization. Guards are ID32 shape ids.
                 add_executable(
                     test-shadow-ic
                     tests/test_shadow_ic.cc)
@@ -4863,10 +4856,9 @@ if(BUILD_TESTING)
         )
         set_tests_properties(tjs_shared_loop PROPERTIES TIMEOUT 20)
 
-        # E0 §2 directed tests for the BC27/OP_ext runtime foundation
-        # (0037-capsid-ext-foundation + 0038-capsid-ext-get-array-el).
-        # RED: fails on a patchless runtime (BC27 is rejected as an
-        # unsupported bytecode version).
+        # Directed BC27/OP_ext foundation tests. Patch 0041 retires the R0
+        # array handler and permanently reserves id 1, so only fail-closed
+        # BC27 behavior is valid until a new catalog entry is approved.
         add_executable(
             test-ext-bytecode
             tests/test_ext_bytecode.cc
@@ -5510,5 +5502,49 @@ if(BUILD_TESTING)
                 $<TARGET_FILE:test-stubborn-worker>
         )
         set_tests_properties(worker_timeout_drain PROPERTIES TIMEOUT 20)
+    endif()
+
+    # These evidence tests depend on the worker-side QuickJS runtime, not on
+    # the host coordinator. Keep them visible in the Host=OFF profiling build.
+    if(CAPSID_BUILD_WORKER)
+        # Runtime exact-PC evidence is first aggregated into adjacent
+        # 2..8-opcode patterns. The coordinates remain runtime-local; only the
+        # pattern is allowed to reach the static CFG+SSA census, which must
+        # re-prove effects, ownership, and boundaries.
+        find_program(
+            CAPSID_PROFILE_PYTHON_EXECUTABLE
+            NAMES python3 python REQUIRED)
+        add_test(
+            NAME bytecode_profile_sequences
+            COMMAND "${CAPSID_PROFILE_PYTHON_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_profile_sequences.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(
+            bytecode_profile_sequences PROPERTIES TIMEOUT 30)
+
+        if(CAPSID_ENABLE_OPCODE_PROFILE)
+            add_executable(
+                test-opcode-profile
+                tests/test_opcode_profile.cc)
+            target_link_libraries(test-opcode-profile PRIVATE tjs)
+            target_compile_definitions(
+                test-opcode-profile PRIVATE CONFIG_OPCODE_PROFILE=1)
+            set_target_properties(
+                test-opcode-profile PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-opcode-profile PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-opcode-profile PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(NAME bytecode_opcode_profile COMMAND test-opcode-profile)
+            set_tests_properties(bytecode_opcode_profile PROPERTIES TIMEOUT 120)
+        endif()
     endif()
 endif()

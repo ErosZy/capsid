@@ -136,6 +136,33 @@ static const uint64_t kPoisonGraceNs = 100 * 1000000ull;  // 100ms
 // treated as a detached continuation and the worker poisons.
 static const uint64_t kReclaimSettleWindowNs = 2 * 1000000000ull;  // 2s
 
+#ifdef CAPSID_SHAPE_GUARD_IC
+// Compile-gated measurement control. Production builds do not contain this
+// environment surface; an IC experiment build remains OFF unless the runner
+// explicitly requests SHADOW or ADAPTIVE.
+bool configure_shape_ic(JSContext *ctx, std::string *error) {
+    const char *mode = std::getenv("CAPSID_SHAPE_IC_MODE");
+    JSICMode selected = JS_IC_MODE_OFF;
+    if (mode == NULL || mode[0] == '\0' || std::strcmp(mode, "off") == 0) {
+        selected = JS_IC_MODE_OFF;
+    } else if (std::strcmp(mode, "shadow") == 0) {
+        selected = JS_IC_MODE_SHADOW;
+    } else if (std::strcmp(mode, "adaptive") == 0) {
+        selected = JS_IC_MODE_ADAPTIVE;
+    } else {
+        *error = "CAPSID_SHAPE_IC_MODE must be off, shadow, or adaptive";
+        return false;
+    }
+    JS_ICSetMode(JS_GetRuntime(ctx), selected);
+    return JS_ICGetMode(JS_GetRuntime(ctx)) == selected;
+}
+
+bool shape_ic_report_enabled() {
+    const char *report = std::getenv("CAPSID_SHAPE_IC_REPORT");
+    return report != NULL && std::strcmp(report, "1") == 0;
+}
+#endif
+
 ssize_t write_socket(int fd, const uint8_t *data, size_t size) {
 #if defined(_WIN32)
     // Winsock send() takes the raw SOCKET handle, not the CRT fd.
@@ -843,6 +870,11 @@ public:
                 JS_DumpOpcodeProfile(stderr, JS_GetRuntime(ctx_));
             }
 #endif
+#ifdef CAPSID_SHAPE_GUARD_IC
+            if (ctx_ != NULL && shape_ic_report_enabled()) {
+                JS_DumpICShadowReport(stderr, JS_GetRuntime(ctx_));
+            }
+#endif
             TJS_FreeRuntime(runtime_);
             // §7.5: a poison exit can leave registry tokens behind — refs
             // held by parked JS continuations are never released, because
@@ -1018,6 +1050,15 @@ public:
         if (!runtime_ || !ctx_) {
             return 1;
         }
+#ifdef CAPSID_SHAPE_GUARD_IC
+        std::string shape_ic_error;
+        if (!configure_shape_ic(ctx_, &shape_ic_error)) {
+            send_error(0, std::string("shape IC setup failed: ") +
+                              shape_ic_error);
+            flush_blocking();
+            return 1;
+        }
+#endif
         JS_SetInterruptHandler(
             JS_GetRuntime(ctx_), interrupt_handler, this);
         JSJobContextHooks job_hooks;

@@ -229,9 +229,44 @@ struct Run {
     bool active;
 };
 
+bool site_execution(const RegionExecutionProfile* profile, uint32_t function,
+                    uint32_t pc, uint64_t* out) {
+    if (profile == NULL) return false;
+    for (size_t i = 0; i < profile->sites.size(); i++) {
+        const RegionSiteExecution& site = profile->sites[i];
+        if (site.function == function && site.pc == pc) {
+            *out = site.executions;
+            return true;
+        }
+    }
+    return false;
+}
+
+int64_t weighted_prediction(int64_t predicted, uint64_t executions) {
+    if (predicted == 0 || executions == 0) return 0;
+    if (predicted > 0 &&
+        executions > static_cast<uint64_t>(INT64_MAX / predicted)) {
+        return INT64_MAX;
+    }
+    if (predicted < 0 &&
+        executions > static_cast<uint64_t>(INT64_MAX / -predicted)) {
+        return INT64_MIN;
+    }
+    return predicted * static_cast<int64_t>(executions);
+}
+
+void saturating_add_u64(uint64_t* value, uint64_t add) {
+    if (add > UINT64_MAX - *value) {
+        *value = UINT64_MAX;
+    } else {
+        *value += add;
+    }
+}
+
 void flush_run(const Run& run, const SsaBlock& block,
+               uint32_t function, const RegionExecutionProfile* profile,
                RegionCensusReport* rep) {
-    if (!run.active) return;
+    if (!run.active || run.n_insns < 2) return;
     const SsaNode& first = block.nodes[run.first_node];
     const SsaNode& last = block.nodes[run.last_node];
     const uint32_t slow =
@@ -244,13 +279,52 @@ void flush_run(const Run& run, const SsaBlock& block,
     rep->slow_bytes[k] += slow;
     rep->predicted_total[k] += pred;
     if (pred > rep->predicted_best[k]) rep->predicted_best[k] = pred;
+    if (profile != NULL) {
+        uint64_t weight = UINT64_MAX;
+        for (uint32_t n = run.first_node; n <= run.last_node; n++) {
+            uint64_t executions = 0;
+            if (!site_execution(profile, function, block.nodes[n].old_off,
+                                &executions)) {
+                rep->missing_profile_sites++;
+                weight = 0;
+                break;
+            }
+            weight = std::min(weight, executions);
+        }
+        if (weight != UINT64_MAX) {
+            saturating_add_u64(&rep->dynamic_candidates[k], weight);
+            if (weight > UINT64_MAX / run.n_insns) {
+                rep->dynamic_insns_covered[k] = UINT64_MAX;
+            } else if (rep->dynamic_insns_covered[k] != UINT64_MAX) {
+                const uint64_t add = weight * run.n_insns;
+                if (add > UINT64_MAX - rep->dynamic_insns_covered[k]) {
+                    rep->dynamic_insns_covered[k] = UINT64_MAX;
+                } else {
+                    rep->dynamic_insns_covered[k] += add;
+                }
+            }
+            const int64_t add = weighted_prediction(pred, weight);
+            if (add == INT64_MAX ||
+                (add > 0 && rep->dynamic_predicted_total[k] >
+                                INT64_MAX - add)) {
+                rep->dynamic_predicted_total[k] = INT64_MAX;
+            } else if (add == INT64_MIN ||
+                       (add < 0 && rep->dynamic_predicted_total[k] <
+                                       INT64_MIN - add)) {
+                rep->dynamic_predicted_total[k] = INT64_MIN;
+            } else {
+                rep->dynamic_predicted_total[k] += add;
+            }
+        }
+    }
 }
 
 // Census one function: walk every SSA block, extend maximal runs of
 // same-template matching nodes, split at 8 original instructions.
 // Returns false only on an internal invariant break (fail-closed); the
 // caller counts the function as rejected coverage.
-bool census_function(const Cfg& cfg, const SsaFunc& ssa,
+bool census_function(const Cfg& cfg, const SsaFunc& ssa, uint32_t function,
+                     const RegionExecutionProfile* profile,
                      RegionCensusReport* rep, std::string* error) {
     for (size_t b = 0; b < ssa.blocks.size(); b++) {
         const SsaBlock& block = ssa.blocks[b];
@@ -272,12 +346,12 @@ bool census_function(const Cfg& cfg, const SsaFunc& ssa,
                 t = -1;
             }
             if (t < 0) {
-                flush_run(run, block, rep);
+                flush_run(run, block, function, profile, rep);
                 run.active = false;
                 continue;
             }
             if (!run.active || run.tmpl != static_cast<Template>(t)) {
-                flush_run(run, block, rep);
+                flush_run(run, block, function, profile, rep);
                 run.active = true;
                 run.tmpl = static_cast<Template>(t);
                 run.first_node = static_cast<uint32_t>(n);
@@ -286,11 +360,11 @@ bool census_function(const Cfg& cfg, const SsaFunc& ssa,
             run.last_node = static_cast<uint32_t>(n);
             run.n_insns++;
             if (run.n_insns == 8) {  // region rule: at most 8 originals
-                flush_run(run, block, rep);
+                flush_run(run, block, function, profile, rep);
                 run.active = false;
             }
         }
-        flush_run(run, block, rep);
+        flush_run(run, block, function, profile, rep);
     }
     return true;
 }
@@ -304,10 +378,11 @@ void count_function(const std::vector<FuncInfo>& funcs, uint64_t* count) {
 
 }  // namespace
 
-bool region_round_trip(const uint8_t* data,
-                       size_t size,
-                       RegionCensusReport* out,
-                       std::string* error) {
+static bool region_round_trip_impl(const uint8_t* data,
+                                   size_t size,
+                                   const RegionExecutionProfile* profile,
+                                   RegionCensusReport* out,
+                                   std::string* error) {
     std::vector<FuncInfo> functions;
     if (!read_functions(data, size, &functions, error)) return false;
     RegionCensusReport rep;
@@ -320,7 +395,12 @@ bool region_round_trip(const uint8_t* data,
         rep.slow_bytes[i] = 0;
         rep.predicted_total[i] = 0;
         rep.predicted_best[i] = INT64_MIN;
+        rep.dynamic_candidates[i] = 0;
+        rep.dynamic_insns_covered[i] = 0;
+        rep.dynamic_predicted_total[i] = 0;
     }
+    rep.missing_profile_sites = 0;
+    rep.has_dynamic_profile = profile != NULL;
     rep.first_templates[0] = Template::COUNT;
     rep.first_templates[1] = Template::COUNT;
     rep.first_candidates[0] = 0;
@@ -332,7 +412,10 @@ bool region_round_trip(const uint8_t* data,
     struct Walker {
         const uint8_t* data;
         RegionCensusReport* rep;
+        const RegionExecutionProfile* profile;
+        uint32_t next_function;
         bool run(const FuncInfo& fi, std::string* error) {
+            const uint32_t function = next_function++;
             std::vector<Insn> insns;
             if (!decode_function(data + fi.code_off, fi.code_len, data, fi,
                                  &insns, error,
@@ -370,7 +453,7 @@ bool region_round_trip(const uint8_t* data,
                 error->clear();
                 return true;
             }
-            if (!census_function(cfg, ssa, rep, error)) {
+            if (!census_function(cfg, ssa, function, profile, rep, error)) {
                 std::fprintf(stderr, "region: rejected (census): %s\n",
                              error->c_str());
                 rep->rejected_functions++;
@@ -387,11 +470,15 @@ bool region_round_trip(const uint8_t* data,
     Walker w;
     w.data = data;
     w.rep = &rep;
+    w.profile = profile;
+    w.next_function = 0;
     for (size_t i = 0; i < functions.size(); i++) {
         if (!w.run(functions[i], error)) return false;
     }
 
-    // Select the at-most-two first templates by predicted cost
+    // Select the at-most-two first templates by predicted cost. With exact
+    // dynamic evidence, selection is based only on weighted benefit; missing
+    // site evidence never falls back to static counts.
     // (ties: insns_covered desc, then template id asc). Only templates
     // with at least one candidate are selectable; empty slots stay
     // Template::COUNT ("none").
@@ -402,25 +489,55 @@ bool region_round_trip(const uint8_t* data,
         }
         std::sort(order, order + static_cast<int>(Template::COUNT),
                   [&rep](int a, int b) {
-                      const int64_t pa = rep.predicted_total[a];
-                      const int64_t pb = rep.predicted_total[b];
+                      const int64_t pa = rep.has_dynamic_profile
+                                             ? rep.dynamic_predicted_total[a]
+                                             : rep.predicted_total[a];
+                      const int64_t pb = rep.has_dynamic_profile
+                                             ? rep.dynamic_predicted_total[b]
+                                             : rep.predicted_total[b];
                       if (pa != pb) return pa > pb;
-                      if (rep.insns_covered[a] != rep.insns_covered[b]) {
-                          return rep.insns_covered[a] > rep.insns_covered[b];
+                      const uint64_t ia = rep.has_dynamic_profile
+                                              ? rep.dynamic_insns_covered[a]
+                                              : rep.insns_covered[a];
+                      const uint64_t ib = rep.has_dynamic_profile
+                                              ? rep.dynamic_insns_covered[b]
+                                              : rep.insns_covered[b];
+                      if (ia != ib) {
+                          return ia > ib;
                       }
                       return a < b;
                   });
         for (int k = 0; k < 2; k++) {
             const int t = order[k];
-            if (rep.candidates[t] == 0) break;
+            const int64_t score = rep.has_dynamic_profile
+                                      ? rep.dynamic_predicted_total[t]
+                                      : rep.predicted_total[t];
+            if (rep.candidates[t] == 0 || score <= 0) break;
             rep.first_templates[k] = static_cast<Template>(t);
-            rep.first_candidates[k] = rep.candidates[t];
-            rep.first_predicted[k] = rep.predicted_total[t];
+            rep.first_candidates[k] = rep.has_dynamic_profile
+                                          ? rep.dynamic_candidates[t]
+                                          : rep.candidates[t];
+            rep.first_predicted[k] = score;
         }
     }
 
     *out = rep;
     return true;
+}
+
+bool region_round_trip(const uint8_t* data,
+                       size_t size,
+                       RegionCensusReport* out,
+                       std::string* error) {
+    return region_round_trip_impl(data, size, NULL, out, error);
+}
+
+bool region_round_trip_profiled(const uint8_t* data,
+                                size_t size,
+                                const RegionExecutionProfile& profile,
+                                RegionCensusReport* out,
+                                std::string* error) {
+    return region_round_trip_impl(data, size, &profile, out, error);
 }
 
 }  // namespace ir

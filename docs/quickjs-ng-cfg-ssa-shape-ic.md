@@ -1,12 +1,15 @@
 # QuickJS-ng CFG+SSA, Shape IC, and Extended Opcode Plan
 
-> Status: active successor plan, product decision 2026-08-24. The completed
-> bytecode-only profiling and specialization phase remains the evidence base in
-> [QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md). This
-> plan authorizes BC27/`OP_ext`, a new full-stack CFG+SSA IR, shape feedback,
-> bounded inline caches, GC integration when required, guarded region fusion,
-> and runtime quickening. Authorization is broad; every candidate still has to
-> pass the correctness, memory, rollback, and measured-benefit gates below.
+> Status: implementation re-audited 2026-08-24. Sections 2–15 retain the
+> original design and measurement record; section 16 is the authoritative
+> current state. R0 is retired after a −12.69% target regression, product AOT
+> emits BC26 only, and ext id 1 is permanently reserved. Source-attributed
+> exact-PC profile v3,
+> a compile-gated monomorphic `get_field` runtime quickening experiment, and a
+> profile-weighted multi-instruction region decision layer are implemented.
+> The repaired IC is stopped after its direct PATCHLESS comparison showed a
+> significant fresh-receiver regression and no mono/Hono win. It remains
+> compile-gated/default OFF; no ext handler is emitted in production.
 
 ## 1. Decision, Evidence, and Target
 
@@ -17,12 +20,16 @@ changes the lowering target and cost model:
 
 ```text
 canonical BC26 after kPassAll
-  -> lossless CFG
-  -> operand-stack + local SSA
-  -> type, effect, ownership, shape, and profile facts
-  -> guarded region selection
-  -> BC27 OP_ext superinstructions + retained generic slow paths
-  -> ext-aware verifier, pc2line remap, serializer, and dual-version reader
+  -> lossless CFG + operand-stack/local SSA (analyze only)
+  -> sound type/effect facts + exact-site execution evidence
+  -> multi-instruction region census and dynamic cost ranking
+  -> no emission until a region clears the paired A/B gate
+
+runtime get_field (compile-gated experiment)
+  -> exact-PC training after the function is hot
+  -> same-size runtime-only monomorphic opcode 253
+  -> generic fallback and observation-free parking on an 8-miss streak
+  -> canonical get_field when serialized
 ```
 
 The measured reasons to proceed are:
@@ -1115,7 +1122,7 @@ verified, and A/B'd exactly as specced (§10 item 9); the paired measurement
 rejects the template's premise on this runtime. Full evidence below, per the
 tier-3 "measure first, decide later" discipline.
 
-### 15.1 Deliverables (§10 item 9)
+### 15.1 Historical deliverables at measurement time (§10 item 9)
 
 - **Optimizer emission** (commit `3be7c0b`): `kPassExtFastArrayGet = 1u<<7`
   converts every `get_array_el` of the final stream to `OP_ext` +
@@ -1273,15 +1280,279 @@ density in hot loops (−12.7% at 6 high-density sites, −2.0% self-score at
 binaries), which is exactly the signature of a per-execution dispatch tax,
 not of fixture noise.
 
-What R0 leaves behind (positive infrastructure, validated end-to-end):
-the BC27 contract (version outside the checksummed range, canonicality,
-dual reader, fail-closed re-entry), the ext emission path, and the paired
-A/B tooling — all reusable for any future ext template.
+What R0 leaves behind is the versioned ext foundation, fail-closed reader,
+and paired A/B tooling. The R0 emitter and handler themselves are retired in
+§16.1.
 
-**R1/R2 implications**: a guarded serve of the same fast path (SHADOW MONO,
-§10 items 10-11) shares R0's fate — a guard pays dispatch overhead to serve
-work the generic already does for free. Any future template must do
-something the generic path does not (eliminate checks the generic cannot,
-serve shapes its fast path misses, or cut a cost beyond the entry), and must
-re-run this paired A/B before acceptance. Recommendation: do not proceed to
-R1/R2 in their planned form.
+**R1/R2 implications**: do not quicken the array operation to another copy of
+its existing fast path. A field IC remains a distinct experiment because a
+validated shape+offset hit can bypass property lookup; it still must prove
+that its guard, sidecar, and miss costs are worthwhile in uninstrumented A/B.
+
+## 16. Re-audit Implementation Record (2026-08-24)
+
+This section supersedes the implementation-status claims in sections 2–15.
+The earlier design and R0 measurements remain useful evidence, but they no
+longer describe what the branch emits or serves.
+
+### 16.1 R0 cleanup and wire policy
+
+- `kPassExtFastArrayGet`, `CAPSID_AOT_EMIT_EXT`, blanket `get_array_el`
+  rewriting, and the runtime array-ext handler have been removed.
+- The product optimizer accepts and emits canonical BC26 only. BC26 rejects
+  `OP_ext`; with no live ext catalog entry, every current BC27 input also
+  fails closed.
+- `OP_ext` remains byte 252 as future multi-instruction infrastructure. Ext
+  id 1 is a size-zero `reserved_array_get_r0` hole and must never be reused;
+  archived R0 bytecode can therefore never acquire a new meaning.
+- Opcode 253 is `get_field_ic`, an in-memory interpreter opcode only. Bytes
+  254 and 255 remain invalid. The bytecode reader rejects opcode 253, and the
+  writer converts a quickened site back to ordinary `get_field` plus its atom
+  on a copied serialization buffer. Runtime cache state, shape ids, and
+  sidecar indexes never enter the wire format.
+
+Overlay patch `0041-capsid-direct-field-ic.patch` applies these rules. Patch
+`0042-capsid-opcode-profile-source.patch` adds diagnostic source provenance;
+the resulting 43-patch overlay is locked to key
+`1064f0cdb59a96de8c178709963cd9522be72de1111c39d58be55a4b3088aba8`
+and manifest
+`1dd19a9279e655763a88f3842bc0510e680edea3dacdd469d9a9219fbaa215c4`.
+
+### 16.2 Source-attributed exact-PC profile v3
+
+`CONFIG_OPCODE_PROFILE` now emits `quickjs-ng-opcode-profile-v3`. A bounded
+65,536-entry per-runtime table records runtime-local function id, exact original
+PC, opcode, source-filename hash, and saturating execution count for every
+observed instruction; overflow is explicit. Property sites additionally record
+the path actually taken:
+
+```text
+direct
+prototype_or_int_fallback
+missing_or_key_fallback
+accessor_or_generic
+primitive_or_nullish
+```
+
+The array classifier mirrors the side-effect-free dense-array class and bounds
+checks before the helper call, fixing v1's false conclusion that every
+`get_array_el` execution was slow. `bench/profile-aggregate.py` reads both
+archived v1/v2 and current v3 dumps, ranks true generic-path entries, and marks
+high-volume monomorphic `get_field` sites. The profiling build remains
+diagnostic; its timing is never product performance evidence.
+
+The v3 function id is deliberately runtime-local. Together with source
+provenance it is sufficient for within-run hotspot ranking and IC eligibility,
+but it is not yet a stable PGO
+bundle key. A future offline emitter must bind the observation to bundle hash
++ function cpool path + PC and reject missing or ambiguous mappings. It must
+not assume that v3 runtime function ids equal serialized preorder indexes.
+
+This provenance field was added after an unfiltered dynamic census ranked
+`get_loc_check > get_loc_check > get_length > lt` as a 4%–9% dispatch
+opportunity even though the same template had zero static application
+occurrences in three framework bundles and only two in a fourth. A minimal app
+reproduced 77,872 dynamic executions while its application bundle had zero
+static occurrences, proving that bootstrap bytecode dominated the ranking.
+Source-filtered sequence selection now excludes such rows rather than treating
+runtime-wide heat as an application AOT opportunity.
+
+### 16.3 Monomorphic own-data field IC
+
+When `CONFIG_SHAPE_GUARD_IC` and ID32 shape guards are compiled in, the
+runtime exposes OFF, SHADOW, and ADAPTIVE modes. Production defaults to OFF.
+The implementation has these bounded semantics:
+
+- at most eight exact-PC sites per function and 64 KiB of sidecars per
+  runtime; allocation failure or budget exhaustion denies the function;
+- only canonical `get_field` participates; arrays, put operations, accessors,
+  prototypes, primitives, proxies/exotics, and polymorphic serving remain on
+  the generic path;
+- after the function reaches 128 executions, two consecutive hits for the
+  same shape and own data-property offset replace the five-byte `get_field`
+  instruction with same-size opcode 253 plus a sidecar id;
+- a direct hit revalidates object tag, shape ID, offset bounds, and property
+  flags before duplicating the value. Stable hits perform no policy/counter
+  writes; the first hit after a miss only clears the consecutive-miss streak;
+- a miss enters the shared generic `get_field` handler with the original atom.
+  Eight consecutive misses park the runtime opcode in a terminal state; later
+  executions use the generic handler without calling the observer or writing
+  replacement-policy counters;
+- changing away from ADAPTIVE or freeing the bytecode restores all quickened
+  instructions before atom walking. Snapshot/serialization always produces
+  canonical, cache-free bytecode.
+
+Directed tests cover exact-PC separation, mono training, accessor and shape
+misses, quicken/dequicken, OFF restoration, budget bounds, and serialization
+into a fresh OFF runtime. This proves semantics and rollback. The subsequent
+O3 + `NDEBUG` + LTO paired A/B rejected enabling this implementation; see
+§16.5 and the maintained performance record.
+
+### 16.4 CFG+SSA multi-instruction decision layer
+
+The SSA lattice is now conservative around JavaScript numeric semantics:
+constant int overflow becomes `FLOAT64`; unproven int add/sub/mul produces
+`NUMBER`; division/mod/pow remain numeric; unsigned shift is not claimed as
+`INT32`; and BigInt-capable bitwise operators produce `INT32` only when their
+operands are proven Numbers. This closes the earlier unsound routes from an
+int-looking input to an overflowed JavaScript number and from an unknown input
+to a normal BigInt result.
+
+Region selection no longer treats a single expensive opcode as fusion. A
+candidate contains at least two same-block operations, never crosses a call,
+safepoint, suspension, handler boundary, or unmatched effect, and is capped at
+eight original instructions. With `RegionExecutionProfile`, its dynamic
+weight is the minimum exact-site execution count across all member
+instructions. Any missing member site gives the region zero dynamic weight;
+there is no static fallback that could invent a hot region. Selection ranks
+the saturated product of per-execution savings and dynamic executions, and
+keeps at most two positive templates.
+
+This is intentionally analyze-only. The next ext candidate must first provide
+a stable profile-to-bundle mapping, demonstrate that it removes multiple
+dispatches or shares a guard unavailable to the generic handler, then pass
+the same correctness, byte-size, memory, and interleaved paired A/B gates that
+rejected R0. Until then, zero candidates and zero BC27 emission are valid and
+preferred outcomes.
+
+### 16.5 Direct field IC paired A/B verdict
+
+Seven balanced OFF/ADAPTIVE pairs with the same optimized worker produced:
+
+| case | ADAPTIVE gain, paired 95% CI | sign | site result |
+| --- | ---: | ---: | ---: |
+| module-lifetime exact receiver | +2.82% [+2.16%, +3.49%] | 7/7 wins | 3 quickened, 0 restored |
+| fresh receiver per request | -18.98% [-29.11%, -7.39%] | 0/7 wins | 3 quickened, 3 restored |
+| sequential Hono JSON | -0.63% [-2.05%, +0.82%] | 2/7 wins | 32 quickened, 9 restored |
+
+The same-binary host + two-worker Hono screen gave QPS centers of +2.56% for
+JSON, +0.80% for static bytes 4k, and -3.86% for stream 4k; every interval
+crossed zero and their geometric-mean center was -0.20%. Each adaptive worker
+used 47,956 bytes of the 64 KiB cap and quickened 153 sites, of which 111/112
+were restored. A same-source PATCHLESS versus feature-built OFF comparison
+measured a +1.92% [+0.72%, +3.14%] latency tax on the monomorphic property
+fixture, so the apparently ideal +2.82% win is not a sufficient product win.
+Correctness was clean throughout.
+
+The directed regression exposed a missing terminal fast exit. Once the direct
+opcode reached eight misses, the old path restored `get_field`, but its generic
+hook continued to invoke `js_ic_observe` and write terminal counters forever.
+The repaired path parks opcode 253 and jumps into the shared generic handler
+with observation disabled. A regression test performs another 100,000
+terminal accesses and proves observations, misses, dequickens, and
+megamorphic transitions remain fixed. All directed correctness, serialization,
+round-trip, differential, and overlay tests pass.
+
+The repaired same-binary screen used 21 balanced pairs:
+
+| case | ADAPTIVE gain, paired 95% CI | sign | site result |
+| --- | ---: | ---: | ---: |
+| module-lifetime exact receiver | +1.40% [-1.83%, +4.73%] | 12/21 wins | 3 quickened, 0 parked |
+| fresh receiver per request | -2.77% [-6.96%, +1.62%] | 6/21 wins | 3 quickened, 3 parked |
+| sequential Hono JSON | -0.60% [-2.36%, +1.18%] | 9/21 wins | 32 quickened, 9 parked |
+
+The fresh loss shrank from -18.98% to -2.77%, so the terminal-observer defect
+was real and the repair worked. It still did not create a statistically clear
+same-binary win. The decisive 21-pair PATCHLESS-to-ADAPTIVE comparison uses
+latency change (positive means regression): fresh **+7.31%
+[+5.15%, +9.51%]**, Hono -0.94% [-2.84%, +0.99%], and mono -0.25%
+[-4.70%, +4.40%]. A separate PATCHLESS-to-feature-OFF attribution had centers
+of +3.48% fresh, -0.52% Hono, and +2.38% mono; those sessions are not
+subtracted, but the centers fail the +/-0.5% OFF gate.
+
+**Final decision: current R2 is stopped and remains compile-gated/default
+OFF.** Do not proceed to another terminal opcode, POLY2, prototype caching,
+put-field caching, a larger budget, or the full host/resource matrix. The
+repaired implementation has a correct terminal path but no product-level
+benefit: mono and Hono are neutral against PATCHLESS and fresh receivers
+regress significantly. A future IC design must remove observer/layout cost
+from the compiled-OFF generic handler and demonstrate its stable-site win
+directly against PATCHLESS before any cache expansion.
+
+Evidence is generated by `bench/field-ic-{ab,host-ab,off-tax}.sh`. The initial
+screen is retained under the timestamped `bench/results/field-ic-*20260824T16*/`
+directories. Repaired 21-pair evidence is in
+`field-ic-terminal-ab-20260824T165700-p21`,
+`field-ic-terminal-net-20260824T170000-p21`, and
+`field-ic-terminal-off-tax-20260824T170100-p21`, each with a manifest, raw
+samples, summary, and SHA-256 list.
+
+### 16.6 Cross-suite fusion census and rejected `get_arg0 + get_field`
+
+The source-attributed region census was extended beyond the original fixture
+and Hono-only inputs. Four production-shaped framework bundles (Hono, H3,
+itty-router, and Elysia) executed 256 warm-up plus 1,000 measured requests each.
+Source filtering excluded 79,369 foreign/bootstrap sites and left 5,191,010
+application instruction executions. No long, high-coverage sequence was common
+to all four applications. The leading common property pair was:
+
+| pattern | executions | programs | static occurrences | dispatch-only ceiling |
+| --- | ---: | ---: | ---: | ---: |
+| `get_arg0 > get_field` | 53,272 | 4/4 | 38 | 1.026% |
+| `get_loc8 > get_field` | 8,131 | 2/4 | — | 0.157% |
+| `get_field > get_field` | 17,584 | 2/4 | — | 0.339% |
+
+Kraken, Octane 2, and SunSpider were then used as an independent breadth
+check, not as product timing evidence. The checkouts were pinned at Kraken
+`77ef4e08af23c131166762adad8cb460c49160e8`, Octane
+`570ad1ccfe86e3eecba0636c8f932ac08edec517`, and WebKit/JetStream
+`7769b693502fa80f28a97bbfacd3296e0513acc5`. Their original classic-script
+harnesses were used because only 9 of 37 compilable module conversions executed
+under Capsid; strict-module and frozen-intrinsic compatibility failures are not
+performance results. Of 41 classic programs, 34 completed (Kraken 10/14,
+Octane 12/15, SunSpider 12/12). `get_arg0 > get_field` was again common: 125.6
+million executions, 1,333 occurrences, and five programs. `mul > add` appeared
+in three programs but ranked only 38th. The exact-site table overflowed by
+24,832,010 insertions, so these legacy-suite counts establish cross-program
+presence only; they are not a complete prevalence estimate or a timing claim.
+
+That breadth evidence justified one guarded prototype, not a keep decision. The
+prototype replaced `get_arg0; get_field atom` with a six-byte BC27 ext
+instruction. It preserved the generic property's full semantics and removed
+one primary dispatch plus the cancelling argument duplicate/free. Directed
+tests covered own and inherited data, getter, Proxy, missing property, primitive,
+null, and throwing getter behavior; all responses and round trips matched.
+Static application confirmed that the transform was not a single microbenchmark
+artifact:
+
+| application | fused sites | control bytes | candidate bytes |
+| --- | ---: | ---: | ---: |
+| Hono | 147 | 184,639 | 184,599 |
+| H3 | 309 | 215,779 | 215,681 |
+| itty-router | 93 | 51,519 | 51,499 |
+| Elysia | 1,642 | 944,172 | 942,825 |
+
+The keep gate was 11 paired clusters per application in balanced ABBA/BAAB
+order on the same worker and CPUs. Each invocation used 256 warm-up and 1,000
+measured requests, giving 2,000 requests per arm, application, and pair. A
+cluster-paired 100,000-resample bootstrap produced:
+
+| application | control median | candidate median | candidate gain, 95% CI |
+| --- | ---: | ---: | ---: |
+| Hono | 0.195 ms | 0.197 ms | -0.95% [-2.00%, +0.20%] |
+| H3 | 0.250 ms | 0.253 ms | **-1.13% [-2.11%, -0.08%]** |
+| itty-router | 0.328 ms | 0.326 ms | +0.89% [-0.06%, +2.31%] |
+| Elysia | 0.431 ms | 0.449 ms | **-3.98% [-4.88%, -3.13%]** |
+| equal-weight combined | — | — | **-1.28% [-1.77%, -0.77%]** |
+
+**Decision: reject and remove this fusion.** It reduced serialized size and
+occurred in both framework and legacy suites, yet it did not remove the costly
+property lookup itself. Its theoretical framework ceiling was about one percent,
+while ext-prefix decoding, handler/layout changes, and the still-present generic
+lookup were enough to erase that saving. This also rejects mechanically adding
+the analogous `get_locN + get_field` catalog: it has the same cost model and no
+new eliminated work.
+
+The maintained outcome is therefore BC26 production emission, v3 profiling,
+and analyze-only CFG+SSA. A later fusion must remove multiple dispatches and
+some helper/coercion/reference-count work, and must have material coverage in
+current framework bundles before implementation. A later IC must be a new
+zero-tax design: compile-time per-site slot operands, no compiled-OFF observer
+or layout cost, lazy state only for proven-hot functions, and a direct
+PATCHLESS comparison. The rejected ext implementation is not retained.
+
+Local raw framework samples and analysis are under
+`bench/results/arg0-field-fusion-framework-ab-20260824/`; the framework and
+legacy-suite census outputs are under
+`bench/results/framework-sequence-census-v3-20260824/` and
+`bench/results/legacy-suite-sequence-census-20260824/`.

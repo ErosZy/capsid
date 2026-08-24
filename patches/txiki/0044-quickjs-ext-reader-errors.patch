@@ -1,0 +1,30 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -40374,13 +40374,25 @@
+                 JS_ThrowSyntaxError(s->ctx, "invalid ext opcode in BC26 bytecode");
+                 return -1;
+             }
+             if (pos + 1 >= bc_len) {
+                 b->byte_code_len = pos;
++                JS_ThrowSyntaxError(s->ctx,
++                                    "truncated ext opcode in bytecode");
+                 return -1;
+             }
+             ei = ext_opcode_info_or_invalid(bc_buf[pos + 1]);
+-            if (ei == NULL || ei->size > bc_len - pos) {
++            if (ei == NULL) {
++                b->byte_code_len = pos;
++                JS_ThrowSyntaxError(s->ctx,
++                                    "invalid ext opcode id 0x%02x in bytecode",
++                                    bc_buf[pos + 1]);
++                return -1;
++            }
++            if (ei->size > bc_len - pos) {
+                 b->byte_code_len = pos;
++                JS_ThrowSyntaxError(s->ctx,
++                                    "truncated ext opcode id 0x%02x in bytecode",
++                                    bc_buf[pos + 1]);
+                 return -1;
+             }
+             s->has_ext_op = true;
+             len = ei->size;

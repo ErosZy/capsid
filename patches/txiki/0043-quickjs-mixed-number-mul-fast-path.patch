@@ -1,0 +1,28 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -21175,7 +21175,24 @@
+                     sp[-2] = js_float64(d);
+                     sp--;
+                 } else {
+-                    goto binary_arith_slow;
++                    int tag1 = JS_VALUE_GET_TAG(op1);
++                    int tag2 = JS_VALUE_GET_TAG(op2);
++                    if ((tag1 == JS_TAG_INT || JS_TAG_IS_FLOAT64(tag1)) &&
++                        (tag2 == JS_TAG_INT || JS_TAG_IS_FLOAT64(tag2))) {
++                        double d1 = tag1 == JS_TAG_INT
++                            ? JS_VALUE_GET_INT(op1)
++                            : JS_VALUE_GET_FLOAT64(op1);
++                        double d2 = tag2 == JS_TAG_INT
++                            ? JS_VALUE_GET_INT(op2)
++                            : JS_VALUE_GET_FLOAT64(op2);
++                        PROFILE_ARITH(ctx, OP_mul, 3);
++                        JS_X87_FPCW_SAVE_AND_ADJUST(fpcw);
++                        d = d1 * d2;
++                        JS_X87_FPCW_RESTORE(fpcw);
++                        goto mul_fp_res;
++                    } else {
++                        goto binary_arith_slow;
++                    }
+                 }
+             }
+             BREAK;

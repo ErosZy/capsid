@@ -5,6 +5,7 @@
 #   - bench/bin/bytecode-raw       (Step 8: optimizer-free bytecode generator)
 #   - bench/bin/exec-throughput    (Step 8: three-state timing harness)
 #   - bench/bin/analyze            (Step 8: static ceiling re-measurement)
+#   - bench/bin/classic-bytecode   (classic-suite raw/optimized compiler+runner)
 # The candidate side is bench/wrappers/run-host.sh with CAPSID_BENCH_HOST_BIN
 # pointing at the built capsid-host; the worker is the built capsid-worker.
 # Every component's SHA-256 is recorded by the runner in manifest.json.
@@ -60,6 +61,14 @@ g++ -O2 -std=c++20 -I"$SCRIPT_DIR/../src" \
     "$SCRIPT_DIR/../src/bytecode_optimizer/ir/region.cc" \
     "$SCRIPT_DIR/../src/bytecode_optimizer/ir/effects.cc" \
     -o "$BIN/analyze"
+
+echo "==> classic-bytecode (classic-suite compiler + runner)"
+g++ -O2 -std=c++20 \
+    -I"$SCRIPT_DIR/../src" \
+    -I"$BUILD_LINUX/vendor-overlay/txiki.js/deps/quickjs" \
+    "$SCRIPT_DIR/classic-bytecode.cc" -o "$BIN/classic-bytecode" \
+    -L"$BUILD_LINUX" -lcapsid_bytecode_opt \
+    -L"$BUILD_LINUX/txiki-build/deps/quickjs" -lqjs
 
 echo "==> components"
 ls -l "$BIN"

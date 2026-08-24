@@ -194,6 +194,156 @@ cases, and byte-for-byte determinism. P14 also demonstrated why instruction
 count is not a cost model: removing a small number of expensive `get_field`
 operations produced more wall-clock benefit than removing the same number of
 cheap dispatches.
-## 6. Retired Checkpoints
+
+## 6. Runtime Specialization Status (2026-08-24)
+
+R0's single-op array ext is a measured negative and is no longer emitted. Its
+target fixture regressed by 12.69% because the generic property helper already
+contains the same dense-array fast path and `OP_ext` added another indirect
+dispatch. The ext id remains reserved so archived experimental bytecode cannot
+be reinterpreted.
+
+The branch now contains two non-production mechanisms:
+
+- source-attributed exact-site opcode profile v3, used only to identify actual
+  helper paths and hot application PCs without folding bootstrap execution into
+  AOT candidates; and
+- a compile-gated, runtime-only monomorphic own-data `get_field` IC with
+  bounded sidecars, generic fallback, dequickening, and canonical
+  serialization.
+
+The IC correctness and rollback tests pass. An uninstrumented O3 + `NDEBUG` +
+LTO no-go screen was then run on the AMD Ryzen 3 3300X. The initial screen used
+seven balanced ABBA/BAAB pairs per arm. OFF and ADAPTIVE used the same worker
+binary; the end-to-end screen also used the same host binary, two workers, 64
+connections, and CPUs 0-3 for the SUT / 4-7 for the load generator. Every
+worker response body and every load-generator correctness verdict matched.
+
+Single-worker latency uses a paired log-ratio mean and Student-t 95% interval;
+positive means ADAPTIVE is faster:
+
+| case | OFF median | ADAPTIVE median | gain, paired 95% CI | positive pairs | quickened / dequickened |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| long-lived monomorphic receiver | 14.065 ms | 13.680 ms | **+2.82% [+2.16%, +3.49%]** | 7/7 | 3 / 0 |
+| fresh receiver per request | 13.505 ms | 15.806 ms | **-18.98% [-29.11%, -7.39%]** | 0/7 | 3 / 3 |
+| sequential Hono JSON | 0.252 ms | 0.253 ms | -0.63% [-2.05%, +0.82%] | 2/7 | 32 / 9 |
+
+The matching host + two-worker Hono screen did not show a broad win:
+
+| workload | QPS change, paired 95% CI | positive pairs | p95 change, paired 95% CI |
+| --- | ---: | ---: | ---: |
+| JSON | +2.56% [-1.05%, +6.30%] | 6/7 | -8.19% [-14.69%, -1.20%] |
+| static bytes 4k | +0.80% [-3.98%, +5.83%] | 4/7 | -2.08% [-11.49%, +8.32%] |
+| stream 4k | -3.86% [-9.95%, +2.65%] | 2/7 | +3.45% [-10.99%, +20.24%] |
+
+The geometric mean of the three QPS centers is -0.20%. Both adaptive workers
+allocated 47,956 bytes of IC state, quickened 153 sites, and dequickened
+111/112 sites. The shared stderr makes their complete JSON reports interleave,
+but these individual numeric records are intact. This short screen does not
+replace the full section-1 profile/resource conclusion gate; it is sufficient
+to reject enabling a mechanism that already has a large directed regression
+and no broad throughput win.
+
+A same-source PATCHLESS versus feature-compiled-but-OFF test also found a
+**+1.92% [+0.72%, +3.14%] latency tax** on the property-dense monomorphic
+fixture (6/7 pairs); fresh and Hono intervals crossed zero. Thus the ideal
++2.82% ADAPTIVE-vs-OFF result contains only about one percentage point of
+headroom over this measured compile/layout tax. Independent sessions are not
+subtracted to manufacture an exact net result.
+
+The largest regression had a concrete implementation explanation. After eight
+misses the direct opcode restored ordinary `get_field` and marked the site
+denied, but every later generic access still called the no-inline observer and
+updated the terminal site's miss counters. The fresh-receiver case therefore
+kept paying observation work after the site had already decided it could not
+serve.
+
+That defect was fixed and regression-tested before making the final decision.
+A terminal site now keeps the runtime opcode only as an observation-free route
+into the shared generic `get_field` handler; it neither calls `js_ic_observe`
+nor updates policy counters. A directed test executes another 100,000 accesses
+after parking and proves that observations, misses, dequickens, and
+megamorphic transitions stay unchanged. Serialization, teardown, mode-change,
+ext round-trip, optimizer differential, overlay audit/key, and all directed IC
+tests pass.
+
+The repaired same-binary screen was increased to 21 balanced pairs. Positive
+gain still means ADAPTIVE is faster:
+
+| case | OFF median | ADAPTIVE median | gain, paired 95% CI | positive pairs | quickened / dequickened |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| long-lived monomorphic receiver | 14.941 ms | 14.492 ms | +1.40% [-1.83%, +4.73%] | 12/21 | 3 / 0 |
+| fresh receiver per request | 14.192 ms | 14.752 ms | -2.77% [-6.96%, +1.62%] | 6/21 | 3 / 3 |
+| sequential Hono JSON | 0.255 ms | 0.256 ms | -0.60% [-2.36%, +1.18%] | 9/21 | 32 / 9 |
+
+The repair recovered most of the old -18.98% fresh-receiver loss, proving the
+diagnosis, but none of the three repaired same-binary intervals excludes zero.
+More importantly, a direct 21-pair PATCHLESS-to-ADAPTIVE comparison measured
+feature-worker latency relative to PATCHLESS (positive is a regression):
+
+| case | ADAPTIVE latency change, paired 95% CI | regression pairs |
+| --- | ---: | ---: |
+| fresh receiver per request | **+7.31% [+5.15%, +9.51%]** | 20/21 |
+| sequential Hono JSON | -0.94% [-2.84%, +0.99%] | 7/21 |
+| long-lived monomorphic receiver | -0.25% [-4.70%, +4.40%] | 13/21 |
+
+The matching 21-pair PATCHLESS-to-feature-built-OFF attribution produced
+fresh +3.48% [-0.16%, +7.25%], Hono -0.52% [-2.88%, +1.89%], and mono +2.38%
+[-1.47%, +6.38%]. These sessions are not arithmetically subtracted: the direct
+PATCHLESS-to-ADAPTIVE comparison is the product verdict. The OFF centers also
+remain far outside the pre-registered +/-0.5% zero-tax gate and are consistent
+with the earlier significant +1.92% mono tax.
+
+**Final verdict: stop this field-IC implementation and keep it compile-gated,
+default OFF.** The terminal fix is correct and valuable diagnostic evidence,
+but it does not turn the mechanism into a product win: the ideal mono case is
+neutral against PATCHLESS, Hono is neutral, and fresh receivers regress
+significantly. Do not spend on a second terminal opcode, POLY2, prototype/put
+caches, or the full host/resource matrix for this design. Any later IC attempt
+must first eliminate compiled-OFF observer/layout tax and prove a stable-site
+win directly against PATCHLESS; same-binary OFF is not an adequate baseline.
+
+Reproduction scripts are `bench/field-ic-ab.sh`,
+`bench/field-ic-host-ab.sh`, and `bench/field-ic-off-tax.sh`. Raw data,
+manifests, summaries, and SHA-256 lists are under
+`bench/results/field-ic-ab-20260824T161100/`,
+`bench/results/field-ic-host-ab-20260824T161900/`, and
+`bench/results/field-ic-off-tax-20260824T162800/` for the first screen. The
+terminal-fix evidence is under
+`bench/results/field-ic-terminal-ab-20260824T165700-p21/`,
+`bench/results/field-ic-terminal-net-20260824T170000-p21/`, and
+`bench/results/field-ic-terminal-off-tax-20260824T170100-p21/`.
+
+The CFG+SSA region path is decision-only. A future `OP_ext` proposal must bind
+v3 observations to stable bundle/function/PC identities, contain at least two
+instructions, have complete evidence for every member, and show a benefit the
+generic handler does not already provide before implementation and A/B.
+
+The follow-up source-attributed census used Hono, H3, itty-router, and Elysia,
+then independently checked Kraken, Octane 2, and SunSpider. The common
+`get_arg0 > get_field` pair was present across all four frameworks and in five
+legacy-suite programs, so it was not selected from one synthetic microbenchmark.
+Its framework dispatch-only ceiling was nevertheless just 1.026%: the fusion
+still had to perform the complete generic property lookup.
+
+An experimental six-byte BC27 implementation was correctness-clean and reduced
+all four framework bundles, but failed an 11-pair balanced real-framework gate.
+Candidate gain was Hono -0.95% [-2.00%, +0.20%], H3 -1.13%
+[-2.11%, -0.08%], itty-router +0.89% [-0.06%, +2.31%], and Elysia -3.98%
+[-4.88%, -3.13%]. The equal-weight combined result was **-1.28%
+[-1.77%, -0.77%]**. The implementation and patch were removed; the census and
+negative result remain as the decision record. Traditional suites are breadth
+evidence only: 34/41 classic programs completed and their exact-site table had
+24,832,010 overflowed insertions, while Capsid module conversion executed only
+9/37 compilable cases due to harness/strictness incompatibilities.
+
+This result narrows the next gate: do not add `get_locN + get_field` variants or
+another ext whose only saving is one cheap dispatch. A fusion must also collapse
+material helper, coercion, stack, or reference-count work. Any renewed IC must
+first make the feature-compiled OFF path patchless-equivalent and encode a
+per-bytecode-site slot directly; only then is a PATCHLESS-to-enabled A/B worth
+running.
+
+## 7. Retired Checkpoints
 
 The previous 2026-08-18 AMD Ryzen 3 3300X checkpoint (`c943e35`, `four-qps-final-20260818T131300`, `four-qps-profile-20260818T132600`, and `cold-start-20260818T134435`) was superseded by the clean rc.07 run above. The 2026-08-18 Intel i5-12400F 6C/12T conclusion-adjacent tables (commit `b39acee`/`build-win`) and the 2026-08-14 4C tables are also retired. They remain available in git history and in the raw artifacts under `bench/results/` referenced by the older revisions of this document.

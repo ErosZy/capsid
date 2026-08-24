@@ -20,7 +20,8 @@
 // nip_catch=110, with_put_var=116, with_make_ref=118, add=156,
 // nop=184, push_0=186, push_1=187, push_i8=194, push_i16=195,
 // get_loc0=203, put_loc0=207, if_false8=240, if_true8=241, goto8=242,
-// goto16=243, await=138, OP_COUNT=252.
+// goto16=243, await=138, OP_ext=252, runtime-only get_field_ic=253,
+// OP_COUNT=254. The two added opcodes remain invalid in BC26.
 
 #include "bytecode_optimizer/bytecode_optimizer.h"
 #include "bytecode_optimizer/ir/cfg.h"
@@ -200,7 +201,7 @@ void check_cfg_fails(const std::vector<std::uint8_t>& code,
 // ---------------------------------------------------------------------------
 
 void test_decode_failures() {
-    // Unknown opcode: 253 >= OP_COUNT, and 0 = invalid (never emitted).
+    // Runtime-only opcode 253 and opcode 0 are invalid on the wire.
     check_decode_fails({253});
     check_decode_fails({0});
     // Truncated instruction: push_i32 needs 5 bytes.

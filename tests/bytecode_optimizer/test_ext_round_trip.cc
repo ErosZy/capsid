@@ -1,16 +1,8 @@
-// F0 ext foundation gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §2/§4.4): the BC27 dual reader, the table-generated OP_ext decode
-// (sizes and stack effects from quickjs-ext-opcode.h, single source of
-// truth), the reader's ext policy (BC26 must reject OP_ext; BC27 must
-// be canonical — at least one ext, all ids known, no truncation), the
-// CFG/identity/SSA/region round trips on BC27 bundles, and the
-// production BC26-only gates with no emission. Part A drives the
-// matrix on hand-built bundles (opcode bytes are the serialized space
-// of quickjs-opcode.h physical order): get_array_el = ext id 1 (2 pop /
-// 1 push, 2 total bytes incl. the 0xFC prefix and the id byte),
-// push_0=186, push_1=187, return_undef=41. Part B compiles the
-// established corpus through the real quickjs-ng compiler and asserts
-// ZERO rejections and ZERO ext instructions (BC26 sources).
+// F0 ext foundation gate. R0's single-op array specialization regressed the
+// paired benchmark and is retired: ext id 1 is a permanent size-zero hole.
+// Until a profile-weighted multi-instruction template clears the evidence
+// gates, the only canonical output is BC26 and every BC27 input fails closed.
+// This test locks that reserved-id policy plus the production BC26-only gate.
 
 #include "bytecode_optimizer/bytecode_optimizer.h"
 #include "bytecode_optimizer/ir/cfg.h"
@@ -126,18 +118,6 @@ std::vector<std::uint8_t> make_bundle(
     return b;
 }
 
-std::vector<std::uint8_t> make_debug(
-    const std::vector<std::uint8_t>& pc2line) {
-    std::vector<std::uint8_t> d;
-    put_leb(&d, 0);  // filename atom
-    put_leb(&d, 1);  // line
-    put_leb(&d, 1);  // col
-    put_leb(&d, static_cast<std::uint32_t>(pc2line.size()));
-    d.insert(d.end(), pc2line.begin(), pc2line.end());
-    put_leb(&d, 0);  // source_len
-    return d;
-}
-
 // Bundle-level ext round trip on a synthetic function blob.
 bool ext_blob(const std::vector<std::uint8_t>& code,
               std::uint32_t stack_size, uint8_t version,
@@ -175,49 +155,14 @@ void test_a2_bc26_rejects_ext() {
     CHECK(err.find("ext instruction in BC26") != std::string::npos);
 }
 
-// a3: BC27 canonical — one ext get_array_el decodes with table size
-// (2) and table stack effects (2 pop / 1 push), the id rides in aux,
-// and the CFG verifies.
-void test_a3_bc27_canonical() {
+// a3: retired R0 id 1 is permanently reserved. Keeping the hole prevents an
+// archived BC27/R0 blob from silently changing meaning in a later release.
+void test_a3_bc27_reserved_r0_id() {
     const std::vector<std::uint8_t> code = {186, 187, 252, 1, 41};
     std::string err;
     ir::ExtRoundTripReport rep;
-    CHECK(ext_blob(code, 2, 27, &rep, &err));
-    CHECK(rep.functions == 1);
-    CHECK(rep.ext_instructions == 1);
-    CHECK(rep.per_id[1] == 1);
-    CHECK(rep.rejected_functions == 0);
-    CHECK(rep.rejected_insns == 0);
-
-    // Direct decode: the ext instruction's metadata comes from the
-    // ext table, not the 0-pop/0-push OP_ext prefix row.
-    std::vector<std::uint8_t> b = make_bundle(code, 2, 27);
-    std::vector<ir::FuncInfo> funcs;
-    CHECK(ir::read_functions(b.data(), b.size(), &funcs, &err));
-    std::vector<ir::Insn> insns;
-    CHECK(ir::decode_function(b.data() + funcs[0].code_off,
-                              funcs[0].code_len, b.data(), funcs[0],
-                              &insns, &err, true));
-    CHECK(insns.size() == 4);  // push_0, push_1, ext, return_undef
-    CHECK(insns[0].op == 186 && insns[1].op == 187);
-    CHECK(insns[2].op == 252);
-    CHECK(insns[2].old_size == 2);
-    CHECK(insns[2].aux == 1 && insns[2].has_aux);
-    CHECK(insns[2].n_pop == 2 && insns[2].n_push == 1);
-
-    // The analyze stack accepts the same bundle end to end.
-    ir::IdentityReport idrep;
-    CHECK(ir::identity_round_trip(b.data(), b.size(), &idrep, &err));
-    CHECK(idrep.rejected_functions == 0 && idrep.rejected_insns == 0);
-    ir::SsaReport srep;
-    CHECK(ir::ssa_round_trip(b.data(), b.size(), &srep, &err));
-    CHECK(srep.rejected_functions == 0 && srep.rejected_insns == 0);
-    ir::RegionCensusReport rrep;
-    CHECK(ir::region_round_trip(b.data(), b.size(), &rrep, &err));
-    CHECK(rrep.rejected_functions == 0 && rrep.rejected_insns == 0);
-    CHECK(capsid::bytecode::cfg_identity_round_trip(b, &err));
-    CHECK(capsid::bytecode::ssa_analyze(b, &err));
-    CHECK(capsid::bytecode::region_census(b, &err));
+    CHECK(!ext_blob(code, 2, 27, &rep, &err));
+    CHECK(err.find("invalid ext id 1") != std::string::npos);
 }
 
 // a4: BC27 with an unknown ext id fails closed at the reader.
@@ -257,79 +202,9 @@ void test_a7_bc27_noncanonical() {
     CHECK(err.find("noncanonical") != std::string::npos);
 }
 
-// a8: adjacent ext instructions decode as two instructions (the walk
-// is table-sized, so a payload byte 0xFC is never absorbed as a
-// recursive prefix); a 0xFC at an id position fails closed instead of
-// misparsing.
-void test_a8_adjacent_ext() {
-    const std::vector<std::uint8_t> code = {186, 187, 252, 1, 187, 252,
-                                            1,   41};
-    std::string err;
-    ir::ExtRoundTripReport rep;
-    CHECK(ext_blob(code, 2, 27, &rep, &err));
-    CHECK(rep.ext_instructions == 2);
-    CHECK(rep.per_id[1] == 2);
-    CHECK(rep.rejected_functions == 0);
-
-    const std::vector<std::uint8_t> rec = {252, 1, 252, 0};
-    CHECK(!ext_blob(rec, 0, 27, &rep, &err));
-    CHECK(err.find("invalid ext id 0") != std::string::npos);
-}
-
-// a9: the verifier uses the ext table's stack effects. With 2 pop / 1
-// push the function's max height is 3; recorded 3 verifies, recorded 2
-// fails — under the 0/0 prefix row the max would be 4 and recorded 3
-// would fail, so this proves the ext effects, not the prefix row, are
-// advertised to the verifier.
-void test_a9_ext_stack_effects() {
-    const std::vector<std::uint8_t> code = {186, 187, 252, 1, 187,
-                                            187, 41};
-    std::string err;
-    ir::ExtRoundTripReport rep;
-    CHECK(ext_blob(code, 3, 27, &rep, &err));
-    CHECK(rep.ext_instructions == 1);
-    CHECK(rep.rejected_functions == 0);
-    CHECK(rep.rejected_insns == 0);
-
-    std::string err2;
-    ir::ExtRoundTripReport rep2;
-    CHECK(ext_blob(code, 2, 27, &rep2, &err2));
-    CHECK(rep2.rejected_functions == 1);
-    CHECK(rep2.rejected_insns == 6);  // all 6 insns of the failed fn
-}
-
-// a10: pc2line resolves against instruction boundaries that the ext
-// table defines — the ext instruction gets the source line of the
-// pc2line entry at its pc, and the identity walker's pc2line
-// readability check passes on a BC27 bundle.
-void test_a10_bc27_pc2line() {
-    const std::vector<std::uint8_t> code = {186, 187, 252, 1, 41};
-    std::vector<std::uint8_t> pc2line = {2, 0};  // pc=0, line+0, col+0
-    std::vector<std::uint8_t> dbg = make_debug(pc2line);
-    std::vector<std::uint8_t> b =
-        make_bundle(code, 2, 27, &dbg);
-    std::string err;
-    ir::ExtRoundTripReport rep;
-    CHECK(ir::ext_round_trip(b.data(), b.size(), &rep, &err));
-    CHECK(rep.rejected_functions == 0);
-
-    std::vector<ir::FuncInfo> funcs;
-    CHECK(ir::read_functions(b.data(), b.size(), &funcs, &err));
-    std::vector<ir::Insn> insns;
-    CHECK(ir::decode_function(b.data() + funcs[0].code_off,
-                              funcs[0].code_len, b.data(), funcs[0],
-                              &insns, &err, true));
-    CHECK(insns[2].op == 252);
-    CHECK(insns[2].src_line == 1);  // the base line of the debug block
-    ir::IdentityReport idrep;
-    CHECK(ir::identity_round_trip(b.data(), b.size(), &idrep, &err));
-    CHECK(idrep.rejected_functions == 0 && idrep.rejected_insns == 0);
-}
-
-// a11: production gates — optimize() and analyze_only() reject BC27
-// input outright (R0 can emit BC27, but ext sites have no foldability
-// consumer: re-optimization is not supported) and keep accepting BC26.
-void test_a11_production_gates() {
+// a8: production gates reject BC27 input and keep accepting BC26. There is no
+// deployed ext emitter in the optimizer.
+void test_a8_production_gates() {
     std::string err;
     std::vector<std::uint8_t> b27 =
         make_bundle({186, 187, 252, 1, 41}, 2, 27);
@@ -490,15 +365,12 @@ void test_corpus_ext() {
 int main() {
     test_a1_bc26_baseline();
     test_a2_bc26_rejects_ext();
-    test_a3_bc27_canonical();
+    test_a3_bc27_reserved_r0_id();
     test_a4_bc27_unknown_id();
     test_a5_bc27_id_zero();
     test_a6_bc27_truncated();
     test_a7_bc27_noncanonical();
-    test_a8_adjacent_ext();
-    test_a9_ext_stack_effects();
-    test_a10_bc27_pc2line();
-    test_a11_production_gates();
+    test_a8_production_gates();
     test_corpus_ext();
     if (g_failures != 0) {
         std::fprintf(stderr, "test_ext_round_trip: %d failure(s)\n",

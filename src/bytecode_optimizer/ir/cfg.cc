@@ -175,7 +175,7 @@ bool decode_function(const uint8_t* code,
     size_t pc = 0;
     while (pc < len) {
         uint8_t op = code[pc];
-        if (op == 0 || op >= OP_COUNT) {
+        if (op == 0 || op >= OP_COUNT || op == OP_get_field_ic) {
             *error = "cfg: invalid opcode in function";
             return false;
         }
@@ -348,9 +348,12 @@ bool decode_function(const uint8_t* code,
             }
         }
         if (op == OP_ext) {
-            // The ext id rides in aux (the payload is opaque for the
-            // `none` format), so downstream consumers can key on it
-            // without re-reading the code blob.
+            ExtInfo ei;
+            if (!ext_lookup(code[pc + 1], &ei)) {
+                *error = "cfg: invalid ext id";
+                return false;
+            }
+            // The ext id rides in aux for table-driven verifier consumers.
             in.aux = code[pc + 1];
             in.has_aux = true;
         }

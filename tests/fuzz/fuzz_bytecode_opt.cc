@@ -7,11 +7,8 @@
 //   3. The pipeline is a fixed point: the second run must be
 //      byte-identical (determinism + convergence).
 //   4. mask-0 (parse + verify + copy) must also accept a success output.
-// R0: emission builds (CAPSID_AOT_EMIT_EXT) may produce BC27 output;
-// re-optimizing BC27 fails closed by design (ext sites have no
-// foldability consumer), so invariants 2-4 apply to BC26 outputs, and
-// BC27 outputs must fail closed with an empty buffer + message on
-// every re-entry.
+// The production optimizer emits canonical BC26 only. BC27/ext inputs
+// and outputs belong to the separately fuzzed ext/fusion boundary.
 // Corpus: deterministic .qjsb bundles compiled from tests/fixtures.
 #include "bytecode_optimizer/bytecode_optimizer.h"
 
@@ -60,31 +57,8 @@ void exercise(const std::uint8_t* data, size_t size) {
             std::abort();
         }
     } else {
-#if defined(CAPSID_AOT_EMIT_EXT)
-        // R0: BC27 output — every re-entry must fail closed (ext sites
-        // have no foldability consumer) with the buffer untouched.
-        std::string error2;
-        std::vector<std::uint8_t> out2;
-        if (capsid::bytecode::optimize(out, &out2,
-                                       capsid::bytecode::kPassAll,
-                                       false, &error2)) {
-            std::abort();
-        }
-        if (!out2.empty() || error2.empty()) {
-            std::abort();
-        }
-        std::string error3;
-        std::vector<std::uint8_t> out3;
-        if (capsid::bytecode::optimize(out, &out3, 0, false, &error3)) {
-            std::abort();
-        }
-        if (!out3.empty() || error3.empty()) {
-            std::abort();
-        }
-#else
-        // Emission-OFF builds never emit BC27.
+        // The BC26 optimizer must never emit another wire version.
         std::abort();
-#endif
     }
     // Determinism: a fresh run on the same input is byte-identical.
     std::string error4;

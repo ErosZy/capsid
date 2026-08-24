@@ -19,8 +19,9 @@ optimizer:
 - exposes pass switches only through the internal API for attribution; the
   production compiler always uses `kPassAll`.
 
-It is not a JIT, a partial evaluator, or a general SSA optimizer. The completed
-opcode-profile phase is recorded in
+It is not a JIT, a partial evaluator, or a general SSA optimizer. Product
+output remains BC26: the measured-negative R0 ext emitter and its build switch
+have been removed. The completed opcode-profile phase is recorded in
 [QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md); new VM,
 format, CFG+SSA, shape-IC, and fusion work is isolated in the active
 [CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).
@@ -46,8 +47,9 @@ The parser mirrors the pinned quickjs-ng commit
 - nested `BC_TAG_FUNCTION_BYTECODE` values are parsed recursively from cpool;
 - jump target = operand start + signed relative offset;
 - `OP_catch` targets and post-`OP_gosub` instructions are CFG roots;
-- serialized opcodes occupy 0..251, `OP_COUNT == 252`; 0 and values >=252 are
-  invalid in BC26;
+- serialized ordinary opcodes occupy 0..251; values >=252 are invalid in
+  BC26. The patched runtime reserves 252 for future `OP_ext` and uses 253 only
+  as a non-serialized in-memory field-IC opcode;
 - pc2line is decoded, mapped through old-to-new instruction offsets, and
   re-encoded with quickjs-ng's cumulative delta format.
 
@@ -75,6 +77,15 @@ final recursive parse + bytecode verifier
 `kPassAll = P2 | P31 | P11 | P14 | P16` (`0x1f`). A round that changes the
 program deletes at least one instruction; hitting the iteration cap is an
 error. The output remains ordinary BC26 and is loaded by the unmodified VM.
+
+The adjacent `ir/` implementation is an analyze-only successor foundation.
+Its SSA rules conservatively model numeric overflow, and its region census
+only considers same-block runs of two to eight matching instructions. The
+profiled API weights a region by the minimum exact-site execution count of all
+members; missing evidence gives zero weight rather than falling back to a
+static guess. No region is lowered or emitted today. This boundary prevents a
+single expensive opcode—the failure mode of R0—from being mislabeled as
+multi-instruction fusion.
 
 ### Pass definitions
 

@@ -621,6 +621,21 @@ void test_p16_dead_store_goldens() {
         expect_code("p16 captured-keep", &b,
                     "60 04 00 bf c8 04 29");
     }
+    // Captured vardefs are arg-first. With three arguments, captured local
+    // slot 0 is vardef index 3, not index 0; P16 must retain its marker and
+    // store. This is the serialized layout used by real nested functions.
+    {
+        Builder b;
+        b.op_u16(96, 0);  // set_loc_uninitialized 0
+        b.op_i32(1, 5);   // push_i32 5
+        b.op_u16(88, 0);  // put_loc 0
+        b.op(41);         // return_undef
+        b.stack_size = 1;
+        const std::vector<std::uint8_t> captured = {0, 0, 0, 1};
+        b.finish(1, 0, nullptr, &captured, 1, 3);
+        expect_code("p16 captured-after-args-keep", &b,
+                    "60 00 00 bf cf 29");
+    }
     // producer-side-effect: the store's producer is push_this, not a
     // pure push, so the store stays; the marker is dead (never read)
     // and is removed.
@@ -953,6 +968,17 @@ void test_fail_closed_matrix() {
         CHECK(!capsid::bytecode::optimize(b.buf, &out, 0xffffffffu, false,
                                           &err));
     }
+    {
+        Builder b;
+        b.op(253);  // runtime-only get_field_ic is never legal in BC26
+        b.op(41);
+        b.stack_size = 1;
+        b.finish(0);
+        std::vector<std::uint8_t> out;
+        std::string err;
+        CHECK(!capsid::bytecode::optimize(b.buf, &out, 0xffffffffu, false,
+                                          &err));
+    }
     // oversized leb128 on the atom-count field (6 continuation bytes)
     {
         Builder b;
@@ -1156,6 +1182,50 @@ void test_p11_folds() {
 }
 
 void test_p11_gates() {
+    // A conditional copy cannot establish an alias at its join: the path
+    // that skips get_loc1/put_loc0 must still read the old slot 0 value.
+    {
+        Builder b;
+        b.op(0xcb);  // get_loc0 (condition)
+        b.op(0xf0);  // if_false8 -> join at byte 5
+        b.op(3);
+        b.op(0xcc);  // get_loc1
+        b.op(0xcf);  // put_loc0
+        b.op(0xcb);  // join: get_loc0
+        b.op(0x28);  // return
+        b.stack_size = 1;
+        b.finish(2);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err,
+                                  capsid::bytecode::kPassP11));
+        const std::uint8_t expect[] =
+            {0xcb, 0xf0, 3, 0xcc, 0xcf, 0xcb, 0x28};
+        CHECK(code.size() == sizeof(expect));
+        if (code.size() == sizeof(expect)) {
+            CHECK(std::memcmp(code.data(), expect, sizeof(expect)) == 0);
+        }
+    }
+    // Loc slot 0 follows three argument vardefs in the serialized capture
+    // mask. P11 must not delete a copy into that captured local.
+    {
+        Builder b;
+        b.op_u16(0x57, 1);  // get_loc 1
+        b.op_u16(0x58, 0);  // put_loc 0 (captured)
+        b.op(0x29);         // return_undef
+        b.stack_size = 1;
+        const std::vector<std::uint8_t> captured = {0, 0, 0, 1, 0};
+        b.finish(2, 0, nullptr, &captured, 1, 3);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err,
+                                  capsid::bytecode::kPassP11));
+        const std::uint8_t expect[] = {0xcc, 0xcf, 0x29};
+        CHECK(code.size() == sizeof(expect));
+        if (code.size() == sizeof(expect)) {
+            CHECK(std::memcmp(code.data(), expect, sizeof(expect)) == 0);
+        }
+    }
     // Barrier (eval) between the store and the read: the alias dies, the
     // read touches b, and the (get,put) pair must survive (0x58 stays).
     // eval is op 50 + argc u16 + scope_idx u16; the get_loc before it
@@ -1323,6 +1393,33 @@ void test_p14_folds() {
 }
 
 void test_p14_gates() {
+    // As with P11/P16, loc slot 0 is vardef index arg_count+0. A captured
+    // literal local cannot be described/folded because its closure may
+    // observe it independently of this instruction stream.
+    {
+        Builder b;
+        b.op(0x0b);  // object
+        b.op(0xbb);  // push_1
+        b.code.push_back(0x4b);  // define_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0xcf);  // put_loc0
+        b.op(0xcb);  // get_loc0
+        b.code.push_back(0x40);  // get_field atom 0
+        put_u32(&b.code, 0);
+        b.op(0x28);
+        b.stack_size = 2;
+        const std::vector<std::uint8_t> captured = {0, 0, 1};
+        b.finish(1, 0, nullptr, &captured, 1, 2);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err,
+                                  capsid::bytecode::kPassP14));
+        bool has_getfield = false;
+        for (std::uint8_t x : code) {
+            if (x == 0x40) has_getfield = true;
+        }
+        CHECK(has_getfield);
+    }
     // put_field between construction and read: the mutation defeats the
     // fold; the get_field must survive.
     {
@@ -1531,6 +1628,59 @@ void test_debug_block_remap() {
     CHECK(stored == bc_csum(out.data() + 5, out.size() - 5));
 }
 
+void test_classic_benchmark_boundary() {
+    JSRuntime* rt = JS_NewRuntime();
+    CHECK(rt != nullptr);
+    JSContext* ctx = JS_NewContext(rt);
+    CHECK(ctx != nullptr);
+    if (ctx == nullptr) {
+        JS_FreeRuntime(rt);
+        return;
+    }
+    const char source[] =
+        "var sum = 0; for (var i = 0; i < 100; i++) sum += i; "
+        "globalThis.__r = sum;";
+    JSValue compiled = JS_Eval(ctx, source, sizeof(source) - 1,
+                               "classic.js",
+                               JS_EVAL_TYPE_GLOBAL |
+                                   JS_EVAL_FLAG_COMPILE_ONLY);
+    CHECK(!JS_IsException(compiled));
+    std::size_t size = 0;
+    std::uint8_t* data =
+        JS_WriteObject(ctx, &size, compiled, JS_WRITE_OBJ_BYTECODE);
+    JS_FreeValue(ctx, compiled);
+    CHECK(data != nullptr);
+    if (data != nullptr) {
+        std::vector<std::uint8_t> raw(data, data + size);
+        js_free(ctx, data);
+        std::vector<std::uint8_t> rejected;
+        std::string product_error;
+        CHECK(!capsid::bytecode::optimize(raw, &rejected, 0xffffffffu, false,
+                                          &product_error));
+        CHECK(product_error.find("not a module") != std::string::npos);
+
+        std::vector<std::uint8_t> optimized;
+        std::string error;
+        CHECK(capsid::bytecode::optimize_classic_for_benchmark(
+            raw, &optimized, 0xffffffffu, false, &error));
+        JSValue loaded = JS_ReadObject(ctx, optimized.data(), optimized.size(),
+                                       JS_READ_OBJ_BYTECODE);
+        CHECK(!JS_IsException(loaded));
+        JSValue result = JS_EvalFunction(ctx, loaded);
+        CHECK(!JS_IsException(result));
+        JS_FreeValue(ctx, result);
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue value = JS_GetPropertyStr(ctx, global, "__r");
+        std::int32_t actual = 0;
+        CHECK(JS_ToInt32(ctx, &actual, value) == 0);
+        CHECK(actual == 4950);
+        JS_FreeValue(ctx, value);
+        JS_FreeValue(ctx, global);
+    }
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+
 void test_determinism_and_idempotence() {
     // x = 1; x + 1 twice plus a conditional, run twice: identical
     // output; optimizing the output again is a no-op.
@@ -1553,83 +1703,6 @@ void test_determinism_and_idempotence() {
     CHECK(o1 == o2);
     CHECK(capsid::bytecode::optimize(o1, &o3, 0xffffffffu, false, &e3));
     CHECK(o1 == o3);
-}
-
-// ---------------------------------------------------------------------------
-// R0 BC27 ext emission (tier-3 plan §5.3.1/§10 item 9): kPassExtFastArrayGet
-// converts every get_array_el of the final stream to the OP_ext +
-// EXT_get_array_el template (quickjs-ext-opcode.h: ext id 1, pop 2 push 1,
-// size 2 — the same stack effect as get_array_el, +1 byte/site). Emission
-// builds produce canonical BC27; emission-OFF builds stay byte-identical
-// BC26 (§7 rollback). BC27 output is never re-optimized (ext sites have
-// no foldability consumer).
-// ---------------------------------------------------------------------------
-void test_r0_ext_emission() {
-    // Array read with runtime-dependent receiver and index, so no pass
-    // folds the site away: get_loc0; get_loc1; get_array_el; return.
-    Builder b;
-    b.op(0xcb);  // get_loc0
-    b.op(0xcc);  // get_loc1
-    b.op(0x46);  // get_array_el
-    b.op(0x28);  // return
-    b.stack_size = 2;
-    b.finish(2);
-    std::vector<std::uint8_t> o1, o2;
-    std::string err;
-    CHECK(capsid::bytecode::optimize(b.buf, &o1, capsid::bytecode::kPassAll,
-                                     false, &err));
-    CHECK(capsid::bytecode::optimize(b.buf, &o2, capsid::bytecode::kPassAll,
-                                     false, &err));
-    CHECK(o1 == o2);  // deterministic
-    CHECK(bc_csum(o1.data() + 5, o1.size() - 5) ==
-          (static_cast<std::uint32_t>(o1[1]) |
-           (static_cast<std::uint32_t>(o1[2]) << 8) |
-           (static_cast<std::uint32_t>(o1[3]) << 16) |
-           (static_cast<std::uint32_t>(o1[4]) << 24)));
-#if defined(CAPSID_AOT_EMIT_EXT)
-    // Emission on: the site is the ext template and the bundle is BC27.
-    CHECK(o1[0] == 27);
-    std::vector<std::uint8_t> code;
-    CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassAll));
-    const std::uint8_t want[] = {0xcb, 0xcc, 0xfc, 0x01, 0x28};
-    CHECK(code.size() == sizeof(want));
-    CHECK(std::memcmp(code.data(), want, sizeof(want)) == 0);
-    // Canonical BC27: the F0 dual reader accepts it end to end.
-    CHECK(capsid::bytecode::ext_round_trip(o1, &err));
-    // get_array_el2 stays BC26 (no ext template): a mixed stream converts
-    // only the first form.
-    {
-        Builder m;
-        m.op(0xcb);  // get_loc0
-        m.op(0xcc);  // get_loc1
-        m.op(0x46);  // get_array_el
-        m.op(0xcb);  // get_loc0
-        m.op(0xcc);  // get_loc1
-        m.op(0x47);  // get_array_el2
-        m.op(0x28);  // return
-        m.stack_size = 3;
-        m.finish(2);
-        std::vector<std::uint8_t> mo;
-        CHECK(m.run_optimize(&mo, &err, capsid::bytecode::kPassAll));
-        CHECK(mo[0] == 27);
-        std::vector<std::uint8_t> mcode;
-        CHECK(m.optimize_and_code(&mcode, &err, capsid::bytecode::kPassAll));
-        const std::uint8_t mwant[] = {0xcb, 0xcc, 0xfc, 0x01,
-                                      0xcb, 0xcc, 0x47, 0x28};
-        CHECK(mcode.size() == sizeof(mwant));
-        CHECK(std::memcmp(mcode.data(), mwant, sizeof(mwant)) == 0);
-    }
-    // BC27 output is never re-optimized: ext sites have no foldability
-    // consumer (fail closed, out untouched).
-    std::vector<std::uint8_t> o3;
-    CHECK(!capsid::bytecode::optimize(o1, &o3, capsid::bytecode::kPassAll,
-                                      false, &err));
-    CHECK(o3.empty());
-#else
-    // Emission off: byte-identical BC26 — no OP_ext anywhere.
-    CHECK(o1[0] == 26);
-    CHECK(o1 == b.buf);
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -1959,8 +2032,8 @@ int main() {
     test_p14_folds();
     test_p14_gates();
     test_debug_block_remap();
+    test_classic_benchmark_boundary();
     test_determinism_and_idempotence();
-    test_r0_ext_emission();
     test_roundtrip_values();
     test_p14_semantics();
     test_p11_semantics();

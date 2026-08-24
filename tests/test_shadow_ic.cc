@@ -1,23 +1,20 @@
-// S1 SHADOW IC gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §5.2/§5.2.1/§5.3): bounded lazy sidecars on hot JSFunctionBytecode,
-// PC-derived site ids (BC26 SHADOW compromise), the 16-byte entry
-// layout gate, the state machine
+// Exact-PC monomorphic field-IC gate. SHADOW provides collision-free
+// eligibility evidence; ADAPTIVE quickens a hot five-byte get_field to the
+// runtime-only opcode 253 after two same-shape own-data observations. The
+// stable serving hits are read-only, snapshots are canonicalized, and eight
+// consecutive misses park the runtime opcode in an observation-free generic
+// state until mode change or teardown restores get_field. The bounded sidecar
+// retains the 16-byte entry layout and this state machine:
 //
-//   COLD -> TRAINING -> MONO -> POLY2 -> MEGAMORPHIC / DISABLED
+//   COLD -> TRAINING -> MONO -> MEGAMORPHIC / DISABLED
 //
-// with at most two shape variants per site (a third distinct shape or
-// eight consecutive misses becomes megamorphic for that function
-// lifetime), the 64 KiB runtime budget, and generic results always
-// authoritative (SHADOW trains and reports would-hit/miss, never
-// serves). Compiled against CONFIG_SHAPE_GUARD_IC (which requires
+// The MVP is deliberately monomorphic: polymorphic training never quickens;
+// eight misses after MONO dequicken. Compiled against CONFIG_SHAPE_GUARD_IC (which requires
 // CONFIG_SHAPE_GUARD_ID32, forwarded from CAPSID_ENABLE_SHAPE_GUARD_IC
 // + CAPSID_ENABLE_SHAPE_GUARD_ID32).
 //
-// Locality microcases (§5.2): mono tight loop; two unrelated PCs using
-// the same atom with different shapes (no pollution); stable
-// alternating POLY2; three-shape megamorphic; eight sites spanning
-// multiple cache lines; emitted-cold, always-miss, and SHADOW-only
-// controls; budget cap; ID32 wrap disables.
+// Locality microcases cover mono, distinct exact PCs, polymorphic denial,
+// dequickening, serialization, cold/OFF controls, budget, and ID32 wrap.
 //
 // `--bench` additionally prints the hit-rate/memory adjudication
 // measurements as `bench <name> <value>` lines for the §14 record.
@@ -115,7 +112,8 @@ void dump_report(const JSICShadowReport& rep) {
     std::fprintf(stderr,
                  "  report: functions=%u bytes=%llu obs=%llu hits=%llu "
                  "misses=%llu trains=%llu transitions=%llu mega=%llu "
-                 "disabled=%llu budget_fail=%llu\n",
+                 "disabled=%llu quickened=%llu dequickened=%llu "
+                 "budget_fail=%llu\n",
                  rep.functions, (unsigned long long)rep.bytes,
                  (unsigned long long)rep.observations,
                  (unsigned long long)rep.hits,
@@ -124,6 +122,8 @@ void dump_report(const JSICShadowReport& rep) {
                  (unsigned long long)rep.transitions,
                  (unsigned long long)rep.megamorphic,
                  (unsigned long long)rep.disabled,
+                 (unsigned long long)rep.quickened,
+                 (unsigned long long)rep.dequickened,
                  (unsigned long long)rep.budget_failures);
     for (int i = 0; i < 8; i++) {
         if (rep.sites[i].hits || rep.sites[i].misses ||
@@ -153,7 +153,7 @@ void test_layout_gate() {
 }
 
 // 2. One monomorphic site in a tight loop: everything trains to MONO,
-// every observation is a would-hit, zero misses, exactly one
+// all but the two training observations are would-hits, exactly one
 // transition, one function state.
 void test_mono_tight_loop() {
     Ctx c = make_ctx(JS_IC_MODE_SHADOW);
@@ -168,8 +168,8 @@ void test_mono_tight_loop() {
     JSICShadowReport rep;
     JS_ICGetShadowReport(c.rt, &rep);
     check_row("mono_functions", rep.functions == 1);
-    check_row("mono_hits", rep.hits == 100000);
-    check_row("mono_zero_misses", rep.misses == 0);
+    check_row("mono_hits", rep.hits == 99998);
+    check_row("mono_training_misses", rep.misses == 2);
     check_row("mono_trains", rep.trains == 1);
     check_row("mono_transitions", rep.transitions == 1);
     check_row("mono_no_mega", rep.megamorphic == 0);
@@ -178,7 +178,8 @@ void test_mono_tight_loop() {
     for (int i = 0; i < 8; i++) {
         if (rep.sites[i].trains == 1) {
             seen_mono = rep.sites[i].state == 2 &&  // MONO
-                        rep.sites[i].hits == 100000;
+                        rep.sites[i].hits == 99998 &&
+                        rep.sites[i].misses == 2;
         }
     }
     check_row("mono_site_state", seen_mono);
@@ -188,10 +189,8 @@ void test_mono_tight_loop() {
 }
 
 // 3. Two unrelated PCs using the same atom with different shapes: no
-// pollution. The PC-derived site ids must not collide — the source
-// layout (a pure-arithmetic filler block between the loops) keeps the
-// two get_field offsets apart; a collision would merge the two
-// per-site distributions and fail the per-site assertions.
+// pollution. Exact bytecode PCs must not collide — the source
+// layout is irrelevant: exact PC mapping cannot collide.
 void test_two_pcs_same_atom_no_pollution() {
     Ctx c = make_ctx(JS_IC_MODE_SHADOW);
     bool ok = true;
@@ -216,8 +215,8 @@ void test_two_pcs_same_atom_no_pollution() {
     for (int i = 0; i < 8; i++) {
         if (rep.sites[i].trains == 1) {
             trained++;
-            if (rep.sites[i].state != 2 || rep.sites[i].hits != 20000 ||
-                rep.sites[i].misses != 0)
+            if (rep.sites[i].state != 2 || rep.sites[i].hits != 19998 ||
+                rep.sites[i].misses != 2)
                 each_mono = false;
         }
         if (rep.sites[i].trains > 1)
@@ -230,9 +229,8 @@ void test_two_pcs_same_atom_no_pollution() {
     free_ctx(c);
 }
 
-// 4. Stable alternating POLY2: two shapes, second trains the overflow
-// variant, the dominant stays in the mono entry; no rotation, no MEGA.
-void test_poly2_alternating() {
+// 4. Stable alternating shapes never satisfy the two-consecutive proof.
+void test_alternating_shapes() {
     Ctx c = make_ctx(JS_IC_MODE_SHADOW);
     bool ok = true;
     std::string r = run_int(
@@ -242,26 +240,25 @@ void test_poly2_alternating() {
         "s += (i % 2 ? a : b).v; return s; } "
         "globalThis.__r = hot();",
         &ok);
-    check_row("poly2_result", ok && r == "150000");
+    check_row("alternating_result", ok && r == "150000");
     JSICShadowReport rep;
     JS_ICGetShadowReport(c.rt, &rep);
-    check_row("poly2_hits", rep.hits == 99999);   // 1 train-hit + 99998
-    check_row("poly2_misses", rep.misses == 1);   // the b that trained poly
-    check_row("poly2_transitions", rep.transitions == 1);
-    check_row("poly2_no_mega", rep.megamorphic == 0);
-    bool seen_poly2 = false;
+    check_row("alternating_hits", rep.hits == 0);
+    check_row("alternating_misses", rep.misses == 100000);
+    check_row("alternating_transitions", rep.transitions == 0);
+    check_row("alternating_no_mega", rep.megamorphic == 0);
+    bool seen_training = false;
     for (int i = 0; i < 8; i++) {
-        if (rep.sites[i].trains == 1)
-            seen_poly2 = rep.sites[i].state == 3;  // POLY2
+        if (rep.sites[i].trains == 100000)
+            seen_training = rep.sites[i].state == 1;  // TRAINING
     }
-    check_row("poly2_site_state", seen_poly2);
-    if (!seen_poly2)
+    check_row("alternating_site_state", seen_training);
+    if (!seen_training)
         dump_report(rep);
     free_ctx(c);
 }
 
-// 5. Three-shape megamorphic transition: the field site sees a third
-// distinct shape and becomes megamorphic for the function lifetime.
+// 5. A three-shape rotation also stays in TRAINING; it never becomes an IC.
 void test_three_shape_megamorphic() {
     Ctx c = make_ctx(JS_IC_MODE_SHADOW);
     bool ok = true;
@@ -277,17 +274,14 @@ void test_three_shape_megamorphic() {
     check_row("mega_result", ok && r == "199999");
     JSICShadowReport rep;
     JS_ICGetShadowReport(c.rt, &rep);
-    check_row("mega_count", rep.megamorphic == 1);
-    bool seen_mega = false, seen_mono = false;
+    check_row("mega_count", rep.megamorphic == 0);
+    bool seen_training = false;
     for (int i = 0; i < 8; i++) {
-        if (rep.sites[i].state == 4)  // MEGAMORPHIC
-            seen_mega = true;
-        if (rep.sites[i].state == 2 && rep.sites[i].hits >= 99990)
-            seen_mono = true;  // the array site stays monomorphic
+        if (rep.sites[i].state == 1 && rep.sites[i].trains == 100000)
+            seen_training = true;
     }
-    check_row("mega_site", seen_mega);
-    check_row("mega_array_site_mono", seen_mono);
-    if (!(seen_mega && seen_mono))
+    check_row("mega_site_denied", seen_training);
+    if (!seen_training)
         dump_report(rep);
     free_ctx(c);
 }
@@ -307,16 +301,16 @@ void test_eight_consecutive_misses() {
     check_row("streak_result", ok && r == "24");
     JSICShadowReport rep;
     JS_ICGetShadowReport(c.rt, &rep);
-    check_row("streak_hits", rep.hits == 8);
-    check_row("streak_misses", rep.misses == 8);
+    check_row("streak_hits", rep.hits == 6);
+    check_row("streak_misses", rep.misses == 10);
     check_row("streak_mega", rep.megamorphic == 1);
-    if (!(rep.hits == 8 && rep.misses == 8 && rep.megamorphic == 1))
+    if (!(rep.hits == 6 && rep.misses == 10 && rep.megamorphic == 1))
         dump_report(rep);
     free_ctx(c);
 }
 
 // 7. Always-miss control: an accessor-only site is never cacheable,
-// never trains, and reaches megamorphic through the miss-streak rule.
+// never trains and stays cold; the miss streak applies only after MONO.
 void test_always_miss_accessor() {
     Ctx c = make_ctx(JS_IC_MODE_SHADOW);
     bool ok = true;
@@ -331,7 +325,7 @@ void test_always_miss_accessor() {
     JS_ICGetShadowReport(c.rt, &rep);
     check_row("accessor_no_train", rep.trains == 0 && rep.hits == 0);
     check_row("accessor_all_miss", rep.misses == 1000);
-    check_row("accessor_mega", rep.megamorphic == 1);
+    check_row("accessor_no_mega", rep.megamorphic == 0);
     if (!(rep.trains == 0 && rep.hits == 0 && rep.misses == 1000))
         dump_report(rep);
     free_ctx(c);
@@ -478,7 +472,124 @@ void test_id32_wrap_disables() {
     free_ctx(c);
 }
 
-// 13. Adjudication measurements (--bench): cycles per observed access
+// 13. ADAPTIVE: 128 cold observations are allocation-free, the next two
+// train, and all remaining accesses run through opcode 253 without hit-counter
+// writes. Switching OFF restores canonical get_field in place.
+void test_adaptive_mono_quickens() {
+    Ctx c = make_ctx(JS_IC_MODE_ADAPTIVE);
+    bool ok = true;
+    std::string r = run_int(
+        c,
+        "function hot() { const o = {a: 5}; let s = 0; "
+        "for (let i = 0; i < 100000; i++) s += o.a; return s; } "
+        "globalThis.__r = hot();",
+        &ok);
+    check_row("adaptive_result", ok && r == "500000");
+    JSICShadowReport rep;
+    JS_ICGetShadowReport(c.rt, &rep);
+    check_row("adaptive_quickened", rep.quickened == 1);
+    check_row("adaptive_not_dequickened", rep.dequickened == 0);
+    check_row("adaptive_two_training_observations",
+              rep.observations == 2 && rep.misses == 2 && rep.hits == 0);
+    JS_ICSetMode(c.rt, JS_IC_MODE_OFF);
+    JS_ICGetShadowReport(c.rt, &rep);
+    check_row("adaptive_mode_restore", rep.dequickened == 1 &&
+                                           JS_ICGetMode(c.rt) == JS_IC_MODE_OFF);
+    r = run_int(c, "globalThis.__r = hot();", &ok);
+    check_row("adaptive_restored_result", ok && r == "500000");
+    free_ctx(c);
+}
+
+// 14. Eight shape misses in the direct handler permanently deny that site.
+// The runtime opcode remains parked so later accesses reuse the full generic
+// get_field handler without re-entering the observer or writing counters.
+void test_adaptive_dequickens_on_miss_streak() {
+    Ctx c = make_ctx(JS_IC_MODE_ADAPTIVE);
+    bool ok = true;
+    std::string r = run_int(
+        c,
+        "function g(o) { return o.v; } const a = {v: 1}; "
+        "const b = {v: 2, w: 0}; let s = 0; "
+        "for (let i = 0; i < 140; i++) s += g(a); "
+        "for (let i = 0; i < 8; i++) s += g(b); "
+        "for (let i = 0; i < 10; i++) s += g(a); "
+        "globalThis.__r = s;",
+        &ok);
+    check_row("dequicken_result", ok && r == "166");
+    JSICShadowReport rep;
+    JS_ICGetShadowReport(c.rt, &rep);
+    check_row("dequicken_counts", rep.quickened == 1 &&
+                                      rep.dequickened == 1 &&
+                                      rep.megamorphic == 1);
+    const uint64_t observations_after_park = rep.observations;
+    const uint64_t misses_after_park = rep.misses;
+    r = run_int(
+        c,
+        "let tail = 0; for (let i = 0; i < 100000; i++) tail += g(a); "
+        "globalThis.__r = tail;",
+        &ok);
+    check_row("dequicken_terminal_result", ok && r == "100000");
+    JS_ICGetShadowReport(c.rt, &rep);
+    check_row("dequicken_terminal_observation_free",
+              rep.observations == observations_after_park &&
+                  rep.misses == misses_after_park &&
+                  rep.dequickened == 1 && rep.megamorphic == 1);
+    if (!(rep.observations == observations_after_park &&
+          rep.misses == misses_after_park && rep.dequickened == 1 &&
+          rep.megamorphic == 1))
+        dump_report(rep);
+    free_ctx(c);
+}
+
+// 15. Serializing a live quickened function rewrites only the writer's copy
+// to canonical get_field + atom. A fresh OFF runtime can load and execute it.
+void test_adaptive_snapshot_is_canonical() {
+    Ctx c = make_ctx(JS_IC_MODE_ADAPTIVE);
+    std::string err;
+    const char* src =
+        "function g(o) { return o.v; } const o = {v: 7}; let s = 0; "
+        "for (let i = 0; i < 140; i++) s += g(o); globalThis.__r = s;";
+    JSValue compiled = JS_Eval(c.ctx, src, std::strlen(src), "snapshot.js",
+                               JS_EVAL_TYPE_GLOBAL |
+                                   JS_EVAL_FLAG_COMPILE_ONLY);
+    bool ok = !JS_IsException(compiled);
+    JSValue eval_result = ok ? JS_EvalFunction(c.ctx,
+                                                JS_DupValue(c.ctx, compiled))
+                             : JS_EXCEPTION;
+    ok = ok && !JS_IsException(eval_result);
+    JS_FreeValue(c.ctx, eval_result);
+    JSICShadowReport rep;
+    JS_ICGetShadowReport(c.rt, &rep);
+    check_row("snapshot_source_quickened", ok && rep.quickened == 1);
+    std::size_t size = 0;
+    std::uint8_t* data = ok ? JS_WriteObject(
+                                  c.ctx, &size, compiled, JS_WRITE_OBJ_BYTECODE)
+                            : nullptr;
+    check_row("snapshot_write", data != nullptr && size > 0);
+
+    Ctx fresh = make_ctx(JS_IC_MODE_OFF);
+    JSValue loaded = data ? JS_ReadObject(fresh.ctx, data, size,
+                                          JS_READ_OBJ_BYTECODE)
+                          : JS_EXCEPTION;
+    JSValue ret = !JS_IsException(loaded)
+                      ? JS_EvalFunction(fresh.ctx, loaded)
+                      : JS_EXCEPTION;
+    loaded = JS_UNDEFINED;  // JS_EvalFunction consumed the bytecode value.
+    int32_t result = 0;
+    bool loaded_ok = !JS_IsException(ret) &&
+                     JS_ToInt32(fresh.ctx, &result, ret) == 0 && result == 980;
+    check_row("snapshot_fresh_runtime_exec", loaded_ok);
+
+    JS_FreeValue(fresh.ctx, ret);
+    JS_FreeValue(fresh.ctx, loaded);
+    free_ctx(fresh);
+    if (data)
+        js_free(c.ctx, data);
+    JS_FreeValue(c.ctx, compiled);
+    free_ctx(c);
+}
+
+// 16. Adjudication measurements (--bench): cycles per observed access
 // on the mono tight loop, bytes per function state, observations.
 void bench_mono() {
 #if defined(__x86_64__)
@@ -526,7 +637,7 @@ int main(int argc, char** argv) {
     test_layout_gate();
     test_mono_tight_loop();
     test_two_pcs_same_atom_no_pollution();
-    test_poly2_alternating();
+    test_alternating_shapes();
     test_three_shape_megamorphic();
     test_eight_consecutive_misses();
     test_always_miss_accessor();
@@ -535,6 +646,9 @@ int main(int argc, char** argv) {
     test_shadow_generic_authoritative();
     test_budget_cap();
     test_id32_wrap_disables();
+    test_adaptive_mono_quickens();
+    test_adaptive_dequickens_on_miss_streak();
+    test_adaptive_snapshot_is_canonical();
     if (argc > 1 && std::strcmp(argv[1], "--bench") == 0)
         bench_mono();
     if (g_fail) {

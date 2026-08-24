@@ -192,17 +192,23 @@ function(capsid_compute_txiki_overlay_key)
     #      object and linked-binary level for the OFF configuration).
     # 0037 BC27/OP_ext format foundation (ext table, dual reader, stack
     #      verifier, dispatch stub; catalog empty, emission off).
-    # 0038 EXT_get_array_el handler + canonical BC27 writer selection.
+    # 0038 EXT_get_array_el handler + canonical BC27 writer selection
+    #      (retired by 0041; retained in history so the reserved id cannot
+    #      be silently reused).
     # 0039 S0 shape-guard A/B measurement backends (compile-gated
     #      ID32/STRONG_REF sites; no production consumer, both OFF by
     #      default — zero tax enforced by the OFF configuration).
     # 0040 S1 SHADOW IC bounded lazy sidecars (compile-gated; builds on
-    #      ID32; SHADOW only trains and reports, generic stays
-    #      authoritative; OFF by default — zero tax enforced by the
-    #      OFF configuration).
-    if(NOT CTOK_PATCH_COUNT EQUAL 41)
+    #      ID32); 0041 exact-PC monomorphic get_field quickening with a
+    #      runtime-only direct opcode, plus retirement/reservation of the
+    #      rejected single-op array ext id. 0042 adds source provenance to
+    #      the diagnostic opcode profile so bootstrap sites cannot rank as
+    #      application AOT candidates. 0043 keeps mixed int/float multiply
+    #      in the interpreter's numeric fast path. 0044 makes every rejected
+    #      ext encoding install a real SyntaxError before returning.
+    if(NOT CTOK_PATCH_COUNT EQUAL 45)
         message(FATAL_ERROR
-            "expected 41 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 45 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

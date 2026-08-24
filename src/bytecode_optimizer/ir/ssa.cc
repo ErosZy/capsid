@@ -529,13 +529,42 @@ void transfer(const Analyzer& A, const SsaNode& node, SsaFunc* f,
     case OP_typeof:
         set(0, Lattice::STRING, 0, false);
         return;
-    case OP_not: case OP_lnot: case OP_is_undefined: case OP_is_null:
+    case OP_lnot: case OP_is_undefined: case OP_is_null:
     case OP_is_undefined_or_null: case OP_typeof_is_undefined:
     case OP_typeof_is_function:
     case OP_lt: case OP_lte: case OP_gt: case OP_gte:
     case OP_eq: case OP_neq: case OP_strict_eq: case OP_strict_neq:
     case OP_in: case OP_instanceof:
         set(0, Lattice::INT32, 0, false);
+        return;
+    case OP_not: {
+        // Number ~ produces int32, but BigInt ~ produces BigInt. UNKNOWN
+        // therefore cannot be narrowed merely because execution returned.
+        const Lattice a = node.args.empty()
+                                  ? Lattice::UNKNOWN
+                                  : f->lattice[node.args[0]];
+        const bool numeric = a == Lattice::INT32 ||
+                             a == Lattice::FLOAT64 ||
+                             a == Lattice::NUMBER;
+        set(0, numeric ? Lattice::INT32 : Lattice::UNKNOWN, 0, false);
+        return;
+    }
+    case OP_and: case OP_or: case OP_xor: case OP_shl: case OP_sar: {
+        // Number operands produce an int32. These operators also have a
+        // normal BigInt result, so an unproven operand pair stays UNKNOWN.
+        bool numeric = node.args.size() >= 2;
+        for (size_t i = 0; numeric && i < 2; i++) {
+            const Lattice a = f->lattice[node.args[i]];
+            numeric = a == Lattice::INT32 || a == Lattice::FLOAT64 ||
+                      a == Lattice::NUMBER;
+        }
+        set(0, numeric ? Lattice::INT32 : Lattice::UNKNOWN, 0, false);
+        return;
+    }
+    case OP_shr:
+        // Unsigned shift can exceed INT32_MAX and become a float64-tagged
+        // uint32 in QuickJS.
+        set(0, Lattice::NUMBER, 0, false);
         return;
     case OP_add: case OP_sub: case OP_mul: {
         // args are top-first: [right, left]; result = left op right.
@@ -556,8 +585,8 @@ void transfer(const Analyzer& A, const SsaNode& node, SsaFunc* f,
         }
         if (la == Lattice::INT32 && lb == Lattice::INT32 && ha && hb) {
             // Fold small ints (the int64 intermediate is exact for two
-            // int32 operands); an int32-range overflow becomes a
-            // float64 at runtime -> UNKNOWN per §3.3.
+            // int32 operands). QuickJS represents an int32-range overflow
+            // as a float64 number, so retain that proven tag class.
             int64_t r = 0;
             if (in.op == OP_add) {
                 r = ia + ib;
@@ -567,19 +596,48 @@ void transfer(const Analyzer& A, const SsaNode& node, SsaFunc* f,
                 r = ia * ib;
             }
             if (r < INT_MIN || r > INT_MAX) {
-                set(0, Lattice::UNKNOWN, 0, false);
+                set(0, Lattice::FLOAT64, 0, false);
             } else {
                 set(0, Lattice::INT32, r, true);
             }
         } else {
-            static const std::vector<uint32_t> kNoShapes;
-            Lattice jlat;
-            int64_t jimm;
-            bool jhas;
-            std::vector<uint32_t> dummy;
-            jlat = join_lattice(la, ia, ha, lb, ib, hb, &jimm, &jhas,
-                                kNoShapes, kNoShapes, &dummy);
-            set(0, jlat, jimm, jhas);
+            const bool a_num = la == Lattice::INT32 ||
+                               la == Lattice::FLOAT64 ||
+                               la == Lattice::NUMBER;
+            const bool b_num = lb == Lattice::INT32 ||
+                               lb == Lattice::FLOAT64 ||
+                               lb == Lattice::NUMBER;
+            if (a_num && b_num) {
+                // Two unknown int32 operands can overflow. The old transfer
+                // joined INT32+INT32 back to INT32 and was unsound for any
+                // later tag-specialized lowering.
+                set(0, la == Lattice::FLOAT64 && lb == Lattice::FLOAT64
+                           ? Lattice::FLOAT64
+                           : Lattice::NUMBER,
+                    0, false);
+            } else {
+                set(0, Lattice::UNKNOWN, 0, false);
+            }
+        }
+        return;
+    }
+    case OP_div: case OP_mod: case OP_pow: {
+        if (node.args.size() < 2) {
+            set(0, Lattice::UNKNOWN, 0, false);
+            return;
+        }
+        const Lattice la = f->lattice[node.args[1]];
+        const Lattice lb = f->lattice[node.args[0]];
+        const bool a_num = la == Lattice::INT32 ||
+                           la == Lattice::FLOAT64 ||
+                           la == Lattice::NUMBER;
+        const bool b_num = lb == Lattice::INT32 ||
+                           lb == Lattice::FLOAT64 ||
+                           lb == Lattice::NUMBER;
+        if (!a_num || !b_num) {
+            set(0, Lattice::UNKNOWN, 0, false);
+        } else {
+            set(0, Lattice::NUMBER, 0, false);
         }
         return;
     }

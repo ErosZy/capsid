@@ -74,9 +74,24 @@ for name in $FIXTURES; do
             continue
         fi
     fi
-    src_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v1"' \
+    src_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v3"' \
         "$OUT/$name.source.profile.jsonl" || true)
-    opt_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v1"' \
+    opt_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v3"' \
         "$OUT/$name.opt.profile.jsonl" || true)
     echo "$name: $src_n source profiles, $opt_n opt profiles"
 done
+
+# Runtime function ids are deliberately local to one dump. Aggregate only
+# opcode patterns here; any concrete lowering must rediscover and re-prove a
+# matching site in the serialized bundle's CFG+SSA form.
+python3 bench/profile_sequences.py "$OUT" --mode source \
+    --source-template 'file:///app/{name}.js' \
+    --json-out "$OUT/sequences.source.json" \
+    | tee "$OUT/sequences.source.txt"
+python3 bench/profile_sequences.py "$OUT" --mode opt \
+    --source-template 'file:///app/{name}.js' \
+    --json-out "$OUT/sequences.opt.json" \
+    | tee "$OUT/sequences.opt.txt"
+
+find "$OUT" -maxdepth 1 -type f ! -name sha256sums.txt -print0 | sort -z | \
+    xargs -0 sha256sum >"$OUT/sha256sums.txt"

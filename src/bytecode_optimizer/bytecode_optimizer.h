@@ -3,11 +3,10 @@
 // rewrites standard quickjs-ng bytecode (BC_VERSION 26) produced by
 // capsid-bytecode-compile before attestation. Never changes the
 // vendored VM or the compatibility identity; unmodified runtimes load
-// the output with JS_ReadObject as-is. R0 (tier-3 plan §5.3.1) may
-// emit BC27 ext sites (OP_ext, quickjs-ext-opcode.h) when the
-// optimizer is built with CAPSID_AOT_EMIT_EXT; the dual reader in the
-// vendored runtime accepts both versions, and an emission-OFF build
-// stays byte-identical BC26.
+// the output with JS_ReadObject as-is. The deployed optimizer emits
+// canonical BC26 only. BC27 is owned by the separate ext/fusion
+// foundation and is not emitted until a measured multi-instruction
+// template passes its independent keep gate.
 //
 // Fail-closed contract: any input the optimizer cannot fully parse
 // (unknown BCTag, unknown opcode, malformed LEB128, checksum mismatch,
@@ -88,26 +87,8 @@ enum PassFlags : uint32_t {
     // so deletion is stack-neutral with no target fixups beyond the
     // standard compaction remap.
     kPassTier3Lane2 = 1u << 6,
-    // R0 (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md §5.3.1/§10
-    // item 9): emit the measured fast-array/int-index ext template at
-    // every get_array_el site of the final stream. The wire form is
-    // OP_ext + ext_id 1 (BC27, quickjs-ext-opcode.h), pop 2 push 1 —
-    // identical stack effect to get_array_el. Semantics-preserving at
-    // every site: the interpreter's guard set (tag object + tag int +
-    // js_get_fast_array_element class/bounds) is exact, and a miss
-    // executes the identical generic property operation, so the
-    // conversion only ever pays +1 byte per site (measured in the R0
-    // A/B). No shape identity is involved. Included in kPassAll only
-    // when the optimizer is compiled with CAPSID_AOT_EMIT_EXT, so an
-    // emission-OFF build is byte-identical BC26 (rollback contract §7).
-    kPassExtFastArrayGet = 1u << 7,
-#if defined(CAPSID_AOT_EMIT_EXT)
-    kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassP16 |
-               kPassTier3Lane1 | kPassTier3Lane2 | kPassExtFastArrayGet,
-#else
     kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassP16 |
                kPassTier3Lane1 | kPassTier3Lane2,
-#endif
 };
 
 // Optimizes `in` (a serialized quickjs-ng bytecode buffer) into `out`.
@@ -121,6 +102,17 @@ bool optimize(const std::vector<std::uint8_t>& in,
               uint32_t passes,
               bool report,
               std::string* error);
+
+// Benchmark-only classic-script entry. Capsid's product compiler and worker
+// remain module-only and call optimize(); this function exists solely so the
+// upstream classic-script suites can exercise the identical rewrite pipeline
+// without changing their strictness/global semantics. It requires a serialized
+// top-level global function and rejects a module record.
+bool optimize_classic_for_benchmark(const std::vector<std::uint8_t>& in,
+                                    std::vector<std::uint8_t>* out,
+                                    uint32_t passes,
+                                    bool report,
+                                    std::string* error);
 
 // Step 0 analysis: parse and validate, then report foldability
 // statistics per function to stderr (never to stdout or `out`).
@@ -151,10 +143,12 @@ bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error);
 
 // I2 region census (tier-3 plan §4, analyze-only): matches candidate
 // fusion regions (the §4.2 template catalog) on the SSA form of every
-// decodable function and reports dynamic weighted coverage, guard
+// decodable function and reports static coverage, guard
 // requirements, slow-path duplication, and the §4.1 predicted cost to
 // stderr, selecting the at-most-two first templates by predicted
-// total. Nothing is emitted; the production pipeline never calls this.
+// total. The lower-level region_round_trip_profiled API performs dynamic
+// exact-site weighting for decisions. Nothing is emitted; the production
+// pipeline never calls this.
 // Functions the analyses cannot prove are counted as rejected coverage
 // and reported, never skipped silently. Returns false only on a
 // whole-bundle parse failure, same contract as optimize().

@@ -1,9 +1,10 @@
 # QuickJS-ng Opcode Profiling, AOT Specialization, and PGO
 
 > Status: completed bytecode-only profiling/AOT phase and evidence record.
-> A0-A4, C1, C2, and D1 are complete. The 2026-08-24 product decision opens
-> BC27, full CFG+SSA, shape IC, GC integration, fusion, and quickening under
-> the successor [CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).
+> Profile v1 results below are historical. Overlays 0041/0042 upgrade collection
+> to source-attributed exact-site `quickjs-ng-opcode-profile-v3`; current runtime IC, R0 retirement,
+> and fusion status are maintained in section 16 of the successor
+> [CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).
 
 ## 1. Goal, Limits, and Expected Benefit
 
@@ -70,8 +71,9 @@ results recorded here.
 
 The design is anchored to the pinned quickjs-ng vendor source, not assumptions:
 
-- serialized normal/short opcodes occupy 0..251 and `OP_COUNT == 252`; byte
-  values 252..255 are currently free;
+- serialized normal/short opcodes occupy 0..251. The current overlay reserves
+  252 for `OP_ext` and 253 for runtime-only `get_field_ic`; BC26 rejects both,
+  and bytes 254..255 remain invalid;
 - `call`, `call_method`, constructors and tail calls carry only `u16 argc`;
   the callee and receiver are stack values; only `fclosure/fclosure8` carries a
   function cpool index;
@@ -112,35 +114,36 @@ short-write failure is fatal. Production `qjs` does not recognize the flag.
 
 ### 3.2 Profile contents
 
-Schema name: `quickjs-ng-opcode-profile-v1`. Record 64-bit saturating counters
-for:
+The archived A0–D1 evidence uses `quickjs-ng-opcode-profile-v1`: per-runtime
+saturating execution counters, arithmetic classes, branch direction, call argc
+buckets, and coarse property fast/slow counts. In particular, v1 counted entry
+into `JS_GetPropertyValue` as a slow array path even when that helper immediately
+took its dense-array fast path. R0 later proved this distinction matters.
 
-- dynamic executions, slow-path entries, exceptions, and sampled ticks by
-  opcode;
-- arithmetic operand classes (int-int, number-number, string, BigInt, other);
-- property/index classes (object, own data, prototype, accessor, proxy/exotic,
-  dense/hole/typed array);
-- calls (bytecode/C/bound/proxy, argc bucket, callee stability);
-- branch direction, backedges, and top opcode pairs/triples;
-- per-site hits, dominant class, miss count, and polymorphism.
+The maintained implementation is `quickjs-ng-opcode-profile-v3`. It retains
+the aggregate counters and adds a bounded 65,536-entry exact-site table for every
+opcode. Each row has a source-filename hash, runtime-local function id, original
+PC, opcode, execution count, and property classes when applicable. Property observations classify the
+path actually taken as `direct`, `prototype_or_int_fallback`,
+`missing_or_key_fallback`, `accessor_or_generic`, or
+`primitive_or_nullish`. Array classification mirrors the side-effect-free
+dense-array class/bounds test before the helper call. Saturation and site-table
+overflow are explicit in the JSON.
 
-Sampling must not reorder the observed fast/slow branches. Calibrate clock
-overhead with a control handler and report how much the profiling binary itself
-perturbs patchless execution. Profiling results rank opportunities; production
-performance is never measured with this build.
+Sampling must not reorder the observed branches. Profiling results only rank
+opportunities; production performance is never measured with this build.
+`bench/profile-aggregate.py` remains backward-compatible with archived v1/v2
+dumps while using the true v2/v3 classes and exact-site ratios for new evidence.
+Fusion ranking is stricter: `bench/profile_sequences.py` accepts v2 for archive
+inspection, but source-filtered candidate selection fails closed unless a v3
+row's source hash matches the application module being analyzed.
 
-The first implementation (overlay patch 0036) covers a strict subset: per-
-opcode dispatch executions and slow-path entries, three-way arithmetic operand
-classes for `add/sub/mul/div/mod` (int-int, float-float, other), branch
-direction, call argc buckets, and property fast/slow counts. Remaining classes
-are additive and keep the schema name `quickjs-ng-opcode-profile-v1`. All
-counters are per-runtime saturating u64s, so the process may host multiple
-worker runtimes; the dump API emits one JSON object per runtime.
+### 3.3 Site identity and offline binding
 
-### 3.3 Stable site identity
-
-Addresses, paths, atom text, and runtime allocation order are forbidden. A site
-key is:
+Profile v3 exact PCs remove the old collision-prone `(pc >> 2) & 7` style of
+measurement, but its function id is runtime-local and is not an offline PGO
+identity. Addresses and runtime allocation order remain forbidden. A future
+emitting profile must normalize each observation to:
 
 ```text
 prePgoBundleSha256
@@ -153,8 +156,9 @@ originalOpcode
 `functionCpoolPath` follows serialized child-function indexes from the root.
 Profile the canonical output of today's `kPassAll`, called bundle B. A later
 PGO compile must regenerate B byte-for-byte, verify its SHA-256, then match the
-path/PC/opcode. Any mismatch, duplicate site, overflow, limit, or schema/build
-identity error fails closed.
+path/PC/opcode. It must never equate a v2 runtime function id with serialized
+preorder by assumption. Any missing/ambiguous mapping, duplicate site,
+overflow, limit, or schema/build identity error fails closed.
 
 Profile parsing has hard limits for bytes, site count, transition count, nesting
 and counter values. Profile data may select a semantics-preserving guarded
@@ -181,6 +185,11 @@ at least 2% of sampled interpreter ticks. Fewer qualified candidates means
 fewer prototypes; none ends the project after the no-go report.
 
 ### 3.4a First-round evidence (2026-08-23)
+
+This table is a v1 historical ranking. Its dynamic execution counts remain
+useful, but its `get_array_el` slow-path cost is not: v2 observes the actual
+dense-array fast path inside `JS_GetPropertyValue`, and the R0 paired A/B
+measured the duplicate ext handler as a regression.
 
 Corpus: the 13 bench fixtures (ES-module, strict) + v8-suite
 (`bench/fixtures/v8-suite-rt.js`, sablejs adaptation, sloppy) — 14 profiles

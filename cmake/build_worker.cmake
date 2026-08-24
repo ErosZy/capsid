@@ -146,10 +146,9 @@ if(CAPSID_BUILD_WORKER)
         CACHE BOOL "" FORCE)
     set(CONFIG_SHAPE_GUARD_STRONG_REF ${CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF}
         CACHE BOOL "" FORCE)
-    # S1: forward the SHADOW IC measurement backend into the quickjs
-    # xoptions. Same rule as the shape-guard forwarding: the overlay
-    # key/manifest do not depend on this cache value — the compiled
-    # code does, so production builds keep it OFF.
+    # Forward the exact-PC SHADOW/adaptive field IC into quickjs. The
+    # overlay identity is mode-independent; the binary is not, and the
+    # production configuration remains OFF pending paired A/B evidence.
     set(CONFIG_SHAPE_GUARD_IC ${CAPSID_ENABLE_SHAPE_GUARD_IC}
         CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
@@ -279,6 +278,16 @@ if(CAPSID_BUILD_WORKER)
         target_compile_definitions(capsid-worker PRIVATE
             CAPSID_OPCODE_PROFILE=1)
     endif()
+    if(CAPSID_ENABLE_SHAPE_GUARD_IC)
+        # Measurement-only worker control. CONFIG_SHAPE_GUARD_IC exposes the
+        # compile-gated QuickJS API in quickjs.h; CAPSID_SHAPE_GUARD_IC gates
+        # the environment selector/reporting code in worker_runtime.cc. The
+        # ordinary build compiles out both and the experimental build still
+        # defaults to OFF unless CAPSID_SHAPE_IC_MODE is explicitly set.
+        target_compile_definitions(capsid-worker PRIVATE
+            CONFIG_SHAPE_GUARD_IC=1
+            CAPSID_SHAPE_GUARD_IC=1)
+    endif()
     if(CAPSID_GENERATE_LINK_MAP)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
            CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -368,15 +377,6 @@ if(CAPSID_BUILD_WORKER)
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF)
-    # R0: BC27 ext emission (kPassExtFastArrayGet enters kPassAll). OFF
-    # by default — an emission-OFF build is byte-identical BC26.
-    # INTERFACE (not PRIVATE): every consumer TU that passes kPassAll
-    # (capsid-bytecode-compile, bench tools, tests) must see the same
-    # mask as the library, or the emission bit silently never fires.
-    if(CAPSID_AOT_EMIT_EXT)
-        target_compile_definitions(capsid_bytecode_opt INTERFACE
-            CAPSID_AOT_EMIT_EXT=1)
-    endif()
     if(CAPSID_STRICT_WARNINGS)
         if(MSVC)
             target_compile_options(capsid_bytecode_opt PRIVATE /W4 /WX)
@@ -387,6 +387,5 @@ if(CAPSID_BUILD_WORKER)
     endif()
     target_link_libraries(capsid-bytecode-compile PRIVATE
         capsid_bytecode_opt)
-
     add_dependencies(capsid_runtime capsid-worker)
 endif()

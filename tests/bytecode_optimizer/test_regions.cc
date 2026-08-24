@@ -1,6 +1,7 @@
 // I2 region census gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §4): matches candidate fusion regions (the §4.2 template catalog) on
-// the SSA form and reports weighted coverage, guard requirements,
+// §4): matches multi-instruction candidate fusion regions (the §4.2
+// template catalog) on the SSA form and reports static plus exact-site
+// dynamically weighted coverage, guard requirements,
 // slow-path duplication, and the §4.1 predicted cost, selecting the
 // at-most-two first templates. Part A drives the bundle-level
 // region_round_trip walker on hand-built canonical BC26 function blobs
@@ -17,7 +18,7 @@
 // Byte values are the serialized opcode space (quickjs-opcode.h
 // physical order, temps excluded): object=11, drop=14, return_undef=41,
 // get_field=64, put_field=66, get_array_el=70, get_array_el2=71,
-// put_array_el=72, catch=107, nip_catch=110, add=156, dup=17, push_0=186,
+// put_array_el=72, put_loc0=207, catch=107, nip_catch=110, add=156, dup=17, push_0=186,
 // push_1=187, push_i8=194, if_false8=240, if_true8=241, goto8=242.
 // Jump targets: pc + size + signed aux (catch aux is the 4-byte diff at
 // pc+1; if_true8/goto8 aux is the u8 at pc+1). get_field/put_field
@@ -173,20 +174,17 @@ void check_tmpl(const ir::RegionCensusReport& rep, ir::Template t,
 // Part A: the synthetic matrix.
 // ---------------------------------------------------------------------------
 
-// r1: i32 arith chain at a join. p1 (the merge parameter) joins imm 5
-// and imm 3 -> INT32 without an imm; the dup copy keeps the no-imm
-// lattice, so both adjacent adds survive the both-immediates exclusion
-// and form one 2-node candidate run. (a3's join, with dup; add; add
-// replacing the single add.)
+// r1: a sound i32 chain. The first `and` folds two immediate-tag inputs
+// conceptually and is excluded; its result has no immediate, so the next
+// two adjacent bitwise ops form a two-node candidate. Unlike add/sub/mul,
+// bitwise normal results cannot overflow out of INT32.
 void test_r1_i32_chain() {
-    // push_0; push_1; if_true8 +5; push_i8 5; goto8 +3; [B1] push_i8 3;
-    // [B2] dup; add; add; return_undef.
-    const std::vector<std::uint8_t> code = {186, 187, 241, 5,  194, 5,
-                                            242, 3,   194, 3,  17,  156,
-                                            156, 41};
+    // push_0; push_1; push_2; push_3; and; and; and; return_undef.
+    const std::vector<std::uint8_t> code = {186, 187, 188, 189,
+                                            161, 161, 161, 41};
     std::string err;
     ir::RegionCensusReport rep;
-    CHECK(census_blob(code, 3, &rep, &err));
+    CHECK(census_blob(code, 4, &rep, &err));
     if (err.empty() && rep.functions == 0) return;
     CHECK(rep.functions == 1);
     CHECK(rep.rejected_functions == 0);
@@ -212,9 +210,8 @@ void test_r2_shape_chain() {
     check_tmpl(rep, ir::Template::SHAPE_GET_OWN, 1, 2, 1, 1);
 }
 
-// r3: array get sites with provably-int indices — get_array_el on an
-// OBJECT_SHAPES object, then get_array_el2 on the (UNKNOWN) result.
-// The push_1 between them splits the run: two 1-node candidates.
+// r3: isolated array gets are quickening candidates, not OP_ext fusion
+// regions. The push between them prevents a multi-instruction run.
 void test_r3_array_get() {
     // object; push_0; get_array_el; push_1; get_array_el2; return_undef.
     const std::vector<std::uint8_t> code = {11, 186, 70, 187, 71, 41};
@@ -224,12 +221,11 @@ void test_r3_array_get() {
     if (err.empty() && rep.functions == 0) return;
     CHECK(rep.functions == 1);
     CHECK(rep.rejected_functions == 0);
-    // Two 1-insn candidates: each predicted = 2*1 - 2 - 1 - 1/8 = -1.
-    check_tmpl(rep, ir::Template::FAST_ARRAY_GET_I32, 2, 2, -2, -1);
+    for (size_t i = 0; i < static_cast<size_t>(ir::Template::COUNT); i++)
+        CHECK(rep.candidates[i] == 0);
 }
 
-// r4: array update site — put_array_el with a provably-int index and
-// a provably-int stored value (update_number).
+// r4: one array update is likewise not a fusion region.
 void test_r4_array_update() {
     // object; push_0; push_1; put_array_el; return_undef.
     const std::vector<std::uint8_t> code = {11, 186, 187, 72, 41};
@@ -239,8 +235,8 @@ void test_r4_array_update() {
     if (err.empty() && rep.functions == 0) return;
     CHECK(rep.functions == 1);
     CHECK(rep.rejected_functions == 0);
-    // One 1-insn candidate: predicted = 2*1 - 2 - 1 - 1/8 = -1.
-    check_tmpl(rep, ir::Template::FAST_ARRAY_UPDATE_NUM, 1, 1, -1, -1);
+    for (size_t i = 0; i < static_cast<size_t>(ir::Template::COUNT); i++)
+        CHECK(rep.candidates[i] == 0);
 }
 
 // r5: the 8-instruction region cap — ten adjacent get_fields split
@@ -289,8 +285,7 @@ void test_r6_handler() {
     CHECK(rep.first_templates[1] == ir::Template::COUNT);
 }
 
-// r7: shape put site — put_field over a literal object with a
-// provably-int stored value (own-data shape guard, 2 guards).
+// r7: one shape put belongs to an IC/quickening path, not fusion.
 void test_r7_shape_put() {
     // object; push_0; put_field; return_undef.
     const std::vector<std::uint8_t> code = {11, 186, 66, 0, 0, 0, 0, 41};
@@ -300,26 +295,22 @@ void test_r7_shape_put() {
     if (err.empty() && rep.functions == 0) return;
     CHECK(rep.functions == 1);
     CHECK(rep.rejected_functions == 0);
-    // One 1-insn candidate: predicted = 2*1 - 2 - 1 - 5/8 = -1.
-    check_tmpl(rep, ir::Template::SHAPE_PUT_OWN, 1, 1, -1, -1);
+    for (size_t i = 0; i < static_cast<size_t>(ir::Template::COUNT); i++)
+        CHECK(rep.candidates[i] == 0);
 }
 
 // r8: the at-most-two selection — a bundle with a shape chain
 // (predicted 1) and an i32 chain (predicted 3) selects the i32 chain
 // first, the shape chain second, and nothing else.
 void test_r8_selection() {
-    // object; get_field; get_field; push_0; push_1; if_true8 +5;
-    // push_i8 5; goto8 +3; [B1] push_i8 3; [B2] dup; add; add;
-    // return_undef.
+    // object; get_field; get_field; push_0..push_3; and; and; and;
+    // return_undef. The first and is the both-immediate exclusion.
     const std::vector<std::uint8_t> code = {11,  64,  0,  0,  0,  0,  64,
                                             0,   0,   0,  0,  186, 187,
-                                            241, 5,   194, 5,  242, 3,
-                                            194, 3,   17,  156, 156, 41};
+                                            188, 189, 161, 161, 161, 41};
     std::string err;
     ir::RegionCensusReport rep;
-    // B2 enters at height 3 (the shape-chain values ride along), so
-    // the dup peaks at 4.
-    CHECK(census_blob(code, 4, &rep, &err));
+    CHECK(census_blob(code, 5, &rep, &err));
     if (err.empty() && rep.functions == 0) return;
     CHECK(rep.functions == 1);
     CHECK(rep.rejected_functions == 0);
@@ -335,6 +326,45 @@ void test_r8_selection() {
     CHECK(rep.first_candidates[1] == 1);
 }
 
+// r9: the same static candidates reverse order under exact dynamic weights:
+// the shape chain runs 1000 times while the i32 chain runs 10. Missing exact
+// site evidence gives a region weight of zero instead of silently using the
+// static count.
+void test_r9_dynamic_weighting() {
+    const std::vector<std::uint8_t> code = {11,  64,  0,  0,  0,  0,  64,
+                                            0,   0,   0,  0,  186, 187,
+                                            188, 189, 161, 161, 161, 41};
+    std::vector<std::uint8_t> bundle = make_bundle(code, 5);
+    ir::RegionExecutionProfile profile;
+    profile.sites.push_back({0, 1, 1000});
+    profile.sites.push_back({0, 6, 1000});
+    profile.sites.push_back({0, 16, 10});
+    profile.sites.push_back({0, 17, 10});
+    ir::RegionCensusReport rep;
+    std::string err;
+    CHECK(ir::region_round_trip_profiled(bundle.data(), bundle.size(),
+                                          profile, &rep, &err));
+    CHECK(rep.has_dynamic_profile);
+    CHECK(rep.missing_profile_sites == 0);
+    const size_t shape = static_cast<size_t>(ir::Template::SHAPE_GET_OWN);
+    const size_t i32 = static_cast<size_t>(ir::Template::I32_ARITH_CHAIN);
+    CHECK(rep.dynamic_candidates[shape] == 1000);
+    CHECK(rep.dynamic_insns_covered[shape] == 2000);
+    CHECK(rep.dynamic_predicted_total[shape] == 1000);
+    CHECK(rep.dynamic_candidates[i32] == 10);
+    CHECK(rep.dynamic_predicted_total[i32] == 30);
+    CHECK(rep.first_templates[0] == ir::Template::SHAPE_GET_OWN);
+    CHECK(rep.first_templates[1] == ir::Template::I32_ARITH_CHAIN);
+
+    profile.sites.erase(profile.sites.begin() + 1);  // shape pc 6 missing
+    CHECK(ir::region_round_trip_profiled(bundle.data(), bundle.size(),
+                                          profile, &rep, &err));
+    CHECK(rep.missing_profile_sites == 1);
+    CHECK(rep.dynamic_candidates[shape] == 0);
+    CHECK(rep.first_templates[0] == ir::Template::I32_ARITH_CHAIN);
+    CHECK(rep.first_templates[1] == ir::Template::COUNT);
+}
+
 void test_region_blobs() {
     test_r1_i32_chain();
     test_r2_shape_chain();
@@ -344,6 +374,7 @@ void test_region_blobs() {
     test_r6_handler();
     test_r7_shape_put();
     test_r8_selection();
+    test_r9_dynamic_weighting();
 }
 
 // ---------------------------------------------------------------------------
@@ -364,9 +395,9 @@ void test_region_bundles() {
     CHECK(rep.functions == 1);
     CHECK(rep.rejected_functions == 0);
     CHECK(rep.rejected_insns == 0);
-    // object (OBJECT_SHAPES) + push_0 (INT32): get_array_el matches.
+    // object + push_0 + one get_array_el has no multi-op fusion region.
     CHECK(rep.candidates[static_cast<size_t>(
-             ir::Template::FAST_ARRAY_GET_I32)] == 1);
+             ir::Template::FAST_ARRAY_GET_I32)] == 0);
     // The public entry agrees.
     CHECK(capsid::bytecode::region_census(good, &err));
     CHECK(err.empty());
@@ -458,7 +489,6 @@ void test_corpus_regions() {
         "let x; if (globalThis.__c) { x = 1; } x = 5; "
         "globalThis.__r = x;",
     };
-    std::uint64_t total_insns = 0;
     for (const char* src : sources) {
         JSValue module = JS_Eval(ctx, src, std::strlen(src), "region.js",
                                  JS_EVAL_TYPE_MODULE |
@@ -505,17 +535,13 @@ void test_corpus_regions() {
             continue;
         }
         CHECK(rep.functions > 0);
-        for (size_t i = 0; i < static_cast<size_t>(ir::Template::COUNT);
-             i++) {
-            total_insns += rep.insns_covered[i];
-        }
         // The public entry agrees on every corpus bundle.
         CHECK(capsid::bytecode::region_census(buf, &err));
         if (g_failures > 5) break;  // don't flood past the first few
     }
-    // The census is not vacuous on the corpus: the object-property loop
-    // sources must surface real shape-guard demand.
-    CHECK(total_insns > 0);
+    // Candidate demand is asserted by the synthetic matrix. Zero candidates
+    // in this corpus is a valid decision result and must block inventing an
+    // OP_ext fusion without broader dynamic evidence.
     JS_FreeContext(ctx);
     JS_FreeRuntime(rt);
 }

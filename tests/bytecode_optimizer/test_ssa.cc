@@ -2,7 +2,8 @@
 // the analyze-only full-stack SSA. Part A drives decode -> CFG -> verify
 // -> ssa_analyze_function on hand-built canonical BC26 function blobs and
 // asserts the exact analysis results: block parameters (phi), the value
-// lattice with small-int folding (and overflow -> UNKNOWN), the ordered
+// lattice with small-int folding (overflow -> FLOAT64, unknown int32
+// arithmetic -> NUMBER), the ordered
 // world token (backedges excluded from the entry join), exception
 // successors (catch markers, handler entry, region-end drops), and the
 // refcount ownership census. Part B runs the bundle-level ssa_round_trip
@@ -14,9 +15,11 @@
 // Byte values are the serialized opcode space (quickjs-opcode.h physical
 // order, temps excluded): push_i32=1, drop=14, dup=17, return_undef=41,
 // put_field=66, catch=107, gosub=108, ret=109, nip_catch=110, add=156,
-// inc_loc=146, push_0=186, push_1=187, push_i8=194, get_loc0=203,
+// inc_loc=146, not=148, and=161, push_0=186, push_1=187, push_i8=194,
+// get_arg=90, get_loc0=203,
 // put_loc0=207, put_loc1=208, set_loc0=211, get_loc0_loc1=202,
-// if_false8=240, if_true8=241, goto8=242, OP_COUNT=252. Jump targets:
+// if_false8=240, if_true8=241, goto8=242, OP_ext=252, runtime-only
+// get_field_ic=253, OP_COUNT=254. Jump targets:
 // pc + size + signed aux (catch/gosub aux is the 4-byte diff at pc+1;
 // if_true8/goto8 aux is the u8 at pc+1).
 
@@ -151,7 +154,7 @@ void test_a1_fold_dup_drop() {
     CHECK(ssa.ownership[1] == ir::Ownership::CONSUMED);
 }
 
-// a2: INT32 fold overflow (INT32_MAX + 1) degrades to UNKNOWN.
+// a2: INT32 fold overflow (INT32_MAX + 1) is a proven FLOAT64.
 void test_a2_overflow() {
     // push_i32 2147483647; dup; push_i8 1; add; return_undef.
     const std::vector<std::uint8_t> code = {1, 0xff, 0xff, 0xff, 0x7f,
@@ -161,8 +164,46 @@ void test_a2_overflow() {
     CHECK(analyze_blob(code, 3, &ssa, &err));
     if (err.empty() && ssa.blocks.empty()) return;
     CHECK(ssa.value_count == 4);
-    CHECK(ssa.lattice[3] == ir::Lattice::UNKNOWN);
+    CHECK(ssa.lattice[3] == ir::Lattice::FLOAT64);
     CHECK(ssa.has_imm[3] == 0);
+}
+
+// a2b: bitwise operations cannot claim INT32 for unknown values: Number
+// inputs return int32, but the same operators have normal BigInt results.
+void test_a2b_unknown_bitwise() {
+    {
+        // get_arg 0; not; return_undef.
+        const std::vector<std::uint8_t> code = {90, 0, 0, 148, 41};
+        ir::SsaFunc ssa;
+        std::string err;
+        CHECK(analyze_blob(code, 1, &ssa, &err));
+        if (!ssa.blocks.empty()) {
+            const std::vector<ir::SsaNode>& nodes = ssa.blocks[0].nodes;
+            CHECK(nodes.size() >= 2 && !nodes[nodes.size() - 2].results.empty());
+            if (nodes.size() >= 2 && !nodes[nodes.size() - 2].results.empty()) {
+                const std::uint32_t result =
+                    nodes[nodes.size() - 2].results[0];
+                CHECK(ssa.lattice[result] == ir::Lattice::UNKNOWN);
+            }
+        }
+    }
+    {
+        // get_arg 0; get_arg 0; and; return_undef.
+        const std::vector<std::uint8_t> code = {90, 0, 0, 90, 0, 0,
+                                                161, 41};
+        ir::SsaFunc ssa;
+        std::string err;
+        CHECK(analyze_blob(code, 2, &ssa, &err));
+        if (!ssa.blocks.empty()) {
+            const std::vector<ir::SsaNode>& nodes = ssa.blocks[0].nodes;
+            CHECK(nodes.size() >= 2 && !nodes[nodes.size() - 2].results.empty());
+            if (nodes.size() >= 2 && !nodes[nodes.size() - 2].results.empty()) {
+                const std::uint32_t result =
+                    nodes[nodes.size() - 2].results[0];
+                CHECK(ssa.lattice[result] == ir::Lattice::UNKNOWN);
+            }
+        }
+    }
 }
 
 // a3: two-way join — the merge block takes one parameter per live
@@ -198,9 +239,10 @@ void test_a3_join_params() {
     CHECK(ssa.has_imm[p0] != 0 && ssa.imm[p0] == 0);
     CHECK(ssa.lattice[p1] == ir::Lattice::INT32);
     CHECK(ssa.has_imm[p1] == 0);
-    // add result: both operands INT32 -> INT32, no imm.
+    // The runtime add may overflow even though both input tags are INT32;
+    // without two known immediates the only sound result is NUMBER.
     const uint32_t add_r = merge.nodes[0].results[0];
-    CHECK(ssa.lattice[add_r] == ir::Lattice::INT32);
+    CHECK(ssa.lattice[add_r] == ir::Lattice::NUMBER);
     CHECK(ssa.has_imm[add_r] == 0);
     // Merge entry token: max(goto8 edge (blk0: if_true8 CONTROL +1,
     // goto8 CONTROL +1 = 2), B1 fallthrough edge (entry 1, no effect)
@@ -483,6 +525,7 @@ void test_a11_mixed_loc_join() {
 void test_ssa_blobs() {
     test_a1_fold_dup_drop();
     test_a2_overflow();
+    test_a2b_unknown_bitwise();
     test_a3_join_params();
     test_a4_loop_token();
     test_a5_try_catch();

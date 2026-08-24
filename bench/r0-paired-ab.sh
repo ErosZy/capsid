@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
-# R0 paired A/B (tier-3 plan §9): BC27-opt (ext emission ON) vs BC26-opt
+# RETIRED R0 paired A/B archive: BC27-opt (ext emission ON) vs BC26-opt
 # (emission OFF) through the SAME worker binary, interleaved ABBA/BAAB,
 # PAIRS paired samples per fixture, median per arm. The two opt bundles
-# are produced by two capsid-bytecode-compile builds (CAPSID_AOT_EMIT_EXT
-# on/off); the worker's dual reader accepts both versions, so the only
+# are produced by two historical capsid-bytecode-compile builds from the R0
+# measurement revision. The current branch intentionally cannot create the
+# BC27 arm: the emitter and handler were removed after a -12.69% regression.
+# The historical worker's dual reader accepts both versions, so the only
 # difference between the arms is the R0 ext template at get_array_el
 # sites. Bodies are cross-checked byte-for-byte (--expect-body) so the
 # A/B doubles as a correctness check.
 #
-# Usage: bash bench/r0-paired-ab.sh
+# Usage (historical binaries only): ALLOW_RETIRED_R0=1 bash bench/r0-paired-ab.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+if [ "${ALLOW_RETIRED_R0:-}" != 1 ]; then
+    echo "R0 is retired; set ALLOW_RETIRED_R0=1 only with archived R0 binaries" >&2
+    exit 2
+fi
 
 OUT=${OUT:-bench/results/r0-paired-$(date +%Y%m%dT%H%M%S)}
 mkdir -p "$OUT"

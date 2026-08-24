@@ -13,7 +13,8 @@
 // Usage:
 //   exec-throughput --worker <capsid-worker> --mode source|raw|opt \
 //       --input <bundle> --source-name <file://...> \
-//       [--rounds N] [--warmup N] [--expect-body <text>]
+//       [--rounds N] [--warmup N] [--timeout-seconds N] \
+//       [--expect-body <text>]
 #include "capsid/runtime.h"
 
 #include "win32_compat.h"
@@ -60,6 +61,32 @@ std::string read_file(const char* path) {
     }
     return std::string(std::istreambuf_iterator<char>(input),
                        std::istreambuf_iterator<char>());
+}
+
+std::string json_escape(const std::string& input) {
+    static const char hex[] = "0123456789abcdef";
+    std::string output;
+    output.reserve(input.size());
+    for (unsigned char ch : input) {
+        switch (ch) {
+        case '"': output += "\\\""; break;
+        case '\\': output += "\\\\"; break;
+        case '\b': output += "\\b"; break;
+        case '\f': output += "\\f"; break;
+        case '\n': output += "\\n"; break;
+        case '\r': output += "\\r"; break;
+        case '\t': output += "\\t"; break;
+        default:
+            if (ch < 0x20) {
+                output += "\\u00";
+                output += hex[ch >> 4];
+                output += hex[ch & 0x0f];
+            } else {
+                output += static_cast<char>(ch);
+            }
+        }
+    }
+    return output;
 }
 
 capsid_worker* spawn_worker(const char* worker_path) {
@@ -112,17 +139,18 @@ void wait_for_ready(capsid_worker* worker) {
 // Runs one request, returning the wall time from begin_request to
 // RESPONSE_END and the response body. Mirrors the differential test's
 // request loop exactly (same event handling, same credit flow).
-double run_request(capsid_worker* worker, std::string* body_out) {
+double run_request(capsid_worker* worker, const char* url,
+                   int timeout_seconds, std::string* body_out) {
     const std::chrono::steady_clock::time_point begin =
         std::chrono::steady_clock::now();
     require_result(
         capsid_worker_begin_bodyless_request(
-            worker, 1, "GET", "https://example.test/sync", NULL, 0),
+            worker, 1, "GET", url, NULL, 0),
         "begin bodyless request");
     std::string body;
     bool received_head = false;
     const std::chrono::steady_clock::time_point deadline =
-        begin + std::chrono::seconds(30);
+        begin + std::chrono::seconds(timeout_seconds);
     for (;;) {
         const capsid_result flush = capsid_worker_flush(worker);
         if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
@@ -187,6 +215,50 @@ double run_request(capsid_worker* worker, std::string* body_out) {
     }
 }
 
+// Profiling builds emit their exact-site dump while the worker runtime is
+// being freed.  Abortive capsid_worker_destroy() intentionally gives a live
+// child only a short natural-exit window, which can truncate that diagnostic
+// JSON.  Follow the public graceful-stop protocol so EXIT is observed only
+// after teardown (and therefore the dump) has completed.
+void shutdown_worker(capsid_worker* worker) {
+    require_result(capsid_worker_shutdown(worker), "shutdown worker");
+    const std::chrono::steady_clock::time_point deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    for (;;) {
+        const capsid_result flush = capsid_worker_flush(worker);
+        if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
+            fail(std::string("shutdown flush: ") + capsid_result_string(flush));
+        }
+        capsid_event event = {};
+        event.struct_size = sizeof(event);
+        const capsid_result result = capsid_worker_next_event(worker, &event);
+        if (result == CAPSID_OK) {
+            if (event.type == CAPSID_EVENT_EXIT) {
+                return;
+            }
+            if (event.type == CAPSID_EVENT_ERROR) {
+                fail(std::string("worker shutdown error: ") +
+                     std::string(
+                         reinterpret_cast<const char*>(event.payload.data),
+                         event.payload.size));
+            }
+            continue;
+        }
+        if (result != CAPSID_WOULD_BLOCK) {
+            fail(std::string("shutdown event: ") +
+                 capsid_result_string(result));
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            fail("timed out waiting for graceful worker exit");
+        }
+        capsid_pollfd descriptor = {};
+        descriptor.fd = capsid_worker_fd(worker);
+        descriptor.events = POLLIN |
+            (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
+        capsid::win32::capsid_poll(&descriptor, 1, 50);
+    }
+}
+
 const char* flag_value(int argc, char** argv, const char* name,
                        const char* fallback) {
     for (int i = 1; i < argc - 1; ++i) {
@@ -214,6 +286,8 @@ int main(int argc, char** argv) {
     const char* input_path = flag_value(argc, argv, "--input", nullptr);
     const char* source_name = flag_value(argc, argv, "--source-name", nullptr);
     const char* expect_body = flag_value(argc, argv, "--expect-body", nullptr);
+    const char* url = flag_value(argc, argv, "--url",
+                                 "https://example.test/sync");
     if (!worker_path || !mode || !input_path || !source_name) {
         fail("expected --worker --mode source|raw|opt --input --source-name");
     }
@@ -224,11 +298,19 @@ int main(int argc, char** argv) {
     }
     int rounds = 5;
     int warmup = 1;
+    int timeout_seconds = 30;
     if (has_flag(argc, argv, "--rounds")) {
         rounds = std::atoi(flag_value(argc, argv, "--rounds", "5"));
     }
     if (has_flag(argc, argv, "--warmup")) {
         warmup = std::atoi(flag_value(argc, argv, "--warmup", "1"));
+    }
+    if (has_flag(argc, argv, "--timeout-seconds")) {
+        timeout_seconds =
+            std::atoi(flag_value(argc, argv, "--timeout-seconds", "30"));
+    }
+    if (timeout_seconds <= 0) {
+        fail("--timeout-seconds must be positive");
     }
 
     const std::string payload = read_file(input_path);
@@ -250,7 +332,7 @@ int main(int argc, char** argv) {
 
     for (int round = 1 - warmup; round <= rounds; ++round) {
         std::string body;
-        const double ms = run_request(worker, &body);
+        const double ms = run_request(worker, url, timeout_seconds, &body);
         if (round <= 0) {
             continue;  // warmup, discarded
         }
@@ -258,11 +340,13 @@ int main(int argc, char** argv) {
             fail(std::string("body mismatch: got '") + body + "' expected '" +
                  expect_body + "'");
         }
+        const std::string escaped_body = json_escape(body);
         std::printf("{\"mode\":\"%s\",\"round\":%d,\"ms\":%.3f,"
                     "\"status\":200,\"body_len\":%zu,\"body\":\"%s\","
                     "\"ok\":true}\n",
-                    mode, round, ms, body.size(), body.c_str());
+                    mode, round, ms, body.size(), escaped_body.c_str());
     }
+    shutdown_worker(worker);
     capsid_worker_destroy(worker);
     return 0;
 }

@@ -21,10 +21,9 @@ namespace bytecode {
 namespace ir {
 namespace {
 
-// Serialized ext ids, generated from the vendor table like the Opcode
-// enum in cfg.cc. Ids are contiguous from 1; a removed id keeps its
-// row (size 0) and stays reserved.
-enum ExtOpcode {
+// Serialized ids, generated from the same vendor table. Removed ids retain
+// their named, size-zero row, so their numeric value can never be reused.
+enum ExtOpcode : uint8_t {
 #define EXT_FMT(f)
 #define EXT_DEF(id, name, size, n_pop, n_push, fmt) EXT_##name = (id),
 #include "quickjs-ext-opcode.h"

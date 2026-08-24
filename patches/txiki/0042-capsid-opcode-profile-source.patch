@@ -1,0 +1,90 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -1368,6 +1368,7 @@
+     uint32_t pc;
+     uint8_t op;
+     uint8_t reserved[7];
++    uint64_t source_hash;
+     uint64_t exec;
+     uint64_t classes[5];
+ } JSOpcodeSiteProfile;
+@@ -1395,6 +1396,8 @@
+ static JSAtom __JS_NewAtomInit(JSRuntime *rt, const char *str, int len,
+                                int atom_type);
+ static void JS_FreeAtomStruct(JSRuntime *rt, JSAtomStruct *p);
++static const char *JS_AtomGetStrRT(JSRuntime *rt, char *buf, int buf_size,
++                                   JSAtom atom);
+ static void free_function_bytecode(JSRuntime *rt, JSFunctionBytecode *b);
+ static JSValue js_call_c_function(JSContext *ctx, JSValueConst func_obj,
+                                   JSValueConst this_obj,
+@@ -2797,7 +2800,23 @@
+ }
+ 
+ #ifdef CONFIG_OPCODE_PROFILE
+-static JSOpcodeSiteProfile *js_profile_site(JSOpcodeProfile *p,
++static uint64_t js_profile_source_hash(JSRuntime *rt,
++                                       JSFunctionBytecode *b)
++{
++    char buf[256];
++    const unsigned char *s = (const unsigned char *)
++        JS_AtomGetStrRT(rt, buf, sizeof(buf), b->filename);
++    uint64_t hash = UINT64_C(14695981039346656037);
++
++    while (*s) {
++        hash ^= *s++;
++        hash *= UINT64_C(1099511628211);
++    }
++    return hash;
++}
++
++static JSOpcodeSiteProfile *js_profile_site(JSRuntime *rt,
++                                            JSOpcodeProfile *p,
+                                             JSFunctionBytecode *b,
+                                             const uint8_t *pc, int op,
+                                             bool count_overflow)
+@@ -2824,6 +2843,7 @@
+             site->function_id = function_id;
+             site->pc = off;
+             site->op = op;
++            site->source_hash = js_profile_source_hash(rt, b);
+         }
+         if (site->function_id == function_id && site->pc == off &&
+             site->op == op)
+@@ -2844,7 +2864,7 @@
+         JSOpcodeSiteProfile *site;
+         if (p->exec[op] != UINT64_MAX)
+             p->exec[op]++;
+-        site = js_profile_site(p, b, pc, op, true);
++        site = js_profile_site(rt, p, b, pc, op, true);
+         if (site && site->exec != UINT64_MAX)
+             site->exec++;
+     }
+@@ -2872,7 +2892,7 @@
+ 
+     if (!p || cls < 0 || cls >= 5)
+         return;
+-    site = js_profile_site(p, b, pc, op, false);
++    site = js_profile_site(ctx->rt, p, b, pc, op, false);
+     if (site && site->classes[cls] != UINT64_MAX)
+         site->classes[cls]++;
+ }
+@@ -2960,7 +2980,7 @@
+         fputs("{}\n", fp);
+         return;
+     }
+-    fputs("{\"schema\":\"quickjs-ng-opcode-profile-v2\",\"runtime\":", fp);
++    fputs("{\"schema\":\"quickjs-ng-opcode-profile-v3\",\"runtime\":", fp);
+     fprintf(fp, "%llu", (unsigned long long)p->id);
+     fputs(",\"exec\":{", fp);
+     for (op = 0; op < OP_COUNT; op++) {
+@@ -2992,8 +3012,9 @@
+             fputc(',', fp);
+         first = 0;
+         fprintf(fp, "{\"function\":%u,\"pc\":%u,\"op\":\"%s\","
+-                    "\"exec\":%llu,\"prop\":{",
++                    "\"source_hash\":\"%016llx\",\"exec\":%llu,\"prop\":{",
+                 site->function_id, site->pc, opcode_profile_names[site->op],
++                (unsigned long long)site->source_hash,
+                 (unsigned long long)site->exec);
+         for (c = 0; c < 5; c++) {
+             if (site->classes[c] == 0)

@@ -1,34 +1,8 @@
-// E0 §2 directed tests for the BC27 / OP_ext runtime foundation
-// (overlay patches 0037-capsid-ext-foundation.patch +
-// 0038-capsid-ext-get-array-el.patch, plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §2).
-//
-// RED: fails on a patchless runtime — a BC27 blob is rejected as an
-// unsupported bytecode version, so every BC27 scenario fails.
-// GREEN: every §2 scenario passes:
-//   1. baseline sanity: unmodified fixture is BC26, loads and runs (42);
-//   2. BC26 must reject OP_ext — both a spliced-while-BC26 blob and a BC27
-//      blob with the version byte flipped back to 26;
-//   3. unknown bundle version (28) must be rejected;
-//   4. BC27 + canonical EXT_get_array_el loads and runs (42) — this proves
-//      the reader accepts BC27, derives ext size/stack effect from the ext
-//      table, and the dual-mode dispatch executes the handler;
-//   5. reserved id 0 and unknown ids (0x7F) fail closed at read;
-//   6. truncated payload (ext prefix with no ext_id byte) fails closed;
-//   7. checksum identity: a corrupt byte anywhere (atoms or body) fails
-//      closed; with the checksum recomputed the same blob is accepted and
-//      executes (checksum covers the whole [5..end] range incl. ext);
-//   8. atom indexes: an atom-bearing instruction (get_field) after the ext
-//      site is remapped correctly. The get_field atom operand must be the
-//      wire remap (first_atom + section_idx) and must resolve back to the
-//      real property after the splice (result 45 proves both);
-//   9. branch targets: a conditional jump over an ext-containing body
-//      executes both paths correctly;
-//  10. pc2line: an exception raised at the ext site reports the source line
-//      of the ext instruction;
-//  11. canonical reserialization: reading a BC27 blob and rewriting it
-//      yields version 27 with a byte-identical image; the unmodified BC26
-//      fixture rewrites as version 26.
+// Directed tests for the retained BC27 / OP_ext foundation. R0's array
+// specialization regressed the paired benchmark, so ext id 1 is now a
+// permanent reserved hole and no BC27 image is canonical. The matrix locks
+// BC26 compatibility and fail-closed handling for BC26+ext, reserved/unknown
+// ids, truncated instructions, noncanonical BC27, and corrupt checksums.
 //
 // Splicing mechanism: each fixture is compiled by the runtime's own
 // compiler as a module, serialized (JS_WriteObject), and then patched in
@@ -46,11 +20,9 @@
 // Any layout drift (compiler output change, opcode renumbering) fails the
 // fixture-setup asserts loudly instead of silently mis-splicing.
 //
-// Stack-effect verification (the §2 "OP_ext cannot advertise 0 pop / 0
-// push" blocker) is exercised by compute_stack_size and the F0 verifier —
-// both compiler/optimizer side. The runtime trusts bytecode validated at
-// compile time (JS_ReadObject does not run compute_stack_size), so no
-// runtime underflow scenario is asserted here; see the E0 audit record.
+// A future live ext id must restore directed size/stack/pc2line coverage
+// before it can be emitted. With every current id reserved, accepting such
+// a fixture would be the bug this test is intended to catch.
 
 #include "quickjs.h"
 
@@ -79,28 +51,25 @@ void require(bool condition, const char *message) {
 // Bytecode wire constants (BC26 format, pinned by quickjs-opcode.h DEF
 // ordinals — renumbering any of these is a wire-format break):
 //
-//   OP_ext          = 252  (plan §4.4 wire registry; OP_COUNT == 253)
+//   OP_ext          = 252  (wire prefix)
+//   OP_get_field_ic = 253  (runtime-only; reader rejects it on the wire)
 //   OP_push_0       = 186  DEF ordinal (the fixture's `a[0]` index)
 //   OP_get_array_el = 70   DEF ordinal
 //   OP_return       = 40   DEF ordinal
-//   EXT_get_array_el = 1   (quickjs-ext-opcode.h catalog, id 1)
-//   JS_ATOM_END (predefined atom count) = 242 in this fork — wire atom
-//     operands are first_atom + section_idx (242 + idx), record atoms are
-//     leb128 ((first_atom + idx) << 1)
-//
+//   ext id 1          = permanently reserved retired-R0 hole
 // BC_TAG_FUNCTION_BYTECODE = 12, BC_TAG_MODULE = 13 (BCTagEnum:
 // BC_TAG_NULL = 1, ...)
 // ---------------------------------------------------------------------------
 
 constexpr uint8_t kOpExt = 0xFC;          // 252
-constexpr uint8_t kExtGetArrayEl = 0x01;  // ext id 1
+constexpr uint8_t kExtRetiredR0 = 0x01;  // permanently reserved ext id 1
 constexpr uint8_t kOpPush0 = 0xBA;        // 186
 constexpr uint8_t kOpGetArrayEl = 0x46;   // 70
 constexpr uint8_t kOpReturn = 0x28;       // 40
 constexpr uint8_t kOpGetField = 0x40;     // 64
+constexpr uint8_t kOpGetFieldIC = 0xFD;   // 253, runtime-only
 constexpr uint8_t kTagFunctionBytecode = 12;
 constexpr uint8_t kTagModule = 13;
-constexpr uint32_t kFirstAtom = 242;      // JS_ATOM_END in this fork
 
 constexpr uint8_t kVersion26 = 26;
 constexpr uint8_t kVersion27 = 27;
@@ -581,14 +550,14 @@ struct Runtime {
         //    26 (proves the gate keys on the version byte, not on how the
         //    blob was produced).
         Blob b26 = base;
-        b26.splice_ext(kExtGetArrayEl);
+        b26.splice_ext(kExtRetiredR0);
         std::string r2 = read_only(b26);
         require(r2.rfind("ex:", 0) == 0, "BC26+ext must fail closed");
         require(r2.find("ext") != std::string::npos,
                 "BC26+ext error must mention ext");
         Blob b27_flipped = base;
         b27_flipped.set_version(kVersion27);
-        b27_flipped.splice_ext(kExtGetArrayEl);
+        b27_flipped.splice_ext(kExtRetiredR0);
         b27_flipped.set_version(kVersion26);
         std::string r2b = read_only(b27_flipped);
         require(r2b.rfind("ex:", 0) == 0,
@@ -603,14 +572,37 @@ struct Runtime {
         require(read_only(b28).rfind("ex:", 0) == 0,
                 "version 28 must be rejected");
 
-        // 4. BC27 canonical acceptance (dual dispatch, table effects)
+        // Runtime quickening opcode 253 is never legal on the wire, even in
+        // an otherwise canonical BC26 image.
+        Blob runtime_ic = compile_blob(
+            "globalThis.__r = (function(){ var a=[42]; var o={x:3}; return "
+            "a[0] + o.x; })();\n",
+            /*tail_is_gea_return=*/false);
+        size_t field_pos = runtime_ic.buf.size();
+        const size_t body_end = runtime_ic.body_pos + runtime_ic.bc_len;
+        for (size_t i = runtime_ic.body_pos + 1;
+             i + 5 <= runtime_ic.buf.size() && i < body_end; i++) {
+            if (runtime_ic.buf[i] == kOpGetField) {
+                field_pos = i;
+                break;
+            }
+        }
+        require(field_pos < runtime_ic.buf.size(),
+                "runtime-op fixture lacks get_field");
+        runtime_ic.buf[field_pos] = kOpGetFieldIC;
+        runtime_ic.recompute_checksum();
+        require(read_only(runtime_ic).rfind("ex:", 0) == 0,
+                "runtime-only field IC opcode must fail closed on wire");
+
+        // 4. BC27 retired R0 id 1 is a permanent reserved hole.
         Blob bc27 = base;
         bc27.set_version(kVersion27);
-        bc27.splice_ext(kExtGetArrayEl);
-        require(load_and_run(bc27) == "val:42",
-                "BC27 canonical ext must run and return 42");
+        bc27.splice_ext(kExtRetiredR0);
+        std::string r4 = read_only(bc27);
+        require(r4.rfind("ex:", 0) == 0,
+                "retired R0 ext id must fail closed");
 
-        // 5. reserved id 0 and unknown ids fail closed
+        // 5. reserved id 0 and unknown ids fail closed.
         Blob id0 = bc27;
         id0.buf[id0.body_pos + 1] = 0x00;
         id0.recompute_checksum();
@@ -625,8 +617,8 @@ struct Runtime {
         // 6. truncated payload: ext prefix as the last body byte (no
         //    ext_id byte follows). Note: for the current size-2 ext an
         //    "ext_id present but payload short" case cannot exist (2 bytes
-        //    consume the whole instruction); when a size-3+ ext lands
-        //    (F0/R0) this test must grow a matching case.
+        //    consume the whole instruction); when a size-3+ ext lands this
+        //    test must grow a matching case.
         Blob trunc = base;
         trunc.set_version(kVersion27);
         require(trunc.buf[trunc.body_pos + 1] == kOpReturn,
@@ -636,12 +628,20 @@ struct Runtime {
         require(read_only(trunc).rfind("ex:", 0) == 0, "truncated ext must "
                 "be rejected");
 
-        // 7. checksum identity
-        Blob ck_atoms = bc27;
+        // 7. BC27 without OP_ext is noncanonical while R0 is retired.
+        Blob no_ext = base;
+        no_ext.set_version(kVersion27);
+        no_ext.recompute_checksum();
+        require(read_only(no_ext).rfind("ex:", 0) == 0,
+                "BC27 without ext must fail closed");
+
+        // 8. The checksum still covers all BC26 payload bytes. After
+        // recomputing it, the deliberately changed index executes.
+        Blob ck_atoms = base;
         ck_atoms.buf[5] ^= 0x01;  // corrupt the atom count
         require(read_only(ck_atoms).rfind("ex:", 0) == 0, "corrupt atoms "
                 "must fail the checksum");
-        Blob ck_body = bc27;
+        Blob ck_body = base;
         ck_body.buf[ck_body.body_pos - 1] ^= 0x01;  // push_0 -> push_1
         require(read_only(ck_body).rfind("ex:", 0) == 0, "corrupt body must "
                 "fail the checksum");
@@ -653,103 +653,8 @@ struct Runtime {
         require(r7 == "undef", "re-checksummed blob must run (corrupt "
                 "index, undefined result)");
 
-        // 8. atom indexes: get_field (atom-bearing) after the ext site.
-        //    The fixture uses `o.x` (not `a.length`, which compiles to the
-        //    atom-free get_length) so a real get_field operand sits after
-        //    the splice. Assert the operand is the wire remap
-        //    (first_atom + section_idx), then that execution resolves it
-        //    to the real property.
-        Blob atom = compile_blob(
-            "globalThis.__r = (function(){ var a=[42]; var o={x:3}; return "
-            "a[0] + o.x; })();\n",
-            /*tail_is_gea_return=*/false);
-        atom.set_version(kVersion27);
-        atom.splice_ext(kExtGetArrayEl);
-        // get_field's u32 atom operand, right after the splice: 0x40
-        // followed by (242 + section_idx("x")).
-        size_t x_idx = atom.atoms.size();
-        for (size_t i = 0; i < atom.atoms.size(); i++) {
-            if (atom.atoms[i] == "x") {
-                x_idx = i;
-                break;
-            }
-        }
-        require(x_idx < atom.atoms.size(), "atom section lacks 'x'");
-        uint32_t wire_atom = kFirstAtom + (uint32_t)x_idx;
-        bool found_wire = false;
-        for (size_t i = 0; i + 5 <= atom.buf.size(); i++) {
-            if (atom.buf[i] == kOpGetField &&
-                read_le32(atom.buf.data() + i + 1) == wire_atom) {
-                found_wire = true;
-                break;
-            }
-        }
-        require(found_wire,
-                "get_field atom operand is not the wire remap "
-                "(first_atom + section_idx)");
-        require(load_and_run(atom) == "val:45",
-                "atom remap after ext must yield 45 (42 + o.x)");
-
-        // 9. branch targets: conditional jump over the ext body. The arg
-        //    is passed by the module top-level call, so the two paths are
-        //    two blobs that share the identical inner function record
-        //    (hence identical splice offsets).
-        Blob branch_1 = compile_blob(
-            "globalThis.__r = (function(n){ if (n<0) return -1; var a=[42]; "
-            "return a[0]; })(1);\n");
-        branch_1.set_version(kVersion27);
-        branch_1.splice_ext(kExtGetArrayEl);
-        require(load_and_run(branch_1) == "val:42",
-                "fallthrough path with ext must return 42");
-        Blob branch_m1 = compile_blob(
-            "globalThis.__r = (function(n){ if (n<0) return -1; var a=[42]; "
-            "return a[0]; })(-1);\n");
-        branch_m1.set_version(kVersion27);
-        branch_m1.splice_ext(kExtGetArrayEl);
-        require(load_and_run(branch_m1) == "val:-1",
-                "jump over ext-containing body must return -1");
-
-        // 10. pc2line: exception raised at the ext site reports the line
-        //     of the ext instruction. The throw is on line 3 (inside the
-        //     get trap); the ext site `a[0];` is on line 5 — so the
-        //     backtrace must contain ":5" for the caller frame, proving
-        //     pc2line maps the spliced ext pc to the right source line.
-        //     The module top-level is async, so the throw travels as a
-        //     rejected promise; load_and_run surfaces the rejection reason
-        //     (with its stack) via the worker_runtime completion contract.
-        Blob pc = compile_blob(
-            "globalThis.__r = (function() {\n"
-            "  var a = new Proxy([42], {\n"
-            "    get: function() { throw new Error(\"boom\"); }\n"
-            "  });\n"
-            "  a[0];\n"
-            "  return 1;\n"
-            "})();\n",
-            /*tail_is_gea_return=*/false);
-        pc.set_version(kVersion27);
-        pc.splice_ext(kExtGetArrayEl);
-        std::string r10 = load_and_run(pc);
-        require(r10.rfind("ex:", 0) == 0, "proxy fallback must throw");
-        {
-            std::string m10 = "backtrace must place the ext site on line 5: " +
-                              r10;
-            require(r10.find(":5") != std::string::npos, m10.c_str());
-        }
-
-        // 11. canonical reserialization
-        JSValue obj27 = JS_ReadObject(ctx, bc27.buf.data(), bc27.buf.size(),
-                                      JS_READ_OBJ_BYTECODE);
-        require(!JS_IsException(obj27), "re-read of BC27 blob failed");
-        size_t len27 = 0;
-        uint8_t *re27 = JS_WriteObject(ctx, &len27, obj27,
-                                       JS_WRITE_OBJ_BYTECODE);
-        require(re27 != nullptr, "reserialize of BC27 failed");
-        require(len27 == bc27.buf.size() && memcmp(re27, bc27.buf.data(),
-                len27) == 0, "BC27 reserialization is not canonical");
-        require(re27[0] == kVersion27, "reserialized BC27 lost the version");
-        JS_FreeValue(ctx, obj27);
-        js_free(ctx, re27);
-
+        // 9. Canonical reserialization remains BC26 while there is no
+        // deployed ext instruction.
         JSValue obj26 = JS_ReadObject(ctx, base.buf.data(), base.buf.size(),
                                       JS_READ_OBJ_BYTECODE);
         require(!JS_IsException(obj26), "re-read of BC26 blob failed");

@@ -659,10 +659,13 @@ bool decode_code(const uint8_t* code,
                  std::string* error,
                  bool allow_ext = false);
 
+enum class TopLevelKind { kModule, kGlobal };
+
 bool parse_buffer(const uint8_t* data,
                   size_t size,
                   std::vector<FuncRecord>* functions,
-                  std::string* error) {
+                  std::string* error,
+                  TopLevelKind top_level = TopLevelKind::kModule) {
     Reader r(data, size, error);
     uint8_t version = 0;
     if (!r.u8(&version)) return false;
@@ -702,15 +705,25 @@ bool parse_buffer(const uint8_t* data,
             return r.fail_public("unexpected atom type");
         }
     }
+    const uint32_t top_level_off = static_cast<uint32_t>(r.offset());
     uint8_t tag = 0;
     if (!r.u8(&tag)) return false;
-    if (tag != BC_TAG_MODULE) {
-        *error = "bytecode optimize: top-level record is not a module";
-        return false;
+    if (top_level == TopLevelKind::kModule) {
+        if (tag != BC_TAG_MODULE) {
+            *error = "bytecode optimize: top-level record is not a module";
+            return false;
+        }
+        if (!r.skip_module(functions, error)) return false;
+    } else {
+        if (tag != BC_TAG_FUNCTION_BYTECODE) {
+            *error =
+                "bytecode optimize: top-level record is not a global function";
+            return false;
+        }
+        if (!r.skip_function(functions, error, 0, top_level_off)) return false;
     }
-    if (!r.skip_module(functions, error)) return false;
     if (!r.at_end()) {
-        *error = "bytecode optimize: trailing bytes after module record";
+        *error = "bytecode optimize: trailing bytes after top-level record";
         return false;
     }
     // F0 ext policy (BC27 dual reader, E0 reader contract): enforced at
@@ -847,7 +860,7 @@ bool scan_function(const FuncRecord& f,
     size_t pc = 0;
     while (pc < len) {
         uint8_t op = code[pc];
-        if (op == 0 || op >= OP_COUNT) return false;
+        if (op == 0 || op >= OP_COUNT || op == OP_get_field_ic) return false;
         const OpInfo& oi = short_opcode_info(op);
         if (pc + oi.size > len) return false;
         st->insns++;
@@ -956,7 +969,7 @@ bool decode_code(const uint8_t* code,
     size_t pc = 0;
     while (pc < len) {
         uint8_t op = code[pc];
-        if (op == 0 || op >= OP_COUNT) {
+        if (op == 0 || op >= OP_COUNT || op == OP_get_field_ic) {
             *error = "bytecode optimize: invalid opcode in function";
             return false;
         }
@@ -1000,9 +1013,6 @@ bool decode_code(const uint8_t* code,
         in.has_aux = false;
         switch (op) {
         case OP_ext:
-            // R0 verifier: the ext id rides in aux so verify_code can
-            // apply the ext-table stack effects (the BC27 scan path
-            // discards the stream, so this was unused before).
             in.aux = code[pc + 1];
             break;
         case OP_push_minus1: in.imm = -1; break;
@@ -1104,6 +1114,13 @@ bool decode_code(const uint8_t* code,
         default:
             break;
         }
+        if (op == OP_ext) {
+            // The ext id rides in aux (the payload is opaque for the
+            // `none` format); the BC27 scan keys the per-id ledger on
+            // it without re-reading the blob.
+            in.aux = code[pc + 1];
+            in.has_aux = true;
+        }
         // Atom-family operands: raw u32 JSAtom value at pc+1 (also the
         // atom_u8/u16 and with_* label variants). P14 compares
         // define_field vs get_field atoms by value; no name resolution
@@ -1124,13 +1141,6 @@ bool decode_code(const uint8_t* code,
             default:
                 break;
             }
-        }
-        if (op == OP_ext) {
-            // The ext id rides in aux (the payload is opaque for the
-            // `none` format); the BC27 scan keys the per-id ledger on
-            // it without re-reading the blob.
-            in.aux = code[pc + 1];
-            in.has_aux = true;
         }
         insns->push_back(in);
         pc += size;
@@ -1178,9 +1188,6 @@ struct RewriteStats {
     uint64_t to_propkey_removed = 0;  // tier-3 Lane 2: proven-redundant
                                       // to_propkey sites deleted
                                       // rewritten to plain loc ops
-    uint64_t ext_emitted = 0;  // R0: get_array_el sites converted to the
-                               // BC27 fast-array/int-index ext template
-                               // (kPassExtFastArrayGet; 0 in OFF builds)
     uint64_t shrinks = 0;     // short-form re-encodings
     uint64_t insns_before = 0;
     uint64_t insns_after = 0;
@@ -1464,6 +1471,18 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     for (size_t i = 0; i < n; i++) {
         if ((*dead)[i]) continue;
         const Insn& in = (*insns)[i];
+        // Aliases are path facts, not linear-stream facts. A jump target is
+        // a control-flow join and a branch has distinct target/fallthrough
+        // successors, so neither may inherit the current alias map. Keeping
+        // an alias across either boundary miscompiled conditional copies:
+        // the join read was renamed to the source even on the path that
+        // skipped the copy. last_put_idx deliberately survives the clear so
+        // a later unaliased read keeps the candidate store alive.
+        if (targets[i]) clear_all_alias();
+        if (in.target >= 0) {
+            clear_all_alias();
+            continue;
+        }
         if (is_slot_alias_barrier(in.op)) {
             // Barrier ops (eval/with/fclosure) can never write loc
             // slots — the compiler emits loc ops only for slots it
@@ -3021,8 +3040,6 @@ bool emit_code(const std::vector<Insn>& insns,
         out->push_back(static_cast<uint8_t>(in.op));
         switch (in.op) {
         case OP_ext:
-            // R0 BC27 emission: OP_ext prefix + ext id (aux). The
-            // ext-table payload (none today) follows verbatim.
             out->push_back(static_cast<uint8_t>(in.aux));
             break;
         case OP_push_minus1: case OP_push_0: case OP_push_1:
@@ -3190,7 +3207,8 @@ bool verify_code(const uint8_t* code,
         int32_t n_pop;
         int32_t n_push;
         if (in.op == OP_ext) {
-            // R0: BC27 ext sites carry ext-table stack effects (the
+            // Retained BC27 foundation: ext sites carry table stack effects
+            // (the
             // OP_ext prefix row in quickjs-opcode.h is 0-pop/0-push
             // and is never advertised to any stack verifier).
             ExtInfo ei;
@@ -3444,6 +3462,22 @@ bool rewrite_function(const FuncRecord& f,
     stats->insns_before += insns.size();
     stats->bytes_before += f.code_len;
 
+    // Serialized vardefs are ordered [arguments..., locals...], whereas
+    // every loc opcode indexes var_buf (locals only). The direct local-slot
+    // passes must therefore use the arg_count-offset slice. Indexing the raw
+    // vardef mask by a loc operand confused argument capture bits with local
+    // capture bits and allowed P11/P14/P16 to rewrite captured locals. If a
+    // stripped or future record omits the redundant vardef table, default to
+    // all captured and fail closed for these passes.
+    std::vector<uint8_t> local_captured(f.var_count, 1);
+    const uint64_t vardef_count =
+        static_cast<uint64_t>(f.arg_count) + f.var_count;
+    if (f.captured.size() == vardef_count) {
+        for (uint32_t s = 0; s < f.var_count; s++) {
+            local_captured[s] = f.captured[f.arg_count + s];
+        }
+    }
+
     // Tier-2 direct level (P11/P14), then P2/P3.1/P6 fixpoint:
     // peephole sweeps until stable (each round that changes anything
     // deletes at least one instruction, so this terminates), then
@@ -3453,7 +3487,7 @@ bool rewrite_function(const FuncRecord& f,
         std::vector<uint8_t> dead(insns.size(), 0);
         bool round_changed = false;
         if ((passes & (kPassP11 | kPassP14)) &&
-            apply_tier2_direct(&insns, &dead, f.var_count, f.captured,
+            apply_tier2_direct(&insns, &dead, f.var_count, local_captured,
                                passes, stats)) {
             round_changed = true;
         }
@@ -3462,7 +3496,7 @@ bool rewrite_function(const FuncRecord& f,
         // are already visible; it only deletes instructions, so it
         // cannot feed the lattice and the fixpoint still terminates.
         if ((passes & kPassP16) &&
-            apply_dead_store_p16(&insns, &dead, f.var_count, f.captured,
+            apply_dead_store_p16(&insns, &dead, f.var_count, local_captured,
                                  stats)) {
             round_changed = true;
         }
@@ -3506,27 +3540,6 @@ bool rewrite_function(const FuncRecord& f,
     }
     apply_reshrink(&insns, stats);
 
-    // R0 (tier-3 plan §5.3.1/§10 item 9): emit the measured
-    // fast-array/int-index ext template at every get_array_el site of
-    // the final stream. Semantics-preserving at every site — the
-    // interpreter's guard set (tag object + tag int + the exact
-    // js_get_fast_array_element class/bounds predicate) is precise,
-    // and a miss executes the identical generic property operation —
-    // so the conversion's measured cost is +1 byte per site (R0 A/B).
-    // get_array_el2 stays BC26 (no ext template); the wire form is
-    // OP_ext + ext id 1 (quickjs-ext-opcode.h), pop 2 push 1, same
-    // stack effect, so no CFG/verifier target fixups are needed and
-    // pc2line remap below simply maps the site to its new offset.
-    if ((passes & kPassExtFastArrayGet)) {
-        for (size_t i = 0; i < insns.size(); i++) {
-            if (insns[i].op == OP_get_array_el) {
-                insns[i].op = OP_ext;
-                insns[i].aux = 1;  // EXT_get_array_el
-                stats->ext_emitted++;
-            }
-        }
-    }
-
     // Emit.
     std::vector<uint32_t> new_offs;
     if (!emit_code(insns, code, new_code, &new_offs, error)) return false;
@@ -3534,11 +3547,8 @@ bool rewrite_function(const FuncRecord& f,
     stats->insns_after += insns.size();
     stats->bytes_after += new_code->size();
 
-    // Verify the rewritten code against the same rules. The emitted
-    // stream may contain ext sites (R0); allow them through the same
-    // decode + ext-table stack effects the reader enforces.
     if (!verify_code(new_code->data(), new_code->size(), f.stack_size,
-                     error, /*allow_ext=*/(passes & kPassExtFastArrayGet) != 0)) {
+                     error)) {
         return false;
     }
 
@@ -4827,11 +4837,11 @@ static bool tier3_function(const FuncRecord& f,
 
 bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
     error->clear();
-    // F0/R0: BC27 is produced (R0 ext emission) and read by the
-    // ext/identity analysis stack, but never consumed here: the
+    // F0: the retired R0 emitter no longer produces BC27. Keep this product
+    // gate independent from the ext/identity analysis stack: the
     // production foldability model has no ext consumer and must not
     // silently treat ext sites as ordinary BC26 code (re-analyzing an
-    // emitted BC27 stream has no foldability consumer).
+    // BC27 stream has no foldability consumer).
     if (!in.empty() && in[0] == BC_VERSION_EXT) {
         *error = "bytecode optimize: BC27 input is not re-analyzable "
                  "(ext sites have no foldability consumer)";
@@ -4910,26 +4920,29 @@ bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
     return true;
 }
 
-bool optimize(const std::vector<std::uint8_t>& in,
-              std::vector<std::uint8_t>* out,
-              uint32_t passes,
-              bool report,
-              std::string* error) {
+static bool optimize_with_top_level(const std::vector<std::uint8_t>& in,
+                                    std::vector<std::uint8_t>* out,
+                                    uint32_t passes,
+                                    bool report,
+                                    TopLevelKind top_level,
+                                    std::string* error) {
     error->clear();
-    // F0/R0: BC27 is produced (R0 ext emission) but never re-optimized:
-    // accepting ext input would silently run the v1 passes over
+    // F0: the retired R0 emitter no longer produces BC27, and BC27 is never
+    // re-optimized. Accepting ext input would silently run the v1 passes over
     // instructions whose stack effects only the ext table knows — there
     // is no foldability consumer for ext sites (re-optimization of an
-    // emitted BC27 stream is not supported).
+    // BC27 stream is not supported).
     if (!in.empty() && in[0] == BC_VERSION_EXT) {
         *error = "bytecode optimize: BC27 input is not re-optimizable "
                  "(ext sites have no foldability consumer)";
         return false;
     }
     std::vector<FuncRecord> functions;
-    if (!parse_buffer(in.data(), in.size(), &functions, error)) return false;
+    if (!parse_buffer(in.data(), in.size(), &functions, error, top_level)) {
+        return false;
+    }
     if (functions.size() != 1) {
-        *error = "bytecode optimize: module does not contain exactly one "
+        *error = "bytecode optimize: top level does not contain exactly one "
                  "function record";
         return false;
     }
@@ -4953,7 +4966,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
                          "bytecode optimize: %llu -> %llu insns, %llu -> "
                          "%llu code bytes; folds P2 %llu P3.1 %llu "
                          "P11 %llu P14 %llu P16 %llu T3 %llu "
-                         "P18 %llu, shrinks %llu, ext %llu\n",
+                         "P18 %llu, shrinks %llu\n",
                          static_cast<unsigned long long>(stats.insns_before),
                          static_cast<unsigned long long>(stats.insns_after),
                          static_cast<unsigned long long>(stats.bytes_before),
@@ -4967,8 +4980,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
                              stats.tdz_checks_removed),
                          static_cast<unsigned long long>(
                              stats.to_propkey_removed),
-                         static_cast<unsigned long long>(stats.shrinks),
-                         static_cast<unsigned long long>(stats.ext_emitted));
+                         static_cast<unsigned long long>(stats.shrinks));
         }
         return true;
     }
@@ -4982,19 +4994,13 @@ bool optimize(const std::vector<std::uint8_t>& in,
     (*out)[2] = static_cast<uint8_t>(csum >> 8);
     (*out)[3] = static_cast<uint8_t>(csum >> 16);
     (*out)[4] = static_cast<uint8_t>(csum >> 24);
-    // R0: a stream containing ext sites is BC27 by definition
-    // (canonicality: BC27 must contain at least one ext instruction).
-    // The version byte is outside the checksummed range, so this patch
-    // is safe after the checksum write. Emission-OFF builds always have
-    // ext_emitted == 0 and stay BC26 (byte-identical rollback).
-    if (stats.ext_emitted != 0) (*out)[0] = BC_VERSION_EXT;
     // Final self-check: full reparse (validates version, checksum, atom
     // table, all records) plus per-function stack verification.
     std::vector<FuncRecord> check;
-    if (!parse_buffer(out->data(), out->size(), &check, error)) return false;
-    if (check.size() != 1 ||
-        !verify_tree(check[0], out->data(), error,
-                     /*allow_ext=*/stats.ext_emitted != 0)) {
+    if (!parse_buffer(out->data(), out->size(), &check, error, top_level)) {
+        return false;
+    }
+    if (check.size() != 1 || !verify_tree(check[0], out->data(), error)) {
         if (error->empty()) {
             *error = "bytecode optimize: internal verification failed";
         }
@@ -5005,7 +5011,7 @@ bool optimize(const std::vector<std::uint8_t>& in,
                      "bytecode optimize: %llu -> %llu insns, %llu -> %llu "
                      "code bytes; folds P2 %llu P3.1 %llu "
                      "P11 %llu P14 %llu P16 %llu T3 %llu "
-                     "P18 %llu, shrinks %llu, ext %llu\n",
+                     "P18 %llu, shrinks %llu\n",
                      static_cast<unsigned long long>(stats.insns_before),
                      static_cast<unsigned long long>(stats.insns_after),
                      static_cast<unsigned long long>(stats.bytes_before),
@@ -5019,10 +5025,27 @@ bool optimize(const std::vector<std::uint8_t>& in,
                          stats.tdz_checks_removed),
                      static_cast<unsigned long long>(
                          stats.to_propkey_removed),
-                     static_cast<unsigned long long>(stats.shrinks),
-                     static_cast<unsigned long long>(stats.ext_emitted));
+                     static_cast<unsigned long long>(stats.shrinks));
     }
     return true;
+}
+
+bool optimize(const std::vector<std::uint8_t>& in,
+              std::vector<std::uint8_t>* out,
+              uint32_t passes,
+              bool report,
+              std::string* error) {
+    return optimize_with_top_level(in, out, passes, report,
+                                   TopLevelKind::kModule, error);
+}
+
+bool optimize_classic_for_benchmark(const std::vector<std::uint8_t>& in,
+                                    std::vector<std::uint8_t>* out,
+                                    uint32_t passes,
+                                    bool report,
+                                    std::string* error) {
+    return optimize_with_top_level(in, out, passes, report,
+                                   TopLevelKind::kGlobal, error);
 }
 
 // ---------------------------------------------------------------------------
@@ -5140,10 +5163,11 @@ bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error) {
 // I2 region census analyze-only entry (tier-3 plan §4; the production
 // pipeline never calls it). Runs the bridge + per-function decode ->
 // CFG -> verify -> SSA construction, then matches candidate fusion
-// regions (the §4.2 template catalog) and reports weighted coverage,
+// regions (the §4.2 template catalog) and reports static coverage,
 // guard requirements, slow-path duplication, and the §4.1 predicted
-// cost to stderr, selecting the at-most-two first templates by
-// predicted total. Nothing is emitted. Returns false only on a
+// cost to stderr, selecting the at-most-two first templates by static
+// predicted total. The lower-level profiled entry point performs the dynamic
+// evidence weighting used for decisions. Nothing is emitted. Returns false only on a
 // whole-bundle parse failure; functions the analyses cannot prove are
 // counted as rejected coverage and reported, never skipped silently.
 bool region_census(const std::vector<std::uint8_t>& in, std::string* error) {
