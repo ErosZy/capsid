@@ -97,11 +97,24 @@ def main() -> int:
     for source in sorted(args.sunspider.glob("*.js")):
         name = source.stem
         filename = f"sunspider-{name}.js"
-        trailer = """
-new Benchmark().runIteration();
-globalThis.__capsidSuiteOk = true;
-"""
-        sha = write_script(args.out / filename, [source], trailer)
+        # The classic SunSpider harness timed a test by executing its
+        # top-level body; the modern WebKit tree splits that driver away
+        # and the tests are plain scripts (no Benchmark global).  Wrap the
+        # body in a function and drive it for a fixed iteration count, so
+        # the classic runner's wall-clock measurement is deterministic.
+        wrapped = (
+            "\n(function () {\n  var __ssRun = function () {\n" +
+            f"\n/* upstream: {source.name} */\n" +
+            source.read_text(encoding="utf-8") + "\n" +
+            """  };
+  globalThis.__capsidSuiteOk = false;
+  for (var __ssIter = 0; __ssIter < 8; __ssIter++) __ssRun();
+  globalThis.__capsidSuiteOk = true;
+})();
+""")
+        (args.out / filename).write_text(wrapped, encoding="utf-8",
+                                         newline="\n")
+        sha = hashlib.sha256(wrapped.encode()).hexdigest()
         programs.append({"suite": "sunspider-1.0", "name": name,
                          "file": filename, "sha256": sha})
 
