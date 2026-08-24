@@ -44,6 +44,7 @@
 // I0 CFG bridge (below) adapts the strict reader's FuncRecord tree into
 // ir::FuncInfo; the IR types and entry points live in cfg.h.
 #include "bytecode_optimizer/ir/cfg.h"
+#include "bytecode_optimizer/ir/ssa.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -4888,6 +4889,48 @@ bool cfg_identity_round_trip(const std::vector<std::uint8_t>& in,
                  static_cast<unsigned long long>(rep.rejected_functions),
                  static_cast<unsigned long long>(rep.rejected_insns),
                  static_cast<unsigned long long>(rep.missing_pc2line));
+    return true;
+}
+
+// I1 full-stack SSA analyze-only entry (tier-3 plan §3.1; the
+// production pipeline never calls it). Runs the bridge + per-function
+// decode -> CFG -> verify -> SSA construction with the four analyses
+// (value lattice, world token, exception successors, refcount
+// ownership) over the whole bundle, and reports coverage to stderr.
+// Nothing is emitted. Returns false only on a whole-bundle parse
+// failure; functions the analyses cannot prove are counted as rejected
+// coverage and reported, never skipped silently.
+bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error) {
+    error->clear();
+    ir::SsaReport rep;
+    if (!ir::ssa_round_trip(in.data(), in.size(), &rep, error)) {
+        if (error->empty()) {
+            *error = "bytecode ssa: analysis failed";
+        }
+        return false;
+    }
+    std::fprintf(stderr,
+                 "bytecode ssa: %llu functions, rejected %llu functions / "
+                 "%llu insns, %llu nodes, %llu values, %llu params, "
+                 "max token %llu, lattice {B:%llu U:%llu I32:%llu F64:%llu "
+                 "NUM:%llu STR:%llu ARR:%llu SHAPE:%llu CLOS:%llu UNK:%llu}\n",
+                 static_cast<unsigned long long>(rep.functions),
+                 static_cast<unsigned long long>(rep.rejected_functions),
+                 static_cast<unsigned long long>(rep.rejected_insns),
+                 static_cast<unsigned long long>(rep.nodes),
+                 static_cast<unsigned long long>(rep.values),
+                 static_cast<unsigned long long>(rep.params),
+                 static_cast<unsigned long long>(rep.max_token),
+                 static_cast<unsigned long long>(rep.lattice_count[0]),
+                 static_cast<unsigned long long>(rep.lattice_count[1]),
+                 static_cast<unsigned long long>(rep.lattice_count[2]),
+                 static_cast<unsigned long long>(rep.lattice_count[3]),
+                 static_cast<unsigned long long>(rep.lattice_count[4]),
+                 static_cast<unsigned long long>(rep.lattice_count[5]),
+                 static_cast<unsigned long long>(rep.lattice_count[6]),
+                 static_cast<unsigned long long>(rep.lattice_count[7]),
+                 static_cast<unsigned long long>(rep.lattice_count[8]),
+                 static_cast<unsigned long long>(rep.lattice_count[9]));
     return true;
 }
 

@@ -117,6 +117,16 @@ bool analyze_only(const std::vector<std::uint8_t>& in,
 bool cfg_identity_round_trip(const std::vector<std::uint8_t>& in,
                              std::string* error);
 
+// I1 full-stack SSA (tier-3 plan §3.3/§3.4, analyze-only): builds the
+// SSA form of every decodable function (block parameters, value
+// lattice, one ordered world token, exception successors, refcount
+// ownership) and reports coverage to stderr. Nothing is emitted; the
+// production pipeline never calls this. Functions the analyses cannot
+// prove are counted as rejected coverage and reported, never skipped
+// silently. Returns false only on a whole-bundle parse failure, same
+// contract as optimize().
+bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error);
+
 }  // namespace bytecode
 }  // namespace capsid
 

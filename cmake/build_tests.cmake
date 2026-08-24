@@ -298,6 +298,41 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_cfg PROPERTIES TIMEOUT 120)
 
+            # I1 full-stack SSA (tier-3 plan §3.3/§3.4): synthetic
+            # functions covering the lattice transfers, block parameters,
+            # loops, exception regions, and ownership rejections, plus a
+            # 0-rejection gate over a corpus subset (try/catch/finally,
+            # generators, async, classes, closures). Analyze-only — the
+            # test asserts coverage counts and rejection behavior, never
+            # emissions.
+            add_executable(
+                test-bytecode-ssa
+                tests/bytecode_optimizer/test_ssa.cc)
+            target_link_libraries(
+                test-bytecode-ssa PRIVATE
+                capsid_bytecode_opt
+                tjs)
+            set_target_properties(
+                test-bytecode-ssa PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-bytecode-ssa PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-bytecode-ssa PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(
+                NAME bytecode_ssa
+                COMMAND test-bytecode-ssa)
+            set_tests_properties(
+                bytecode_ssa PROPERTIES TIMEOUT 120)
+
             # Differential gate: every fixture runs through
             # the real deployment path — compiler (optimizer on) →
             # trusted-bytecode worker load — and the response must match

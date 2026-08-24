@@ -23,43 +23,11 @@
 #include <string>
 #include <vector>
 
+#include "bytecode_optimizer/ir/effects.h"
+
 namespace capsid {
 namespace bytecode {
 namespace ir {
-
-// ---------------------------------------------------------------------------
-// Instruction classification (I0 metadata columns).
-// ---------------------------------------------------------------------------
-
-// Effect strength ordering (weakest -> strongest). The I1 world/effect
-// token joins by max so that a candidate can never move across a
-// stronger effect: PURE < LOCAL < MEMORY < CALL < ALLOC < BARRIER <
-// SUSPEND. CONTROL and TERMINAL are structural classes (branches and
-// terminators do not "have" effects to move across; they shape the
-// graph). This ordering is the contract I1 builds on.
-enum class EffectClass : uint8_t {
-    PURE = 0,    // stack/scalar ops with no observable state change
-    LOCAL,       // non-captured frame-local slot access (loc/arg)
-    MEMORY,      // heap/global/shared-storage reads and writes
-    CALL,        // may execute arbitrary code (calls, iterators, eval,
-                 // getters/proxies reachable from property access)
-    ALLOC,       // materializes heap objects (array/object/closure/...)
-    CONTROL,     // branches, catch/gosub dispatch
-    BARRIER,     // with_*/eval: invalidates all local knowledge
-    SUSPEND,     // yield/await: suspension/resume point (safepoint)
-    TERMINAL,    // return*/throw: no fallthrough edge
-};
-
-// What the instruction's pushed value can be at runtime — the seed of
-// the §3.3 value lattice. SCALAR is provably non-heap (null/undefined/
-// booleans/small ints/typeof results); HEAP is provably a heap
-// reference (object/array/closure/string/regexp/class materialization);
-// ANY is the conservative default.
-enum class ResultKind : uint8_t {
-    SCALAR = 0,
-    HEAP,
-    ANY,
-};
 
 // Explicit edge classes (§3.2). A FALLTHROUGH edge is the not-taken
 // continuation of a conditional jump or the plain next-instruction flow
@@ -178,6 +146,10 @@ bool decode_function(const uint8_t* code,
 // conservative backedge flags. Fails closed on control that falls off
 // the end of the blob.
 bool build_cfg(const std::vector<Insn>& insns, Cfg* out, std::string* error);
+
+// Resolved static pop count of an instruction (the npop/npopx/npop_u16
+// operand-count fold, shared by the verifier and the SSA construction).
+int insn_pop_count(const Insn& in);
 
 // Stack verifier over the CFG: breadth-first height propagation with
 // per-block entry-height consistency (the existing verifier's contract,
