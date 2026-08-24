@@ -127,6 +127,17 @@ bool cfg_identity_round_trip(const std::vector<std::uint8_t>& in,
 // contract as optimize().
 bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error);
 
+// I2 region census (tier-3 plan §4, analyze-only): matches candidate
+// fusion regions (the §4.2 template catalog) on the SSA form of every
+// decodable function and reports dynamic weighted coverage, guard
+// requirements, slow-path duplication, and the §4.1 predicted cost to
+// stderr, selecting the at-most-two first templates by predicted
+// total. Nothing is emitted; the production pipeline never calls this.
+// Functions the analyses cannot prove are counted as rejected coverage
+// and reported, never skipped silently. Returns false only on a
+// whole-bundle parse failure, same contract as optimize().
+bool region_census(const std::vector<std::uint8_t>& in, std::string* error);
+
 }  // namespace bytecode
 }  // namespace capsid
 

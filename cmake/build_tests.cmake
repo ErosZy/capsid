@@ -333,6 +333,41 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_ssa PROPERTIES TIMEOUT 120)
 
+            # I2 region census (tier-3 plan §4): candidate fusion-region
+            # matching (the §4.2 template catalog) on the SSA form with
+            # the §4.1 predicted cost model, the 8-instruction cap, the
+            # handler-boundary exclusion, the at-most-two selection, and
+            # a 0-rejection gate over the same corpus subset.
+            # Analyze-only — the test asserts coverage counts and
+            # rejection behavior, never emissions.
+            add_executable(
+                test-regions
+                tests/bytecode_optimizer/test_regions.cc)
+            target_link_libraries(
+                test-regions PRIVATE
+                capsid_bytecode_opt
+                tjs)
+            set_target_properties(
+                test-regions PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-regions PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-regions PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(
+                NAME bytecode_regions
+                COMMAND test-regions)
+            set_tests_properties(
+                bytecode_regions PROPERTIES TIMEOUT 120)
+
             # Differential gate: every fixture runs through
             # the real deployment path — compiler (optimizer on) →
             # trusted-bytecode worker load — and the response must match

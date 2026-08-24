@@ -44,6 +44,7 @@
 // I0 CFG bridge (below) adapts the strict reader's FuncRecord tree into
 // ir::FuncInfo; the IR types and entry points live in cfg.h.
 #include "bytecode_optimizer/ir/cfg.h"
+#include "bytecode_optimizer/ir/region.h"
 #include "bytecode_optimizer/ir/ssa.h"
 
 #include <algorithm>
@@ -4931,6 +4932,57 @@ bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error) {
                  static_cast<unsigned long long>(rep.lattice_count[7]),
                  static_cast<unsigned long long>(rep.lattice_count[8]),
                  static_cast<unsigned long long>(rep.lattice_count[9]));
+    return true;
+}
+
+// I2 region census analyze-only entry (tier-3 plan §4; the production
+// pipeline never calls it). Runs the bridge + per-function decode ->
+// CFG -> verify -> SSA construction, then matches candidate fusion
+// regions (the §4.2 template catalog) and reports weighted coverage,
+// guard requirements, slow-path duplication, and the §4.1 predicted
+// cost to stderr, selecting the at-most-two first templates by
+// predicted total. Nothing is emitted. Returns false only on a
+// whole-bundle parse failure; functions the analyses cannot prove are
+// counted as rejected coverage and reported, never skipped silently.
+bool region_census(const std::vector<std::uint8_t>& in, std::string* error) {
+    error->clear();
+    ir::RegionCensusReport rep;
+    if (!ir::region_round_trip(in.data(), in.size(), &rep, error)) {
+        if (error->empty()) {
+            *error = "bytecode region: census failed";
+        }
+        return false;
+    }
+    std::fprintf(stderr,
+                 "bytecode region: census: %llu functions, rejected %llu "
+                 "functions / %llu insns\n",
+                 static_cast<unsigned long long>(rep.functions),
+                 static_cast<unsigned long long>(rep.rejected_functions),
+                 static_cast<unsigned long long>(rep.rejected_insns));
+    for (size_t i = 0; i < static_cast<size_t>(ir::Template::COUNT); i++) {
+        const ir::Template t = static_cast<ir::Template>(i);
+        std::fprintf(stderr,
+                     "bytecode region:   %-24s candidates %llu, insns "
+                     "%llu, guards %llu, slow bytes %llu, predicted %lld "
+                     "(best %lld)\n",
+                     ir::template_name(t),
+                     static_cast<unsigned long long>(rep.candidates[i]),
+                     static_cast<unsigned long long>(rep.insns_covered[i]),
+                     static_cast<unsigned long long>(
+                         rep.candidates[i] * ir::template_guards(t)),
+                     static_cast<unsigned long long>(rep.slow_bytes[i]),
+                     static_cast<long long>(rep.predicted_total[i]),
+                     static_cast<long long>(
+                         rep.candidates[i] == 0 ? 0
+                                                : rep.predicted_best[i]));
+    }
+    std::fprintf(stderr, "bytecode region: first templates: ");
+    for (int k = 0; k < 2; k++) {
+        std::fprintf(stderr, "%s%s (%lld)", k == 0 ? "" : ", ",
+                     ir::template_name(rep.first_templates[k]),
+                     static_cast<long long>(rep.first_predicted[k]));
+    }
+    std::fprintf(stderr, "\n");
     return true;
 }
 

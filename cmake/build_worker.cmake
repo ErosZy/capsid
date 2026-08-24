@@ -344,7 +344,8 @@ if(CAPSID_BUILD_WORKER)
         # BC26.
         "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/cfg.cc"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/effects.cc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/ssa.cc")
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/ssa.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/region.cc")
     target_include_directories(capsid_bytecode_opt
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
         PRIVATE
