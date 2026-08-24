@@ -10,6 +10,13 @@
 > The repaired IC is stopped after its direct PATCHLESS comparison showed a
 > significant fresh-receiver regression and no mono/Hono win. It remains
 > compile-gated/default OFF; no ext handler is emitted in production.
+>
+> R1 (ext34, 2026-08-25): a fused loc-read + `get_array_el` ext template was
+> measured and KEPT — +0.66% equal-weight geomean with a significant positive
+> cluster (audio-beat-detection, audio-fft, navier-stokes, all 7/7 pairs) and
+> zero regressions beyond noise (section 17). The candidate remains gated
+> behind pass bits outside the deployed mask; the product pipeline is
+> unchanged BC26.
 
 ## 1. Decision, Evidence, and Target
 
@@ -1556,3 +1563,109 @@ Local raw framework samples and analysis are under
 legacy-suite census outputs are under
 `bench/results/framework-sequence-census-v3-20260824/` and
 `bench/results/legacy-suite-sequence-census-20260824/`.
+
+## 17. R1 Loc-Read + get_array_el Ext34 Fusion Record (2026-08-25)
+
+Status: **R1 measured — kept (modest positive)**. A run-based matcher fuses
+consecutive local-slot reads ending in `get_array_el` into two new BC27 ext
+templates (id 2, two-slot window; id 3, three-slot window). The paired
+measurement shows a significant positive cluster on three Kraken programs
+and no regression beyond noise elsewhere; the candidate is kept behind its
+pass bits, outside the deployed mask.
+
+### 17.1 Deliverables at measurement time (§10 item 10)
+
+- **Optimizer matcher** (commit `c1c09c4`, fixed `2bb34ae`): after the last
+  reshrink, scan for a run of ≤3 slot reads (`get_loc0..3` short forms,
+  `get_loc8`/`get_loc`, `get_arg0..3`/`get_arg`, and the emitter's fused
+  `get_loc0_loc1`) immediately followed by `get_array_el`. Payload bytes are
+  tagged: bit 7 selects the argument buffer, low 7 bits the local slot. The
+  fused ext's stack effect equals its window's (id 2: pop 2 push 1; id 3:
+  pop 2 push 2), so heights, catch offsets, and exception stack shapes are
+  preserved; the only CFG constraint is that no jump may land strictly
+  inside a window (a landing at the window start is fine). Id-3 windows win
+  over id-2 windows at the same start.
+- **Runtime handlers** (patch 0045 `capsid-ext-loc-array-fusion`): a guarded
+  fast path (object + int-index tag check plus `js_get_fast_array_element`,
+  covering arrays, arguments, and typed arrays) with a full slow path that
+  duplicates the window's exact `get_loc*; get_loc*; get_array_el` generic
+  semantics including exceptions (`sf->cur_pc` restored on throw).
+- **Pass bits** (API only, outside the frozen CLI): `kPassExtFuse34 = 1<<7`,
+  `kPassExtFuse4 = 1<<8`. The deployed `kPassAll` mask (0x7f) and product
+  pipeline are unchanged; the A/B arms differ only in these bits.
+- **Semantics coverage** (commits `aa450f1`, `310e43e`): goldens for the
+  short-form payloads plus a live base/opt A/B through the real compiler
+  output. Two emitter facts had to be learned the hard way: `let` locals
+  read via `get_loc_check` (TDZ), which the matcher excludes by design (the
+  fused handler performs no TDZ re-check — fail-closed), and `var` locals
+  initialized to constants are constant-eliminated by the emitter (uses
+  become `push_<const>`, no slot read at all). The live fixtures therefore
+  use non-constant `var` initializers, verified end to end to fuse as:
+  f `[80 81]`, g `[80 81]` (const read excluded), h `[00 01]`, h3 `[80 03]`
+  (the `get_loc3` short-form regression), k id3 `[00 80 01]`.
+
+### 17.2 Layout-tax probe (no code change to the window)
+
+A side-by-side probe compiled the 21-fixture corpus with the ext bits on and
+off and compared the serialized outputs. Both arms produced byte-identical
+BC26 streams for all 21 fixtures (commit `91e52df`): the ext matcher is a
+pure rewrite on the shrunk stream with no layout or offset side effects. The
+two arms' execution paths then differ only by the fused-vs-unfused
+instructions themselves.
+
+### 17.3 read_slots short-form bug found by the probe
+
+The layout-tax probe exposed a matcher defect: short-form `get_loc1..3`
+reads were encoded with slot 0 (the decoder leaves `aux` at 0 for
+operand-less short forms; `slot_of()`'s `op - OP_get_loc0` convention was
+not mirrored in the matcher). This silently mis-fused windows using
+`get_loc1..3` as indices — the exact shape audio-beat-detection's hot loops
+emit. The pre-fix checkout failed exactly the two new short-form goldens
+(lines 1844/1862) and the micro-reproducer disagreed with the unoptimized
+run; the fix (`op - OP_get_loc0`) makes all goldens and the live A/B agree.
+Without the end-to-end probes this would have shipped a semantic
+mismatch in a deployed-looking arm; the fail-closed round trip caught it.
+
+### 17.4 Paired A/B results (Release, `taskset -c 2-3`, 7 ABBA/BAAB pairs per program)
+
+Runner `bench/ext34-classic-ab.sh` (commit `42694ca`): control mask 0x7f vs
+candidate 0x1ff, 8 programs of the classic suite corpus, 14 samples per arm
+per program.
+
+| program | gain % | CI95 % | positive pairs |
+| --- | ---: | ---: | ---: |
+| kraken-audio-beat-detection | **+2.01** | [1.27, 2.75] | 7/7 |
+| kraken-audio-fft | **+3.66** | [1.78, 5.58] | 7/7 |
+| kraken-audio-oscillator | −1.41 | [−4.49, 1.76] | 1/7 |
+| kraken-imaging-darkroom | −0.22 | [−0.75, 0.32] | 3/7 |
+| octane-box2d | +0.38 | [−0.69, 1.47] | 4/7 |
+| octane-gameboy | −0.46 | [−1.30, 0.40] | 2/7 |
+| octane-navier-stokes | **+1.02** | [0.47, 1.56] | 7/7 |
+| octane-richards | +0.37 | [−1.66, 2.45] | 5/7 |
+| equal-weight geomean | **+0.66** | [−0.65, 1.98] | — |
+| kraken geomean / octane geomean | +0.99 / +0.33 | — | — |
+
+All 8/8 programs completed, zero failures, zero semantic mismatches. The
+three programs with 7/7 positive pairs form a significant cluster with CIs
+clear of zero; darkroom (0 fused sites — clean control), oscillator,
+gameboy, box2d, and richards sit within noise. No program shows a
+regression beyond its noise band.
+
+### 17.5 Verdict — ext34 kept
+
+The fused template removes dispatch (two or three slot reads + the array
+access become one opcode) and the per-slot generic read work; unlike R0's
+blanket `get_array_el` rewrite it does not replace a fast path with a
+table-indirected one at every site — it only compresses the reads leading
+into a `get_array_el` that still executes its own generic path. The
+measured signature is exactly that: consistent small wins where
+slot-read/array windows are hot (audio DSP kernels, navier-stokes), flat
+elsewhere. Kept behind `kPassExtFuse34|kPassExtFuse4`, outside the deployed
+mask; the product pipeline remains BC26 (unchanged).
+
+**R2 implication**: the next array fusion should remove the `get_array_el`
+generic path itself (the part that R0 and this record both leave intact),
+not another copy of its dispatch.
+
+Evidence is archived under `bench/results/ext34-classic-ab-20260825T014012/`
+(per-program pair gains, summary.json; bench/results is gitignored).
