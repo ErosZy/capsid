@@ -205,10 +205,12 @@ function(capsid_compute_txiki_overlay_key)
     #      the diagnostic opcode profile so bootstrap sites cannot rank as
     #      application AOT candidates. 0043 keeps mixed int/float multiply
     #      in the interpreter's numeric fast path. 0044 makes every rejected
-    #      ext encoding install a real SyntaxError before returning.
-    if(NOT CTOK_PATCH_COUNT EQUAL 45)
+    #      ext encoding install a real SyntaxError before returning. 0045
+    #      adds the measured loc-loc-array fusion ext templates (ids 2/3)
+    #      for the R1 A/B campaign; no production consumer yet.
+    if(NOT CTOK_PATCH_COUNT EQUAL 46)
         message(FATAL_ERROR
-            "expected 45 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 46 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

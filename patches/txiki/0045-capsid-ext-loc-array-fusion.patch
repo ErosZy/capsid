@@ -1,0 +1,109 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -20845,6 +20845,90 @@
+                 switch (ext_id) {
+ #endif
+         EXT_CASE(1, reserved_array_get_r0)
++
++        /* loc+loc(+loc)+array fusion templates (BC27 ext ids 2/3). The
++           optimizer emits these only from the measured keep gate; a
++           fused site reads the slots directly (the original get_loc8s
++           are gone, so nothing is dup'd or freed on the fast path).
++           Payload slots are tagged: bit 7 selects the argument buffer
++           (the VM frame keeps args and locals in separate stores), the
++           low 7 bits index it. The generic fallback mirrors
++           get_loc8; get_loc8; get_array_el exactly:
++           JS_GetPropertyValue takes ownership of the index ref, the
++           object ref is released here, property-key coercion order,
++           getters, missing-property and null behavior are the shared
++           path's. */
++        EXT_CASE(2, loc_loc_array_get)
++            {
++                uint8_t *ep = pc - ei->size;
++                JSValue *vb = var_buf;
++                JSValue *ab = sf->arg_buf;
++                uint8_t p2 = ep[2];
++                uint8_t p3 = ep[3];
++                JSValue obj = (p2 & 0x80) ? ab[p2 & 0x7f] : vb[p2 & 0x7f];
++                JSValue idx = (p3 & 0x80) ? ab[p3 & 0x7f] : vb[p3 & 0x7f];
++                JSValue val;
++
++                /* Fast path: proven array + int index — the exact
++                   predicate JS_GetPropertyValue takes; the accessor dups
++                   internally. */
++                if (likely(JS_VALUE_GET_TAG(obj) == JS_TAG_OBJECT &&
++                           JS_VALUE_GET_TAG(idx) == JS_TAG_INT &&
++                           js_get_fast_array_element(ctx, JS_VALUE_GET_OBJ(obj),
++                                                     JS_VALUE_GET_INT(idx),
++                                                     &val))) {
++                    *sp++ = val;
++                    EXT_BREAK;
++                }
++                sf->cur_pc = ep;
++                *sp++ = js_dup(obj);
++                *sp++ = js_dup(idx);
++                val = JS_GetPropertyValue(ctx, sp[-2], sp[-1]);
++                JS_FreeValue(ctx, sp[-2]);
++                sp[-2] = val;
++                sp--;
++                if (unlikely(JS_IsException(val)))
++                    goto exception;
++            }
++            EXT_BREAK;
++
++        EXT_CASE(3, loc_loc_loc_array_get)
++            {
++                uint8_t *ep = pc - ei->size;
++                JSValue *vb = var_buf;
++                JSValue *ab = sf->arg_buf;
++                uint8_t p2 = ep[2];
++                uint8_t p3 = ep[3];
++                uint8_t p4 = ep[4];
++                JSValue keep = (p2 & 0x80) ? ab[p2 & 0x7f] : vb[p2 & 0x7f];
++                JSValue obj = (p3 & 0x80) ? ab[p3 & 0x7f] : vb[p3 & 0x7f];
++                JSValue idx = (p4 & 0x80) ? ab[p4 & 0x7f] : vb[p4 & 0x7f];
++                JSValue val;
++
++                if (likely(JS_VALUE_GET_TAG(obj) == JS_TAG_OBJECT &&
++                           JS_VALUE_GET_TAG(idx) == JS_TAG_INT &&
++                           js_get_fast_array_element(ctx, JS_VALUE_GET_OBJ(obj),
++                                                     JS_VALUE_GET_INT(idx),
++                                                     &val))) {
++                    *sp++ = js_dup(keep);
++                    *sp++ = val;
++                    EXT_BREAK;
++                }
++                /* Mirror the original stack: [keep, obj, idx] before the
++                   access, [keep, val] after. */
++                sf->cur_pc = ep;
++                *sp++ = js_dup(keep);
++                *sp++ = js_dup(obj);
++                *sp++ = js_dup(idx);
++                val = JS_GetPropertyValue(ctx, sp[-2], sp[-1]);
++                JS_FreeValue(ctx, sp[-2]);
++                sp[-2] = val;
++                sp--;
++                if (unlikely(JS_IsException(val)))
++                    goto exception;
++            }
++            EXT_BREAK;
++
+         EXT_DEFAULT:
+             JS_ThrowInternalError(ctx,
+                                   "invalid ext opcode: pc=%u ext_id=0x%02x",
+--- a/deps/quickjs/quickjs-ext-opcode.h
++++ b/deps/quickjs/quickjs-ext-opcode.h
+@@ -34,5 +34,13 @@
+ /* ext_id, name, size (incl. OP_ext prefix + ext_id), n_pop, n_push, fmt */
+ EXT_DEF(0, invalid, 0, 0, 0, none) /* reserved: never a valid id */
+ EXT_DEF(1, reserved_array_get_r0, 0, 0, 0, none)
++/* Fusion templates (measured keep gate): id 2 fuses two loc reads +
++   get_array_el (payload: object slot, index slot); id 3 fuses three
++   loc reads + get_array_el (payload: leftover slot, object slot,
++   index slot). Each slot byte is tagged: bit 7 = argument buffer
++   (arg_buf, args and locals live in separate stores), low 7 bits =
++   index. Sizes include OP_ext + ext_id + payload. */
++EXT_DEF(2, loc_loc_array_get, 4, 0, 1, none)
++EXT_DEF(3, loc_loc_loc_array_get, 5, 0, 2, none)
+ /* id 1 is the retired single-op array experiment. Its zero-sized row locks
+    the number permanently while every consumer rejects it as invalid. */

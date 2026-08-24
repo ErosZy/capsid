@@ -3,7 +3,7 @@
 # This audit verifies:
 #   1. Vendor checkout is clean (no untracked or modified files).
 #   2. Vendor HEAD matches the expected tag (if configured).
-#   3. All 45 patches apply in sequence to a fresh vendor copy, using the
+#   3. All 46 patches apply in sequence to a fresh vendor copy, using the
 #      same tool and flags as the build (git apply -p1 --ignore-whitespace
 #      — PrepareTxiki.cmake).
 #   4. The overlay stamp matches the key computed from the shared function.
@@ -160,10 +160,11 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # exact-PC monomorphic get_field quickening and retired ext-id reservation;
 # 0042 adds source provenance to the diagnostic opcode profile; 0043 keeps
 # mixed int/float multiplication on the numeric interpreter fast path; 0044
-# preserves the reader's pending-exception contract for rejected ext forms.
-if(NOT CAPSID_PATCH_COUNT EQUAL 45)
+# preserves the reader's pending-exception contract for rejected ext forms;
+# 0045 adds the loc-loc-array fusion ext templates (ids 2/3, R1 campaign).
+if(NOT CAPSID_PATCH_COUNT EQUAL 46)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 45 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 46 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------
