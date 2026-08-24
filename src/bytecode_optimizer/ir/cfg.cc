@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <cstring>
 
+#include "bytecode_optimizer/ir/ext.h"
+
 namespace capsid {
 namespace bytecode {
 namespace ir {
@@ -147,7 +149,8 @@ bool decode_function(const uint8_t* code,
                      const uint8_t* bundle,
                      const FuncInfo& fi,
                      std::vector<Insn>* out,
-                     std::string* error) {
+                     std::string* error,
+                     bool allow_ext) {
     // Resolve the pc2line entries once; src_line/src_col are filled
     // per instruction from the entry with the largest pc <= pc.
     std::vector<SrcEntry> src;
@@ -177,7 +180,39 @@ bool decode_function(const uint8_t* code,
             return false;
         }
         const OpInfo& oi = opcode_info[op];
-        if (pc + oi.size > len) {
+        uint8_t size = oi.size;
+        uint8_t n_pop = oi.n_pop;
+        uint8_t n_push = oi.n_push;
+        if (op == OP_ext) {
+            // F0 ext foundation (BC27): OP_ext is a prefix; the ext
+            // table (quickjs-ext-opcode.h, single source of truth)
+            // supplies the total size and stack effects so the payload
+            // is walked opaquely and the verifier never sees the
+            // 0-pop/0-push prefix row. BC26 must reject the prefix
+            // outright (E0 reader contract).
+            if (!allow_ext) {
+                *error = "cfg: ext instruction in BC26 bundle";
+                return false;
+            }
+            if (pc + 1 >= len) {
+                *error = "cfg: truncated instruction";
+                return false;
+            }
+            const uint8_t ext_id = code[pc + 1];
+            ExtInfo ei;
+            if (!ext_lookup(ext_id, &ei)) {
+                *error = "cfg: invalid ext id " + std::to_string(ext_id);
+                return false;
+            }
+            if (ei.fmt != EXT_FMT_none) {
+                *error = "cfg: unimplemented ext operand format";
+                return false;
+            }
+            size = ei.size;
+            n_pop = ei.n_pop;
+            n_push = ei.n_push;
+        }
+        if (pc + size > len) {
             *error = "cfg: truncated instruction";
             return false;
         }
@@ -185,13 +220,13 @@ bool decode_function(const uint8_t* code,
         Insn in;
         in.op = op;
         in.old_off = static_cast<uint32_t>(pc);
-        in.old_size = oi.size;
+        in.old_size = size;
         in.target = INT32_MIN;  // "no jump" sentinel
         in.imm = 0;
         in.aux = 0;
         in.has_aux = false;
-        in.n_pop = oi.n_pop;
-        in.n_push = oi.n_push;
+        in.n_pop = n_pop;
+        in.n_push = n_push;
         in.src_line = 0;
         in.src_col = 0;
         in.may_throw = oc.may_throw;
@@ -312,9 +347,16 @@ bool decode_function(const uint8_t* code,
                 break;
             }
         }
+        if (op == OP_ext) {
+            // The ext id rides in aux (the payload is opaque for the
+            // `none` format), so downstream consumers can key on it
+            // without re-reading the code blob.
+            in.aux = code[pc + 1];
+            in.has_aux = true;
+        }
         resolve_src(static_cast<uint32_t>(pc), &in.src_line, &in.src_col);
         out->push_back(in);
-        pc += oi.size;
+        pc += size;
     }
     // Resolve jump operands to instruction indexes. Offsets are
     // strictly increasing, so a binary search over instruction starts
@@ -584,6 +626,19 @@ bool verify_cfg(const Cfg& cfg, std::string* error) {
 // emit_identity
 // ---------------------------------------------------------------------------
 
+// Total encoded size of a decoded instruction. The opcode table only
+// knows the 2-byte OP_ext prefix; the ext table supplies the total
+// size so the identity lowering walks (and re-emits) the payload
+// opaquely. Ext ids were validated at decode, so the lookup cannot
+// fail on a decoded stream.
+uint8_t insn_size(const Insn& in) {
+    if (in.op == OP_ext) {
+        ExtInfo ei;
+        if (ext_lookup(static_cast<uint8_t>(in.aux), &ei)) return ei.size;
+    }
+    return opcode_info[in.op].size;
+}
+
 bool emit_identity(const std::vector<Insn>& insns,
                    const uint8_t* old_code,
                    size_t old_len,
@@ -595,7 +650,7 @@ bool emit_identity(const std::vector<Insn>& insns,
     uint32_t off = 0;
     for (size_t i = 0; i < insns.size(); i++) {
         offs[i] = off;
-        off += opcode_info[insns[i].op].size;
+        off += insn_size(insns[i]);
     }
     if (off != old_len) {
         *error = "cfg: identity size mismatch";
@@ -759,9 +814,10 @@ bool emit_identity(const std::vector<Insn>& insns,
             break;
         default:
             // Everything else copies verbatim; identity lowering does
-            // not re-select forms.
+            // not re-select forms. Ext payload bytes are part of the
+            // instruction (insn_size), never re-parsed as opcodes.
             out->insert(out->end(), old_code + in.old_off + 1,
-                        old_code + in.old_off + oi.size);
+                        old_code + in.old_off + insn_size(in));
             break;
         }
     }
@@ -816,7 +872,8 @@ bool identity_round_trip(const uint8_t* data,
         bool run(const FuncInfo& fi, std::string* error) {
             std::vector<Insn> insns;
             if (!decode_function(data + fi.code_off, fi.code_len, data, fi,
-                                 &insns, error)) {
+                                 &insns, error,
+                                 data[0] == BC_VERSION_EXT)) {
                 std::fprintf(stderr, "cfg: rejected (decode): %s\n",
                              error->c_str());
                 // Undecodable: no instruction count is knowable, so the

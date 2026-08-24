@@ -138,6 +138,17 @@ bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error);
 // whole-bundle parse failure, same contract as optimize().
 bool region_census(const std::vector<std::uint8_t>& in, std::string* error);
 
+// F0 ext foundation (tier-3 plan §2/§4.4, analyze-only): BC27 dual
+// reader + ext round trip. Reads BC26 and BC27 bundles, decodes every
+// function with ext-table sizes and stack effects (table-generated
+// OP_ext from quickjs-ext-opcode.h, single source of truth), builds
+// and verifies the CFG, and reports ext coverage to stderr. BC26
+// containing OP_ext, BC27 without ext (noncanonical), unknown ext ids,
+// truncated payloads, and unimplemented operand formats fail closed at
+// the reader or the decoder. Nothing is emitted; the production
+// pipeline (optimize / analyze_only) rejects BC27 input outright.
+bool ext_round_trip(const std::vector<std::uint8_t>& in, std::string* error);
+
 }  // namespace bytecode
 }  // namespace capsid
 

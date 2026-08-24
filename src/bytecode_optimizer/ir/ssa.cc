@@ -28,6 +28,8 @@
 #include <cstdio>
 #include <utility>
 
+#include "bytecode_optimizer/ir/ext.h"
+
 namespace capsid {
 namespace bytecode {
 namespace ir {
@@ -1563,7 +1565,8 @@ bool ssa_round_trip(const uint8_t* data,
         bool run(const FuncInfo& fi, std::string* error) {
             std::vector<Insn> insns;
             if (!decode_function(data + fi.code_off, fi.code_len, data, fi,
-                                 &insns, error)) {
+                                 &insns, error,
+                                 data[0] == BC_VERSION_EXT)) {
                 std::fprintf(stderr, "ssa: rejected (decode): %s\n",
                              error->c_str());
                 rep->rejected_functions++;

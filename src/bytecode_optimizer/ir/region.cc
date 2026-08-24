@@ -16,6 +16,7 @@
 
 #include "bytecode_optimizer/ir/cfg.h"
 #include "bytecode_optimizer/ir/effects.h"
+#include "bytecode_optimizer/ir/ext.h"
 #include "bytecode_optimizer/ir/ssa.h"
 
 namespace capsid {
@@ -334,7 +335,8 @@ bool region_round_trip(const uint8_t* data,
         bool run(const FuncInfo& fi, std::string* error) {
             std::vector<Insn> insns;
             if (!decode_function(data + fi.code_off, fi.code_len, data, fi,
-                                 &insns, error)) {
+                                 &insns, error,
+                                 data[0] == BC_VERSION_EXT)) {
                 std::fprintf(stderr, "region: rejected (decode): %s\n",
                              error->c_str());
                 rep->rejected_functions++;

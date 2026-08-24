@@ -368,6 +368,43 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_regions PROPERTIES TIMEOUT 120)
 
+            # F0 ext foundation (tier-3 plan §2/§4.4): the BC27 dual
+            # reader, table-generated OP_ext decode (sizes + stack
+            # effects from quickjs-ext-opcode.h), the reader's ext
+            # policy (BC26 rejects OP_ext; BC27 must be canonical),
+            # CFG/identity round trips on BC27 bundles, the production
+            # BC26-only gates, and the malformed-input matrix (unknown
+            # ext ids, id 0, truncation, noncanonical BC27, recursive
+            # prefixes). Analyze-only — the test asserts acceptance and
+            # fail-closed behavior, never emissions.
+            add_executable(
+                test-ext-round-trip
+                tests/bytecode_optimizer/test_ext_round_trip.cc)
+            target_link_libraries(
+                test-ext-round-trip PRIVATE
+                capsid_bytecode_opt
+                tjs)
+            set_target_properties(
+                test-ext-round-trip PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(
+                        test-ext-round-trip PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-ext-round-trip PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(
+                NAME bytecode_ext_round_trip
+                COMMAND test-ext-round-trip)
+            set_tests_properties(
+                bytecode_ext_round_trip PROPERTIES TIMEOUT 120)
+
             # Differential gate: every fixture runs through
             # the real deployment path — compiler (optimizer on) →
             # trusted-bytecode worker load — and the response must match

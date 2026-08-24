@@ -44,6 +44,7 @@
 // I0 CFG bridge (below) adapts the strict reader's FuncRecord tree into
 // ir::FuncInfo; the IR types and entry points live in cfg.h.
 #include "bytecode_optimizer/ir/cfg.h"
+#include "bytecode_optimizer/ir/ext.h"
 #include "bytecode_optimizer/ir/region.h"
 #include "bytecode_optimizer/ir/ssa.h"
 
@@ -57,7 +58,34 @@
 namespace capsid {
 namespace bytecode {
 
+// F0 ext foundation: the ext table contract (quickjs-ext-opcode.h via
+// ir/ext.h — the single source of truth for OP_ext sizes, stack
+// effects, and ids) lives in ir::; the BC27 reader and the tier-3
+// walker sites reference it from bytecode-namespace scope.
+using capsid::bytecode::ir::BC_VERSION_EXT;
+using capsid::bytecode::ir::ExtInfo;
+using capsid::bytecode::ir::ext_lookup;
+
 namespace {
+
+// The v1 decoder's instruction type. Declared at the top of the
+// anonymous namespace so the decode_code forward declaration below
+// (which the strict reader needs for the F0 ext policy scan) and the
+// decode_code definition resolve to the same type — ir::Insn from
+// cfg.h is a separate type (the IR side of the I0 bridge) and must
+// never be mixed in.
+struct Insn {
+    uint16_t op;
+    uint32_t old_off;   // byte offset in the original code blob
+    uint8_t old_size;   // original encoded size
+    uint32_t pc_off;    // pc2line source offset (own old_off unless a
+                        // fold replaced this instruction)
+    int32_t target;     // insn index for jumps, else -1
+    int64_t imm;        // small-int value for push_minus1..push_i32
+    uint32_t aux;       // cpool idx (push_const/fclosure), var idx
+                        // (get/put/set loc/arg/var_ref), argc (call)
+    bool has_aux;
+};
 
 // ---------------------------------------------------------------------------
 // Opcode tables, built exactly like quickjs.c:1158/1166/21856.
@@ -145,6 +173,9 @@ enum BCTag {
     BC_TAG_SET,
     BC_TAG_SYMBOL,
 };
+// The reader accepts BC_VERSION (BC26) and BC_VERSION_EXT (BC27, ext
+// foundation); the production paths (optimize/analyze_only) gate on
+// BC26 only (F0: no production emission).
 enum { BC_VERSION = 26 };
 
 // pc2line encoding constants (quickjs.c:769-772).
@@ -620,6 +651,14 @@ private:
 // Header parse + top-level dispatch.
 // ---------------------------------------------------------------------------
 
+// Defined below (per-function decoder); the strict reader calls it for
+// the ext policy scan so reader acceptance and decode stay in lockstep.
+bool decode_code(const uint8_t* code,
+                 size_t len,
+                 std::vector<Insn>* insns,
+                 std::string* error,
+                 bool allow_ext = false);
+
 bool parse_buffer(const uint8_t* data,
                   size_t size,
                   std::vector<FuncRecord>* functions,
@@ -627,7 +666,7 @@ bool parse_buffer(const uint8_t* data,
     Reader r(data, size, error);
     uint8_t version = 0;
     if (!r.u8(&version)) return false;
-    if (version != BC_VERSION) {
+    if (version != BC_VERSION && version != BC_VERSION_EXT) {
         *error = "bytecode optimize: unsupported bytecode version " +
                  std::to_string(version);
         return false;
@@ -672,6 +711,46 @@ bool parse_buffer(const uint8_t* data,
     if (!r.skip_module(functions, error)) return false;
     if (!r.at_end()) {
         *error = "bytecode optimize: trailing bytes after module record";
+        return false;
+    }
+    // F0 ext policy (BC27 dual reader, E0 reader contract): enforced at
+    // the strict reader so every consumer inherits it. BC26 must
+    // reject OP_ext outright; BC27 may contain only canonical known
+    // ext ids and must contain at least one ext instruction (BC27 is
+    // canonical only with ext present — the writer emits BC26
+    // otherwise). The scan reuses decode_code with the ext table, so
+    // reader acceptance and the decoders can never diverge; the
+    // 0-pop/0-push OP_ext prefix row is never advertised to any
+    // stack verifier.
+    uint64_t ext_total = 0;
+    struct ExtScan {
+        const uint8_t* data;
+        bool allow_ext;
+        uint64_t* ext_total;
+        bool run(const FuncRecord& f, std::string* error) {
+            std::vector<Insn> insns;
+            if (!decode_code(data + f.code_off, f.code_len, &insns, error,
+                             allow_ext)) {
+                return false;
+            }
+            for (size_t i = 0; i < insns.size(); i++) {
+                if (insns[i].op == OP_ext) (*ext_total)++;
+            }
+            for (size_t i = 0; i < f.children.size(); i++) {
+                if (!run(f.children[i], error)) return false;
+            }
+            return true;
+        }
+    } scan;
+    scan.data = data;
+    scan.allow_ext = (version == BC_VERSION_EXT);
+    scan.ext_total = &ext_total;
+    for (size_t i = 0; i < functions->size(); i++) {
+        if (!scan.run((*functions)[i], error)) return false;
+    }
+    if (version == BC_VERSION_EXT && ext_total == 0) {
+        *error = "bytecode optimize: BC27 bundle without ext "
+                 "instructions (noncanonical)";
         return false;
     }
     return true;
@@ -830,19 +909,6 @@ bool scan_function(const FuncRecord& f,
 // Pass pipeline: instruction decode.
 // ---------------------------------------------------------------------------
 
-struct Insn {
-    uint16_t op;
-    uint32_t old_off;   // byte offset in the original code blob
-    uint8_t old_size;   // original encoded size
-    uint32_t pc_off;    // pc2line source offset (own old_off unless a
-                        // fold replaced this instruction)
-    int32_t target;     // insn index for jumps, else -1
-    int64_t imm;        // small-int value for push_minus1..push_i32
-    uint32_t aux;       // cpool idx (push_const/fclosure), var idx
-                        // (get/put/set loc/arg/var_ref), argc (call)
-    bool has_aux;
-};
-
 bool is_small_int_push(uint8_t op) {
     return (op >= OP_push_minus1 && op <= OP_push_7) ||
            op == OP_push_i8 || op == OP_push_i16 || op == OP_push_i32;
@@ -877,11 +943,16 @@ uint8_t shortest_push_op(int64_t v) {
 // Decode a code blob into an instruction list, resolving every jump
 // operand to an instruction index (self-relative target = operand
 // start + signed offset; labels were removed in resolve_labels, so
-// targets may point at any instruction boundary).
+// targets may point at any instruction boundary). With allow_ext,
+// OP_ext decodes via the ext table (quickjs-ext-opcode.h, single
+// source of truth): the total size walks the payload opaquely and the
+// ext id rides in aux. Without it (the BC26 production contract)
+// OP_ext fails closed.
 bool decode_code(const uint8_t* code,
                  size_t len,
                  std::vector<Insn>* insns,
-                 std::string* error) {
+                 std::string* error,
+                 bool allow_ext) {
     size_t pc = 0;
     while (pc < len) {
         uint8_t op = code[pc];
@@ -890,14 +961,38 @@ bool decode_code(const uint8_t* code,
             return false;
         }
         const OpInfo& oi = short_opcode_info(op);
-        if (pc + oi.size > len) {
+        uint8_t size = oi.size;
+        if (op == OP_ext) {
+            // F0 ext foundation (BC27): OP_ext is a prefix; the ext
+            // table supplies the total size. The 0-pop/0-push prefix
+            // row is never advertised: only the BC27 scan (parse)
+            // reaches here, and it discards the decoded stream.
+            if (!allow_ext) {
+                *error =
+                    "bytecode optimize: ext instruction in BC26 bundle";
+                return false;
+            }
+            if (pc + 1 >= len) {
+                *error = "bytecode optimize: truncated instruction";
+                return false;
+            }
+            const uint8_t ext_id = code[pc + 1];
+            ExtInfo ei;
+            if (!ext_lookup(ext_id, &ei)) {
+                *error = "bytecode optimize: invalid ext id " +
+                         std::to_string(ext_id);
+                return false;
+            }
+            size = ei.size;
+        }
+        if (pc + size > len) {
             *error = "bytecode optimize: truncated instruction";
             return false;
         }
         Insn in;
         in.op = op;
         in.old_off = static_cast<uint32_t>(pc);
-        in.old_size = oi.size;
+        in.old_size = size;
         in.pc_off = in.old_off;
         in.target = -1;
         in.imm = 0;
@@ -1024,8 +1119,15 @@ bool decode_code(const uint8_t* code,
                 break;
             }
         }
+        if (op == OP_ext) {
+            // The ext id rides in aux (the payload is opaque for the
+            // `none` format); the BC27 scan keys the per-id ledger on
+            // it without re-reading the blob.
+            in.aux = code[pc + 1];
+            in.has_aux = true;
+        }
         insns->push_back(in);
-        pc += oi.size;
+        pc += size;
     }
     // Resolve jump operands to instruction indexes. Offsets are
     // strictly increasing, so a binary search over instruction starts
@@ -4655,6 +4757,15 @@ static bool tier3_function(const FuncRecord& f,
 
 bool analyze_only(const std::vector<std::uint8_t>& in, std::string* error) {
     error->clear();
+    // F0: BC27 is read by the ext/identity analysis stack only; the
+    // production foldability model has no ext consumer and must not
+    // silently treat ext sites as ordinary BC26 code (no production
+    // emission).
+    if (!in.empty() && in[0] == BC_VERSION_EXT) {
+        *error = "bytecode optimize: BC27 input is analyze-only (ext "
+                 "foundation; no production emission)";
+        return false;
+    }
     std::vector<FuncRecord> functions;
     if (!parse_buffer(in.data(), in.size(), &functions, error)) return false;
     FoldStats st;
@@ -4734,6 +4845,15 @@ bool optimize(const std::vector<std::uint8_t>& in,
               bool report,
               std::string* error) {
     error->clear();
+    // F0: BC27 is analyze-only. The production pipeline emits BC26;
+    // accepting ext input would silently run the v1 passes over
+    // instructions whose stack effects only the ext table knows (no
+    // production emission).
+    if (!in.empty() && in[0] == BC_VERSION_EXT) {
+        *error = "bytecode optimize: BC27 input is analyze-only (ext "
+                 "foundation; no production emission)";
+        return false;
+    }
     std::vector<FuncRecord> functions;
     if (!parse_buffer(in.data(), in.size(), &functions, error)) return false;
     if (functions.size() != 1) {
@@ -4981,6 +5101,40 @@ bool region_census(const std::vector<std::uint8_t>& in, std::string* error) {
         std::fprintf(stderr, "%s%s (%lld)", k == 0 ? "" : ", ",
                      ir::template_name(rep.first_templates[k]),
                      static_cast<long long>(rep.first_predicted[k]));
+    }
+    std::fprintf(stderr, "\n");
+    return true;
+}
+
+// F0 ext foundation (tier-3 plan §2/§4.4, analyze-only): BC27 dual
+// reader + ext round trip. Reads BC26 and BC27 bundles, decodes every
+// function with ext-table sizes and stack effects, builds and verifies
+// the CFG, and reports ext coverage to stderr. BC26 containing OP_ext,
+// BC27 without ext (noncanonical), unknown ext ids, truncated payloads,
+// and unimplemented operand formats fail closed at the reader or the
+// decoder. Nothing is emitted; the production pipeline (optimize /
+// analyze_only) rejects BC27 input outright.
+bool ext_round_trip(const std::vector<std::uint8_t>& in, std::string* error) {
+    error->clear();
+    ir::ExtRoundTripReport rep;
+    if (!ir::ext_round_trip(in.data(), in.size(), &rep, error)) {
+        if (error->empty()) {
+            *error = "bytecode ext: round trip failed";
+        }
+        return false;
+    }
+    std::fprintf(stderr,
+                 "bytecode ext: round trip: %llu functions, %llu ext "
+                 "insns, rejected %llu functions / %llu insns\n",
+                 static_cast<unsigned long long>(rep.functions),
+                 static_cast<unsigned long long>(rep.ext_instructions),
+                 static_cast<unsigned long long>(rep.rejected_functions),
+                 static_cast<unsigned long long>(rep.rejected_insns));
+    std::fprintf(stderr, "bytecode ext:   per id:");
+    for (int id = 1; id < 256; id++) {
+        if (rep.per_id[id] == 0) continue;
+        std::fprintf(stderr, " %d=%llu", id,
+                     static_cast<unsigned long long>(rep.per_id[id]));
     }
     std::fprintf(stderr, "\n");
     return true;

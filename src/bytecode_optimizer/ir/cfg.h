@@ -134,12 +134,17 @@ bool read_functions(const uint8_t* data,
 // removed by the compiler, so targets may point at any instruction
 // boundary). Fails closed on unknown opcodes, truncation, and jump
 // targets that are out of range or not on an instruction boundary.
+// With allow_ext, OP_ext decodes via the ext table (quickjs-ext-opcode.h,
+// single source of truth) — total size, stack effects, and id in aux;
+// the payload is walked opaquely and the ext policy (BC26 rejects
+// OP_ext, unknown ids, unimplemented formats) is enforced here too.
 bool decode_function(const uint8_t* code,
                      size_t len,
                      const uint8_t* bundle,
                      const FuncInfo& fi,
                      std::vector<Insn>* out,
-                     std::string* error);
+                     std::string* error,
+                     bool allow_ext = false);
 
 // Builds the CFG from decoded instructions: block leaders (entry, jump
 // targets, post-gosub return points), explicit edge classes, and
