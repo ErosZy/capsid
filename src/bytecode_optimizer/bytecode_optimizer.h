@@ -87,6 +87,22 @@ enum PassFlags : uint32_t {
     // so deletion is stack-neutral with no target fixups beyond the
     // standard compaction remap.
     kPassTier3Lane2 = 1u << 6,
+    // R1 (tier-3 plan §5.3.2, docs/quickjs-ng-opcode-optimization.md):
+    // BC27 ext fusion of get_loc* + get_array_el windows (measured
+    // candidate; keep gate pending). kPassExtFuse34 fuses the 3-insn
+    // window [get_loc* obj][get_loc* idx][get_array_el] into ext id 2
+    // (payload [obj, idx]); kPassExtFuse4 fuses the 4-insn window
+    // [get_loc* keep][get_loc* obj][get_loc* idx][get_array_el] into
+    // ext id 3 (payload [keep, obj, idx]). The matcher runs on the
+    // final shrunk stream, requires no jump target strictly inside a
+    // window, and preserves stack effects and exception shapes
+    // exactly (the dispatch loop's catch unwinding is stack-based, so
+    // try regions impose no constraint). Both emit BC27 (version byte
+    // patched after the checksum write; canonical BC27 requires >= 1
+    // ext), so neither is in kPassAll: the deployed pipeline stays
+    // byte-identical BC26 until a template clears its keep gate.
+    kPassExtFuse34 = 1u << 7,
+    kPassExtFuse4 = 1u << 8,
     kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassP16 |
                kPassTier3Lane1 | kPassTier3Lane2,
 };

@@ -83,8 +83,13 @@ struct Insn {
     int32_t target;     // insn index for jumps, else -1
     int64_t imm;        // small-int value for push_minus1..push_i32
     uint32_t aux;       // cpool idx (push_const/fclosure), var idx
-                        // (get/put/set loc/arg/var_ref), argc (call)
+                        // (get/put/set loc/arg/var_ref), argc (call),
+                        // ext id (OP_ext)
     bool has_aux;
+    // BC27 (R1): OP_ext payload bytes following the ext id byte. The
+    // fused loc templates (ext ids 2/3) carry one loc index per byte.
+    uint8_t ext_payload[3] = {};
+    uint8_t ext_payload_len = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -1014,6 +1019,19 @@ bool decode_code(const uint8_t* code,
         switch (op) {
         case OP_ext:
             in.aux = code[pc + 1];
+            // BC27: the payload bytes after the ext id ride along so
+            // the emitted code round-trips exactly. The ext table
+            // bounds the size; the fixed array covers the fused loc
+            // templates (ids 2/3), and anything larger fails closed.
+            in.ext_payload_len = static_cast<uint8_t>(size - 2);
+            if (in.ext_payload_len > sizeof(in.ext_payload)) {
+                *error = "bytecode optimize: ext payload exceeds "
+                         "supported operand size";
+                return false;
+            }
+            for (uint8_t k = 0; k < in.ext_payload_len; k++) {
+                in.ext_payload[k] = code[pc + 2 + k];
+            }
             break;
         case OP_push_minus1: in.imm = -1; break;
         case OP_push_0: case OP_push_1: case OP_push_2: case OP_push_3:
@@ -1188,6 +1206,10 @@ struct RewriteStats {
     uint64_t to_propkey_removed = 0;  // tier-3 Lane 2: proven-redundant
                                       // to_propkey sites deleted
                                       // rewritten to plain loc ops
+    uint64_t ext_fuse34 = 0;  // R1: 3-insn loc,loc,array windows fused
+                              // to ext id 2 (kPassExtFuse34)
+    uint64_t ext_fuse4 = 0;   // R1: 4-insn loc,loc,loc,array windows
+                              // fused to ext id 3 (kPassExtFuse4)
     uint64_t shrinks = 0;     // short-form re-encodings
     uint64_t insns_before = 0;
     uint64_t insns_after = 0;
@@ -3040,7 +3062,12 @@ bool emit_code(const std::vector<Insn>& insns,
         out->push_back(static_cast<uint8_t>(in.op));
         switch (in.op) {
         case OP_ext:
+            // BC27: OP_ext prefix + ext id (aux) + payload bytes (the
+            // loc indices of the fused templates).
             out->push_back(static_cast<uint8_t>(in.aux));
+            for (uint8_t k = 0; k < in.ext_payload_len; k++) {
+                out->push_back(in.ext_payload[k]);
+            }
             break;
         case OP_push_minus1: case OP_push_0: case OP_push_1:
         case OP_push_2: case OP_push_3: case OP_push_4:
@@ -3415,6 +3442,133 @@ static bool tier3_apply_to_propkey(std::vector<Insn>* insns,
                                    uint32_t var_count,
                                    RewriteStats* stats);
 
+// R1 (tier-3 plan §5.3.2): BC27 ext fusion of get_loc* + get_array_el
+// windows in the final stream. Runs after the last reshrink, so every
+// matching get_loc* is short-form (get_loc0-3/get_loc8) with aux < 256
+// — the ext payload is one byte per loc. The fused ext's stack effect
+// equals its window's (id 2: pop 2 push 1; id 3: pop 2 push 2), so
+// heights, catch offsets, and exception stack shapes are preserved:
+// the dispatch loop finds handlers by unwinding the stack for a
+// CATCH_OFFSET tag, never by pc range, so try regions impose no
+// constraint on the window. The one CFG constraint is enforced below:
+// no jump may land strictly inside a window (a landing at the window
+// start executes the whole window, which is what the ext encodes).
+// Id-3 windows win over id-2 windows at the same start; a fused window
+// is never itself revisited.
+static bool ext34_fuse(std::vector<Insn>* insns,
+                       uint32_t passes,
+                       RewriteStats* stats) {
+    std::vector<uint8_t> dead(insns->size(), 0);
+    std::vector<uint8_t> is_target(insns->size(), 0);
+    for (const Insn& in : *insns) {
+        if (in.target >= 0 &&
+            in.target < static_cast<int32_t>(is_target.size())) {
+            is_target[static_cast<size_t>(in.target)] = 1;
+        }
+    }
+    // A window is a run of consecutive slot reads (get_loc*, get_arg*,
+    // or the compiler's fused get_loc0_loc1 two-slot read) ended by
+    // get_array_el, totaling 2 slots (ext id 2) or 3 slots (ext id 3).
+    // The quickjs emitter coalesces get_loc(0) get_loc(1) into
+    // get_loc0_loc1, so `a[i]` with the object at loc0 and index at
+    // loc1 appears as a 2-insn window — the common hot-loop shape.
+    // Slot bytes are tagged: bit 7 selects the argument buffer (the VM
+    // frame keeps args and locals in separate stores), so slots above
+    // 127 cannot be encoded and end the run. Returns the slot count
+    // read, or 0 if `in` is not a slot read.
+    auto read_slots = [](const Insn& in, uint8_t* slots) -> int {
+        if (in.op == OP_get_loc0_loc1) {
+            slots[0] = 0;
+            slots[1] = 1;
+            return 2;
+        }
+        if (in.aux > 127) return 0;
+        if (in.op >= OP_get_arg0 && in.op <= OP_get_arg3) {
+            slots[0] = static_cast<uint8_t>(0x80 | (in.op - OP_get_arg0));
+            return 1;
+        }
+        if (in.op == OP_get_arg) {
+            slots[0] = static_cast<uint8_t>(0x80 | in.aux);
+            return 1;
+        }
+        switch (in.op) {
+        case OP_get_loc0: case OP_get_loc1: case OP_get_loc2:
+        case OP_get_loc3: case OP_get_loc8: case OP_get_loc:
+            slots[0] = static_cast<uint8_t>(in.aux);
+            return 1;
+        default:
+            return 0;
+        }
+    };
+    size_t n = insns->size();
+    for (size_t i = 0; i < n;) {
+        uint8_t slots[3];
+        int total = 0;
+        size_t j = i;
+        for (; j < n && total < 3; j++) {
+            int got = read_slots((*insns)[j], &slots[total]);
+            if (got == 0) break;
+            total += got;
+        }
+        if (j >= n) break;  // stream ended inside a run: no array
+        if ((*insns)[j].op != OP_get_array_el || total < 2) {
+            // Not a window: no array after the run, or a single loc
+            // read before the array (net effect 0 — no ext covers it).
+            i++;
+            continue;
+        }
+        // The array access ends the window. A target strictly inside
+        // (including on the array itself, whose path pushes obj+idx
+        // without the reads) blocks fusion; a target at the window
+        // start is fine — it lands on the fused ext, identical
+        // behavior at any height.
+        bool blocked = false;
+        for (size_t k = i + 1; k <= j; k++) {
+            if (is_target[k]) { blocked = true; break; }
+        }
+        uint32_t need = total == 3 ? kPassExtFuse4 : kPassExtFuse34;
+        if (!blocked && (passes & need)) {
+            Insn ext = (*insns)[i];
+            ext.op = OP_ext;
+            ext.target = -1;
+            if (total == 3) {
+                ext.old_size = 5;
+                // Fold convention: the replacement inherits the last
+                // replaced instruction's pc (the array access, whose
+                // line the fused site is attributed to).
+                ext.pc_off = (*insns)[j].pc_off;
+                ext.aux = 3;  // EXT_loc_loc_loc_array_get
+                ext.ext_payload_len = 3;
+                ext.ext_payload[0] = slots[0];
+                ext.ext_payload[1] = slots[1];
+                ext.ext_payload[2] = slots[2];
+                stats->ext_fuse4++;
+            } else {
+                ext.old_size = 4;
+                ext.pc_off = (*insns)[j].pc_off;
+                ext.aux = 2;  // EXT_loc_loc_array_get
+                ext.ext_payload_len = 2;
+                ext.ext_payload[0] = slots[0];
+                ext.ext_payload[1] = slots[1];
+                stats->ext_fuse34++;
+            }
+            (*insns)[i] = ext;
+            for (size_t k = i + 1; k <= j; k++) dead[k] = 1;
+            i = j + 1;
+            continue;
+        }
+        // Blocked or the pass bit for this width is off: retry one insn
+        // later so a narrower window inside the run can still fuse.
+        i++;
+    }
+    if (stats->ext_fuse34 + stats->ext_fuse4 == 0) return false;
+    // Targets never point strictly inside a window (enforced above),
+    // and a target at the window start lands on the fused ext, so the
+    // generic remap is exact.
+    compact_insns(insns, dead);
+    return true;
+}
+
 bool rewrite_function(const FuncRecord& f,
                       const uint8_t* data,
                       std::vector<uint8_t>* new_code,
@@ -3540,6 +3694,16 @@ bool rewrite_function(const FuncRecord& f,
     }
     apply_reshrink(&insns, stats);
 
+    // R1: BC27 ext fusion of get_loc* + get_array_el windows (ext ids
+    // 2/3, quickjs-ext-opcode.h). Runs on the final shrunk stream; the
+    // payload bytes above and the version patch in
+    // optimize_with_top_level turn the bundle into canonical BC27.
+    // OFF builds (the deployed kPassAll mask) match R0's rollback
+    // contract: byte-identical BC26 output.
+    if ((passes & (kPassExtFuse34 | kPassExtFuse4)) != 0) {
+        ext34_fuse(&insns, passes, stats);
+    }
+
     // Emit.
     std::vector<uint32_t> new_offs;
     if (!emit_code(insns, code, new_code, &new_offs, error)) return false;
@@ -3547,8 +3711,12 @@ bool rewrite_function(const FuncRecord& f,
     stats->insns_after += insns.size();
     stats->bytes_after += new_code->size();
 
+    // Verify the rewritten code against the same rules. The emitted
+    // stream may contain ext sites (R1); allow them through the same
+    // decode + ext-table stack effects the reader enforces.
     if (!verify_code(new_code->data(), new_code->size(), f.stack_size,
-                     error)) {
+                     error, /*allow_ext=*/(passes & (kPassExtFuse34 |
+                                                     kPassExtFuse4)) != 0)) {
         return false;
     }
 
@@ -4966,7 +5134,7 @@ static bool optimize_with_top_level(const std::vector<std::uint8_t>& in,
                          "bytecode optimize: %llu -> %llu insns, %llu -> "
                          "%llu code bytes; folds P2 %llu P3.1 %llu "
                          "P11 %llu P14 %llu P16 %llu T3 %llu "
-                         "P18 %llu, shrinks %llu\n",
+                         "P18 %llu, shrinks %llu, ext34 %llu ext4 %llu\n",
                          static_cast<unsigned long long>(stats.insns_before),
                          static_cast<unsigned long long>(stats.insns_after),
                          static_cast<unsigned long long>(stats.bytes_before),
@@ -4980,7 +5148,9 @@ static bool optimize_with_top_level(const std::vector<std::uint8_t>& in,
                              stats.tdz_checks_removed),
                          static_cast<unsigned long long>(
                              stats.to_propkey_removed),
-                         static_cast<unsigned long long>(stats.shrinks));
+                         static_cast<unsigned long long>(stats.shrinks),
+                         static_cast<unsigned long long>(stats.ext_fuse34),
+                         static_cast<unsigned long long>(stats.ext_fuse4));
         }
         return true;
     }
@@ -4994,13 +5164,21 @@ static bool optimize_with_top_level(const std::vector<std::uint8_t>& in,
     (*out)[2] = static_cast<uint8_t>(csum >> 8);
     (*out)[3] = static_cast<uint8_t>(csum >> 16);
     (*out)[4] = static_cast<uint8_t>(csum >> 24);
+    // R1: a stream containing fused ext sites is BC27 by definition
+    // (canonicality: BC27 must contain at least one ext instruction).
+    // The version byte is outside the checksummed range, so this patch
+    // is safe after the checksum write. OFF builds always have zero
+    // fusions and stay BC26 (byte-identical rollback).
+    if (stats.ext_fuse34 + stats.ext_fuse4 != 0) (*out)[0] = BC_VERSION_EXT;
     // Final self-check: full reparse (validates version, checksum, atom
     // table, all records) plus per-function stack verification.
     std::vector<FuncRecord> check;
     if (!parse_buffer(out->data(), out->size(), &check, error, top_level)) {
         return false;
     }
-    if (check.size() != 1 || !verify_tree(check[0], out->data(), error)) {
+    if (check.size() != 1 ||
+        !verify_tree(check[0], out->data(), error,
+                     /*allow_ext=*/stats.ext_fuse34 + stats.ext_fuse4 != 0)) {
         if (error->empty()) {
             *error = "bytecode optimize: internal verification failed";
         }
@@ -5011,7 +5189,7 @@ static bool optimize_with_top_level(const std::vector<std::uint8_t>& in,
                      "bytecode optimize: %llu -> %llu insns, %llu -> %llu "
                      "code bytes; folds P2 %llu P3.1 %llu "
                      "P11 %llu P14 %llu P16 %llu T3 %llu "
-                     "P18 %llu, shrinks %llu\n",
+                     "P18 %llu, shrinks %llu, ext34 %llu ext4 %llu\n",
                      static_cast<unsigned long long>(stats.insns_before),
                      static_cast<unsigned long long>(stats.insns_after),
                      static_cast<unsigned long long>(stats.bytes_before),
@@ -5025,7 +5203,9 @@ static bool optimize_with_top_level(const std::vector<std::uint8_t>& in,
                          stats.tdz_checks_removed),
                      static_cast<unsigned long long>(
                          stats.to_propkey_removed),
-                     static_cast<unsigned long long>(stats.shrinks));
+                     static_cast<unsigned long long>(stats.shrinks),
+                     static_cast<unsigned long long>(stats.ext_fuse34),
+                     static_cast<unsigned long long>(stats.ext_fuse4));
     }
     return true;
 }
