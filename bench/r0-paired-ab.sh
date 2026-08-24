@@ -15,12 +15,15 @@ cd "$(dirname "$0")/.."
 OUT=${OUT:-bench/results/r0-paired-$(date +%Y%m%dT%H%M%S)}
 mkdir -p "$OUT"
 WORKER=${WORKER:-build-release/capsid-worker}
-THROUGHPUT=${THROUGHPUT:-build-release/bench/bin/exec-throughput}
+THROUGHPUT=${THROUGHPUT:-bench/bin/exec-throughput}
 COMPILE26=${COMPILE26:-build-release/capsid-bytecode-compile}
 COMPILE27=${COMPILE27:-build-release-emit/capsid-bytecode-compile}
 SUT_CPUSET=${SUT_CPUSET:-2-3}
 PAIRS=${PAIRS:-7}
-FIXTURES=${FIXTURES:-"matrix-rt arrlocal-rt v8-suite-rt v8-suite-mod"}
+FIXTURES=${FIXTURES:-"matrix-rt arrlocal-rt sieve-rt json-rt v8-suite-mod"}
+for bin in "$WORKER" "$THROUGHPUT" "$COMPILE26" "$COMPILE27"; do
+    [ -x "$bin" ] || { echo "missing required binary: $bin" >&2; exit 1; }
+done
 
 median() {
     sort -n | awk '{a[NR]=$1} END {print a[int((NR+1)/2)]}'
@@ -60,27 +63,59 @@ for name in $FIXTURES; do
         "$(stat -c%s "$q26")" "$(stat -c%s "$q27")" \
         | tee -a "$OUT/cells.txt"
 
-    # Reference body from a source run.
-    body=$(taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
-        --mode source --input "$src" --source-name "$source_name" \
-        --rounds 1 --warmup 0 \
-        | grep -o '"body":"[^"]*"' | head -1 | sed 's/"body":"\(.*\)"/\1/')
-    [ -n "$body" ] || { echo "$name: no body" >&2; continue; }
+    # Reference body from a source run. exec-throughput prints the body
+    # raw inside the JSON string (multi-line bodies break line-based
+    # parsing), so join all lines first, then cut between the markers.
+    # NO_BODY_CHECK_FIXTURES: fixtures whose body varies run to run by
+    # design (v8-suite-mod self-times its own benchmarks, so scores
+    # differ every run) skip the byte-for-byte cross-check; a structural
+    # marker check stands in, and timing still comes from interleaved
+    # samples.
+    if [[ " ${NO_BODY_CHECK_FIXTURES:-} " == *" $name "* ]]; then
+        body=""
+        markers="${BODY_MARKERS:-Richards: Score (version 7):}"
+    else
+        body=$(taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
+            --mode source --input "$src" --source-name "$source_name" \
+            --rounds 1 --warmup 0 \
+            | awk '{all = all $0 "\n"} END {
+                       a = index(all, "\"body\":\"");
+                       b = index(all, "\",\"ok\"");
+                       if (a > 0 && b > a + 8)
+                           print substr(all, a + 8, b - (a + 8));
+                   }')
+        [ -n "$body" ] || { echo "$name: no body extracted from source run" >&2;
+                            continue; }
+    fi
 
     # One warmup run per arm, then PAIRS interleaved ABBA/BAAB samples.
-    taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
-        --mode opt --input "$q26" --source-name "$source_name" \
-        --rounds 1 --warmup 0 --expect-body "$body" >/dev/null
-    taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
-        --mode opt --input "$q27" --source-name "$source_name" \
-        --rounds 1 --warmup 0 --expect-body "$body" >/dev/null
+    expect=(); [ -n "$body" ] && expect=(--expect-body "$body")
+    for arm in 26 27; do
+        q="$OUT/$name.opt$arm.qjsb"
+        if [ -n "$body" ]; then
+            taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
+                --mode opt --input "$q" --source-name "$source_name" \
+                --rounds 1 --warmup 0 --expect-body "$body" >/dev/null \
+                || { echo "$name: opt$arm warmup failed (body mismatch?)" >&2;
+                     exit 1; }
+        else
+            raw=$(taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
+                --mode opt --input "$q" --source-name "$source_name" \
+                --rounds 1 --warmup 0)
+            for m in $markers; do
+                case "$raw" in *"$m"*) : ;; *)
+                    echo "$name: opt$arm warmup missing marker '$m'" >&2
+                    exit 1;; esac
+            done
+        fi
+    done
     for ((i = 0; i < PAIRS; i++)); do
         if ((i % 2 == 0)); then seq="26 27 27 26"; else seq="27 26 26 27"; fi
         for arm in $seq; do
             if [ "$arm" = 26 ]; then q="$q26"; else q="$q27"; fi
             taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
                 --mode opt --input "$q" --source-name "$source_name" \
-                --rounds 1 --warmup 0 --expect-body "$body" \
+                --rounds 1 --warmup 0 "${expect[@]}" \
                 >>"$OUT/$name.$arm.jsonl"
         done
     done

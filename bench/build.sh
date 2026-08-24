@@ -44,11 +44,21 @@ echo "==> exec-throughput + analyze (Step 8; link capsid_bytecode_opt)"
 g++ -O2 -std=c++20 -I"$SCRIPT_DIR/../include" -I"$SCRIPT_DIR/../src" \
     "$SCRIPT_DIR/exec-throughput.cc" -o "$BIN/exec-throughput" \
     -L"$BUILD_LINUX" -lcapsid_runtime -pthread
+# analyze compiles the optimizer sources directly, so it must see the
+# overlay quickjs headers (the same include the CMake target uses): the
+# pristine vendor lacks the F0/R0 ext row (quickjs-opcode.h DEF(ext))
+# and quickjs-ext-opcode.h, which are overlay patches. The ir/ sources
+# are required too (ext_lookup and the round-trip entry points live in
+# ir/ext.cc, ir/cfg.cc, ir/ssa.cc, ir/region.cc, ir/effects.cc).
 g++ -O2 -std=c++20 -I"$SCRIPT_DIR/../src" \
-    -I"$BUILD_LINUX/txiki-build/deps/quickjs" \
-    -I"$SCRIPT_DIR/../vendor/txiki.js/deps/quickjs" \
+    -I"$BUILD_LINUX/vendor-overlay/txiki.js/deps/quickjs" \
     "$SCRIPT_DIR/analyze.cc" \
     "$SCRIPT_DIR/../src/bytecode_optimizer/bytecode_optimizer.cc" \
+    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/ext.cc" \
+    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/cfg.cc" \
+    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/ssa.cc" \
+    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/region.cc" \
+    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/effects.cc" \
     -o "$BIN/analyze"
 
 echo "==> components"
