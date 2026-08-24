@@ -156,9 +156,11 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # probe for per-token reclaim decisions; 0035 fixes libwebsockets cookie
 # attribute indices so Secure/HttpOnly cannot overwrite the name/value.
 # Arbitrary parked Promise reactions are deliberately not a completion signal.
-if(NOT CAPSID_PATCH_COUNT EQUAL 39)
+# 0039 S0 shape-guard A/B backends; 0040 S1 SHADOW IC sidecars (both
+# compile-gated measurement backends, OFF by default — zero tax).
+if(NOT CAPSID_PATCH_COUNT EQUAL 41)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 39 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 41 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------

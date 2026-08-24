@@ -1032,3 +1032,78 @@ QuickJS's shape lifetime; ID32 required none. Both backends remain compile-
 gated measurement builds; production keeps both OFF (zero tax, §12.6
 patchless hashes unchanged — `CONFIG_OPCODE_PROFILE`-style gate). There is
 still no active cache consumer: S1 (SHADOW IC) is the next step.
+
+## 14. S1 SHADOW IC Record (2026-08-24)
+
+### 14.1 Deliverables (§10 item 8)
+
+- Overlay `patches/txiki/0040-capsid-shadow-ic.patch` (3 files, 686 lines):
+  the SHADOW IC measurement backend, compile-gated
+  `xoption(CONFIG_SHAPE_GUARD_IC)` with a FATAL dependency on
+  `CONFIG_SHAPE_GUARD_ID32` (IC guards are ID32 shape ids), and the public
+  `JS_ICSetMode` / `JS_ICGetMode` / `JS_ICGetShadowReport` /
+  `JS_DumpICShadowReport` API. Lazy sidecar per function bytecode:
+  cold functions allocate neither the site slab nor the counters;
+  `JSICFunctionState` (sites[8] × 16 B + poly[8] × 16 B, cache-line aligned,
+  ~535 B) is attached on the first observation and released with the
+  bytecode. Budget: 64 KiB per runtime, bounded deny (`b->ic_denied`) for the
+  function lifetime. Overlay key relocked to `23da3ce9…` (manifest
+  `595da218…`), patch count 40 → 41.
+- `tests/test_shadow_ic.cc` (`test-shadow-ic`, Debug-only, links `tjs`,
+  compile-defs `CONFIG_SHAPE_GUARD_IC=1 CONFIG_SHAPE_GUARD_ID32=1`):
+  50-row locality/hit-rate matrix (16 B entry size, 8 sites/function,
+  mono tight loop, two-PC same-atom separation, POLY2 alternation, 3-shape
+  megamorphism, 8-consecutive-miss rule, accessor control, cold/OFF
+  controls, generic-authoritative A/B, 300-function budget cap, ID32 wrap)
+  + `--bench` adjudication measurements. All 50 rows green in
+  `build-s0-id32` (Debug, taskset 2-3); ctest `bytecode_shadow_ic` +
+  `bytecode_shape_guard` pass.
+
+### 14.2 Key findings
+
+1. **Top-level bytecode teardown.** The first versions of the microcases ran
+   their hot loops at top level (`JS_EVAL_TYPE_GLOBAL`). The top-level
+   closure is transient — its bytecode, and with it the sidecar, is freed
+   when `JS_Eval` returns — so the report saw `functions=0` after 100000
+   traced observations. Hot loops must live in named functions (kept by the
+   global object) for their sidecars to survive to report time. This
+   explains the earlier "16 observations" misread: that dump was the streak
+   microcase (8+8 = 16 iterations, pc=27 → site id (27>>2)&7 = 6), not the
+   mono loop (pc=75 → site id 2).
+2. **The miss-streak rule fires only on non-cacheable misses.** With two
+   cacheable shapes the first distinct-shape miss trains the POLY2 overflow
+   variant and subsequent same-shape accesses hit; 8 consecutive misses
+   cannot accumulate on cacheable accesses. The rule is exercised by the
+   accessor control (getter → non-cacheable, 1000 misses → MEGAMORPHIC) and
+   by the directed streak microcase (train MONO on own-data, then 8 getter
+   accesses → MEGAMORPHIC).
+
+### 14.3 Hit-rate / memory adjudication (before MONO)
+
+| Microcase | observations | hits / misses | transitions | site state | memory |
+| --- | --- | --- | --- | --- | --- |
+| mono tight loop (100000) | 100000 | 100000 / 0 | 1 | MONO | 535 B / function |
+| two-PC same atom (2 × 20000) | 40000 | 40000 / 0 | 2 | 2 × MONO | 535 B |
+| POLY2 alternation (100000) | 100000 | 99999 / 1 | 1 | POLY2 | 535 B |
+| 3-shape megamorphic (100000) | 100000 | — | — | 1 MEGA + array site MONO | 535 B |
+| accessor (1000) | 1000 | 0 / 1000 | 0 | MEGAMORPHIC | 535 B |
+| budget cap (300 functions) | — | — | — | ≥100 denied | ≤ 64 KiB runtime |
+
+`--bench` (2M-iteration mono, taskset 2-3, Debug): 308 cycles/observation
+(cold start includes the lazy allocation), 535 B/function state, one counter
+write per hit. The hit-rate ceiling at a stable mono site is 100% with a
+single transition; the memory footprint is one ~535 B state per hot function
+bounded by the 64 KiB runtime cap, with denial confined to the function
+lifetime. These numbers are the input to the R2 gate; SHADOW never serves —
+the generic result remains authoritative (verified by the OFF/SHADOW
+identical-result A/B on a mixed own-data/proto/accessor/megamorphic
+workload).
+
+### 14.4 Verdict
+
+S1 gates green: layout contract (16 B entries, 8 sites, direct indexing),
+bounded lazy allocation, budget enforcement, ID32-wrap disable path, and
+generic-authoritative results all verified by the 50-row matrix. **Proceed
+to R0/R1/R2 sequencing as planned**; MONO enabling (R2) remains conditional
+on SHADOW clearing the same hit-rate/memory gates in production-shaped
+bundles, not on these synthetic microcases.

@@ -146,6 +146,12 @@ if(CAPSID_BUILD_WORKER)
         CACHE BOOL "" FORCE)
     set(CONFIG_SHAPE_GUARD_STRONG_REF ${CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF}
         CACHE BOOL "" FORCE)
+    # S1: forward the SHADOW IC measurement backend into the quickjs
+    # xoptions. Same rule as the shape-guard forwarding: the overlay
+    # key/manifest do not depend on this cache value — the compiled
+    # code does, so production builds keep it OFF.
+    set(CONFIG_SHAPE_GUARD_IC ${CAPSID_ENABLE_SHAPE_GUARD_IC}
+        CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public

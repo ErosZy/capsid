@@ -82,6 +82,17 @@ if(CAPSID_ENABLE_SHAPE_GUARD_ID32 AND CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF)
     message(FATAL_ERROR
         "CAPSID_ENABLE_SHAPE_GUARD_ID32 and CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF are mutually exclusive")
 endif()
+# S1: SHADOW IC measurement backend (overlay patch 0040, plan
+# docs/quickjs-ng-cfg-ssa-shape-ic.md §5.2/§5.2.1). Compile-gated in
+# quickjs via CONFIG_SHAPE_GUARD_IC; the IC guards are ID32 shape ids,
+# so it builds on CAPSID_ENABLE_SHAPE_GUARD_ID32 (which also excludes
+# STRONG_REF above). Measurement builds only — production keeps OFF.
+option(CAPSID_ENABLE_SHAPE_GUARD_IC
+    "Build with the quickjs SHADOW IC measurement backend" OFF)
+if(CAPSID_ENABLE_SHAPE_GUARD_IC AND NOT CAPSID_ENABLE_SHAPE_GUARD_ID32)
+    message(FATAL_ERROR
+        "CAPSID_ENABLE_SHAPE_GUARD_IC requires CAPSID_ENABLE_SHAPE_GUARD_ID32 (IC guards are ID32 shape ids)")
+endif()
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY

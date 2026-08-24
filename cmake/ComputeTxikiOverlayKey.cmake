@@ -196,9 +196,13 @@ function(capsid_compute_txiki_overlay_key)
     # 0039 S0 shape-guard A/B measurement backends (compile-gated
     #      ID32/STRONG_REF sites; no production consumer, both OFF by
     #      default — zero tax enforced by the OFF configuration).
-    if(NOT CTOK_PATCH_COUNT EQUAL 40)
+    # 0040 S1 SHADOW IC bounded lazy sidecars (compile-gated; builds on
+    #      ID32; SHADOW only trains and reports, generic stays
+    #      authoritative; OFF by default — zero tax enforced by the
+    #      OFF configuration).
+    if(NOT CTOK_PATCH_COUNT EQUAL 41)
         message(FATAL_ERROR
-            "expected 40 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 41 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

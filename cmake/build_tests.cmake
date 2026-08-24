@@ -443,6 +443,39 @@ if(BUILD_TESTING)
                     bytecode_shape_guard PROPERTIES TIMEOUT 300)
             endif()
 
+            if(CAPSID_ENABLE_SHAPE_GUARD_IC)
+                # S1 measurement gate (§5.2/§5.2.1): drives the SHADOW IC
+                # through the locality microcases and hit-rate/memory
+                # adjudication. The IC guards are ID32 shape ids.
+                add_executable(
+                    test-shadow-ic
+                    tests/test_shadow_ic.cc)
+                target_link_libraries(test-shadow-ic PRIVATE tjs)
+                target_compile_definitions(
+                    test-shadow-ic PRIVATE
+                    CONFIG_SHAPE_GUARD_IC=1 CONFIG_SHAPE_GUARD_ID32=1)
+                set_target_properties(
+                    test-shadow-ic PROPERTIES
+                    CXX_STANDARD 20
+                    CXX_STANDARD_REQUIRED ON
+                    CXX_EXTENSIONS OFF)
+                if(CAPSID_STRICT_WARNINGS)
+                    if(MSVC)
+                        target_compile_options(
+                            test-shadow-ic PRIVATE /W4 /WX)
+                    else()
+                        target_compile_options(
+                            test-shadow-ic PRIVATE
+                            -Wall -Wextra -Wpedantic -Werror)
+                    endif()
+                endif()
+                add_test(
+                    NAME bytecode_shadow_ic
+                    COMMAND test-shadow-ic)
+                set_tests_properties(
+                    bytecode_shadow_ic PROPERTIES TIMEOUT 300)
+            endif()
+
             # Differential gate: every fixture runs through
             # the real deployment path — compiler (optimizer on) →
             # trusted-bytecode worker load — and the response must match
