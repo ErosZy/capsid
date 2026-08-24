@@ -1823,6 +1823,45 @@ void test_ext34_fusion_goldens() {
         CHECK(code.size() == sizeof(expected) &&
               std::memcmp(code.data(), expected, sizeof(expected)) == 0);
     }
+    // Short-form local slots: the decoder leaves aux at 0 for
+    // get_loc0..3, so the payload must encode op - get_loc0 (regression:
+    // these used to be encoded as slot 0, corrupting the fused reads).
+    // id 2: [get_loc0][get_loc1][array] -> {0, 1}.
+    {
+        Builder b;
+        b.op(203);           // get_loc0 (object)
+        b.op(204);           // get_loc1 (index)
+        b.op(70);            // get_array_el
+        b.op(41);            // return_undef
+        b.stack_size = 2;
+        b.finish(4);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err,
+                                  capsid::bytecode::kPassExtFuse34));
+        const std::uint8_t expected[] = {252, 2, 0, 1, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // id 3: [get_loc0][get_loc1][get_loc2][array] -> {0, 1, 2}.
+    {
+        Builder b;
+        b.op(203);           // get_loc0 (leftover)
+        b.op(204);           // get_loc1 (object)
+        b.op(205);           // get_loc2 (index)
+        b.op(70);            // get_array_el
+        b.op(41);            // return_undef
+        b.stack_size = 3;
+        b.finish(4);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err, capsid::bytecode::kPassExtFuse4));
+        const std::uint8_t expected[] = {252, 3, 0, 1, 2, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
     // Precedence: with both bits, the 4-insn window wins over the
     // 3-insn prefix.
     {
@@ -2264,6 +2303,14 @@ void test_ext34_semantics() {
     const char* src =
         "function f(a, i) { return a[i]; }\n"
         "function g(a, i) { const k = 7; return k + a[i]; }\n"
+        // Short-form local slots (regression: get_loc1/3 used to be
+        // encoded as slot 0). The emitter coalesces a loc0+loc1 pair,
+        // so these windows are arg-object + short-form index — the
+        // shape that exercises read_slots on the short forms.
+        "function h(o) { let j = 3; let i = 4; return o[i]; }\n"
+        "function h3(o) { let a0=1; let a1=2; let a2=3; let a3=4;"
+        " return o[a3]; }\n"
+        "function k(o) { let t = 9; let i = 2; return t + o[i]; }\n"
         "let s = '';\n"
         "s += f([1, 2, 3], 1) + ',';\n"   // id2 fast path
         "s += f([1, 2, 3], 5) + ',';\n"   // id2 fast miss -> undefined
@@ -2272,6 +2319,10 @@ void test_ext34_semantics() {
         "s += g([10, 20], 1) + ',';\n"    // id3 fast path
         "s += g({ x: 5 }, 'x') + ',';\n"  // id3 slow path
         "s += g([10, 20], 9) + ',';\n"    // id3 miss -> 7 + undefined
+        "s += h([10, 11, 12, 13, 14], 0) + ',';\n"  // get_loc1 idx: o[4]
+        "s += h3([1, 2, 3, 4, 5], 0) + ',';\n"      // get_loc3 idx: o[4]
+        "s += h3({0:'a',1:'b',2:'c',3:'d',4:'e'}, 0) + ',';\n" // slow path
+        "s += k([8, 9, 10], 0) + ',';\n"  // id3 short-form keep+idx: 19
         "try { f(null, 0); s += 'no-throw'; }\n"
         "catch (e) { s += e.name + ':' + e.message; }\n"
         "globalThis.__r = s;\n";

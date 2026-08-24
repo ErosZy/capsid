@@ -3493,7 +3493,13 @@ static bool ext34_fuse(std::vector<Insn>* insns,
         }
         switch (in.op) {
         case OP_get_loc0: case OP_get_loc1: case OP_get_loc2:
-        case OP_get_loc3: case OP_get_loc8: case OP_get_loc:
+        case OP_get_loc3:
+            // Short forms carry the slot in the opcode; the decoder
+            // leaves aux at 0 for these operand-less ops (slot_of()
+            // uses the same convention).
+            slots[0] = static_cast<uint8_t>(in.op - OP_get_loc0);
+            return 1;
+        case OP_get_loc8: case OP_get_loc:
             slots[0] = static_cast<uint8_t>(in.aux);
             return 1;
         default:
