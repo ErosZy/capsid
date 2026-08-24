@@ -405,6 +405,44 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_ext_round_trip PROPERTIES TIMEOUT 120)
 
+            if(CAPSID_ENABLE_SHAPE_GUARD_ID32 OR
+               CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF)
+                # S0 measurement gate (§5.1.1): drives the compile-gated
+                # backend through the invalidation matrix (and, with
+                # --bench, the selection measurements).
+                add_executable(
+                    test-shape-guard
+                    tests/test_shape_guard.cc)
+                target_link_libraries(test-shape-guard PRIVATE tjs)
+                if(CAPSID_ENABLE_SHAPE_GUARD_ID32)
+                    target_compile_definitions(
+                        test-shape-guard PRIVATE CONFIG_SHAPE_GUARD_ID32=1)
+                else()
+                    target_compile_definitions(
+                        test-shape-guard PRIVATE CONFIG_SHAPE_GUARD_STRONG_REF=1)
+                endif()
+                set_target_properties(
+                    test-shape-guard PROPERTIES
+                    CXX_STANDARD 20
+                    CXX_STANDARD_REQUIRED ON
+                    CXX_EXTENSIONS OFF)
+                if(CAPSID_STRICT_WARNINGS)
+                    if(MSVC)
+                        target_compile_options(
+                            test-shape-guard PRIVATE /W4 /WX)
+                    else()
+                        target_compile_options(
+                            test-shape-guard PRIVATE
+                            -Wall -Wextra -Wpedantic -Werror)
+                    endif()
+                endif()
+                add_test(
+                    NAME bytecode_shape_guard
+                    COMMAND test-shape-guard)
+                set_tests_properties(
+                    bytecode_shape_guard PROPERTIES TIMEOUT 300)
+            endif()
+
             # Differential gate: every fixture runs through
             # the real deployment path — compiler (optimizer on) →
             # trusted-bytecode worker load — and the response must match

@@ -139,6 +139,13 @@ if(CAPSID_BUILD_WORKER)
     # compiled code does, so production builds keep it OFF.
     set(CONFIG_OPCODE_PROFILE ${CAPSID_ENABLE_OPCODE_PROFILE}
         CACHE BOOL "" FORCE)
+    # S0: forward the shape-guard A/B backend into the quickjs xoptions.
+    # Same rule as the opcode-profile forwarding: the overlay key/manifest
+    # do not depend on these cache values — the compiled code does.
+    set(CONFIG_SHAPE_GUARD_ID32 ${CAPSID_ENABLE_SHAPE_GUARD_ID32}
+        CACHE BOOL "" FORCE)
+    set(CONFIG_SHAPE_GUARD_STRONG_REF ${CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF}
+        CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public

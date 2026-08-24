@@ -70,6 +70,18 @@ option(CAPSID_BUILD_FUZZERS "Build the libFuzzer protocol boundary targets" OFF)
 # it, and zero-tax is enforced by the overlay OFF configuration.
 option(CAPSID_ENABLE_OPCODE_PROFILE
     "Build the worker with quickjs-ng opcode profiling counters" OFF)
+# S0: shape-guard A/B measurement backends (overlay patch 0039, plan
+# docs/quickjs-ng-cfg-ssa-shape-ic.md §5.1). Compile-gated in quickjs
+# via CONFIG_SHAPE_GUARD_ID32/STRONG_REF; at most one may be on.
+# Measurement builds only — production keeps both OFF (zero tax).
+option(CAPSID_ENABLE_SHAPE_GUARD_ID32
+    "Build with the quickjs shape-guard ID32 measurement backend" OFF)
+option(CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF
+    "Build with the quickjs shape-guard STRONG_REF measurement backend" OFF)
+if(CAPSID_ENABLE_SHAPE_GUARD_ID32 AND CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF)
+    message(FATAL_ERROR
+        "CAPSID_ENABLE_SHAPE_GUARD_ID32 and CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF are mutually exclusive")
+endif()
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY

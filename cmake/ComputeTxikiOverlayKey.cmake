@@ -193,9 +193,12 @@ function(capsid_compute_txiki_overlay_key)
     # 0037 BC27/OP_ext format foundation (ext table, dual reader, stack
     #      verifier, dispatch stub; catalog empty, emission off).
     # 0038 EXT_get_array_el handler + canonical BC27 writer selection.
-    if(NOT CTOK_PATCH_COUNT EQUAL 39)
+    # 0039 S0 shape-guard A/B measurement backends (compile-gated
+    #      ID32/STRONG_REF sites; no production consumer, both OFF by
+    #      default — zero tax enforced by the OFF configuration).
+    if(NOT CTOK_PATCH_COUNT EQUAL 40)
         message(FATAL_ERROR
-            "expected 37 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 40 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")
