@@ -954,3 +954,81 @@ compiler-side and patchless artifacts for the comparison.
 - Debug + `CAPSID_ENABLE_LTO` mixed-link breakage (GCC 13 dropping
   `always_inline` libstdc++ ctors in LTO partitions) was fixed separately in
   `9936974`; Release builds were already unaffected.
+
+## 13. S0 Shape Guard A/B Record (2026-08-24)
+
+### 13.1 Deliverables (§10 item 7)
+
+- Overlay `patches/txiki/0039-capsid-shape-guard-ab.patch` (3 files, 18 hunks):
+  the two mutually exclusive, compile-gated measurement backends
+  (`xoption(CONFIG_SHAPE_GUARD_ID32)` / `xoption(CONFIG_SHAPE_GUARD_STRONG_REF)`
+  in quickjs's CMakeLists, FATAL when both are set) plus the public
+  `JS_ICShapeGuard*` API. The site holds a monotonic `uint32_t shape_id`
+  (ID32) or a duplicated `JSShape *` (STRONG_REF). Overlay key relocked to
+  `f5718ebb…` (manifest `f1386e39…`).
+- `tests/test_shape_guard.cc` (`test-shape-guard`, Debug-only, links `tjs`):
+  27-row invalidation/allocator-reuse/GC matrix (24 common rows, 3 ID32-only
+  directed wrap rows) + `--bench` selection measurements. Both backends green
+  on their own build (`build-s0-id32`, `build-s0-strong`, Debug, OpenSSL via
+  miniconda, `taskset -c 2-3`).
+
+### 13.2 Matrix coverage vs §5.1.1
+
+| §5.1.1 row | Test row(s) |
+| --- | --- |
+| same-property value assign | `baseline_hit`, `mutate_slow_array_length_value_hit` |
+| add own property | `mutate_add_prop_miss`, `mutate_slow_array_add_prop_miss`, `sibling_mutate_*` |
+| delete + re-add same atom | `mutate_delete_miss`, `mutate_readd_same_atom_miss` |
+| defineProperty data/accessor kind | `mutate_data_to_accessor_miss` |
+| freeze / writable change | `mutate_freeze_miss`, `mutate_freeze_then_write_still_miss` |
+| setPrototypeOf on receiver | `mutate_proto_replace_miss` |
+| fast→slow array / storage transition | `mutate_array_fast_to_slow_miss` |
+| shape free + allocator address reuse | `gc_free_owner_recreate_miss` (ID32) / `…_hit` (STRONG_REF), after forced churn + GC |
+| GC survival, non-object, retrain, wrap | `gc_no_mutation_hit`, `non_object_*`, `retrain_*`, `id32_wrap_*` |
+
+### 13.3 STRONG_REF COW fixes found by the matrix
+
+The matrix exposed three places where stock quickjs's copy-on-write discipline
+assumes a non-hashed shape reaching a mutation funnel is exclusively owned
+(`ref_count == 1`). A STRONG_REF site's `js_dup_shape` breaks that assumption
+(QuickJS's shape hash table holds no reference, so `ref_count > 1` previously
+implied a hashed shape). Debug asserted; Release would have mutated a shared
+shape in place (phantom properties on sibling objects). All three fixes are
+gated `#if defined(CONFIG_SHAPE_GUARD_STRONG_REF)` and compile out of every
+other configuration:
+
+1. `add_property` — clone the shape when a non-hashed shape has `ref_count > 1`
+   (was: `assert(ref_count == 1)`).
+2. `js_shape_prepare_update` — clone whenever `ref_count != 1` regardless of
+   `is_hashed` (was: clone only hashed shapes; non-hashed shared fell through).
+3. `JS_NewObjectFrom` (object-literal path) — clone for exclusive use when the
+   empty shape is shared (was: `assert(ref_count == 1)` + unlink/relink).
+
+ID32 needed no such fixes: it adds no references, so stock COW semantics are
+unchanged.
+
+### 13.4 Selection measurements (`--bench`, taskset 2-3, final patch)
+
+| Metric | ID32 | STRONG_REF | Winner |
+| --- | --- | --- | --- |
+| check_hit | 3.48 cy / 1.30 ns | 4.86 cy / 1.95 ns | ID32 (1.4–1.5×) |
+| update (train) | 6.70 cy / 2.37 ns | 17.80 cy / 6.11 ns | ID32 (2.6×) |
+| mutation pair (add+delete) | 308.8 cy | 291.3 cy | parity (allocator-bound) |
+| retained memory / site | 284 B | 517 B | ID32 (STRONG_REF retains 1.8×) |
+
+Locality: ID32's check is a single `u32` load + compare with no refcount
+touches; STRONG_REF's update does a dup + release pair (refcount inc/dec and,
+on last release, shape alloc/free traffic) — the retained-memory row above is
+its footprint proxy, measured over 20k distinct-shape sites sharing one proto
+(RSS delta from `/proc/self/statm`).
+
+### 13.5 Verdict
+
+**ID32 is selected.** It wins on all three §5.1.1 axes — cycles (check 1.4×,
+update 2.6×), locality (one u32 load; no refcount/allocator traffic), and
+retained memory (284 vs 517 B/site). STRONG_REF also required three COW
+patches for memory safety, a structural cost of external references into
+QuickJS's shape lifetime; ID32 required none. Both backends remain compile-
+gated measurement builds; production keeps both OFF (zero tax, §12.6
+patchless hashes unchanged — `CONFIG_OPCODE_PROFILE`-style gate). There is
+still no active cache consumer: S1 (SHADOW IC) is the next step.
