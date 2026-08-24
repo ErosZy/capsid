@@ -3476,6 +3476,12 @@ static bool ext34_fuse(std::vector<Insn>* insns,
     // frame keeps args and locals in separate stores), so slots above
     // 127 cannot be encoded and end the run. Returns the slot count
     // read, or 0 if `in` is not a slot read.
+    // get_loc_check (a `let`/`const` TDZ-guarded read) is deliberately
+    // NOT a slot read here: the fused ext handlers perform no TDZ
+    // re-check, so a checked read must never be absorbed into a window
+    // — the run just ends, and the window is not formed (fail-closed).
+    // In practice `let` variables read via get_loc_check, so only
+    // `var` locals (plain get_loc0..3) form windows.
     auto read_slots = [](const Insn& in, uint8_t* slots) -> int {
         if (in.op == OP_get_loc0_loc1) {
             slots[0] = 0;

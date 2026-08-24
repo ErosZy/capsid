@@ -2304,13 +2304,23 @@ void test_ext34_semantics() {
         "function f(a, i) { return a[i]; }\n"
         "function g(a, i) { const k = 7; return k + a[i]; }\n"
         // Short-form local slots (regression: get_loc1/3 used to be
-        // encoded as slot 0). The emitter coalesces a loc0+loc1 pair,
-        // so these windows are arg-object + short-form index — the
-        // shape that exercises read_slots on the short forms.
-        "function h(o) { let j = 3; let i = 4; return o[i]; }\n"
-        "function h3(o) { let a0=1; let a1=2; let a2=3; let a3=4;"
+        // encoded as slot 0). Two emitter facts shape these tests:
+        // (a) `let` reads emit get_loc_check (TDZ), which the matcher
+        // excludes by design, so `let` never fuses; (b) a `var`
+        // initialized to a constant is constant-eliminated by the
+        // emitter (uses become push_<const>, the store disappears),
+        // so a literal-initialized `var` never forms a window either.
+        // Non-constant initializers (from args) keep the locals as
+        // real slot reads. With `var` the reads are plain get_loc0..3,
+        // giving windows [0x00, 0x01] (h), [0x80|0, 0x03] (h3 — the
+        // exact get_loc3 regression), and the id3 [0x00, 0x80|0,
+        // 0x01] (k) — the short-form shapes that exercise read_slots'
+        // opcode-encoded slot convention end to end.
+        "function h(o, n) { var q = o; var i = n; return q[i]; }\n"
+        "function h3(o, n) { var a0=o; var a1=n; var a2=n+1; var a3=n+2;"
         " return o[a3]; }\n"
-        "function k(o) { let t = 9; let i = 2; return t + o[i]; }\n"
+        "function k(o, n) { var t = n; var i = n + 1;"
+        " return t + o[i]; }\n"
         "let s = '';\n"
         "s += f([1, 2, 3], 1) + ',';\n"   // id2 fast path
         "s += f([1, 2, 3], 5) + ',';\n"   // id2 fast miss -> undefined
@@ -2319,10 +2329,10 @@ void test_ext34_semantics() {
         "s += g([10, 20], 1) + ',';\n"    // id3 fast path
         "s += g({ x: 5 }, 'x') + ',';\n"  // id3 slow path
         "s += g([10, 20], 9) + ',';\n"    // id3 miss -> 7 + undefined
-        "s += h([10, 11, 12, 13, 14], 0) + ',';\n"  // get_loc1 idx: o[4]
-        "s += h3([1, 2, 3, 4, 5], 0) + ',';\n"      // get_loc3 idx: o[4]
-        "s += h3({0:'a',1:'b',2:'c',3:'d',4:'e'}, 0) + ',';\n" // slow path
-        "s += k([8, 9, 10], 0) + ',';\n"  // id3 short-form keep+idx: 19
+        "s += h([10, 11, 12, 13, 14], 4) + ',';\n"  // get_loc1 idx: o[4]
+        "s += h3([1, 2, 3, 4, 5], 2) + ',';\n"      // get_loc3 idx: o[4]
+        "s += h3({0:'a',1:'b',2:'c',3:'d',4:'e'}, 2) + ',';\n" // slow path
+        "s += k([8, 9, 10], 1) + ',';\n"  // id3 short-form keep+idx: 11
         "try { f(null, 0); s += 'no-throw'; }\n"
         "catch (e) { s += e.name + ':' + e.message; }\n"
         "globalThis.__r = s;\n";
