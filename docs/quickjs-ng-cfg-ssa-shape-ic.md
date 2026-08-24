@@ -1698,9 +1698,12 @@ cannot silently produce 53 error files again.
 54 of 55 programs completed within the per-program caps on `taskset -c
 2-3`. `kraken-imaging-gaussian-blur` exceeds 600 s of instrumented
 execution and was recovered at 1800 s (12 min); `octane-mandreel` exceeds
-even 1800 s (30 min) and was retried at 3600 s. Mandreel is outside the
-A/B corpus (§17.4), so its absence cannot change the §18.7 verdict; the
-final archive state is recorded in the results manifest
+even 1800 s (30 min) and was retried at the maximum 3600 s cap, timing
+out there too — **54/55 is the terminal collection state**. Mandreel is
+outside the A/B corpus (§17.4), so its absence cannot change the §18.7
+verdict; a post-collection re-run of the §18.5 census on the final
+54-dump set reproduced every listed number unchanged. The final archive
+state is recorded in the results manifest
 (`bench/results/classic-profile-20260825T015948/manifest.json`).
 Aggregate on the completed dumps: 66,624,971,999 dynamic opcode
 executions across 19,967 functions, 849,458 instruction sites.
@@ -1824,6 +1827,128 @@ corpus) before any new implementation — not an implementation decision
 made blind.
 
 Evidence is archived under
-`bench/results/classic-profile-20260825T015948/` (53 dump + 2 retried
-dumps, manifest.json; bench/results is gitignored); collection harness
-`bench/classic-profile-collect.sh`; ranking tool `bench/profile_sequences.py`.
+`bench/results/classic-profile-20260825T015948/` (54 final dumps, manifest
+records the two retry attempts; bench/results is gitignored); collection
+harness `bench/classic-profile-collect.sh`; ranking tool
+`bench/profile_sequences.py`.
+
+## 19. Cumulative Baseline Freeze + Leave-One-Out Record (2026-08-25)
+
+Status: **final validation gate (handoff gate 4/5). The deployed baseline
+is frozen at BC26 + optimizer mask 0x7f + patch 0043 (mixed-numeric `mul`
+fast path); the only kept-but-off-mask items are R1 ext34's pass bits; the
+leave-one-out is the 0x7f-vs-0x1ff paired A/B, reproduced on a quiescent
+machine; fresh-directory validation is green.**
+
+### 19.1 What "cumulative baseline" means
+
+Per handoff §6, the loop accumulates small, well-attributed wins into one
+shipped configuration. The final configuration:
+
+| layer | item | mask/bits | output |
+| --- | --- | --- | --- |
+| VM (patch 0043) | mixed numeric `mul` fast path | — | BC26 wire |
+| optimizer (deployed) | v1 P0-P8 pipeline | `kPassAll` = 0x7f | BC26 |
+| optimizer (off-mask) | R1 ext34 (ext ids 2/3) | `kPassExtFuse34`=1<<7, `kPassExtFuse4`=1<<8 | BC27 (API-only) |
+| optimizer (retired) | R0 single-op array ext (id 1) | — | permanent reserved hole |
+
+Per-configuration measured effects (handoff §6 / §17.4 / §12.4):
+
+- `mul` fast path alone (0x7f on both arms, 7 pairs × 8 classic programs,
+  224 observations): **+3.366% equal-weight geomean** [1.262, 5.515].
+- optimizer alone (pre-0043 build, v8-suite-rt three-state, 5 rounds):
+  **+4.51%** opt_vs_raw (§12.4).
+- 0x1ff vs 0x7f (ext34 on the patched stack): **+0.66% equal-weight
+  geomean** [−0.65, 1.98] — the original leave-one-out; removing the ext
+  bits from the candidate returns exactly the deployed 0x7f state.
+
+### 19.2 Final full-suite profile state (task #74)
+
+54/55 dumps terminal. `octane-mandreel` exceeded the 1800 s retry cap and
+then the maximum 3600 s cap (two timeouts, no partial dump); it is outside
+the A/B corpus, so its absence cannot change the verdict. A post-collection
+re-run of the §18.5 census (2-len `--min-programs 15`, 3-4-len
+`--min-programs 3`) on the final 54-dump set reproduced every listed number
+unchanged (2-len: get_loc8>add 369M/20, push_1>sub 332M/28, push_1>add
+291M/33, get_loc8>get_array_el 214M/21, get_loc8>get_field 205M/20,
+get_loc2>get_field 169M/15, mul>add 168M/16, get_field>get_field 147M/20,
+get_arg0>get_field 143M/16, get_array_el>get_loc8 137M/16, push_2>add
+123M/15, get_array_el>add 106M/19, get_loc0>get_field 103M/20, add>put_loc8
+67M/20; 3-4-len rank 1 get_array_el>push_0>or 1,700M). The §18.7 verdict is
+confirmed on the terminal archive.
+
+### 19.3 Fresh-directory validation (gate 5)
+
+Fresh `build-release-r1` (Release + LTO, CAPSID_BUILD_HOST=ON), configured
+with miniconda OpenSSL/Boost + host node:
+
+- ctest 377/380 green; the 3 failures are recorded environmental
+  (wpt_conformance_not_configured loud-fail by design; worker_package_smoke
+  and worker_package_reproducibility — libcrypto.so.3 undeclared dependency,
+  no libssl-dev on this WSL2 host).
+- framework correctness groups (hono/elysia/h3/itty-router/framework, 46+
+  tests) all green; framework QPS workloads are not runnable here (no Go
+  loadgen, no bundle artifacts) — correctness is the ctest gate.
+- stale-test find: `test_ext_round_trip` a4 used ext id 2 as its
+  unknown-id example; id 2 became a valid R1 template, so the test asserted
+  a kept template is invalid. Fixed to id 4 (commit 3664289). This is
+  exactly the staleness class the fresh-dir requirement exists to catch
+  (the old build dir predated patches 0043/0044; its overlay stamp was
+  stale and silently produced wrong test binaries).
+
+### 19.4 Leave-one-out and validation measurements
+
+**ext34 A/B rerun (quiescent 2-3, 7 pairs × 8 programs, §17.4 protocol,
+`bench/results/ext34-classic-ab-r1-20260825T0510/`):**
+
+| program | §17.4 gain | rerun gain | CI95 | pos. pairs |
+| --- | ---: | ---: | ---: | ---: |
+| kraken-audio-beat-detection | +2.01 | **+2.34** | [1.84, 2.83] | 7/7 |
+| kraken-audio-fft | +3.66 | **+2.94** | [2.05, 3.84] | 7/7 |
+| kraken-audio-oscillator | −1.41 | −0.06 | [−1.21, 1.09] | 4/7 |
+| kraken-imaging-darkroom | −0.22 | −0.01 | [−0.48, 0.46] | 3/7 |
+| octane-box2d | +0.38 | +0.52 | [−1.35, 2.43] | 5/7 |
+| octane-gameboy | −0.46 | −0.52 | [−3.28, 2.33] | 3/7 |
+| octane-navier-stokes | +1.02 | **+0.96** | [0.50, 1.42] | 6/7 |
+| octane-richards | +0.37 | +0.77 | [−1.95, 3.57] | 5/7 |
+| equal-weight geomean | **+0.66** | **+0.86** | [−0.14, 1.87] | — |
+
+The significant cluster (beat, fft, navier-stokes) reproduces with CIs
+clear of zero; darkroom is the 0-fusion clean control on both runs; every
+other program sits within its noise band. The tainted earlier rerun
+(`ext34-classic-ab-r1-20260825T035504/`, cpuset 0-1 concurrent with the
+mandreel profile, beat −4.55% 1/7) is archived as invalid; this quiescent
+2-3 run is the record.
+
+**0-fusion control verification (static count probe):** at the deployed
+mask 0x7f, all 8 A/B corpus programs compile to BC26 with zero OP_ext
+(control arm clean). At 0x1ff, ext emission matches the templates exactly:
+beat 42 ext34 + 14 ext4, fft 38 + 14, navier-stokes 16 + 4, darkroom 0 + 0
+— consistent with the measured winners and with §17.4's archived candidate
+blobs (byte-identical).
+
+**v8-suite three-state on the frozen stack** (gate 5 worker check,
+`bench/results/exec-throughput-r1-v8-20260825T0455/`): the opt and raw
+streams are byte-identical to the §12.4 build's blobs (the deployed
+pipeline is deterministic and unchanged), yet v8-suite-rt opt_vs_raw
+measures ≈ −0.5% (sequential 5-round median −0.40%, interleaved 9-per-mode
+median −0.64%) versus §12.4's +4.51% on the pre-0043 build. The runtime-side
+mul fast path accelerates the constant-mul sites the optimizer removes, so
+raw recovers ground — the two mechanisms overlap at mul sites and do not
+add. Both remain individually attributed: optimizer-only +4.51% (§12.4),
+mul-only +3.366% (handoff), ext34-only +0.66% (§17.4); the stacked
+combination is not additive on this noisy vehicle (per-round spread ±7%).
+
+### 19.5 Final verdict
+
+The optimization loop terminates: every ranked candidate either failed the
+direct-binary gate (§18), is a runtime IC concern (call_method), or would
+embed a generic slow path measured negative twice (R0, arg0>get_field).
+Shipped configuration = BC26 + 0x7f + patch 0043; ext34 available via API
+pass bits. Evidence archives: `bench/results/classic-profile-20260825T015948/`
+(54 dumps + manifest), `bench/results/ext34-classic-ab-20260825T014012/`
+(original §17.4 A/B), `bench/results/ext34-classic-ab-r1-20260825T035504/`
+(tainted run, archived), `bench/results/ext34-classic-ab-r1-20260825T0510/`
+(clean leave-one-out rerun), `bench/results/exec-throughput-r1-v8-20260825T0455/`
+(v8-suite three-state). bench/results is gitignored; the numbers above are
+the record.
