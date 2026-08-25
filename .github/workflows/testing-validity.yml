@@ -555,14 +555,25 @@ jobs:
           # (raw step logs need a signed-in viewer).
           cmake --build build-windows --parallel 2 2>&1 | Tee-Object build-windows\build.log
           if ($LASTEXITCODE -ne 0) {
-            Get-Content build-windows\build.log -Tail 60 | ForEach-Object { "::error::$_" }
+            # GitHub accepts only a small annotation set. Emit compiler and
+            # Ninja diagnostics first; annotating every normal tail line can
+            # exhaust that set before the actual error is reached.
+            Select-String -Path build-windows\build.log `
+              -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `
+              | Select-Object -First 20 `
+              | ForEach-Object { "::error title=Windows build::$($_.Line.Trim())" }
+            Get-Content build-windows\build.log -Tail 60
             exit 1
           }
           # The named gate mirrors the macOS job: a quietly skipped
           # Boost-backed Host surface would fail this step explicitly.
           cmake --build build-windows --parallel 2 --target capsid-host 2>&1 | Tee-Object build-windows\build.log
           if ($LASTEXITCODE -ne 0) {
-            Get-Content build-windows\build.log -Tail 60 | ForEach-Object { "::error::$_" }
+            Select-String -Path build-windows\build.log `
+              -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `
+              | Select-Object -First 20 `
+              | ForEach-Object { "::error title=Windows build::$($_.Line.Trim())" }
+            Get-Content build-windows\build.log -Tail 60
             exit 1
           }
 
