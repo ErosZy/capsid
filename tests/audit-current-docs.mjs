@@ -151,7 +151,9 @@ for (const requiredFragment of [
   "`CAPSID_EVENT_READY.flags` contains the sandbox features required by the deployment",
   "Current clean samples were captured on 2026-08-25",
   "Retained optimizer portfolio",
-  "**+2.91%**",
+  "**+2.64%**",
+  "V8 Web Tooling",
+  "-0.49% (neutral)",
   "docs/quickjs-optimization.md",
 ]) {
   assert.ok(

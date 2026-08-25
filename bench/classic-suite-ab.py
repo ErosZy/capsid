@@ -128,10 +128,15 @@ def main() -> int:
     parser.add_argument("--control-tool", type=Path, required=True)
     parser.add_argument("--candidate-tool", type=Path)
     parser.add_argument("--control-passes", default="0")
-    parser.add_argument("--candidate-passes", default="0xffffffff")
+    parser.add_argument(
+        "--candidate-passes", default="0x7f",
+        help="candidate pass mask (default: deployed kPassAll, 0x7f)")
     parser.add_argument("--pairs", type=int, default=3)
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--cpuset", default="2")
+    parser.add_argument(
+        "--smoke-only", action="store_true",
+        help="compile and execute each arm once, without timed pairs")
     parser.add_argument("--program", action="append", default=[],
                         help="program name or filename; repeat to select")
     parser.add_argument(
@@ -169,6 +174,7 @@ def main() -> int:
         "cpuset": args.cpuset,
         "pairs": args.pairs,
         "timeout_seconds": args.timeout,
+        "smoke_only": args.smoke_only,
         "require_bytecode_identical": args.require_bytecode_identical,
         "corpus_manifest_sha256": sha256(manifest_path),
         "control": {"tool": str(args.control_tool.resolve()),
@@ -237,7 +243,7 @@ def main() -> int:
     samples: list[dict[str, Any]] = []
     raw_path = args.out / "samples.jsonl"
     with raw_path.open("w", encoding="utf-8") as raw:
-        for program in runnable:
+        for program in ([] if args.smoke_only else runnable):
             stem = Path(program["file"]).stem
             for pair in range(1, args.pairs + 1):
                 order = ("control", "candidate", "candidate", "control") \
@@ -272,17 +278,20 @@ def main() -> int:
                     continue
                 break
 
-    complete_programs = []
-    for program in runnable:
-        stem = Path(program["file"]).stem
-        if sum(row["program"] == stem for row in samples) == args.pairs * 4:
-            complete_programs.append(stem)
+    complete_programs = (
+        [Path(program["file"]).stem for program in runnable]
+        if args.smoke_only else
+        [Path(program["file"]).stem for program in runnable
+         if sum(row["program"] == Path(program["file"]).stem
+                for row in samples) == args.pairs * 4]
+    )
     complete_samples = [row for row in samples
                         if row["program"] in complete_programs]
     summary = paired_summary(complete_samples)
     summary.update({"requested_programs": len(programs),
                     "runnable_programs": len(runnable),
                     "complete_programs": len(complete_programs),
+                    "smoke_only": args.smoke_only,
                     "bytecode_identity": bytecode_identity,
                     "failures": failures})
     (args.out / "summary.json").write_text(

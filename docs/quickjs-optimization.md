@@ -12,7 +12,7 @@ maintained documentation set.
 
 | Component | Production state | Reason |
 |---|---|---|
-| BC26 AOT optimizer (`kPassAll`) | enabled and frozen | Sound static reductions; no significant program regression |
+| BC26 AOT optimizer (`kPassAll`) | enabled | Sound static reductions; positive classic-suite center and neutral library-suite aggregate |
 | Mixed-number `mul` fast path | enabled | Significant classic-suite contribution |
 | CFG and stack-to-SSA analysis | analyze-only | Useful for proofs and candidate ranking; no lowering today |
 | Exact-site opcode profiling | instrumentation build only | Selection tool, never a production default |
@@ -27,10 +27,14 @@ absent, and the build flag participates in the compatibility identity. The
 field IC and opcode profiler likewise do not run in production builds.
 
 The retained combination—BC26 `kPassAll` plus mixed-number `mul`—measured
-**+2.91% equal-weight gain, 95% CI [+0.84%, +5.02%]** over eight balanced
-Kraken/Octane programs. Seven of eight centers were positive and no program
-regressed significantly. This is the keep decision; it is not a promise of a
-2.91% gain for every application or HTTP request.
+**+2.64% equal-weight gain** over eight balanced Kraken/Octane programs, with
+an across-program 95% interval of **[-0.04%, +5.39%]**. The 18-program V8 Web
+Tooling library portfolio measured **-0.49%**, interval **[-1.34%, +0.37%]**:
+neutral overall, not a library-workload win. DFT and UglifyJS each had one
+significant negative result; UglifyJS was confirmed as an optimizer-combination
+effect, but disable-one tests did not identify a removable pass. This is a
+qualified keep decision, not a promise of a gain for every application or HTTP
+request.
 
 ## 2. What CFG+SSA Can and Cannot Do
 
@@ -102,6 +106,7 @@ in git history.
 | ext34 compiled-in OFF tax | -1.44% equal-weight, program CI [-2.50%, -0.37%] | product gate failed |
 | ext34 patchless→enabled net | +1.51%, CI [-2.07%, +5.22%]; Box2D -2.21%, Richards -3.22% | compiled OFF |
 | `put_loc*; get_loc* -> set_loc*` | +0.28%, CI [-0.68%, +1.25%]; FFT -0.81% significant | removed |
+| Retained set on V8 Web Tooling | -0.49%, across-program interval [-1.34%, +0.37%]; UglifyJS -2.66% significant | keep aggregate; profile combination/layout next |
 
 The field-IC prototype also showed why same-binary OFF/ON is insufficient. The
 feature-built OFF path itself carried roughly 2-3% centers in directed tests.
@@ -147,11 +152,12 @@ the emitted bytecode: QuickJS already lowers common assignment forms to
 `add_loc`, and the measured corpus had no residual site for the proposed
 `add; dup; put_loc; drop` fusion.
 
-The source-attributed census must include real frameworks and broad classic
-suites (Kraken, Octane, and SunSpider where compatible). Suite results are a
-portfolio: partial wins are kept when the final binary has no significant
-regression, but benchmark-specific rewrites are not accepted merely because
-their anchor improves.
+The source-attributed census must include real frameworks, broad classic
+suites (Kraken, Octane, and SunSpider where compatible), and library-level
+tooling work from V8 Web Tooling Benchmark. Suite results are a portfolio:
+partial wins are kept when the final binary has no significant regression,
+but benchmark-specific rewrites are not accepted merely because their anchor
+improves.
 
 ## 6. Required Validation
 
@@ -182,11 +188,42 @@ differential and conformance gates.
 | Cold start | `bench/cold-start.sh` |
 | Field IC A/B | `bench/field-ic-ab.sh`, `bench/field-ic-host-ab.sh`, `bench/field-ic-off-tax.sh` |
 | Classic-suite balanced A/B | `bench/classic-suite-ab.py` |
+| Web Tooling corpus | `bench/prepare-web-tooling.py` |
+| Web Tooling balanced A/B | `bench/web-tooling-ab.sh` |
+
+The Web Tooling preparer records the exact upstream revision, package-lock
+identities, resolved top-level dependency versions, bundle hashes, and build
+tool versions. It creates one static bundle per workload and calls the
+upstream workload function once per fresh process; the outer A/B runner owns
+repetition and timing. This avoids both the upstream dynamic-require all-in-one
+bundle and nested Benchmark.js samples. A reproducible starting point is:
+
+```sh
+git clone https://github.com/v8/web-tooling-benchmark /tmp/web-tooling-benchmark
+git -C /tmp/web-tooling-benchmark checkout 4a12828c6a1eed02a70c011bd080445dd319a05f
+npm --prefix /tmp/web-tooling-benchmark install --ignore-scripts
+python3 bench/prepare-web-tooling.py \
+  --web-tooling /tmp/web-tooling-benchmark \
+  --out /tmp/capsid-web-tooling-corpus-v1
+CORPUS=/tmp/capsid-web-tooling-corpus-v1 bash bench/web-tooling-ab.sh
+```
+
+Run the correctness-only corpus gate before a long paired measurement:
+
+```sh
+SMOKE_ONLY=1 CORPUS=/tmp/capsid-web-tooling-corpus-v1 \
+  bash bench/web-tooling-ab.sh
+```
+
+This 2019 suite is useful for parser, compiler, formatter, minifier, and
+source-map workloads, but it is not a substitute for current framework and
+source-service gates.
 
 The authoritative retained-set evidence is
-`bench/results/all-effective-cumulative-20260825/`: +2.91% equal-weight, 95%
-CI [+0.84%, +5.02%]. The clean direct execution, source-service, profile, and
-cold-start directories and their checksum identities are listed in
+`bench/results/all-effective-cumulative-20260825/` for Kraken/Octane and
+`bench/results/web-tooling-current-20260825/` for V8 Web Tooling. The clean
+direct execution, source-service, profile, cold-start, and current optimizer
+checksum identities are listed in
 [Performance Evidence](performance-benchmarks.md).
 
 ## 8. Next Optimization Direction

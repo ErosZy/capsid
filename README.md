@@ -289,7 +289,8 @@ passed, with zero errors or timeouts:
 | Serving path memory (host + 2 workers) | **6.2 MB PSS host, 6.4 MB per worker** | Gunicorn worker 23.7 MB PSS<br>Uvicorn worker 42.1 MB PSS |
 | Small bundle cold start (10 KiB) | **8.43 ms** source / **7.45 ms** bytecode | Node 110 ms<br>Deno 39 ms |
 | 1 MB trusted bytecode cold start | **36.23 ms** | Node 137 ms<br>Deno 52 ms |
-| Retained optimizer portfolio | **+2.91%** | paired 95% CI **[+0.84%, +5.02%]** |
+| Retained optimizer portfolio (Kraken/Octane) | **+2.64%** | across-program 95% interval **[-0.04%, +5.39%]** |
+| Retained optimizer, V8 Web Tooling | -0.49% (neutral) | across-program 95% interval [-1.34%, +0.37%] |
 
 Full methodology, the 12-workload matrix (1k-32k × json/bytes/stream), per-process
 resource breakdown, and evidence rules are in

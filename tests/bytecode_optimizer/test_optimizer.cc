@@ -540,6 +540,27 @@ void test_p16_dead_store_goldens() {
         b.finish(1);
         expect_code("p16 dead-store-no-marker", &b, "bc 28");
     }
+    // A branch can arrive directly at a store with its value already on the
+    // stack while the fallthrough path produces that value immediately before
+    // the store. Even when the slot is dead, deleting the apparent push/store
+    // pair would leave the branch's incoming value unconsumed.
+    {
+        Builder b;
+        b.op(187);        // push_1 (value carried by the branch path)
+        b.op(186);        // push_0 (condition)
+        b.op(240);        // if_false8 -> put_loc0 at byte 6
+        b.op(3);
+        b.op(14);         // fallthrough: drop branch-carried value
+        b.op(187);        // push_1 (store producer)
+        b.op(207);        // put_loc0 (jump target)
+        b.op(188);        // push_2
+        b.op(40);         // return
+        b.stack_size = 2;
+        b.finish(1);
+        expect_code("p16 targeted-store-keeps-pair", &b,
+                    "bb ba f0 03 0e bb cf bc 28",
+                    capsid::bytecode::kPassP16);
+    }
     // tdz-keep-read-after: the store feeds the get_loc_check read and
     // stays; the marker is overwritten by the store before any read
     // (dead) and is removed. push_atom_value (not push_i32: P2 tracks
@@ -1203,6 +1224,37 @@ void test_p11_gates() {
                                   capsid::bytecode::kPassP11));
         const std::uint8_t expect[] =
             {0xcb, 0xf0, 3, 0xcc, 0xcf, 0xcb, 0x28};
+        CHECK(code.size() == sizeof(expect));
+        if (code.size() == sizeof(expect)) {
+            CHECK(std::memcmp(code.data(), expect, sizeof(expect)) == 0);
+        }
+    }
+    // Mutually exclusive writes to the same destination cannot be treated as
+    // successive linear overwrites. The join reads the value selected by the
+    // branch, so both get/put pairs must survive. This is the minimized shape
+    // from Web Tooling's Leaf.allocate (`treeNew = this` in one arm and
+    // `treeNew = new Leaf(...)` in the other).
+    {
+        Builder b;
+        b.op(0xcb);  // get_loc0 (condition)
+        b.op(0xf0);  // if_false8 -> else at byte 7
+        b.op(5);
+        b.op(0xcc);  // then: get_loc1
+        b.op(0xd1);  // put_loc2
+        b.op(0xf2);  // goto8 -> join at byte 9
+        b.op(3);
+        b.op(0xce);  // else: get_loc3
+        b.op(0xd1);  // put_loc2
+        b.op(0xcd);  // join: get_loc2
+        b.op(0x28);  // return
+        b.stack_size = 1;
+        b.finish(4);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err,
+                                  capsid::bytecode::kPassP11));
+        const std::uint8_t expect[] = {
+            0xcb, 0xf0, 5, 0xcc, 0xd1, 0xf2, 3, 0xce, 0xd1, 0xcd, 0x28};
         CHECK(code.size() == sizeof(expect));
         if (code.size() == sizeof(expect)) {
             CHECK(std::memcmp(code.data(), expect, sizeof(expect)) == 0);
@@ -2195,6 +2247,58 @@ void test_roundtrip_values() {
     JS_FreeRuntime(rt);
 }
 
+void test_typescript_generator_helper_roundtrip() {
+    // TypeScript 3.3's emitted generator state machine nests catch/finally
+    // regions deeply enough to require QuickJS's catch-position dataflow in
+    // addition to plain stack-height propagation. The previous verifier
+    // rejected this legal function at its internal push_0 join even with
+    // passes=0.
+    const char* src = R"JS(
+var __generator = function (thisArg, body) {
+  var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+  return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+  function verb(n) { return function (v) { return step([n, v]); }; }
+  function step(op) {
+    if (f) throw new TypeError("Generator is already executing.");
+    while (_) try {
+      if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+      if (y = 0, t) op = [op[0] & 2, t.value];
+      switch (op[0]) {
+        case 0: case 1: t = op; break;
+        case 4: _.label++; return { value: op[1], done: false };
+        case 5: _.label++; y = op[1]; op = [0]; continue;
+        case 7: op = _.ops.pop(); _.trys.pop(); continue;
+        default:
+          if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+          if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+          if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+          if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+          if (t[2]) _.ops.pop();
+          _.trys.pop(); continue;
+      }
+      op = body.call(thisArg, _);
+    } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+    if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+  }
+};
+globalThis.__r = "typescript-generator-ok";
+)JS";
+
+    JSRuntime* rt = JS_NewRuntime();
+    CHECK(rt != nullptr);
+    JSContext* ctx = JS_NewContext(rt);
+    CHECK(ctx != nullptr);
+    if (ctx == nullptr) return;
+    RtResult base = run_roundtrip(ctx, src, "typescript-helper.js", false);
+    RtResult opt = run_roundtrip(ctx, src, "typescript-helper.js", true);
+    CHECK(base.ok);
+    CHECK(opt.ok);
+    CHECK(base.value == "typescript-generator-ok");
+    CHECK(base.value == opt.value);
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+
 void test_p11_semantics() {
     // P11 differential: copy chains, dead-store elimination, and the
     // barriers must keep raw and optimized execution identical.
@@ -2489,6 +2593,7 @@ int main() {
     test_classic_benchmark_boundary();
     test_determinism_and_idempotence();
     test_roundtrip_values();
+    test_typescript_generator_helper_roundtrip();
     test_p14_semantics();
     test_p11_semantics();
     test_roundtrip_exception_lines();

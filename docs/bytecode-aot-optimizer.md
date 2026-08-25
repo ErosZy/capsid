@@ -97,9 +97,9 @@ multi-instruction fusion.
 | --- | --- | --- |
 | P2 | Forward per-slot lattice; replace a proven local read with an equivalent constant push | Calls, getters/proxies, iterators, suspension, dynamic scope, globals and other user-code barriers drop facts; stack facts do not cross unknown joins |
 | P3.1 | Fold adjacent int32 pushes plus supported arithmetic/bitwise operations | Skip overflow, non-integer division and every result not representable by an existing immediate opcode |
-| P11 | Track `get_loc s; put_loc t` aliases, rename later reads, and remove an unread stack-neutral load/store pair | No captured slots, jump targets, loop-visible pre-store reads, dynamic-scope or frame-opaque propagation |
+| P11 | In straight-line functions, track `get_loc s; put_loc t` aliases, rename later reads, and remove an unread stack-neutral load/store pair | No control-flow edges, later destination writes, captured slots, check-form stores, dynamic scope, frame objects or escaping references |
 | P14 | Track literal object/array construction bound to a local and fold proven own data-property reads | Exact cpool/tag parsing; stop at aliasing, mutation, accessor/proxy, opaque calls or uncertain construction |
-| P16 | Backward slot liveness; remove a dead `set_loc_uninitialized` marker or a dead store together with its pure producer | Captured slots, check-form stores, read-write mutations, eval/with/special objects and unanalyzable environments remain untouched |
+| P16 | Backward slot liveness; remove a dead `set_loc_uninitialized` marker or a dead store together with its pure producer | Captured slots, check-form stores, jump-targeted store pairs, read-write mutations, eval/with/special objects and unanalyzable environments remain untouched |
 | P6 | Re-encode immediates, slots, calls and branches with the shortest valid opcode | Rebuild offsets globally and verify every target after compaction |
 
 P16 is TDZ-sound because `set_loc_uninitialized` writes the observable

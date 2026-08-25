@@ -169,24 +169,62 @@ speedup is +25.89%, but the aggregate is dominated by synthetic arith/cascade
 fixtures and is not an HTTP throughput claim.
 
 The final portfolio gate enables all retained work—BC26 `kPassAll` plus the
-mixed-number `mul` fast path—against the patchless/add-loc control. Eight
-Kraken/Octane programs use seven balanced pairs each:
+mixed-number `mul` fast path—against the patchless/add-loc control. This run
+uses the final 0.2.2 release-candidate worktree, including the P11/P16
+control-flow fixes and the catch-state verifier. Eight Kraken/Octane programs
+use seven balanced pairs each:
 
 | program | gain, paired 95% CI |
 |---|---:|
-| Kraken Beat Detection | +1.23% [-2.98%, +5.62%] |
-| Kraken DFT | -0.63% [-8.16%, +7.53%] |
-| Kraken FFT | **+2.61% [+0.40%, +4.87%]** |
-| Kraken Oscillator | **+4.17% [+2.03%, +6.36%]** |
-| Kraken Darkroom | **+6.78% [+5.63%, +7.93%]** |
-| Octane Box2D | **+1.33% [+0.59%, +2.08%]** |
-| Octane Navier-Stokes | **+5.89% [+5.37%, +6.42%]** |
-| Octane Richards | +2.10% [-6.06%, +10.96%] |
-| **equal-weight geometric mean** | **+2.91% [+0.84%, +5.02%]** |
+| Kraken Beat Detection | **+3.38% [+1.46%, +5.34%]** |
+| Kraken DFT | **-2.78% [-5.13%, -0.37%]** |
+| Kraken FFT | **+3.03% [+1.40%, +4.68%]** |
+| Kraken Oscillator | **+4.76% [+0.49%, +9.20%]** |
+| Kraken Darkroom | **+5.35% [+4.42%, +6.29%]** |
+| Octane Box2D | **+1.56% [+0.54%, +2.58%]** |
+| Octane Navier-Stokes | **+6.91% [+3.56%, +10.37%]** |
+| Octane Richards | -0.74% [-3.10%, +1.68%] |
+| **equal-weight geometric mean** | **+2.64%**; across-program 95% interval **[-0.04%, +5.39%]** |
 
-Seven of eight centers are positive and no program regresses significantly.
-This is the production keep result. IC, BC27, ext34, and store/reload fusion
-remain disabled or removed as recorded in
+Six of eight centers are positive; five are significantly positive and DFT is
+significantly negative in this batch. The combined center remains positive,
+but its across-program interval touches zero.
+
+The same final binaries were also run over all 18 V8 Web Tooling Benchmark
+0.5.3 library workloads. Each target is a separately generated static webpack
+bundle. Three balanced pairs provide 12 fresh-process samples per target:
+
+| workload | gain, paired 95% CI |
+|---|---:|
+| Acorn | -0.86% [-2.57%, +0.87%] |
+| Babel | +0.33% [-2.89%, +3.65%] |
+| Babel Minify | -1.91% [-14.14%, +12.06%] |
+| Babylon | +1.32% [-2.47%, +5.25%] |
+| Bublé | +0.11% [-14.09%, +16.66%] |
+| Chai | -3.60% [-7.13%, +0.06%] |
+| CoffeeScript | -2.20% [-11.06%, +7.53%] |
+| Espree | -0.96% [-3.16%, +1.28%] |
+| Esprima | -0.28% [-2.04%, +1.51%] |
+| JSHint | -2.59% [-13.75%, +10.02%] |
+| Lebab | +1.74% [-5.37%, +9.39%] |
+| PostCSS | +2.28% [-1.26%, +5.96%] |
+| Prepack | +1.62% [-5.58%, +9.36%] |
+| Prettier | -1.28% [-12.66%, +11.58%] |
+| source-map | +0.45% [-7.55%, +9.15%] |
+| Terser | +1.06% [-3.43%, +5.76%] |
+| TypeScript | -1.07% [-4.28%, +2.24%] |
+| UglifyJS | **-2.66% [-4.59%, -0.70%]** |
+| **equal-weight geometric mean** | **-0.49%**; across-program 95% interval **[-1.34%, +0.37%]** |
+
+The library suite is neutral overall, with UglifyJS the only significant
+single-program regression. A same-runtime seven-pair triangle confirmed that
+raw-to-`kPassAll` UglifyJS regressed 2.55% [2.05%, 3.03%], while disabling any
+one deployed pass did not reproduce a significant penalty; P3.1 was instead
+significantly helpful. The evidence therefore does not support deleting a
+specific pass. The current decision is to retain the positive combined
+portfolio, record the library result as neutral rather than a win, and make
+the UglifyJS combination/layout effect a next-round gate. IC, BC27, ext34, and
+store/reload fusion remain disabled or removed as recorded in
 [QuickJS Optimization](quickjs-optimization.md).
 
 ## 6. Evidence Identities
@@ -198,7 +236,9 @@ remain disabled or removed as recorded in
 | host/worker profile | `bench/results/four-qps-current-clean-profile-20260825T164600/` | `c134cda4…` |
 | raw/optimized execution | `bench/results/exec-throughput-current-clean-20260825T164400/` | `4b0c21b8…` |
 | cold start | `bench/results/cold-start-current-clean-20260825T164500/` | `1de6b30c…` |
-| retained portfolio | `bench/results/all-effective-cumulative-20260825/` | `81764e13…` |
+| retained classic portfolio | `bench/results/all-effective-cumulative-20260825/` | `56d86ff7…` |
+| V8 Web Tooling portfolio | `bench/results/web-tooling-current-20260825/` | `454f79c4…` |
 
-The retained-portfolio summary SHA-256 is `35d1840c…`. Every listed checksum
-file was verified after collection.
+The classic and Web Tooling summary SHA-256 values are `2967f60d…` and
+`bdeb60f9…`, respectively. Every listed checksum file was verified after
+collection.

@@ -293,8 +293,9 @@ public:
     }
     bool u16le(uint16_t* out) {
         if (remaining() < 2) return fail("truncated u16");
-        *out = static_cast<uint16_t>(p_[0]) |
-               (static_cast<uint16_t>(p_[1]) << 8);
+        *out = static_cast<uint16_t>(
+            static_cast<uint16_t>(p_[0]) |
+            (static_cast<uint16_t>(p_[1]) << 8));
         p_ += 2;
         return true;
     }
@@ -835,7 +836,7 @@ int64_t push_value(const uint8_t* code, uint8_t op) {
 // mod of int32s is an int32 when the divisor is non-zero. Only add,
 // sub, mul need a range check — overflow produces a float64, which the
 // fold cannot represent without a cpool entry.
-bool foldable_binop(uint8_t op, int64_t a, int64_t b, int64_t* out) {
+bool foldable_binop(uint16_t op, int64_t a, int64_t b, int64_t* out) {
     switch (op) {
     case OP_add:
     case OP_sub:
@@ -940,35 +941,36 @@ bool scan_function(const FuncRecord& f,
 // Pass pipeline: instruction decode.
 // ---------------------------------------------------------------------------
 
-bool is_small_int_push(uint8_t op) {
+bool is_small_int_push(uint16_t op) {
     return (op >= OP_push_minus1 && op <= OP_push_7) ||
            op == OP_push_i8 || op == OP_push_i16 || op == OP_push_i32;
 }
-bool is_cond_jump(uint8_t op) {
+bool is_cond_jump(uint16_t op) {
     return op == OP_if_true || op == OP_if_false || op == OP_if_true8 ||
            op == OP_if_false8;
 }
-bool is_jump_op(uint8_t op) {
+bool is_jump_op(uint16_t op) {
     return is_cond_jump(op) || op == OP_goto || op == OP_goto8 ||
            op == OP_goto16 || op == OP_catch || op == OP_gosub;
 }
-bool is_with_jump(uint8_t op) {
+bool is_with_jump(uint16_t op) {
     return op == OP_with_get_var || op == OP_with_put_var ||
            op == OP_with_delete_var || op == OP_with_make_ref ||
            op == OP_with_get_ref || op == OP_with_get_ref_undef;
 }
-bool is_foldable_binop_op(uint8_t op) {
+bool is_foldable_binop_op(uint16_t op) {
     return op == OP_add || op == OP_sub || op == OP_mul || op == OP_and ||
            op == OP_or || op == OP_xor || op == OP_shl || op == OP_sar ||
            op == OP_shr || op == OP_mod;
 }
 // Shortest push opcode for a value known to fit in int32.
-uint8_t shortest_push_op(int64_t v) {
-    if (v == -1) return OP_push_minus1;
-    if (v >= 0 && v <= 7) return static_cast<uint8_t>(OP_push_0 + v);
-    if (v >= -128 && v <= 127) return OP_push_i8;
-    if (v >= -32768 && v <= 32767) return OP_push_i16;
-    return OP_push_i32;
+uint16_t shortest_push_op(int64_t v) {
+    if (v == -1) return static_cast<uint16_t>(OP_push_minus1);
+    if (v >= 0 && v <= 7) return static_cast<uint16_t>(OP_push_0 + v);
+    if (v >= -128 && v <= 127) return static_cast<uint16_t>(OP_push_i8);
+    if (v >= -32768 && v <= 32767)
+        return static_cast<uint16_t>(OP_push_i16);
+    return static_cast<uint16_t>(OP_push_i32);
 }
 
 // Decode a code blob into an instruction list, resolving every jump
@@ -1103,8 +1105,8 @@ bool decode_code(const uint8_t* code,
         case OP_get_var_ref_check: case OP_put_var_ref_check:
         case OP_put_var_ref_check_init: case OP_close_loc:
         case OP_using_dispose: case OP_using_dispose_async:
-            in.aux = static_cast<uint16_t>(code[pc + 1]) |
-                     (static_cast<uint16_t>(code[pc + 2]) << 8);
+            in.aux = static_cast<uint32_t>(code[pc + 1]) |
+                     (static_cast<uint32_t>(code[pc + 2]) << 8);
             in.has_aux = true;
             break;
         case OP_get_loc8: case OP_put_loc8: case OP_set_loc8:
@@ -1121,8 +1123,8 @@ bool decode_code(const uint8_t* code,
         case OP_tail_call_method: case OP_call_constructor:
         case OP_array_from: case OP_apply: case OP_apply_eval:
         case OP_eval:
-            in.aux = static_cast<uint16_t>(code[pc + 1]) |
-                     (static_cast<uint16_t>(code[pc + 2]) << 8);
+            in.aux = static_cast<uint32_t>(code[pc + 1]) |
+                     (static_cast<uint32_t>(code[pc + 2]) << 8);
             in.has_aux = true;
             break;
         case OP_if_false: case OP_if_true: case OP_goto:
@@ -1324,21 +1326,25 @@ bool apply_peepholes(std::vector<Insn>* insns,
 // must consult the FuncRecord captured mask (from the vardef
 // is_captured flag) — never assume a loc op implies an uncaptured
 // slot.
-bool is_get_loc_op(uint8_t op) {
+bool is_get_loc_op(uint16_t op) {
     return op == OP_get_loc || op == OP_get_loc8 || op == OP_get_loc_check ||
            (op >= OP_get_loc0 && op <= OP_get_loc3);
 }
-bool is_put_loc_op(uint8_t op) {
+bool is_put_loc_op(uint16_t op) {
     return op == OP_put_loc || op == OP_put_loc8 || op == OP_put_loc_check ||
            op == OP_put_loc_check_init ||
            (op >= OP_put_loc0 && op <= OP_put_loc3);
 }
-bool is_set_loc_op(uint8_t op) {
+bool is_plain_put_loc_op(uint16_t op) {
+    return op == OP_put_loc || op == OP_put_loc8 ||
+           (op >= OP_put_loc0 && op <= OP_put_loc3);
+}
+bool is_set_loc_op(uint16_t op) {
     return op == OP_set_loc || op == OP_set_loc8 ||
            (op >= OP_set_loc0 && op <= OP_set_loc3);
 }
 // In-place slot mutations (read + write the slot).
-bool is_slot_mut_op(uint8_t op) {
+bool is_slot_mut_op(uint16_t op) {
     return op == OP_inc_loc || op == OP_dec_loc || op == OP_add_loc ||
            op == OP_set_loc_uninitialized || op == OP_close_loc;
 }
@@ -1347,7 +1353,7 @@ bool is_slot_mut_op(uint8_t op) {
 // can run arbitrary user code that could touch a captured frame, or
 // create closures (frame shapes are compiler-fixed, but a conservative
 // barrier is free here).
-bool is_slot_alias_barrier(uint8_t op) {
+bool is_slot_alias_barrier(uint16_t op) {
     switch (op) {
     case OP_eval:
     case OP_with_get_var: case OP_with_put_var:
@@ -1368,7 +1374,7 @@ bool is_slot_alias_barrier(uint8_t op) {
 // that outer code wrote there). A literal description bound to a local
 // slot must not survive any of these: the described object could have
 // been mutated by the code they run or reach.
-static bool is_frame_opaque_op(uint8_t op) {
+static bool is_frame_opaque_op(uint16_t op) {
     switch (op) {
     case OP_await: case OP_import: case OP_for_await_of_start:
     case OP_get_var_undef: case OP_get_var: case OP_put_var:
@@ -1447,6 +1453,28 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                     const std::vector<uint8_t>& captured,
                     RewriteStats* stats) {
     const size_t n = insns->size();
+    // Dynamic scope, frame objects, and escaping reference objects can read or
+    // write a local without a later get_loc/put_loc in this instruction
+    // stream. A linear copy pass cannot prove such a candidate dead, so skip
+    // the whole function just as P16 does for the same aliasing constructs.
+    for (size_t i = 0; i < n; i++) {
+        uint16_t op = (*insns)[i].op;
+        // Alias facts below are intentionally linear. Any branch, loop,
+        // catch/finally edge, or with_* alternate edge needs a real CFG join;
+        // clearing facts at labels is insufficient to prove which reaching
+        // store feeds a later read (as Web Tooling's Acorn and Babel exposed).
+        if ((*insns)[i].target >= 0) return false;
+        if (op == OP_eval || op == OP_apply_eval ||
+            op == OP_with_get_var || op == OP_with_put_var ||
+            op == OP_with_delete_var || op == OP_with_make_ref ||
+            op == OP_with_get_ref || op == OP_with_get_ref_undef ||
+            op == OP_special_object || op == OP_make_loc_ref ||
+            op == OP_make_arg_ref || op == OP_make_var_ref ||
+            op == OP_make_var_ref_ref || op == OP_get_ref_value ||
+            op == OP_put_ref_value) {
+            return false;
+        }
+    }
     std::vector<uint8_t> targets = compute_targets(*insns);
     // alias[t] = s means slot t currently holds a copy of slot s.
     std::vector<int32_t> alias(var_count, -1);
@@ -1456,7 +1484,6 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
         size_t get_idx;
     };
     std::vector<Cand> cands;
-    std::vector<uint32_t> cand_slot;
     std::vector<size_t> reads_after;
     // read_attr[put_idx] = candidate index, or n when the put is not a
     // candidate; last_put_idx[t] = index of the most recent put_loc t.
@@ -1469,24 +1496,13 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     // both (a plain get_loc read of either is folded into it by the
     // compiler's peephole, so excluding it would undercount readers).
     //
-    // Loop-carried writes: a read inside a loop re-executes after the
-    // loop body's stores, so the linear order is not the execution
-    // order. A candidate whose slot t is stored again anywhere after
-    // the put (by any put/set/mut op) is therefore rename-safe only in
-    // functions without backedges — otherwise the renamed read would
-    // see the later store's value on the next iteration. (Real-world
-    // trigger: a loop counter copied into a slot, read and stored again
-    // inside the loop; renaming the read corrupted the counter and the
-    // loop ran with a stale value.)
-    bool has_backedge = false;
-    for (size_t i = 0; i < n; i++) {
-        if ((*dead)[i]) continue;
-        const Insn& in = (*insns)[i];
-        if (in.target >= 0 && static_cast<size_t>(in.target) < i) {
-            has_backedge = true;
-            break;
-        }
-    }
+    // Later writes: linear order is not execution order across either a
+    // backedge or mutually exclusive branches. A candidate whose slot t is
+    // stored again anywhere after the put is therefore unsafe: a later
+    // branch store can clear last_put_idx[t] even on the path that skipped
+    // that store, causing the earlier candidate to look unread and be
+    // deleted. (Real-world trigger: Web Tooling's Leaf.allocate assigns
+    // treeNew in both arms and reads it after the join.)
     // last_store[t] = index of the last store of t in the stream.
     std::vector<size_t> last_store(var_count, n);
     for (size_t i = 0; i < n; i++) {
@@ -1552,18 +1568,18 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 prev--;
                 if (!(*dead)[prev]) break;
             }
-            if (prev < i && is_get_loc_op((*insns)[prev].op)) {
+            if (is_plain_put_loc_op(in.op) && prev < i &&
+                is_get_loc_op((*insns)[prev].op)) {
                 uint32_t s;
                 if (slot_of((*insns)[prev], &s) && s != sl &&
                     !captured[s] && !captured[sl] && alias[sl] < 0 &&
                     first_get[sl] >= i &&
-                    // No later store of t: in a loop the next iteration
-                    // reads that store before this put's value (see the
-                    // has_backedge/last_store note above).
-                    (!has_backedge || last_store[sl] == i)) {
+                    // No later store of t on the linear stream. This is
+                    // deliberately required even without a backedge because
+                    // the stores may be in mutually exclusive branches.
+                    last_store[sl] == i) {
                     size_t c = cands.size();
                     cands.push_back({i, prev});
-                    cand_slot.push_back(sl);
                     reads_after.push_back(0);
                     read_attr[i] = c;
                     alias[sl] = static_cast<int32_t>(s);
@@ -1615,11 +1631,12 @@ bool apply_copyprop(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 // into loc1/loc2 renamed the reads, the stores were
                 // deleted, and the loop-exit reads saw the pre-loop null,
                 // crashing on a null field access.)
-                uint8_t op = (*insns)[i].op;
+                uint16_t op = (*insns)[i].op;
                 if (op >= OP_get_loc0 && op <= OP_get_loc3)
-                    op = (s <= 255) ? OP_get_loc8 : OP_get_loc;
+                    op = static_cast<uint16_t>(
+                        (s <= 255) ? OP_get_loc8 : OP_get_loc);
                 else if (op == OP_get_loc8 && s > 255)
-                    op = OP_get_loc;
+                    op = static_cast<uint16_t>(OP_get_loc);
                 (*insns)[i].op = op;
                 (*insns)[i].aux = s;
                 (*insns)[i].has_aux = true;
@@ -1718,7 +1735,7 @@ bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
             if (d->fields[j].first == atom) return &d->fields[j].second;
         return nullptr;
     };
-    auto is_call = [](uint8_t op) {
+    auto is_call = [](uint16_t op) {
         switch (op) {
         case OP_call: case OP_call1: case OP_call2: case OP_call3:
         case OP_tail_call:
@@ -1768,12 +1785,13 @@ bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     auto emit_val_push = [&](size_t at, const Val& val, uint32_t pc_off) {
         Insn ni;
         if (val.is_atom) {
-            ni.op = OP_push_atom_value;
+            ni.op = static_cast<uint16_t>(OP_push_atom_value);
             ni.aux = val.atom;
             ni.has_aux = true;
             ni.imm = 0;
         } else if (val.is_cpool) {
-            ni.op = OP_push_const;  // reshrunk to push_const8 when small
+            ni.op = static_cast<uint16_t>(OP_push_const);
+            // Reshrunk to push_const8 when small.
             ni.aux = val.cidx;
             ni.has_aux = true;
             ni.imm = 0;
@@ -1783,7 +1801,7 @@ bool apply_lit_fold(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
             ni.has_aux = false;
         }
         ni.old_off = (*insns)[at].old_off;
-        ni.old_size = static_cast<uint16_t>(short_opcode_info(ni.op).size);
+        ni.old_size = short_opcode_info(ni.op).size;
         ni.pc_off = pc_off;
         ni.target = -1;
         (*insns)[at] = ni;
@@ -2013,9 +2031,9 @@ bool apply_tier2_direct(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
 // out-of-range index is unanalyzable and therefore never deleted.
 // Forward declarations: the loc/arg slot helpers live in the P2
 // section below (they are shared with the v1 lattice passes).
-static bool is_loc_read(uint8_t op);
+static bool is_loc_read(uint16_t op);
 static int32_t loc_index(const Insn& in);
-static bool is_loc_write(uint8_t op);
+static bool is_loc_write(uint16_t op);
 
 // Value producers that may be deleted along with the store they feed:
 // side-effect-free pure pushes only (small ints, cpool consts, atoms,
@@ -2023,7 +2041,7 @@ static bool is_loc_write(uint8_t op);
 // the frame's this slot) and any op that reads the stack or a slot
 // (dup, get_loc, ...) — deleting such a producer would change the
 // stack contents the surrounding code depends on.
-static bool p16_is_pure_push(uint8_t op) {
+static bool p16_is_pure_push(uint16_t op) {
     return is_small_int_push(op) || op == OP_push_const ||
            op == OP_push_const8 || op == OP_push_atom_value ||
            op == OP_undefined || op == OP_null || op == OP_push_false ||
@@ -2036,9 +2054,10 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                           RewriteStats* stats) {
     const size_t n = insns->size();
     if (n == 0 || var_count == 0) return false;
+    const std::vector<uint8_t> targets = compute_targets(*insns);
 
     for (size_t i = 0; i < n; i++) {
-        uint8_t op = (*insns)[i].op;
+        uint16_t op = (*insns)[i].op;
         // The with_* ops are already inside is_slot_alias_barrier; the
         // tier-2b plan's OP_with_jump does not exist in this VM (the
         // with statement compiles to the with_get_var/... family).
@@ -2097,7 +2116,7 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     for (size_t b = 0; b < nb; b++) {
         size_t t = last_live_in(b);
         if (t != n) {
-            uint8_t op = (*insns)[t].op;
+            uint16_t op = (*insns)[t].op;
             switch (op) {
             case OP_return: case OP_return_undef: case OP_return_async:
             case OP_throw: case OP_throw_error: case OP_ret:
@@ -2137,7 +2156,7 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
         for (size_t i = bstart[b]; i < t; i++) {
             if ((*dead)[i]) continue;
             const Insn& in = (*insns)[i];
-            uint8_t op = in.op;
+            uint16_t op = in.op;
             if ((op == OP_if_true || op == OP_if_false ||
                  op == OP_if_true8 || op == OP_if_false8 ||
                  op == OP_catch || op == OP_gosub) &&
@@ -2182,7 +2201,7 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
             i--;
             if ((*dead)[i]) continue;
             const Insn& in = (*insns)[i];
-            uint8_t op = in.op;
+            uint16_t op = in.op;
             if (i < last &&
                 (op == OP_if_true || op == OP_if_false ||
                  op == OP_if_true8 || op == OP_if_false8 ||
@@ -2280,7 +2299,7 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
                 i--;
                 if ((*dead)[i]) continue;
                 const Insn& in = (*insns)[i];
-                uint8_t op = in.op;
+                uint16_t op = in.op;
                 if (i < last &&
                     (op == OP_if_true || op == OP_if_false ||
                      op == OP_if_true8 || op == OP_if_false8 ||
@@ -2351,7 +2370,13 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
             prev--;
             if (!(*dead)[prev]) break;
         }
-        if (prev < d.insn && p16_is_pure_push((*insns)[prev].op)) {
+        // A branch may land directly on the store with its value already on
+        // the stack. Deleting that target (or its fallthrough producer) and
+        // redirecting the branch past the pair would leave the incoming value
+        // unconsumed and change the join height. P11 applies the same target
+        // gate to its stack-neutral pairs.
+        if (!targets[d.insn] && prev < d.insn && !targets[prev] &&
+            p16_is_pure_push((*insns)[prev].op)) {
             (*dead)[prev] = 1;
             (*dead)[d.insn] = 1;
             stats->folds_p16 += 2;
@@ -2375,28 +2400,33 @@ void apply_reshrink(std::vector<Insn>* insns, RewriteStats* stats) {
             in.op = shortest_push_op(in.imm);
             break;
         case OP_push_const:
-            if (in.aux <= 255) in.op = OP_push_const8;
+            if (in.aux <= 255)
+                in.op = static_cast<uint16_t>(OP_push_const8);
             break;
         case OP_fclosure:
-            if (in.aux <= 255) in.op = OP_fclosure8;
+            if (in.aux <= 255)
+                in.op = static_cast<uint16_t>(OP_fclosure8);
             break;
         case OP_get_loc:
             if (in.aux <= 3) in.op = static_cast<uint16_t>(OP_get_loc0 + in.aux);
-            else if (in.aux <= 255) in.op = OP_get_loc8;
+            else if (in.aux <= 255)
+                in.op = static_cast<uint16_t>(OP_get_loc8);
             break;
         case OP_get_loc8:
             if (in.aux <= 3) in.op = static_cast<uint16_t>(OP_get_loc0 + in.aux);
             break;
         case OP_put_loc:
             if (in.aux <= 3) in.op = static_cast<uint16_t>(OP_put_loc0 + in.aux);
-            else if (in.aux <= 255) in.op = OP_put_loc8;
+            else if (in.aux <= 255)
+                in.op = static_cast<uint16_t>(OP_put_loc8);
             break;
         case OP_put_loc8:
             if (in.aux <= 3) in.op = static_cast<uint16_t>(OP_put_loc0 + in.aux);
             break;
         case OP_set_loc:
             if (in.aux <= 3) in.op = static_cast<uint16_t>(OP_set_loc0 + in.aux);
-            else if (in.aux <= 255) in.op = OP_set_loc8;
+            else if (in.aux <= 255)
+                in.op = static_cast<uint16_t>(OP_set_loc8);
             break;
         case OP_set_loc8:
             if (in.aux <= 3) in.op = static_cast<uint16_t>(OP_set_loc0 + in.aux);
@@ -2437,7 +2467,7 @@ void apply_reshrink(std::vector<Insn>* insns, RewriteStats* stats) {
             // low bytes of the original immediate — exactly the value
             // of a shrunk form (range checks above guarantee the value
             // fits), so a size that matches the new opcode is required.
-            in.old_size = static_cast<uint16_t>(short_opcode_info(in.op).size);
+            in.old_size = short_opcode_info(in.op).size;
             stats->shrinks++;
         }
     }
@@ -2486,7 +2516,7 @@ static bool p2_set(const P2Val& v, P2Val* out) {
     return true;
 }
 
-static bool is_loc_read(uint8_t op) {
+static bool is_loc_read(uint16_t op) {
     return op == OP_get_loc || op == OP_get_loc_check ||
            op == OP_get_loc8 ||
            (op >= OP_get_loc0 && op <= OP_get_loc3) ||
@@ -2505,7 +2535,7 @@ static bool is_loc_read(uint8_t op) {
 // (the decoder keeps the two operand spaces separate), and the P2
 // lattice must not alias slots.
 static int32_t loc_index(const Insn& in) {
-    const uint8_t op = in.op;
+    const uint16_t op = in.op;
     if (op >= OP_get_loc0 && op <= OP_get_loc3) return op - OP_get_loc0;
     if (op >= OP_put_loc0 && op <= OP_put_loc3) return op - OP_put_loc0;
     if (op >= OP_set_loc0 && op <= OP_set_loc3) return op - OP_set_loc0;
@@ -2515,7 +2545,7 @@ static int32_t loc_index(const Insn& in) {
     if (op == OP_get_arg || op == OP_put_arg || op == OP_set_arg) return -1;
     return static_cast<int32_t>(in.aux);
 }
-static bool is_loc_write(uint8_t op) {
+static bool is_loc_write(uint16_t op) {
     return op == OP_put_loc || op == OP_put_loc_check ||
            op == OP_put_loc_check_init || op == OP_put_loc8 ||
            op == OP_set_loc || op == OP_set_loc8 ||
@@ -2541,7 +2571,7 @@ static bool is_loc_write(uint8_t op) {
 // operands: unknown values may be objects whose ToPrimitive/ToNumber
 // runs user code; provably primitive operands (numbers, bools, null,
 // undefined, strings, symbols) convert without it.
-static bool p2_op_barrier(uint8_t op, int32_t imm, const P2Val& top,
+static bool p2_op_barrier(uint16_t op, int32_t imm, const P2Val& top,
                           const P2Val& prev, const std::vector<P2Val>& vals,
                           uint32_t var_count) {
     switch (op) {
@@ -2623,7 +2653,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
 
     // Gate: dynamic scope can re-bind any local name.
     for (size_t i = 0; i < n; i++) {
-        uint8_t op = (*insns)[i].op;
+        uint16_t op = (*insns)[i].op;
         if (is_with_jump(op) || op == OP_eval || op == OP_apply_eval) {
             return false;
         }
@@ -2718,7 +2748,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
             if ((*dead)[i]) continue;
             last = i;
             const Insn& in = (*insns)[i];
-            uint8_t op = in.op;
+            uint16_t op = in.op;
             if (is_loc_read(op)) {
                 int32_t s = loc_index(in);
                 P2Val v = (s >= 0 && static_cast<size_t>(s) < var_count)
@@ -2896,9 +2926,12 @@ bool apply_crossbb(std::vector<Insn>* insns,
         if (v.kind == K_UNKNOWN) continue;
         Insn& in = (*insns)[i];
         switch (v.kind) {
-        case K_NULL: in.op = OP_null; break;
-        case K_UNDEF: in.op = OP_undefined; break;
-        case K_BOOL: in.op = v.imm ? OP_push_true : OP_push_false; break;
+        case K_NULL: in.op = static_cast<uint16_t>(OP_null); break;
+        case K_UNDEF: in.op = static_cast<uint16_t>(OP_undefined); break;
+        case K_BOOL:
+            in.op = static_cast<uint16_t>(v.imm ? OP_push_true
+                                                : OP_push_false);
+            break;
         case K_INT: in.op = shortest_push_op(v.imm); in.imm = v.imm; break;
         default: continue;
         }
@@ -2953,7 +2986,7 @@ void compact_insns(std::vector<Insn>* insns, const std::vector<uint8_t>& dead) {
 // Minimal encoded size of a jump opcode; distances are evaluated at
 // emission time. Catch/gosub have no short forms; the with_* family
 // is a fixed 10-byte form (atom u32 + label u32 + u8 flag).
-static int jump_form(uint8_t op) {
+static int jump_form(uint16_t op) {
     switch (op) {
     case OP_if_false8:
     case OP_if_true8:
@@ -2981,18 +3014,19 @@ static int jump_form(uint8_t op) {
 bool fit_jump_form(uint16_t* op, int64_t dist) {
     if (*op == OP_if_false || *op == OP_if_true) {
         if (dist >= -128 && dist <= 127) {
-            *op = (*op == OP_if_false) ? OP_if_false8 : OP_if_true8;
+            *op = static_cast<uint16_t>(
+                (*op == OP_if_false) ? OP_if_false8 : OP_if_true8);
             return true;
         }
         return false;
     }
     if (*op == OP_goto) {
         if (dist >= -128 && dist <= 127) {
-            *op = OP_goto8;
+            *op = static_cast<uint16_t>(OP_goto8);
             return true;
         }
         if (dist >= -32768 && dist <= 32767) {
-            *op = OP_goto16;
+            *op = static_cast<uint16_t>(OP_goto16);
             return true;
         }
         return false;
@@ -3000,24 +3034,25 @@ bool fit_jump_form(uint16_t* op, int64_t dist) {
     if (*op == OP_goto8) {
         if (dist >= -128 && dist <= 127) return false;
         if (dist >= -32768 && dist <= 32767) {
-            *op = OP_goto16;
+            *op = static_cast<uint16_t>(OP_goto16);
             return true;
         }
-        *op = OP_goto;
+        *op = static_cast<uint16_t>(OP_goto);
         return true;
     }
     if (*op == OP_goto16) {
         if (dist >= -128 && dist <= 127) {
-            *op = OP_goto8;
+            *op = static_cast<uint16_t>(OP_goto8);
             return true;
         }
         if (dist >= -32768 && dist <= 32767) return false;
-        *op = OP_goto;
+        *op = static_cast<uint16_t>(OP_goto);
         return true;
     }
     if (*op == OP_if_false8 || *op == OP_if_true8) {
         if (dist >= -128 && dist <= 127) return false;
-        *op = (*op == OP_if_false8) ? OP_if_false : OP_if_true;
+        *op = static_cast<uint16_t>(
+            (*op == OP_if_false8) ? OP_if_false : OP_if_true);
         return true;
     }
     return false;  // catch/gosub: fixed size
@@ -3239,8 +3274,13 @@ bool verify_code(const uint8_t* code,
         return false;
     }
     std::vector<int32_t> heights(insns.size(), -1);
+    // Active exception-handler instruction for each explored program point.
+    // QuickJS's compute_stack_size verifies both stack height and this catch
+    // state: equal-height paths with different handlers are not equivalent.
+    std::vector<int32_t> catch_positions(insns.size(), -2);
     std::vector<size_t> worklist;
-    auto seed = [&](size_t idx, int32_t h) -> bool {
+    int32_t max_h = 0;
+    auto seed = [&](size_t idx, int32_t h, int32_t catch_pos) -> bool {
         if (idx >= insns.size()) {
             *error = "bytecode optimize: control flow falls off the code "
                      "blob";
@@ -3249,22 +3289,35 @@ bool verify_code(const uint8_t* code,
         if (heights[idx] != -1) {
             if (heights[idx] != h) {
                 *error = "bytecode optimize: inconsistent stack height at "
-                         "instruction " + std::to_string(idx);
+                         "instruction " + std::to_string(idx) + " (pc " +
+                         std::to_string(insns[idx].old_off) + ", op " +
+                         short_opcode_info(insns[idx].op).name +
+                         ", existing " + std::to_string(heights[idx]) +
+                         ", incoming " + std::to_string(h) + ")";
+                return false;
+            }
+            if (catch_positions[idx] != catch_pos) {
+                *error = "bytecode optimize: inconsistent catch position at "
+                         "instruction " + std::to_string(idx) + " (existing " +
+                         std::to_string(catch_positions[idx]) + ", incoming " +
+                         std::to_string(catch_pos) + ")";
                 return false;
             }
             return true;
         }
         heights[idx] = h;
+        catch_positions[idx] = catch_pos;
+        if (h > max_h) max_h = h;
         worklist.push_back(idx);
         return true;
     };
-    if (!seed(0, 0)) return false;
-    int32_t max_h = 0;
+    if (!seed(0, 0, -1)) return false;
     while (!worklist.empty()) {
         size_t idx = worklist.back();
         worklist.pop_back();
         const Insn& in = insns[idx];
         int32_t h = heights[idx];
+        int32_t catch_pos = catch_positions[idx];
         int32_t n_pop;
         int32_t n_push;
         if (in.op == OP_ext) {
@@ -3296,52 +3349,90 @@ bool verify_code(const uint8_t* code,
         }
         int32_t post = h - n_pop + n_push;
         if (post > max_h) max_h = post;
+        bool falls_through = true;
         switch (in.op) {
         case OP_tail_call: case OP_tail_call_method:
         case OP_return: case OP_return_undef: case OP_return_async:
         case OP_throw: case OP_throw_error: case OP_ret:
-            break;  // terminators: no fallthrough
+            falls_through = false;
+            break;
         case OP_goto: case OP_goto8: case OP_goto16:
-            if (!seed(static_cast<size_t>(in.target), post)) return false;
+            if (!seed(static_cast<size_t>(in.target), post, catch_pos))
+                return false;
+            falls_through = false;
             break;
         case OP_if_true: case OP_if_false:
         case OP_if_true8: case OP_if_false8:
-            if (!seed(static_cast<size_t>(in.target), post)) return false;
-            if (!seed(idx + 1, post)) return false;
+            if (!seed(static_cast<size_t>(in.target), post, catch_pos))
+                return false;
             break;
         case OP_catch:
-            // Both the handler edge (exception pushed) and the normal
-            // path carry the post-catch height (catch pushes the
-            // handler offset value).
-            if (!seed(static_cast<size_t>(in.target), post)) return false;
-            if (!seed(idx + 1, post)) return false;
+            // The handler target belongs to the previous catch context; the
+            // protected fallthrough path records this catch instruction as
+            // its active handler.
+            if (!seed(static_cast<size_t>(in.target), post, catch_pos))
+                return false;
+            catch_pos = static_cast<int32_t>(idx);
             break;
         case OP_gosub:
             // The finally entry sees the return-address slot (+1); the
             // return point is seeded via the fallthrough edge (ret
             // pops the slot, so the heights line up).
-            if (!seed(static_cast<size_t>(in.target), post + 1)) return false;
-            if (!seed(idx + 1, post)) return false;
+            if (!seed(static_cast<size_t>(in.target), post + 1, catch_pos))
+                return false;
             break;
         case OP_with_get_var:
         case OP_with_delete_var:
-            if (!seed(static_cast<size_t>(in.target), post + 1)) return false;
-            if (!seed(idx + 1, post)) return false;
+            if (!seed(static_cast<size_t>(in.target), post + 1, catch_pos))
+                return false;
             break;
         case OP_with_make_ref:
         case OP_with_get_ref:
         case OP_with_get_ref_undef:
-            if (!seed(static_cast<size_t>(in.target), post + 2)) return false;
-            if (!seed(idx + 1, post)) return false;
+            if (!seed(static_cast<size_t>(in.target), post + 2, catch_pos))
+                return false;
             break;
         case OP_with_put_var:
-            if (!seed(static_cast<size_t>(in.target), post - 1)) return false;
-            if (!seed(idx + 1, post)) return false;
+            if (!seed(static_cast<size_t>(in.target), post - 1, catch_pos))
+                return false;
             break;
-        default:
-            if (!seed(idx + 1, post)) return false;
+        case OP_for_of_start:
+        case OP_for_await_of_start:
+            catch_pos = static_cast<int32_t>(idx);
+            break;
+        case OP_drop:
+        case OP_nip:
+        case OP_nip1:
+        case OP_iterator_close: {
+            int32_t catch_level = post;
+            if (in.op == OP_nip || in.op == OP_nip1) catch_level--;
+            if (in.op == OP_iterator_close) catch_level += 2;
+            if (catch_pos >= 0) {
+                int32_t level = heights[static_cast<size_t>(catch_pos)];
+                if (insns[static_cast<size_t>(catch_pos)].op != OP_catch)
+                    level++;
+                if (catch_level == level) {
+                    catch_pos = catch_positions[
+                        static_cast<size_t>(catch_pos)];
+                }
+            }
             break;
         }
+        case OP_nip_catch:
+            if (catch_pos < 0) {
+                *error = "bytecode optimize: nip_catch without active catch "
+                         "at instruction " + std::to_string(idx);
+                return false;
+            }
+            post = heights[static_cast<size_t>(catch_pos)];
+            if (insns[static_cast<size_t>(catch_pos)].op != OP_catch) post++;
+            post++;
+            catch_pos = catch_positions[static_cast<size_t>(catch_pos)];
+            break;
+        default:
+            break;
+        }
+        if (falls_through && !seed(idx + 1, post, catch_pos)) return false;
     }
     if (static_cast<uint32_t>(max_h) > recorded_stack_size) {
         *error = "bytecode optimize: max stack height exceeds the recorded "
@@ -3584,7 +3675,7 @@ static bool ext34_fuse(std::vector<Insn>* insns,
         uint32_t need = total == 3 ? kPassExtFuse4 : kPassExtFuse34;
         if (!blocked && (passes & need)) {
             Insn ext = (*insns)[i];
-            ext.op = OP_ext;
+            ext.op = static_cast<uint16_t>(OP_ext);
             ext.target = -1;
             if (total == 3) {
                 ext.old_size = 5;
@@ -3636,7 +3727,11 @@ bool rewrite_function(const FuncRecord& f,
     *changed = false;
     // The original must verify: fail closed on anything quickjs's own
     // stack checker would reject (format drift or a parse bug).
-    if (!verify_code(code, f.code_len, f.stack_size, error)) return false;
+    if (!verify_code(code, f.code_len, f.stack_size, error)) {
+        *error += " in function declared at line " +
+                  std::to_string(f.dbg_line);
+        return false;
+    }
 
     std::vector<Insn> insns;
     if (!decode_code(code, f.code_len, &insns, error)) return false;
@@ -3978,7 +4073,7 @@ static uint8_t stack_meet(uint8_t a, uint8_t b) {
 // are not part of the explicit CFG.
 static bool tier3_has_unmodeled_cfg(const std::vector<Insn>& insns) {
     for (size_t i = 0; i < insns.size(); i++) {
-        uint8_t op = insns[i].op;
+        uint16_t op = insns[i].op;
         if (is_with_jump(op) || op == OP_eval || op == OP_apply_eval ||
             op == OP_catch || op == OP_gosub || op == OP_ret ||
             op == OP_nip_catch) {
@@ -3991,7 +4086,7 @@ static bool tier3_has_unmodeled_cfg(const std::vector<Insn>& insns) {
 // True for ops that transfer control without a fall-through: the block
 // ends there, and the next block is entered only via the op's own target
 // (for goto) or not at all (return/throw). Same set as the leader rule.
-static bool tier3_is_terminator(uint8_t op) {
+static bool tier3_is_terminator(uint16_t op) {
     switch (op) {
     case OP_goto: case OP_goto8: case OP_goto16:
     case OP_return: case OP_return_undef: case OP_return_async:
@@ -4173,7 +4268,7 @@ static void tier3_slotinit(const std::vector<Insn>& insns,
                      std::vector<std::pair<size_t, std::vector<uint8_t>>>* edges) {
         for (size_t i = bstart[b]; i < bend[b]; i++) {
             const Insn& in = insns[i];
-            uint8_t op = in.op;
+            uint16_t op = in.op;
             if (op == OP_set_loc_uninitialized) {
                 int32_t s = loc_index(in);
                 if (s >= 0 && static_cast<size_t>(s) < var_count) {
@@ -4356,7 +4451,7 @@ static CapInfo cap_compute(const uint8_t* data, FuncRecord* f) {
     std::string err;
     if (decode_code(data + f->code_off, f->code_len, &insns, &err)) {
         for (size_t i = 0; i < insns.size(); i++) {
-            uint8_t op = insns[i].op;
+            uint16_t op = insns[i].op;
             if (op == OP_put_var_ref || op == OP_set_var_ref ||
                 op == OP_put_var_ref_check || op == OP_put_var_ref_check_init) {
                 if (insns[i].aux < info.obj_writes.size()) {
@@ -4430,7 +4525,8 @@ static bool tier3_apply_lane1(std::vector<Insn>* insns,
         if (!s.reducible) continue;
         Insn& in = (*insns)[s.idx];
         if (in.op != s.op) continue;  // safety: index/op agreement
-        in.op = (s.op == OP_get_loc_check) ? OP_get_loc : OP_put_loc;
+        in.op = static_cast<uint16_t>(
+            (s.op == OP_get_loc_check) ? OP_get_loc : OP_put_loc);
         changed = true;
         stats->tdz_checks_removed++;
     }
@@ -4546,7 +4642,7 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
         uint8_t top = SC_UNKNOWN;
         for (size_t i = bstart[b]; i < bend[b]; i++) {
             const Insn& in = insns[i];
-            uint8_t op = in.op;
+            uint16_t op = in.op;
             if (is_small_int_push(op)) {
                 p2 = prev;
                 prev = top;
@@ -4722,7 +4818,7 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
                     uint8_t s_p2 = p2;       // the slot under the base
                     int s_dep = 2;
                     for (size_t j = i + 1; j < n && j < i + 8; j++) {
-                        uint8_t nop = insns[j].op;
+                        uint16_t nop = insns[j].op;
                         if (insns[j].target >= 0 || tier3_is_terminator(nop))
                             break;  // consumer may not run / not reached
                         if (nop == OP_get_array_el || nop == OP_get_array_el2) {

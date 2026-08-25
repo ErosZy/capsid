@@ -17,6 +17,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
+EXPECTED_TXIKI_PATCH_COUNT = 46
 REQUIRED_AUDIT_TESTS = {
     "txiki_vendor_patch_integrity",
     "txiki_overlay_audit_negative_controls",
@@ -110,8 +111,11 @@ def vendor_evidence(root: Path, build: Path) -> dict[str, Any]:
     patches = sorted((root / "patches/txiki").glob("*.patch"))
     # Keep in sync with cmake/AuditTxikiVendor.cmake, which applies the
     # same directory in order and freezes the count in its header comment.
-    if len(patches) != 36:
-        raise RuntimeError(f"expected 36 patches, found {len(patches)}")
+    if len(patches) != EXPECTED_TXIKI_PATCH_COUNT:
+        raise RuntimeError(
+            f"expected {EXPECTED_TXIKI_PATCH_COUNT} patches, "
+            f"found {len(patches)}"
+        )
     # Mirror the build's own application semantics (PrepareTxiki.cmake):
     # the patch series is sequential — later patches depend on earlier
     # ones' edits — and applied with patch -p1 --forward --batch on a
