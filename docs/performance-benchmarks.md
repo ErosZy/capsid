@@ -1,6 +1,6 @@
 # Performance: Evidence Rules and Current State
 
-This document is the single maintained document for performance topics; it keeps the evidence rules, the current (2026-08-20) release-level samples, and the 2026-08-25 QuickJS specialization review. The `v0.2.0` stable release adopts the final-RC runs as its published performance baseline. Measurements retain their `v0.2.0-rc.07` labels because that is the exact binary identity used to collect them; the stable release changes only documentation and release metadata. Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, and the superseded 2026-08-18 runs) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
+This document is the single maintained document for performance topics; it keeps the evidence rules, the current (2026-08-20) release-level samples, the 2026-08-25 QuickJS specialization review, and the 2026-08-25 clean retained-optimizer validation. The `v0.2.0` stable release adopts the final-RC runs as its published performance baseline. Measurements retain their `v0.2.0-rc.07` labels because that is the exact binary identity used to collect them; the stable release changes only documentation and release metadata. Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, and the superseded 2026-08-18 runs) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
 
 ## 1. Evidence Rules
 
@@ -126,6 +126,80 @@ capsid **worker** (3,711 samples): 21.18% `JS_CallInternal` (QuickJS entry into 
 
 Across all 12 cells, geometric-mean QPS moved from the retired 2026-08-18 AMD checkpoint to this run by +1.40% for capsid, +3.98% for PHP, +1.22% for Flask, and +0.06% for FastAPI. Because every stack and the clean-run setup moved together, this supports **no observed capsid throughput regression**; it is not evidence that a specific capsid change caused an improvement.
 
+### Retained-set source-service checkpoint (2026-08-25)
+
+After rebooting WSL into an otherwise idle environment, commit `cfeae0b` was
+built Release + LTO with opcode profiling, field IC, and ext34 all compiled
+OFF. The same four-stack protocol then completed 144/144 correctness checks
+with zero errors or timeouts. The clean main run is
+`bench/results/four-qps-current-clean-20260825T161800/` (349 checksum entries;
+checksum-list SHA-256 `67ffb510…`), the four-cell repeat is
+`bench/results/four-qps-current-clean-focused-20260825T164700/`
+(`94272dee…`), and the profile is
+`bench/results/four-qps-current-clean-profile-20260825T164600/`
+(`c134cda4…`). The negative control returned 1,402 HTTP 404 responses and the
+verifier rejected all 1,402, recording zero successful QPS.
+
+The main-run median QPS values were:
+
+| workload | capsid + hono | PHP + Slim | Flask + Gunicorn | FastAPI + Uvicorn |
+|---|---:|---:|---:|---:|
+| json 1k | **7042** | 1872 | 5068 | 6260 |
+| matrix-json-4k | **5601** | 1746 | 4663 | 5504 |
+| json 16k | 5070 | 1731 | 4730 | **5520** |
+| json 32k | 4077 | 1573 | 4011 | **4617** |
+| bytes 1k | 5168 | 1839 | 4985 | **5954** |
+| matrix-bytes-4k | 4714 | 1705 | 4704 | **5665** |
+| bytes 16k | 4214 | 1670 | 4596 | **5401** |
+| bytes 32k | 3273 | 1579 | 4071 | **4667** |
+| stream 1k | **4753** | 1749 | 4608 | 2160 |
+| matrix-stream-4k | 4728 | 1748 | **4861** | 3042 |
+| stream 16k | **3830** | 1676 | 3743 | 2131 |
+| stream 32k | 3218 | 1574 | **4180** | 2081 |
+
+This is a cross-time checkpoint, not a same-session old/new A/B. The three
+external stacks quantify common machine drift; the last column below divides
+the capsid ratio by the geometric mean of those three ratios:
+
+| workload | capsid vs 2026-08-20 | external-stack drift | drift-adjusted capsid |
+|---|---:|---:|---:|
+| json 1k | -3.01% | -1.22% | -1.81% |
+| matrix-json-4k | +2.23% | -0.22% | +2.45% |
+| json 16k | -1.39% | +0.41% | -1.80% |
+| json 32k | -4.86% | -3.25% | -1.67% |
+| bytes 1k | -3.27% | -3.26% | -0.01% |
+| matrix-bytes-4k | -4.89% | -3.48% | -1.46% |
+| bytes 16k | -4.91% | -3.23% | -1.74% |
+| bytes 32k | -7.02% | -3.17% | -3.98% |
+| stream 1k | -1.90% | -2.80% | +0.92% |
+| matrix-stream-4k | -2.13% | -0.37% | -1.77% |
+| stream 16k | -3.30% | +0.01% | -3.31% |
+| stream 32k | -1.52% | +0.16% | -1.67% |
+| 12-cell geometric mean | **-3.02%** | **-1.71%** | **-1.33%** |
+
+The per-stack geometric-mean changes were capsid -3.02%, PHP -1.64%, Flask
+-1.27%, and FastAPI -2.22%. A focused repeat did not reproduce a
+capsid-specific large-payload loss: when JSON/bytes 32k slowed again, all four
+stacks slowed by 10-18%; stream 4k returned to 4,697 QPS with 1.1% CV, and
+stream 16k returned to 3,905 QPS with 1.3% CV. Therefore the cross-time center
+does **not** establish either an HTTP throughput win or a product regression.
+It is a passed safety screen with a small unresolved cross-time center.
+
+This source-bundle matrix also does not execute BC26's trusted-bytecode AOT
+pipeline, so it cannot attribute its QPS to that optimizer. Its value here is
+the product-level source/runtime, resource, and correctness gate. The direct
+raw-bytecode versus optimized-bytecode evidence remains the AOT attribution.
+
+Resources stayed flat: capsid host PSS was 6.2 MB and each worker 6.4 MB
+(about 19.0 MB total), versus 5.9/6.4 MB (18.7 MB total) in the release run.
+There is no accumulating IC sidecar state. The current profile captured 831
+host and 3,694 worker samples with zero lost samples and 163,203 validated
+responses. Host leaders were `memcpy` 7.22%, allocator 6.02%, and `get_meta`
+3.01%. Worker leaders remained `JS_CallInternal` 20.36%,
+`malloc_usable_size` 10.42%, malloc 6.74%, regexp backtracking 5.44%, and
+`JS_GetPropertyInternal` 3.68%. The profile explains why dispatch-focused VM
+wins do not pass through proportionally to source-Hono request QPS.
+
 ## 4. Cold-Start Comparison (2026-08-20, median ms, 5 rounds)
 
 Measurement class 4 (process creation, handshake, validation, loading, READY, and first response). Fixture is real-shaped JS source (three template rotations: loop + object-literal function, class, arrow/map/filter/sort chain), at 10k/100k/1M sizes; each side loads the same function body byte-aligned, differing only in entry point. capsid uses C ABI spawn→load (source/trusted bytecode)→READY→first response (bodyless IPC request); Node/Deno use process start→stdout READY→curl first request. Each cell drops 1 warmup round and takes the median of 5 rounds. Capsid was rebuilt from `v0.2.0-rc.07` / `17206e4`; raw data and 20 manifest checksum entries are in `bench/results/cold-start-rc07-clean-20260820T173500/`.
@@ -142,6 +216,23 @@ READY times (same samples): capsid source 8.00/17.85/133.71, bytecode 6.91/9.27/
 - **Trusted bytecode pays off as compile cost grows**: at 1M, bytecode at 35.89 ms is 3.74× faster than capsid source, 3.76× faster than Node, and 31% faster than Deno. Node's ~108 ms small-bundle floor is process + V8 bootstrap; Deno's ~39 ms floor is smaller, but capsid bytecode beats it at every measured size.
 - **At 1M source capsid and Node are effectively tied in these medians** (134.09 vs 135 ms), while Deno remains faster at 52 ms. Trusted bytecode erases that source-compilation gap.
 - Semantic note: capsid first response goes through in-process IPC, while Node/Deno use local HTTP curl; "first request completes after ready" is aligned, but the request path implementation differs, so this is not an isomorphic comparison.
+
+### Retained-set cold-start checkpoint (2026-08-25)
+
+The same clean `cfeae0b` build repeated the five-round protocol. Raw evidence
+is in `bench/results/cold-start-current-clean-20260825T164500/` (20 checksum
+entries; checksum-list SHA-256 `1de6b30c…`).
+
+| Size | capsid source | capsid bytecode | Node source | Deno source |
+|---:|---:|---:|---:|---:|
+| 10k | 8.43 ms (+1.08%) | 7.45 ms (+2.19%) | 110 ms (+1.85%) | 39 ms (0%) |
+| 100k | 18.35 ms (+0.60%) | 9.58 ms (-1.03%) | 109 ms (+0.93%) | 39 ms (0%) |
+| 1M | 133.63 ms (-0.34%) | 36.23 ms (+0.95%) | 137 ms (+1.48%) | 52 ms (0%) |
+
+Parentheses are latency change versus the 2026-08-20 release baseline, so
+positive is slower. All capsid cells stayed within +/-2.2%; there is no
+observed cold-start regression. At 1M, trusted bytecode remains 3.69x faster
+than capsid source and 1.44x faster than Deno source.
 
 ## 5. Bytecode AOT Optimizer (final BC26 configuration)
 
@@ -194,6 +285,66 @@ cases, and byte-for-byte determinism. P14 also demonstrated why instruction
 count is not a cost model: removing a small number of expensive `get_field`
 operations produced more wall-clock benefit than removing the same number of
 cheap dispatches.
+
+### Clean retained-set execution validation (2026-08-25)
+
+The clean post-reboot run used the shipped BC26 `kPassAll` configuration and
+compared optimized bytecode directly with raw bytecode. One warmup was dropped
+and five measured executions were retained per mode. Evidence is in
+`bench/results/exec-throughput-current-clean-20260825T164400/` (172 artifact
+checksums after excluding the checksum file itself; checksum-list SHA-256
+`4b0c21b8…`).
+
+| fixture | raw median | optimized median | optimized vs raw |
+|---|---:|---:|---:|
+| arith-rt | 172.659 ms | 13.659 ms | **+92.09%** |
+| cascade-rt | 68.192 ms | 37.246 ms | **+45.38%** |
+| matrix-rt | 7.639 ms | 7.396 ms | +3.18% |
+| sieve-rt | 49.625 ms | 48.650 ms | +1.96% |
+| string-rt | 2.016 ms | 2.028 ms | -0.60% |
+| fib-rt | 50.246 ms | 50.192 ms | +0.11% |
+| json-rt | 4.118 ms | 4.028 ms | +2.19% |
+| prop-loop-rt | 94.985 ms | 79.122 ms | **+16.70%** |
+| prop-hoist-rt | 13.012 ms | 9.965 ms | **+23.42%** |
+| copy-chain-rt | 14.857 ms | 11.952 ms | **+19.55%** |
+| branch-const-rt | 13.491 ms | 13.429 ms | +0.46% |
+| cse-loop-rt | 19.149 ms | 18.571 ms | +3.02% |
+| licm-rt | 8.157 ms | 8.304 ms | -1.80% |
+
+Eleven of thirteen centers are positive. The equal-fixture geometric-mean
+speedup is +25.89%, and summing fixture medians gives +41.23%; both aggregate
+numbers are synthetic-suite scores dominated by arith/cascade and must not be
+reported as request-throughput improvement. The two negatives are 12 us and
+147 us absolute differences on short fixtures; the pre-reboot string result
+was -6.61% and fell to -0.60% after reboot, confirming substantial environment
+noise at this scale.
+
+The more representative cumulative gate enabled **all retained items**: BC26
+`kPassAll` plus the mixed-number `mul` fast path, compared directly with the
+patchless/add-loc control. Eight Kraken/Octane programs used seven balanced
+pairs each. Evidence is in
+`bench/results/all-effective-cumulative-20260825/` (67 artifact checksums;
+checksum-list SHA-256 `81764e13…`; summary SHA-256 `35d1840c…`). Positive means
+the complete retained candidate is faster:
+
+| program | gain, paired 95% CI | positive pairs |
+|---|---:|---:|
+| Kraken Beat Detection | +1.23% [-2.98%, +5.62%] | 4/7 |
+| Kraken DFT | -0.63% [-8.16%, +7.53%] | 3/7 |
+| Kraken FFT | **+2.61% [+0.40%, +4.87%]** | 5/7 |
+| Kraken Oscillator | **+4.17% [+2.03%, +6.36%]** | 7/7 |
+| Kraken Darkroom | **+6.78% [+5.63%, +7.93%]** | 7/7 |
+| Octane Box2D | **+1.33% [+0.59%, +2.08%]** | 7/7 |
+| Octane Navier-Stokes | **+5.89% [+5.37%, +6.42%]** | 7/7 |
+| Octane Richards | +2.10% [-6.06%, +10.96%] | 4/7 |
+| **equal-weight geometric mean** | **+2.91% [+0.84%, +5.02%]** | 7/8 positive centers |
+
+This is the answer to whether the retained optimizations work together: **yes,
+the combined classic-suite gate is significantly positive and has no
+significant per-program regression.** Kraken's suite center is +2.80% and
+Octane's +3.09%, although their program-dispersion intervals cross zero due to
+the small program count. Keep BC26 plus mixed-number `mul`; keep IC, BC27,
+ext34, and store/reload fusion disabled or removed as recorded below.
 
 ## 6. Runtime Specialization Status (2026-08-24)
 

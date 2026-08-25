@@ -105,6 +105,6 @@ for name in $FIXTURES; do
         >> "$OUT/static.txt"
 done
 
-find "$OUT" -maxdepth 1 -type f -print0 | sort -z | \
+find "$OUT" -maxdepth 1 -type f ! -name sha256sums.txt -print0 | sort -z | \
     xargs -0 sha256sum > "$OUT/sha256sums.txt"
 echo "results in $OUT"

@@ -55,8 +55,25 @@ small BC26 rewrites will compound into a large runtime win.
 The cumulative and optimizer-only `summary.json` SHA-256 values are
 `35d1840c19cd2e83749e2011293ae548eb6ee0ab71f9d6b21afcbb48a4cf2545`
 and `182c88d1046978d8083c337a5556d24ac74bb6cbc90d6a788fb3fffde210db21`.
-The local sessions are `/tmp/capsid-all-effective-cumulative-20260825/` and
-`/tmp/capsid-all-effective-optimizer-only-20260825/`.
+The cumulative session is also preserved under
+`bench/results/all-effective-cumulative-20260825/` (67 artifact checksums;
+checksum-list SHA-256 `81764e13e5ca77ba98137f9d9d209dfb0a4a0838293828e533c9157ad5ec9fd7`).
+The original local sessions are `/tmp/capsid-all-effective-cumulative-20260825/`
+and `/tmp/capsid-all-effective-optimizer-only-20260825/`.
+
+A clean post-reboot product validation then rebuilt commit `cfeae0b` Release +
+LTO with profiling, IC, and ext34 compiled OFF. Direct optimized-versus-raw
+bytecode reproduced the large targeted gains (arith +92.09%, cascade +45.38%,
+prop-loop +16.70%, prop-hoist +23.42%, copy-chain +19.55%); 11/13 fixture
+centres were positive. Cold-start stayed within +/-2.2% of the release baseline
+at every source/bytecode size. The source-Hono four-stack safety screen passed
+144/144 correctness checks, with host/worker PSS at 6.2/6.4 MB. Its 12-cell
+capsid geometric-mean QPS was -3.02% cross-time while the three external stacks
+geometrically moved -1.71%; a four-cell repeat showed large shared machine
+drift and did not confirm a capsid-specific regression. Because that matrix
+loads source rather than BC26 trusted bytecode, it is a product safety screen,
+not AOT attribution. Full tables and evidence hashes are maintained in
+`docs/performance-benchmarks.md`.
 
 “Roll back ineffective work” means no IC/ext opcode is emitted or active in
 the default product. It does not mean deleting the entire experimental patch
