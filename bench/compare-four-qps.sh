@@ -43,7 +43,7 @@ echo "targets: capsid=$CAPSID_TARGET php=$PHP_TARGET flask=$PY_TARGET fastapi=$F
 {
     echo "generated_at: $(date --iso-8601=seconds)"
     echo "commit: $(git rev-parse HEAD)"
-    echo "tag: $(git describe --exact-match --tags HEAD)"
+    echo "tag: $(git describe --exact-match --tags HEAD 2>/dev/null || echo untagged)"
     echo "runner_sha256: $(sha256sum bench/compare-four-qps.sh | cut -d' ' -f1)"
     echo "runner_diff_sha256: $(git diff --no-ext-diff --binary -- bench/compare-four-qps.sh | sha256sum | cut -d' ' -f1)"
     echo "sampler_sha256: $(sha256sum bench/sample-resources.py | cut -d' ' -f1)"
