@@ -181,7 +181,7 @@ foreach(info_line IN LISTS CAPSID_SMOKE_INFO_LINES)
 endforeach()
 # CMake's regex engine has no {n} quantifier, so the fixed widths are checked
 # with explicit lengths (40-hex commit, 64-hex sha256 digests).
-if(NOT CAPSID_SMOKE_VERSION STREQUAL "0.2.1")
+if(NOT CAPSID_SMOKE_VERSION STREQUAL "0.2.2")
     message(FATAL_ERROR "build-info version=${CAPSID_SMOKE_VERSION}")
 endif()
 string(LENGTH "${CAPSID_SMOKE_COMMIT}" commit_len)
@@ -235,7 +235,7 @@ execute_process(
         --source "${CAPSID_SMOKE_BUNDLE}"
         --source-name "smoke.mjs"
         --application "package-smoke"
-        --version "0.2.1"
+        --version "0.2.2"
         --key-id "smoke-key"
         --bytecode-out "${CAPSID_WORK_DIR}/smoke.qjsb"
         --attestation-out "${CAPSID_WORK_DIR}/smoke-bytecode.json"

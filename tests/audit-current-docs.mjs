@@ -142,7 +142,7 @@ for (const permissionName of Object.keys(capabilityManifest.permissions)) {
 }
 
 for (const requiredFragment of [
-  "> **Status**: `0.2.1`, ABI v7.",
+  "> **Status**: `0.2.2`, ABI v7.",
   "cmake --install build-release",
   "<capsid/runtime.hpp>",
   "When `egress_policy == NULL`, all egress Fetch requests are denied.",
@@ -175,7 +175,7 @@ for (const [documentName, content] of [
   ["SECURITY.md", securityPolicy],
 ]) {
   assert.ok(
-    content.includes("`0.2.1`"),
+    content.includes("`0.2.2`"),
     `${documentName} does not state the current release status`,
   );
 }

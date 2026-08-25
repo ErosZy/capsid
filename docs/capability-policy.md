@@ -230,7 +230,7 @@ the host ambient environment.
 ```js
 import { system } from "capsid:system";
 
-system.get("runtimeVersion"); // "0.2.1"
+system.get("runtimeVersion"); // "0.2.2"
 system.get("featureFlags");   // frozen compile-time capability object
 ```
 
