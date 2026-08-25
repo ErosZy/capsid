@@ -1,0 +1,386 @@
+{
+  "programs": {
+    "web-tooling-acorn": {
+      "pairs": 3,
+      "gain_pct": 0.37990211508716065,
+      "pair_gains_pct": [
+        0.48485990299413917,
+        0.7942861836624182,
+        -0.1371954512594531
+      ],
+      "positive_pairs": 2,
+      "gain_ci95_pct": [
+        -0.7926500951872306,
+        1.566312962721983
+      ]
+    },
+    "web-tooling-babel": {
+      "pairs": 3,
+      "gain_pct": 0.9245112169200986,
+      "pair_gains_pct": [
+        1.7148747125617758,
+        0.36652763145845757,
+        0.6970149699672579
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        -0.8037785923541207,
+        2.682912915764857
+      ]
+    },
+    "web-tooling-babel-minify": {
+      "pairs": 3,
+      "gain_pct": 1.8221834910407297,
+      "pair_gains_pct": [
+        2.0530597739950585,
+        1.5531413144697748,
+        1.8609741954915604
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        1.1974271316253393,
+        2.450796870537486
+      ]
+    },
+    "web-tooling-babylon": {
+      "pairs": 3,
+      "gain_pct": 1.1851755417933152,
+      "pair_gains_pct": [
+        1.4116195649515495,
+        0.6696637158097207,
+        1.4762318311388745
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        0.07645787832541995,
+        2.3061763623927423
+      ]
+    },
+    "web-tooling-buble": {
+      "pairs": 3,
+      "gain_pct": 1.6078677186813772,
+      "pair_gains_pct": [
+        1.4866895466112862,
+        1.7730543592110015,
+        1.5640751353979576
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        1.2406217607541237,
+        1.9764458453692457
+      ]
+    },
+    "web-tooling-chai": {
+      "pairs": 3,
+      "gain_pct": 1.7512569238724573,
+      "pair_gains_pct": [
+        0.71515930403383,
+        4.179396288484849,
+        0.40207022823475214
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        -3.296969624318191,
+        7.063018039520297
+      ]
+    },
+    "web-tooling-coffeescript": {
+      "pairs": 3,
+      "gain_pct": 0.3101042046933511,
+      "pair_gains_pct": [
+        0.08280571913088508,
+        0.5582799299883145,
+        0.289793434090857
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        -0.28032519218166296,
+        0.9040294700954687
+      ]
+    },
+    "web-tooling-espree": {
+      "pairs": 3,
+      "gain_pct": -0.07680242325445175,
+      "pair_gains_pct": [
+        0.6028549991878851,
+        -1.0733180475144155,
+        0.24788549233563106
+      ],
+      "positive_pairs": 2,
+      "gain_ci95_pct": [
+        -2.2517594339456326,
+        2.1465486861024674
+      ]
+    },
+    "web-tooling-esprima": {
+      "pairs": 3,
+      "gain_pct": 1.141396188690691,
+      "pair_gains_pct": [
+        1.3399595097163708,
+        1.2112021463317246,
+        0.8736007982156568
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        0.5445357839904519,
+        1.7417997232082039
+      ]
+    },
+    "web-tooling-jshint": {
+      "pairs": 3,
+      "gain_pct": 2.0292348382072722,
+      "pair_gains_pct": [
+        1.0863022510981812,
+        1.4645384935943362,
+        3.554099034204361
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        -1.2089553739872305,
+        5.373567017925751
+      ]
+    },
+    "web-tooling-lebab": {
+      "pairs": 3,
+      "gain_pct": 1.2794520724550562,
+      "pair_gains_pct": [
+        0.9023559076055454,
+        1.2804791236759927,
+        1.6569266564912866
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        0.34646631684369655,
+        2.221112397805891
+      ]
+    },
+    "web-tooling-postcss": {
+      "pairs": 3,
+      "gain_pct": 0.14869850702199372,
+      "pair_gains_pct": [
+        0.6787189993233245,
+        0.641533437014008,
+        -0.8663714446922044
+      ],
+      "positive_pairs": 2,
+      "gain_ci95_pct": [
+        -2.0229571448308836,
+        2.3684887844238167
+      ]
+    },
+    "web-tooling-prepack": {
+      "pairs": 3,
+      "gain_pct": 1.6715699741397083,
+      "pair_gains_pct": [
+        2.428145396817283,
+        0.6802587392322312,
+        1.9142604202250224
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        -0.5394555999388095,
+        3.9317470395831444
+      ]
+    },
+    "web-tooling-prettier": {
+      "pairs": 3,
+      "gain_pct": 0.6217844174462028,
+      "pair_gains_pct": [
+        0.8365483021835152,
+        0.45054860741706726,
+        0.578640329950586
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        0.13468522361956836,
+        1.1112530761999473
+      ]
+    },
+    "web-tooling-source-map": {
+      "pairs": 3,
+      "gain_pct": 1.1841106216684771,
+      "pair_gains_pct": [
+        1.177217446375045,
+        0.9143712076364219,
+        1.461483107906103
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        0.5066453965802298,
+        1.8661423023317747
+      ]
+    },
+    "web-tooling-terser": {
+      "pairs": 3,
+      "gain_pct": 2.0278926491138716,
+      "pair_gains_pct": [
+        1.9891936792213238,
+        2.492759351749929,
+        1.603672462406558
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        0.9265607130791276,
+        3.1412425517250986
+      ]
+    },
+    "web-tooling-typescript": {
+      "pairs": 3,
+      "gain_pct": 1.9015969842819613,
+      "pair_gains_pct": [
+        1.7620400951706916,
+        1.9655239637807354,
+        1.9773707468624613
+      ],
+      "positive_pairs": 3,
+      "gain_ci95_pct": [
+        1.6012184784402583,
+        2.2028635429258037
+      ]
+    },
+    "web-tooling-uglify-js": {
+      "pairs": 3,
+      "gain_pct": 0.5775799388625158,
+      "pair_gains_pct": [
+        0.948280841088045,
+        -0.07412595331777183,
+        0.8617877743353652
+      ],
+      "positive_pairs": 2,
+      "gain_ci95_pct": [
+        -0.8233498937251005,
+        1.9982987479252534
+      ]
+    }
+  },
+  "suites": {
+    "web-tooling-0.5.3": {
+      "programs": 18,
+      "equal_weight_geomean_gain_pct": 1.1360272732462429,
+      "program_dispersion_ci95_pct": [
+        0.7976043858398896,
+        1.4755863984770912
+      ]
+    }
+  },
+  "equal_weight_geomean_gain_pct": 1.1360272732462429,
+  "program_dispersion_ci95_pct": [
+    0.7976043858398896,
+    1.4755863984770912
+  ],
+  "requested_programs": 18,
+  "runnable_programs": 18,
+  "complete_programs": 18,
+  "smoke_only": false,
+  "bytecode_identity": [
+    {
+      "program": "web-tooling-acorn",
+      "identical": true,
+      "control_sha256": "db1fdb1b09e7880bf04af32b5a2c80b431743ebe2980f0d58c1beace16689163",
+      "candidate_sha256": "db1fdb1b09e7880bf04af32b5a2c80b431743ebe2980f0d58c1beace16689163"
+    },
+    {
+      "program": "web-tooling-babel",
+      "identical": true,
+      "control_sha256": "71414aab2374fdf690c7e922d0698bd044aa11601f8a6b2af333169838c63181",
+      "candidate_sha256": "71414aab2374fdf690c7e922d0698bd044aa11601f8a6b2af333169838c63181"
+    },
+    {
+      "program": "web-tooling-babel-minify",
+      "identical": true,
+      "control_sha256": "b72f9bf7934a5d2f24b08e853f04de240ac79d3e45031fc64b20ac3383a374de",
+      "candidate_sha256": "b72f9bf7934a5d2f24b08e853f04de240ac79d3e45031fc64b20ac3383a374de"
+    },
+    {
+      "program": "web-tooling-babylon",
+      "identical": true,
+      "control_sha256": "430837733333bbf99fb6a28b350f9fcfa21cd369ee095a51cd3c597aadf6efa3",
+      "candidate_sha256": "430837733333bbf99fb6a28b350f9fcfa21cd369ee095a51cd3c597aadf6efa3"
+    },
+    {
+      "program": "web-tooling-buble",
+      "identical": true,
+      "control_sha256": "6beb5b0240504c51b2bb5d607e286303463cda90b9e2960375a3160053b31990",
+      "candidate_sha256": "6beb5b0240504c51b2bb5d607e286303463cda90b9e2960375a3160053b31990"
+    },
+    {
+      "program": "web-tooling-chai",
+      "identical": true,
+      "control_sha256": "a43f9a30558ce8b06b40b642260c91af15ddbb2110b59511318e9cb227c04327",
+      "candidate_sha256": "a43f9a30558ce8b06b40b642260c91af15ddbb2110b59511318e9cb227c04327"
+    },
+    {
+      "program": "web-tooling-coffeescript",
+      "identical": true,
+      "control_sha256": "52fcbe2aa2d8ae3142fbc4859b9f5e7fd138b94cb2516f61c62ee97f3fdd0c7f",
+      "candidate_sha256": "52fcbe2aa2d8ae3142fbc4859b9f5e7fd138b94cb2516f61c62ee97f3fdd0c7f"
+    },
+    {
+      "program": "web-tooling-espree",
+      "identical": true,
+      "control_sha256": "87a332bac0e92d7bd32726f0c69f49f517ac6fcf3886f022fc16f2bf58400435",
+      "candidate_sha256": "87a332bac0e92d7bd32726f0c69f49f517ac6fcf3886f022fc16f2bf58400435"
+    },
+    {
+      "program": "web-tooling-esprima",
+      "identical": true,
+      "control_sha256": "831eb3d90a129039ddf1d7790b4c8dd98c7b49984e978e9698b04ba55ad65cb5",
+      "candidate_sha256": "831eb3d90a129039ddf1d7790b4c8dd98c7b49984e978e9698b04ba55ad65cb5"
+    },
+    {
+      "program": "web-tooling-jshint",
+      "identical": true,
+      "control_sha256": "d32e0f47f0666e9e83daa0c687b4f1bf1b2627a4342949833d532a82ed1837f5",
+      "candidate_sha256": "d32e0f47f0666e9e83daa0c687b4f1bf1b2627a4342949833d532a82ed1837f5"
+    },
+    {
+      "program": "web-tooling-lebab",
+      "identical": true,
+      "control_sha256": "9ba5d0c7f5634b8643fad9e651bdcc2b92182bfd466e9308b8ae7598bf05c038",
+      "candidate_sha256": "9ba5d0c7f5634b8643fad9e651bdcc2b92182bfd466e9308b8ae7598bf05c038"
+    },
+    {
+      "program": "web-tooling-postcss",
+      "identical": true,
+      "control_sha256": "b49e37a8b04aa290d6a91bc5e289c06ddde195fa92154281aee3bb85bba56f81",
+      "candidate_sha256": "b49e37a8b04aa290d6a91bc5e289c06ddde195fa92154281aee3bb85bba56f81"
+    },
+    {
+      "program": "web-tooling-prepack",
+      "identical": true,
+      "control_sha256": "00ba47a8d19d50c61d0e0d5e983850f6d2d3a3c53fdd1056f3fa0557295286f1",
+      "candidate_sha256": "00ba47a8d19d50c61d0e0d5e983850f6d2d3a3c53fdd1056f3fa0557295286f1"
+    },
+    {
+      "program": "web-tooling-prettier",
+      "identical": true,
+      "control_sha256": "9c4982c2328140fbde7592dc1cb59dc3c5e70130c4ad664c77997c054873c6ef",
+      "candidate_sha256": "9c4982c2328140fbde7592dc1cb59dc3c5e70130c4ad664c77997c054873c6ef"
+    },
+    {
+      "program": "web-tooling-source-map",
+      "identical": true,
+      "control_sha256": "d624a23ae2706489590e95867c8033cd7e3cf31c9f1e8a9e5c6517d979be7611",
+      "candidate_sha256": "d624a23ae2706489590e95867c8033cd7e3cf31c9f1e8a9e5c6517d979be7611"
+    },
+    {
+      "program": "web-tooling-terser",
+      "identical": true,
+      "control_sha256": "0e1193e597ae266b7786b941a0ac1069d8986b038d992a3a3df5112381336b28",
+      "candidate_sha256": "0e1193e597ae266b7786b941a0ac1069d8986b038d992a3a3df5112381336b28"
+    },
+    {
+      "program": "web-tooling-typescript",
+      "identical": true,
+      "control_sha256": "9f20057f676bffbd8d0c51dbb6bfd3b339684782f1b1134d5018f03f1f087b82",
+      "candidate_sha256": "9f20057f676bffbd8d0c51dbb6bfd3b339684782f1b1134d5018f03f1f087b82"
+    },
+    {
+      "program": "web-tooling-uglify-js",
+      "identical": true,
+      "control_sha256": "45c2c84fbe0fe96276ec3ca37222b08d9cbc6ba54c0846f76106ed4d54482b32",
+      "candidate_sha256": "45c2c84fbe0fe96276ec3ca37222b08d9cbc6ba54c0846f76106ed4d54482b32"
+    }
+  ],
+  "failures": []
+}

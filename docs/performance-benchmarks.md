@@ -21,7 +21,7 @@ A product performance conclusion requires all of the following:
 
 Full HTTP throughput, single-worker execution, cold start, and memory density
 answer different questions and must not be combined into one percentage.
-Optimized-bytecode attribution always compares optimized with raw bytecode;
+Rewritten-bytecode attribution always compares rewritten with raw bytecode;
 source mode also includes parsing and compilation.
 
 Raw samples, correctness verdicts, profiles, manifests, and checksum lists are
@@ -38,7 +38,7 @@ idle environment.
 | CPU | AMD Ryzen 3 3300X, 4C/8T |
 | OS | Ubuntu 24.04 on WSL2, kernel 6.6.87.2-microsoft-standard-WSL2 |
 | Memory | 7.9 GiB visible to WSL |
-| Measured build | commit `cfeae0b`, version 0.2.1, Release + LTO, clean tree |
+| Serving/cold-start build | commit `cfeae0b`, version 0.2.1, Release + LTO, clean tree |
 | QuickJS defaults | stock BC26 opcode set; opcode profile OFF |
 | CPU partition | SUT CPUs 0-3; load generator CPUs 4-7 |
 | Service protocol | two workers, c64, 3s warmup + 8s measured, 3 rotated rounds |
@@ -144,10 +144,10 @@ isomorphic request-path comparison.
 
 The implementation and soundness contract are in
 [Bytecode AOT Rewriter](bytecode-aot-rewriter.md). The current clean run
-compares optimized BC26 directly with raw BC26, using one discarded warmup and
+compares rewritten BC26 directly with raw BC26, using one discarded warmup and
 five measured executions per mode.
 
-| fixture | raw median | optimized median | gain |
+| fixture | raw median | rewritten median | gain |
 |---|---:|---:|---:|
 | arith-rt | 172.659 ms | 13.659 ms | **+92.09%** |
 | cascade-rt | 68.192 ms | 37.246 ms | **+45.38%** |
@@ -167,7 +167,7 @@ Eleven of thirteen centers are positive. The equal-fixture geometric-mean
 speedup is +25.89%, but the aggregate is dominated by synthetic arith/cascade
 fixtures and is not an HTTP throughput claim.
 
-The final portfolio gate enables all retained work—BC26 `kPassAll` plus the
+The retained-set attribution gate enables BC26 `kPassAll` plus the
 mixed-number `mul` fast path—against the patchless/add-loc control. This run
 uses the final 0.2.2 release-candidate worktree, including the P11/P16
 control-flow fixes and the catch-state verifier. Eight Kraken/Octane programs
@@ -223,8 +223,62 @@ significantly helpful. The evidence therefore does not support deleting a
 specific pass. The current decision is to retain the positive combined
 portfolio, record the library result as neutral rather than a win, and make
 the UglifyJS combination/layout effect a next-round gate. IC, BC27, ext34, and
-store/reload fusion remain disabled or removed as recorded in
+store/reload fusion are removed as recorded in
 [QuickJS Optimization](quickjs-optimization.md).
+
+### Custom-bytecode removal gate
+
+The latest final-binary gate compares clean Release + LTO/system-allocator
+builds at `03e79bd` and `04de1fc`. Both use the same upstream interpreter fast
+paths and `kPassAll`; the candidate only physically deletes the field-IC,
+BC27, and `OP_ext` implementations and renames the remaining conservative
+component to the BC26 rewriter. All 26 compared bytecode files are identical.
+Positive numbers mean the deletion candidate is faster.
+
+Seven balanced pairs over the retained Kraken/Octane portfolio produced:
+
+| program | deletion gain, paired 95% CI |
+|---|---:|
+| Kraken Beat Detection | +0.09% [-1.88%, +2.10%] |
+| Kraken DFT | -3.81% [-8.25%, +0.85%] |
+| Kraken FFT | **+0.63% [+0.13%, +1.14%]** |
+| Kraken Oscillator | **+1.50% [+1.21%, +1.79%]** |
+| Kraken Darkroom | -0.64% [-2.00%, +0.74%] |
+| Octane Box2D | **+3.06% [+2.42%, +3.70%]** |
+| Octane Navier-Stokes | +0.88% [-0.21%, +1.98%] |
+| Octane Richards | -0.00% [-0.91%, +0.92%] |
+| **equal-weight geometric mean** | **+0.20%**; across-program 95% interval **[-1.45%, +1.88%]** |
+
+The same deletion over all 18 V8 Web Tooling workloads, with three balanced
+pairs per target, produced:
+
+| workload | deletion gain, paired 95% CI |
+|---|---:|
+| Acorn | +0.38% [-0.79%, +1.57%] |
+| Babel | +0.92% [-0.80%, +2.68%] |
+| Babel Minify | **+1.82% [+1.20%, +2.45%]** |
+| Babylon | **+1.19% [+0.08%, +2.31%]** |
+| Bublé | **+1.61% [+1.24%, +1.98%]** |
+| Chai | +1.75% [-3.30%, +7.06%] |
+| CoffeeScript | +0.31% [-0.28%, +0.90%] |
+| Espree | -0.08% [-2.25%, +2.15%] |
+| Esprima | **+1.14% [+0.54%, +1.74%]** |
+| JSHint | +2.03% [-1.21%, +5.37%] |
+| Lebab | **+1.28% [+0.35%, +2.22%]** |
+| PostCSS | +0.15% [-2.02%, +2.37%] |
+| Prepack | +1.67% [-0.54%, +3.93%] |
+| Prettier | **+0.62% [+0.13%, +1.11%]** |
+| source-map | **+1.18% [+0.51%, +1.87%]** |
+| Terser | **+2.03% [+0.93%, +3.14%]** |
+| TypeScript | **+1.90% [+1.60%, +2.20%]** |
+| UglifyJS | +0.58% [-0.82%, +2.00%] |
+| **equal-weight geometric mean** | **+1.14%**; across-program 95% interval **[+0.80%, +1.48%]** |
+
+The removal is therefore accepted: the classic portfolio is neutral with no
+significant negative program, while the library portfolio improves
+significantly. Both summaries have empty failure sets, and 26/26 programs
+completed with byte-identical BC26. Keeping the rejected code behind OFF flags
+has no product value and carries measurable final-layout risk.
 
 ## 6. Evidence Identities
 
@@ -233,10 +287,11 @@ store/reload fusion remain disabled or removed as recorded in
 | four-stack matrix | `bench/results/four-qps-current-clean-20260825T161800/` | `67ffb510…` |
 | focused stability repeat | `bench/results/four-qps-current-clean-focused-20260825T164700/` | `94272dee…` |
 | host/worker profile | `bench/results/four-qps-current-clean-profile-20260825T164600/` | `c134cda4…` |
-| raw/optimized execution | `bench/results/exec-throughput-current-clean-20260825T164400/` | `4b0c21b8…` |
+| raw/rewritten execution | `bench/results/exec-throughput-current-clean-20260825T164400/` | `4b0c21b8…` |
 | cold start | `bench/results/cold-start-current-clean-20260825T164500/` | `1de6b30c…` |
 | retained classic portfolio | `bench/results/all-effective-cumulative-20260825/` | `56d86ff7…` |
 | V8 Web Tooling portfolio | `bench/results/web-tooling-current-20260825/` | `454f79c4…` |
+| custom-bytecode removal | `bench/results/no-custom-bytecode-layout-20260825/` | classic `ec980bb6…`; Web Tooling `2564f2f3…` |
 
 The classic and Web Tooling summary SHA-256 values are `2967f60d…` and
 `bdeb60f9…`, respectively. Every listed checksum file was verified after

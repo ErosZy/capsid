@@ -1,0 +1,189 @@
+{
+  "schema": "capsid-classic-suite-ab-v1",
+  "command": [
+    "bench/classic-suite-ab.py",
+    "--corpus",
+    "/tmp/capsid-web-tooling-corpus-v1",
+    "--out",
+    "/tmp/capsid-noext-web-tooling-ab-20260825",
+    "--control-tool",
+    "/tmp/capsid-control-rewrite-wrapper.sh",
+    "--candidate-tool",
+    "/tmp/classic-bytecode-noext",
+    "--control-passes",
+    "0x7f",
+    "--candidate-passes",
+    "0x7f",
+    "--pairs",
+    "3",
+    "--cpuset",
+    "2",
+    "--require-bytecode-identical"
+  ],
+  "git_head": "04de1fcdd2b7d797d9cabeb62197e3f3e343e427",
+  "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-musl1",
+  "python": "3.14.5 (main, Jun  9 2026, 08:17:28) [GCC 15.2.0]",
+  "cpuset": "2",
+  "pairs": 3,
+  "timeout_seconds": 180,
+  "smoke_only": false,
+  "require_bytecode_identical": true,
+  "corpus_manifest_sha256": "0fcbafba6a80312b4fd3507444d0c0c86ce65c0989a8336308879a7dee46c902",
+  "control": {
+    "tool": "/tmp/capsid-control-rewrite-wrapper.sh",
+    "sha256": "fb517629aab490c1f83027a73fd605836251776a4a0544c282cd4c3cf4c7564c",
+    "passes": "0x7f"
+  },
+  "candidate": {
+    "tool": "/tmp/classic-bytecode-noext",
+    "sha256": "00ae6c7b9f0156749092630384756a0d631ada7eb44d3029f92b18dfe33edf9f",
+    "passes": "0x7f"
+  },
+  "programs": [
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "acorn",
+      "file": "web-tooling-acorn.js",
+      "sha256": "ba275f81cb458378d2dd46a69c71b081d5be7163e9afe8ca0d68ea9b43b4646a",
+      "bytes": 3182189,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "babel",
+      "file": "web-tooling-babel.js",
+      "sha256": "3105b74d004c262366113c365f176e873f0f476479cea07b6e8f98fa48629079",
+      "bytes": 5911096,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "babel-minify",
+      "file": "web-tooling-babel-minify.js",
+      "sha256": "58d4774041bad57c15220e9dd4373ab8e5ec7e334334c90378b8fe279e1f2a02",
+      "bytes": 5072544,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "babylon",
+      "file": "web-tooling-babylon.js",
+      "sha256": "abd493cb99578c13eb004d7f66190b7c7f30c2625cb7bb5a34b02fa75e24de11",
+      "bytes": 3342176,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "buble",
+      "file": "web-tooling-buble.js",
+      "sha256": "17d1ff6199c2f2a411eaa2dc0f8cb9113ef67501e7736417734b55b4d5cc205e",
+      "bytes": 3536489,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "chai",
+      "file": "web-tooling-chai.js",
+      "sha256": "92a947c48767ff54c8be0a8a54080d6c0158e181d6a085573a105f6c96fef4f6",
+      "bytes": 457659,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "coffeescript",
+      "file": "web-tooling-coffeescript.js",
+      "sha256": "fbe6f0aa0d8794162e54fa2c82b32f3f6b1f36491e9532bf9aa838dc6b72afad",
+      "bytes": 3593211,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "espree",
+      "file": "web-tooling-espree.js",
+      "sha256": "f12ef6a4546413e7eee5d16259844f46d4aad6393b0420a8ecf3180282c57b70",
+      "bytes": 3235944,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "esprima",
+      "file": "web-tooling-esprima.js",
+      "sha256": "5aae3f48735eb7e881f6b68fb76aec54fed09f570bec4c5a580b57deac894628",
+      "bytes": 3275152,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "jshint",
+      "file": "web-tooling-jshint.js",
+      "sha256": "8b4d7dd5fb6af09bd4db50f58bf32a450ff27130f7094c0be04dd05cc54d0845",
+      "bytes": 4196892,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "lebab",
+      "file": "web-tooling-lebab.js",
+      "sha256": "f3a9cef6cfe58013a3298b780a85701975fb11d957d2b4e65aa1d8790f2ee6a6",
+      "bytes": 4676433,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "postcss",
+      "file": "web-tooling-postcss.js",
+      "sha256": "fb2dfff21b24ec861e7d32ccd9b41d07f769d146f7ee964c1c473eff4eb37868",
+      "bytes": 4569773,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "prepack",
+      "file": "web-tooling-prepack.js",
+      "sha256": "1c7df4f8d6f454098dbcadeef6ed5300c54450166ddd199fd0e43fcbef795ec5",
+      "bytes": 6889449,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "prettier",
+      "file": "web-tooling-prettier.js",
+      "sha256": "6b1006610dd3ec24eb14535a80029bc0405a842a230db24349d0852aa100add5",
+      "bytes": 9635694,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "source-map",
+      "file": "web-tooling-source-map.js",
+      "sha256": "06c8650cba1798e0241c7b0011239af78e227bf60b26042afc68ddc445496f68",
+      "bytes": 3088192,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "terser",
+      "file": "web-tooling-terser.js",
+      "sha256": "4d3462156dfb53ac0675bef4ec6c49a7f2b66f6019adb5a6949111cc4586a36c",
+      "bytes": 3648394,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "typescript",
+      "file": "web-tooling-typescript.js",
+      "sha256": "3ab9e60b9a2cb668e3ddb3136742df62d2e24e6e8c7dfab84b134f06708edd6f",
+      "bytes": 10709080,
+      "execution": "one upstream workload fn call per process"
+    },
+    {
+      "suite": "web-tooling-0.5.3",
+      "name": "uglify-js",
+      "file": "web-tooling-uglify-js.js",
+      "sha256": "6382149fe7f9fa47ae5ab46aabcc7e5805c3c192baac22242e2b570ab0d59640",
+      "bytes": 3521445,
+      "execution": "one upstream workload fn call per process"
+    }
+  ]
+}

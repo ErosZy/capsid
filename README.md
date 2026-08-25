@@ -291,6 +291,8 @@ passed, with zero errors or timeouts:
 | 1 MB trusted bytecode cold start | **36.23 ms** | Node 137 ms<br>Deno 52 ms |
 | Retained BC26 rewrite portfolio (Kraken/Octane) | **+2.64%** | across-program 95% interval **[-0.04%, +5.39%]** |
 | Retained BC26 rewrite, V8 Web Tooling | -0.49% (neutral) | across-program 95% interval [-1.34%, +0.37%] |
+| Remove custom bytecode/IC, Kraken/Octane | +0.20% (neutral) | across-program 95% interval [-1.45%, +1.88%] |
+| Remove custom bytecode/IC, V8 Web Tooling | **+1.14%** | across-program 95% interval **[+0.80%, +1.48%]** |
 
 Full methodology, the 12-workload matrix (1k-32k × json/bytes/stream), per-process
 resource breakdown, and evidence rules are in

@@ -13,7 +13,7 @@ maintained documentation set.
 | Component | Production state | Reason |
 |---|---|---|
 | BC26 AOT rewriter (`kPassAll`) | enabled | Sound static reductions; positive classic-suite center and neutral library-suite aggregate |
-| Mixed-number `mul` fast path | enabled | Significant classic-suite contribution |
+| Upstream arithmetic/array inline fast paths | enabled | Existing handlers, no bytecode-format change |
 | CFG and stack-to-SSA analysis | analyze-only | Useful for proofs and candidate ranking; no lowering today |
 | Exact-site opcode profiling | instrumentation build only | Selection tool, never a production default |
 | Field inline cache | removed | Direct patchless comparison regressed fresh receivers |
@@ -26,7 +26,7 @@ no custom bytecode version, extension opcode, field-IC opcode, reader, handler,
 or feature flag. The opcode profiler remains a separate instrumentation-only
 patch and compiles to byte-identical QuickJS code when disabled.
 
-The retained combination—BC26 `kPassAll` plus mixed-number `mul`—measured
+The retained-set attribution—BC26 `kPassAll` plus mixed-number `mul`—measured
 **+2.64% equal-weight gain** over eight balanced Kraken/Octane programs, with
 an across-program 95% interval of **[-0.04%, +5.39%]**. The 18-program V8 Web
 Tooling library portfolio measured **-0.49%**, interval **[-1.34%, +0.37%]**:
@@ -34,7 +34,9 @@ neutral overall, not a library-workload win. DFT and UglifyJS each had one
 significant negative result; UglifyJS was confirmed as an optimizer-combination
 effect, but disable-one tests did not identify a removable pass. This is a
 qualified keep decision, not a promise of a gain for every application or HTTP
-request.
+request. The runtime now carries the broader upstream add/sub/mul/div and
+fast-array-read inline patch; the latest final-binary result below isolates the
+physical deletion of the rejected custom-bytecode mechanisms.
 
 ## 2. What CFG+SSA Can and Cannot Do
 
@@ -154,7 +156,11 @@ same-binary pass-mask comparison.
 
 The rejected extension and IC foundations are physically deleted, not hidden
 behind production-off flags. This restores a single BC26 reader/runtime and
-keeps experimental layout out of every shipping binary.
+keeps experimental layout out of every shipping binary. The deletion-only
+final-binary gate was neutral on eight Kraken/Octane programs (+0.20%,
+across-program 95% CI [-1.45%, +1.88%]) and significantly positive across all
+18 V8 Web Tooling workloads (+1.14%, CI [+0.80%, +1.48%]); no program had a
+significant regression, and all 26 BC26 pairs were byte-identical.
 
 ## 5. Candidate Selection and Lowering Gate
 
@@ -199,7 +205,7 @@ Every production change must pass:
   tests;
 - exact exception/backtrace and getter/coercion/proxy cases;
 - ASan/UBSan fuzzing and invalid operand/frame-index rejection;
-- balanced raw-versus-optimized or patchless-versus-enabled runtime samples;
+- balanced raw-versus-rewritten or patchless-versus-enabled runtime samples;
 - full source-service correctness, resource, cold-start, and separated
   host/worker profile gates when the runtime binary changes;
 - deterministic output and compatibility-identity checks.
@@ -213,7 +219,7 @@ differential and conformance gates.
 | Purpose | Entry point |
 |---|---|
 | Deployed rewriter tests | `build-m1d/test-bytecode-rewriter` |
-| Raw/source/optimized execution | `bench/exec-throughput.sh` |
+| Raw/source/rewritten execution | `bench/exec-throughput.sh` |
 | Four-stack product matrix | `bench/compare-four-qps.sh` |
 | Host/worker profiles | `bench/profile-four-stacks.sh` |
 | Cold start | `bench/cold-start.sh` |
