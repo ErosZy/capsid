@@ -1,4 +1,4 @@
-// I0 CFG gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md §3.2):
+// I0 CFG gate (docs/quickjs-optimization.md §2/§6):
 // the bring-up IR's fail-closed matrix (every decoder / CFG builder /
 // verifier failure mode must abort with an error), hand-built canonical
 // BC26 functions that must round-trip byte-for-byte through

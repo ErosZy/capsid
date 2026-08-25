@@ -65,7 +65,7 @@ enum PassFlags : uint32_t {
                         // markers to slots dead after the store (plain
                         // backward slot liveness; captured slots and
                         // check-form stores excluded)
-    // Tier-3 (tier-3 plan docs/quickjs-ng-opcode-optimization.md):
+    // Tier-3 deployed passes (docs/bytecode-aot-optimizer.md §3):
     // P17/P18 Lane 1 guard-free emission, candidate (a): forward
     // slot-initialization lattice proves every reaching path to a
     // get_loc_check/put_loc_check site has initialized the slot; the
@@ -87,7 +87,7 @@ enum PassFlags : uint32_t {
     // so deletion is stack-neutral with no target fixups beyond the
     // standard compaction remap.
     kPassTier3Lane2 = 1u << 6,
-    // R1 (tier-3 plan §5.3.2, docs/quickjs-ng-opcode-optimization.md):
+    // R1 rejected experiment (docs/quickjs-optimization.md §4):
     // Experimental BC27 ext fusion of get_loc* + get_array_el windows.
     // These bits are unavailable in default builds; an explicit
     // CAPSID_ENABLE_EXT_FUSION34 build is required. kPassExtFuse34 fuses
@@ -138,8 +138,8 @@ bool optimize_classic_for_benchmark(const std::vector<std::uint8_t>& in,
 bool analyze_only(const std::vector<std::uint8_t>& in,
                   std::string* error);
 
-// I0 identity gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §3.2): decodes every function of `in` into the bring-up CFG IR and
+// I0 identity gate (docs/quickjs-optimization.md §2/§6): decodes every
+// function of `in` into the bring-up CFG IR and
 // re-emits it byte-for-byte identical — code blobs, pc2line tables,
 // checksum, bundle. Analyze-only: the production pipeline never calls
 // this; functions the CFG cannot model are counted as rejected coverage

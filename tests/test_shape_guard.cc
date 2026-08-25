@@ -1,5 +1,5 @@
-// S0 measurement gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §5.1/§5.1.1): drives the compile-gated shape-guard A/B backends
+// S0 measurement gate (docs/quickjs-optimization.md §3/§6): drives the
+// compile-gated shape-guard A/B backends
 // through the invalidation matrix and micro-benchmarks. One binary,
 // compiled against whichever backend the build enabled (quickjs
 // CONFIG_SHAPE_GUARD_ID32 or CONFIG_SHAPE_GUARD_STRONG_REF, forwarded

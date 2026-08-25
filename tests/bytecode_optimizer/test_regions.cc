@@ -1,5 +1,5 @@
-// I2 region census gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §4): matches multi-instruction candidate fusion regions (the §4.2
+// I2 region census gate (docs/quickjs-optimization.md §5/§6): matches
+// multi-instruction candidate fusion regions (the template
 // template catalog) on the SSA form and reports static plus exact-site
 // dynamically weighted coverage, guard requirements,
 // slow-path duplication, and the §4.1 predicted cost, selecting the

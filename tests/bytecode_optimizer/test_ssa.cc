@@ -1,4 +1,4 @@
-// I1 SSA gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md §3.3/§3.4):
+// I1 SSA gate (docs/quickjs-optimization.md §2/§6):
 // the analyze-only full-stack SSA. Part A drives decode -> CFG -> verify
 // -> ssa_analyze_function on hand-built canonical BC26 function blobs and
 // asserts the exact analysis results: block parameters (phi), the value

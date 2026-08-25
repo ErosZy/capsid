@@ -22,11 +22,9 @@ optimizer:
 It is not a JIT, a partial evaluator, or a general SSA optimizer. Product
 output remains BC26. The measured-negative R0 emitter is removed, and the
 reviewed ext34 backend exists only in an explicit compile-gated measurement
-build; default builds contain no live ext34 ids or handlers. The completed
-opcode-profile phase is recorded in
-[QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md); new VM,
-format, CFG+SSA, shape-IC, and fusion work is isolated in the active
-[CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).
+build; default builds contain no live ext34 ids or handlers. Profiling,
+CFG+SSA, IC, fusion decisions, and the next implementation gate are maintained
+in [QuickJS Optimization](quickjs-optimization.md).
 
 Implementation ownership is intentionally separate from command-line tooling:
 
@@ -177,45 +175,16 @@ are in [Performance Evidence](performance-benchmarks.md).
 
 ## 7. Interpretation and Next Boundary
 
-The evidence answers the CFG/SSI question:
+CFG construction, join handling, stack verification, forward propagation, and
+backward liveness remain useful and deployed. What was removed is the generic
+SSI/SCCP/GVN/LICM layer: it added only 2 removals over the direct passes on a
+12,645-instruction corpus (0.016%), and LICM moved nothing on its anchor
+fixture.
 
-- direct, local proofs can remove meaningful interpreter work;
-- generic SSI/SCCP/GVN/LICM over the existing stack bytecode added essentially
-  nothing on the measured corpus;
-- expensive operations matter more than dispatch count alone (`get_field`
-  removal outperformed its static share);
-- large synthetic wins identify a mechanism but cannot be extrapolated to the
-  mixed Hono/request workload.
-
-### Why CFG remains but generic SSI does not
-
-Capsid has not abandoned CFG analysis. CFG construction, join handling, stack
-height verification, forward constant propagation, and backward slot liveness
-remain part of the deployed optimizer. What was retired is the generic
-P9-P15' SSI/SCCP/GVN/LICM layer. On the measured corpus it added only 2 removed
-instructions over the direct passes (2/12,645, or 0.016%): SCCP duplicated P2,
-the SSI property fold duplicated direct P14, and copy propagation, SSA DCE,
-LICM, and slot-read CSE had no independent breadth. LICM did not move code even
-on its dedicated anchor fixture.
-
-This is also a structural result. quickjs-ng has already removed many shallow
-stack-bytecode redundancies, while the remaining expensive work is dominated
-by runtime tags, property shapes/prototypes, dynamic callees, coercion, and
-exceptional paths. Generic SSI can describe value flow, but calls, accessors,
-proxies, iterators, suspension, and dynamic scope force a sound analysis to
-discard most facts needed to eliminate those costs. Maintaining a general SSI
-framework is therefore not justified by the measured incremental benefit.
-
-The result does not reject the active full-stack SSA project. The retired suite
-lowered back to the unchanged BC26 vocabulary and could only rediscover direct
-propagation/deletion wins. The successor SSA instead forms guarded regions and
-lowers them into new ext opcodes, where it can share guards, remove multiple
-dispatches, and avoid intermediate VM-stack materialization. Profiling still
-selects expensive regions first; test262 and differential tests judge
-correctness, while corpus attribution and paired runtime measurements judge
-whether each region and cache is worth keeping.
-
-Further gains inside BC26 should be proposed only with an analyze-only ceiling
-and a new corpus class. Work that changes opcode cost or introduces runtime
-specialization belongs to the separately gated active
-[CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).
+That result is specific to lowering back into unchanged BC26. quickjs-ng has
+already removed many shallow stack-bytecode redundancies; the expensive
+remainder depends on runtime tags, property shapes, callees, coercion, and
+exceptional paths. Further BC26 proposals therefore need an analyze-only
+ceiling and a new corpus class. New opcodes, runtime specialization, and
+multi-instruction lowering follow the gates in
+[QuickJS Optimization](quickjs-optimization.md).

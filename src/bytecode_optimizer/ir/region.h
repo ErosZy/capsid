@@ -1,5 +1,5 @@
-// I2 region census (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §4): matches candidate fusion regions on the SSA form and reports
+// I2 region census (docs/quickjs-optimization.md §5): matches candidate
+// fusion regions on the SSA form and reports
 // static and dynamic-profile-weighted coverage, guard requirements,
 // slow-path duplication, and predicted cost. Analyze-only — nothing is emitted and the
 // production pipeline never calls this. The census's job is to answer

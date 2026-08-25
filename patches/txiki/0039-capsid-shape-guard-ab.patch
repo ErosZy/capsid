@@ -7,7 +7,7 @@ index 066346c..829ac29 100644
  add_compile_definitions(QUICKJS_NG_BUILD)
  
 +# S0 shape-guard A/B measurement backends (capsid
-+# docs/quickjs-ng-cfg-ssa-shape-ic.md §5.1): compile-gated, zero
++# docs/quickjs-optimization.md §3): compile-gated, zero
 +# production tax, and mutually exclusive — exactly one may be enabled.
 +xoption(CONFIG_SHAPE_GUARD_ID32 "Shape-guard ID32 measurement backend" OFF)
 +xoption(CONFIG_SHAPE_GUARD_STRONG_REF "Shape-guard STRONG_REF measurement backend" OFF)
@@ -453,7 +453,7 @@ index c1ccb51..6444fb9 100644
 +
 +#if defined(CONFIG_SHAPE_GUARD_ID32) || defined(CONFIG_SHAPE_GUARD_STRONG_REF)
 +/* S0 shape-guard A/B measurement API (compile-gated; capsid plan
-+   docs/quickjs-ng-cfg-ssa-shape-ic.md §5.1). Used only by the capsid
++   docs/quickjs-optimization.md §3). Used only by the capsid
 +   measurement binary; no production path consumes it. */
 +typedef struct JSICShapeGuardSite JSICShapeGuardSite;
 +

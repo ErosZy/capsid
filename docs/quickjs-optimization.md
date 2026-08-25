@@ -1,0 +1,207 @@
+# QuickJS Optimization: Current State and Decision Record
+
+This is the single maintained entry point for Capsid-specific QuickJS
+optimization. It records the production configuration, the measured decisions
+behind it, and the gate for future work. Implementation details for the
+deployed BC26 rewriter live in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md);
+full benchmark tables live in [Performance Evidence](performance-benchmarks.md).
+Historical plans and per-task execution logs belong in git history, not in the
+maintained documentation set.
+
+## 1. Production State
+
+| Component | Production state | Reason |
+|---|---|---|
+| BC26 AOT optimizer (`kPassAll`) | enabled and frozen | Sound static reductions; no significant program regression |
+| Mixed-number `mul` fast path | enabled | Significant classic-suite contribution |
+| CFG and stack-to-SSA analysis | analyze-only | Useful for proofs and candidate ranking; no lowering today |
+| Exact-site opcode profiling | instrumentation build only | Selection tool, never a production default |
+| Field inline cache | compiled OFF | Direct patchless comparison regressed fresh receivers |
+| BC27 `get_arg0 + get_field` fusion | removed | Real-framework combined result was significantly negative |
+| ext34 loc-read/array fusion | compiled OFF | Targeted wins did not survive enabled-binary product gates |
+| Store/reload fusion | removed | Aggregate neutral with a significant FFT regression |
+
+Default output is ordinary quickjs-ng bytecode version 26. With
+`CAPSID_ENABLE_EXT_FUSION34=OFF`, ext34 ids, formats, readers, and handlers are
+absent, and the build flag participates in the compatibility identity. The
+field IC and opcode profiler likewise do not run in production builds.
+
+The retained combination—BC26 `kPassAll` plus mixed-number `mul`—measured
+**+2.91% equal-weight gain, 95% CI [+0.84%, +5.02%]** over eight balanced
+Kraken/Octane programs. Seven of eight centers were positive and no program
+regressed significantly. This is the keep decision; it is not a promise of a
+2.91% gain for every application or HTTP request.
+
+## 2. What CFG+SSA Can and Cannot Do
+
+The limitation is not the absence of an AST. QuickJS has already lowered the
+source AST into stack bytecode, and many useful transformations can be proved
+from bytecode CFG, stack height, local-slot flow, effects, and exception edges.
+Capsid already uses those facts for constant propagation, copy propagation,
+literal property folding, TDZ-sound dead-store removal, and compaction.
+
+The practical constraint is the lowering target:
+
+- lowering back into unchanged BC26 can only select existing opcodes or delete
+  work; quickjs-ng has already removed many shallow redundancies;
+- the expensive remainder depends on runtime tags, shapes, prototypes,
+  coercion, callees, accessors, proxies, and exceptions, so sound analysis must
+  discard facts across many real program boundaries;
+- a new fused opcode can express more, but it changes interpreter layout and
+  must earn back its handler/dispatch cost across the whole product binary.
+
+The retired generic SSI/SCCP/GVN/LICM layer illustrates the first point. It
+removed only 2 additional instructions on a 12,645-instruction corpus (0.016%)
+over the direct passes; LICM moved nothing even on its anchor fixture. CFG
+remains valuable, but a general SSA framework is not itself a speedup.
+
+The next useful lowering should collapse material work: several dispatches,
+intermediate stack values, reference-count transfers, repeated guards, or a
+helper call. Saving one cheap dispatch while still executing the full generic
+property helper is below the current threshold.
+
+## 3. Why V8-Style IC Gains Do Not Transfer Directly
+
+V8 can use feedback to generate or patch low-level code at the access site. A
+stable receiver shape can therefore lead to a few machine instructions and a
+direct branch to the slow path. The feedback is valuable because a later tier
+consumes it.
+
+Capsid's QuickJS path remains a C interpreter. An IC lookup still pays opcode
+dispatch, C control flow, cache/state access, guards, and fallback plumbing.
+QuickJS's generic property helper already contains dense-array and common own
+property fast paths, so a cache wrapped around it may duplicate work rather
+than remove it. Adding handlers can also perturb compiler layout enough to
+move unrelated programs even when their bytecode is identical.
+
+This does not mean interpreter ICs can never win. It means a future IC must:
+
+1. allocate feedback slots per bytecode site at compile time;
+2. encode the slot directly in the operand—no exact-PC lookup or atom-shared
+   ring;
+3. make the compiled-OFF runtime byte/layout equivalent to patchless;
+4. prove a direct patchless-to-enabled win on stable and unstable receivers;
+5. remain bounded in memory and preserve canonical serialization and fallback
+   semantics.
+
+Without lower-level specialization or broader fused execution, a property IC
+alone is unlikely to produce V8-scale gains.
+
+## 4. Measured Rejections
+
+Only final, decision-relevant numbers are maintained here. Raw manifests and
+samples remain under `bench/results/`; superseded intermediate numbers remain
+in git history.
+
+| Experiment | Best relevant evidence | Decision |
+|---|---|---|
+| R0 single-op array ext | Target fixture -12.69%; generic helper already had the same fast path | removed |
+| Exact-site field IC | PATCHLESS→enabled fresh latency +7.31% regression, CI [+5.15%, +9.51%]; mono and Hono neutral | compiled OFF |
+| BC27 `get_arg0 + get_field` | Four-framework equal-weight -1.28%, CI [-1.77%, -0.77%] | removed |
+| Corrected ext34, same binary | Beat +9.72%, FFT +9.66%, Navier-Stokes +3.22% | mechanism proven |
+| ext34 compiled-in OFF tax | -1.44% equal-weight, program CI [-2.50%, -0.37%] | product gate failed |
+| ext34 patchless→enabled net | +1.51%, CI [-2.07%, +5.22%]; Box2D -2.21%, Richards -3.22% | compiled OFF |
+| `put_loc*; get_loc* -> set_loc*` | +0.28%, CI [-0.68%, +1.25%]; FFT -0.81% significant | removed |
+
+The field-IC prototype also showed why same-binary OFF/ON is insufficient. The
+feature-built OFF path itself carried roughly 2-3% centers in directed tests.
+After fixing terminal observers, the catastrophic fresh-receiver result
+improved, but the direct patchless-to-enabled product comparison still failed.
+
+The corrected ext34 result is equally important: multi-instruction fusion can
+win even when its slow path eventually calls the generic helper. Beat and FFT
+proved the mechanism. It was rejected because merely compiling the handlers
+changed broad runtime performance and the net build significantly regressed
+Box2D and Richards. New handlers must pass the final-binary gate, not only a
+same-binary pass-mask comparison.
+
+Physically deleting every experimental foundation was also tested and was
+aggregate-neutral (-0.29%, CI [-2.83%, +2.33%]) but significantly regressed
+Beat, FFT, and Navier-Stokes through another layout change. The source remains
+available behind real compile gates; no rejected opcode is active or emitted.
+
+## 5. Candidate Selection and Lowering Gate
+
+A proposal is eligible for implementation only when all of the following are
+true:
+
+- exact-site profiles bind bundle, function, and bytecode PC and exclude
+  bootstrap execution;
+- the pattern occurs across representative frameworks or classic suites, not
+  only its anchor microbenchmark;
+- every member of a proposed region has profile evidence and the region is
+  within one basic block unless exceptional control flow is modeled exactly;
+- the static ceiling and dynamic hotness can exceed noise after accounting for
+  generic-helper cost;
+- the lowering preserves exception PC, coercion order, reference counting,
+  stack effects, and debug-line mapping;
+- the candidate is compared directly against a patchless runtime with balanced
+  pairs, correctness, resource measurements, and both-side profiles;
+- compiled-but-disabled code has a pre-registered zero-tax gate.
+
+Prefer guard-free semantic fusion over speculative type paths. For example, a
+sequence may reuse QuickJS's complete numeric/string/BigInt/object slow path
+and only fuse the successful result transfer into a local. Such a lowering
+does not need guard/deopt machinery. Before implementing it, however, inspect
+the emitted bytecode: QuickJS already lowers common assignment forms to
+`add_loc`, and the measured corpus had no residual site for the proposed
+`add; dup; put_loc; drop` fusion.
+
+The source-attributed census must include real frameworks and broad classic
+suites (Kraken, Octane, and SunSpider where compatible). Suite results are a
+portfolio: partial wins are kept when the final binary has no significant
+regression, but benchmark-specific rewrites are not accepted merely because
+their anchor improves.
+
+## 6. Required Validation
+
+Every production change must pass:
+
+- native QuickJS tests and pinned test262 where applicable;
+- bytecode parse/verify/round-trip and source-versus-bytecode differential
+  tests;
+- exact exception/backtrace and getter/coercion/proxy cases;
+- ASan/UBSan fuzzing and invalid operand/frame-index rejection;
+- balanced raw-versus-optimized or patchless-versus-enabled runtime samples;
+- full source-service correctness, resource, cold-start, and separated
+  host/worker profile gates when the runtime binary changes;
+- deterministic output and compatibility-identity checks.
+
+The classic-suite completion marker proves successful execution, not complete
+semantic output equivalence. Correctness claims must come from the dedicated
+differential and conformance gates.
+
+## 7. Reproduction Map
+
+| Purpose | Entry point |
+|---|---|
+| Deployed optimizer tests | `build-m1d/test-bytecode-optimizer` |
+| Raw/source/optimized execution | `bench/exec-throughput.sh` |
+| Four-stack product matrix | `bench/compare-four-qps.sh` |
+| Host/worker profiles | `bench/profile-four-stacks.sh` |
+| Cold start | `bench/cold-start.sh` |
+| Field IC A/B | `bench/field-ic-ab.sh`, `bench/field-ic-host-ab.sh`, `bench/field-ic-off-tax.sh` |
+| Classic-suite balanced A/B | `bench/classic-suite-ab.py` |
+
+The authoritative retained-set evidence is
+`bench/results/all-effective-cumulative-20260825/`: +2.91% equal-weight, 95%
+CI [+0.84%, +5.02%]. The clean direct execution, source-service, profile, and
+cold-start directories and their checksum identities are listed in
+[Performance Evidence](performance-benchmarks.md).
+
+## 8. Next Optimization Direction
+
+Do not add another opcode that saves only one cheap dispatch, and do not revive
+the atom-shared IC ring. The next round should proceed in this order:
+
+1. profile a representative workload portfolio with exact-site attribution;
+2. rank multi-instruction regions by removable runtime work, not frequency
+   alone;
+3. implement one guard-free fusion or a compile-time per-site feedback-slot
+   prototype in an isolated build;
+4. reject it immediately if compiled-OFF is not patchless-equivalent;
+5. keep it only if the direct final-binary portfolio has no significant
+   regression and a positive combined interval.
+
+The current evidence favors multi-instruction semantic fusion before another
+property IC attempt.

@@ -1171,7 +1171,7 @@ index 6de1097..d895344 100644
  #if defined(CONFIG_SHAPE_GUARD_IC)
 -/* S1 SHADOW IC measurement API (compile-gated; capsid plan
 +/* Site-aware field IC API (compile-gated; capsid plan
-    docs/quickjs-ng-cfg-ssa-shape-ic.md §5.2/§5.2.1). Builds on the S0
+    docs/quickjs-optimization.md §3). Builds on the S0
     ID32 backend, so CONFIG_SHAPE_GUARD_ID32 must also be defined. SHADOW
 -   mode observes get_field / get_array_el sites, trains bounded lazy
 -   sidecars and reports would-hit/miss; the generic result is always

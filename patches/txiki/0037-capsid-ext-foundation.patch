@@ -24,7 +24,7 @@ index 0000000..531c74c
 + * The format column values are collected by the EXT_FMT macro (one
 + * EXT_FMT(fmt) line per distinct value, mirroring quickjs-opcode.h).
 + *
-+ * Catalog rules (docs/quickjs-ng-cfg-ssa-shape-ic.md §4.2):
++ * Catalog rules (docs/quickjs-optimization.md §5):
 + *   - id 0 is reserved and always invalid;
 + *   - ids are contiguous from 1 and never renumbered;
 + *   - an id is added only together with its handler, verifier metadata,

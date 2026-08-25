@@ -1,5 +1,5 @@
-// F0 ext foundation (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §2/§4.4): table-generated OP_ext metadata for the BC27 wire format.
+// F0 ext foundation (docs/quickjs-optimization.md §4/§5): table-generated
+// OP_ext metadata for the BC27 wire format.
 // The single source of truth is the vendored quickjs-ext-opcode.h (the
 // same include mechanism as quickjs-opcode.h in cfg.cc/effects.cc);
 // every optimizer consumer — the strict bundle reader, the two

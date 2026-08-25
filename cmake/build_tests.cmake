@@ -267,8 +267,8 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_optimizer PROPERTIES TIMEOUT 60)
 
-            # I0 CFG gate (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-            # §3.2): synthetic malformed-function matrix (each decoder /
+            # I0 CFG gate (docs/quickjs-optimization.md §2/§6): synthetic
+            # malformed-function matrix (each decoder /
             # CFG builder / verifier failure mode must abort fail-closed),
             # hand-built canonical BC26 functions that must round-trip
             # byte-for-byte, and the identity gate over the real fixture

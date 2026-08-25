@@ -1,5 +1,5 @@
-// I1: full-stack SSA (tier-3 plan docs/quickjs-ng-cfg-ssa-shape-ic.md
-// §3.3/§3.4). Analyze-only: this module builds the SSA form of a
+// I1: full-stack SSA (docs/quickjs-optimization.md §2). Analyze-only:
+// this module builds the SSA form of a
 // verified CFG, runs the lattice / effect-token / exception-successor /
 // ownership analyses, and emits nothing. Functions the analyses cannot
 // prove are rejected (fail-closed) and counted as rejected coverage by

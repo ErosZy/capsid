@@ -30,10 +30,8 @@ Capsid documentation is organized around selection → integration → configura
 - Test gate: [testing.md](testing.md)
 - Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
 - Deployed bytecode optimizer: [bytecode-aot-optimizer.md](bytecode-aot-optimizer.md)
-- Completed opcode profiling/AOT evidence:
-  [quickjs-ng-opcode-optimization.md](quickjs-ng-opcode-optimization.md)
-- Active CFG+SSA, shape IC, and extended-opcode plan:
-  [quickjs-ng-cfg-ssa-shape-ic.md](quickjs-ng-cfg-ssa-shape-ic.md)
+- QuickJS optimization decisions and next gate:
+  [quickjs-optimization.md](quickjs-optimization.md)
 
 ## Maintenance Rules
 

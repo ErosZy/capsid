@@ -3886,7 +3886,7 @@ bool verify_tree(const FuncRecord& f, const uint8_t* data, std::string* error,
 
 // ---------------------------------------------------------------------------
 // A3 (tier-3 plan §4): analyze-only density proofs for the two candidates
-// selected by the A2 ranking (docs/quickjs-ng-opcode-optimization.md §3.4a).
+// selected by the candidate gate (docs/quickjs-optimization.md §5).
 // Emits nothing — this is the go/no-go density measurement.
 //
 //   (a) TDZ-check elimination: get_loc_check / put_loc_check whose slot is
@@ -5280,7 +5280,7 @@ bool optimize_classic_for_benchmark(const std::vector<std::uint8_t>& in,
 }
 
 // ---------------------------------------------------------------------------
-// I0 CFG bridge (docs/quickjs-ng-cfg-ssa-shape-ic.md §3.1): adapts the
+// I0 CFG bridge (docs/quickjs-optimization.md §2): adapts the
 // strict bundle reader's FuncRecord tree into the IR's FuncInfo tree.
 // Kept in this TU so ir/cfg.cc stays a decoder-only module; the identity
 // gate then exercises both decode stacks on every corpus bundle.
