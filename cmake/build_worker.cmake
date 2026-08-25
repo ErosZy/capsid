@@ -151,6 +151,11 @@ if(CAPSID_BUILD_WORKER)
     # production configuration remains OFF pending paired A/B evidence.
     set(CONFIG_SHAPE_GUARD_IC ${CAPSID_ENABLE_SHAPE_GUARD_IC}
         CACHE BOOL "" FORCE)
+    # R1: unlike an optimizer pass mask, this removes the ext34 handlers and
+    # live ext ids from the binary entirely. OFF is the production default;
+    # candidate A/B and feature tests opt in explicitly.
+    set(CONFIG_EXT_FUSION34 ${CAPSID_ENABLE_EXT_FUSION34}
+        CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public
@@ -373,6 +378,10 @@ if(CAPSID_BUILD_WORKER)
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
         PRIVATE
         "${CAPSID_TXIKI_OVERLAY}/deps/quickjs")
+    if(CAPSID_ENABLE_EXT_FUSION34)
+        target_compile_definitions(capsid_bytecode_opt
+            PRIVATE CAPSID_ENABLE_EXT_FUSION34=1 CONFIG_EXT_FUSION34=1)
+    endif()
     set_target_properties(capsid_bytecode_opt PROPERTIES
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED ON

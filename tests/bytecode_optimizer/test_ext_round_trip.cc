@@ -1,11 +1,11 @@
 // F0 ext foundation gate. R0's single-op array specialization regressed the
 // paired benchmark and is retired: ext id 1 is a permanent size-zero hole.
-// The R1 fusion templates (ids 2/3, loc-read + get_array_el) are kept
-// behind pass bits outside the deployed mask, so the only canonical
-// product output remains BC26; a BC27 input is accepted only for the
-// known ids 2/3 (with their exact payload sizes) and fails closed
-// otherwise. This test locks the reserved-id policy (0 and 1), the
-// unknown-id rejection, and the production BC26-only gate.
+// The R1 fusion templates (ids 2/3, loc-read + get_array_el) exist only in an
+// explicit compile-gated measurement build and behind pass bits outside the
+// deployed mask, so product output remains BC26. A feature build accepts BC27
+// only for known ids 2/3 with valid frame-slot payloads and fails closed
+// otherwise. This test locks the reserved-id policy (0 and 1), unknown-id
+// rejection, and the production BC26-only gate.
 
 #include "bytecode_optimizer/bytecode_optimizer.h"
 #include "bytecode_optimizer/ir/cfg.h"
@@ -229,6 +229,19 @@ void test_a8_production_gates() {
                                      &err3));
 }
 
+#ifdef CAPSID_ENABLE_EXT_FUSION34
+// a9: live ext slot operands are part of the untrusted BC27 payload. A
+// syntactically complete id2 instruction must still be rejected when either
+// tagged frame-slot index lies outside this function's arg/local arrays.
+void test_a9_bc27_rejects_out_of_range_slot() {
+    const std::vector<std::uint8_t> code = {252, 2, 127, 127, 41};
+    std::string err;
+    ir::ExtRoundTripReport rep;
+    CHECK(!ext_blob(code, 1, 27, &rep, &err));
+    CHECK(err.find("slot operand out of range") != std::string::npos);
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // Part B: the mandatory 0-rejection gate over the real corpus.
 // ---------------------------------------------------------------------------
@@ -377,6 +390,9 @@ int main() {
     test_a6_bc27_truncated();
     test_a7_bc27_noncanonical();
     test_a8_production_gates();
+#ifdef CAPSID_ENABLE_EXT_FUSION34
+    test_a9_bc27_rejects_out_of_range_slot();
+#endif
     test_corpus_ext();
     if (g_failures != 0) {
         std::fprintf(stderr, "test_ext_round_trip: %d failure(s)\n",

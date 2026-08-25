@@ -20,8 +20,10 @@ optimizer:
   production compiler always uses `kPassAll`.
 
 It is not a JIT, a partial evaluator, or a general SSA optimizer. Product
-output remains BC26: the measured-negative R0 ext emitter and its build switch
-have been removed. The completed opcode-profile phase is recorded in
+output remains BC26. The measured-negative R0 emitter is removed, and the
+reviewed ext34 backend exists only in an explicit compile-gated measurement
+build; default builds contain no live ext34 ids or handlers. The completed
+opcode-profile phase is recorded in
 [QuickJS-ng Opcode Optimization](quickjs-ng-opcode-optimization.md); new VM,
 format, CFG+SSA, shape-IC, and fusion work is isolated in the active
 [CFG+SSA, Shape IC, and Extended Opcode Plan](quickjs-ng-cfg-ssa-shape-ic.md).
@@ -48,8 +50,10 @@ The parser mirrors the pinned quickjs-ng commit
 - jump target = operand start + signed relative offset;
 - `OP_catch` targets and post-`OP_gosub` instructions are CFG roots;
 - serialized ordinary opcodes occupy 0..251; values >=252 are invalid in
-  BC26. The patched runtime reserves 252 for future `OP_ext` and uses 253 only
-  as a non-serialized in-memory field-IC opcode;
+  BC26. The default runtime reserves 252 for `OP_ext` with no live ids and uses
+  253 only as a non-serialized in-memory field-IC opcode; an explicit ext34
+  measurement build assigns ids 2/3 and records that ABI difference in its
+  compatibility identity;
 - pc2line is decoded, mapped through old-to-new instruction offsets, and
   re-encoded with quickjs-ng's cumulative delta format.
 
@@ -67,14 +71,16 @@ fixpoint, at most 16 rounds:
   P14 literal property folding
   P16 TDZ-sound dead-store elimination
   P2  cross-basic-block constant propagation
-  P3.1 integer constant folding
+P3.1 integer constant folding
+P17 proven-TDZ check removal
+P18 redundant to_propkey removal
   P6  compact and select shortest encodings
 P7 remap pc2line
 P8 rebuild records and checksum
 final recursive parse + bytecode verifier
 ```
 
-`kPassAll = P2 | P31 | P11 | P14 | P16` (`0x1f`). A round that changes the
+`kPassAll = P2 | P31 | P11 | P14 | P16 | P17 | P18` (`0x7f`). A round that changes the
 program deletes at least one instruction; hitting the iteration cap is an
 error. The output remains ordinary BC26 and is loaded by the unmodified VM.
 

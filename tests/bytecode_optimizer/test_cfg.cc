@@ -253,6 +253,38 @@ void test_emit_failures() {
     CHECK(!err.empty());
 }
 
+#ifdef CAPSID_ENABLE_EXT_FUSION34
+void test_ext_operand_bounds() {
+    // The independent CFG decoder must enforce the same tagged-frame-slot
+    // contract as the strict bundle reader. This exercises the shared check
+    // without letting the outer reader reject the malformed bundle first.
+    const std::vector<std::uint8_t> code = {252, 2, 0, 1, 41};
+    ir::FuncInfo fi = zero_fi(static_cast<std::uint32_t>(code.size()));
+    fi.var_count = 2;
+    std::vector<ir::Insn> insns;
+    std::string err;
+    CHECK(ir::decode_function(code.data(), code.size(), code.data(), fi,
+                              &insns, &err, true));
+
+    fi.var_count = 1;
+    insns.clear();
+    err.clear();
+    CHECK(!ir::decode_function(code.data(), code.size(), code.data(), fi,
+                               &insns, &err, true));
+    CHECK(err.find("local slot operand out of range") != std::string::npos);
+
+    const std::vector<std::uint8_t> arg_code = {252, 2, 0x80, 0x81, 41};
+    fi = zero_fi(static_cast<std::uint32_t>(arg_code.size()));
+    fi.arg_count = 1;
+    insns.clear();
+    err.clear();
+    CHECK(!ir::decode_function(arg_code.data(), arg_code.size(),
+                               arg_code.data(), fi, &insns, &err, true));
+    CHECK(err.find("argument slot operand out of range") !=
+          std::string::npos);
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // Part A: canonical blobs with explicit edge-class assertions.
 // ---------------------------------------------------------------------------
@@ -625,6 +657,9 @@ int main() {
     test_cfg_failures();
     test_verify_failures();
     test_emit_failures();
+#ifdef CAPSID_ENABLE_EXT_FUSION34
+    test_ext_operand_bounds();
+#endif
     test_edge_classes();
     test_identity_blobs();
     test_identity_bundles();

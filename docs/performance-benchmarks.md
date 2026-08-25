@@ -1,6 +1,6 @@
 # Performance: Evidence Rules and Current State
 
-This document is the single maintained document for performance topics; it keeps the evidence rules and the current (2026-08-20) conclusion-level samples. The `v0.2.0` stable release adopts these final-RC runs as its published performance baseline. Measurements retain their `v0.2.0-rc.07` labels because that is the exact binary identity used to collect them; the stable release changes only documentation and release metadata. Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, and the superseded 2026-08-18 runs) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
+This document is the single maintained document for performance topics; it keeps the evidence rules, the current (2026-08-20) release-level samples, and the 2026-08-25 QuickJS specialization review. The `v0.2.0` stable release adopts the final-RC runs as its published performance baseline. Measurements retain their `v0.2.0-rc.07` labels because that is the exact binary identity used to collect them; the stable release changes only documentation and release metadata. Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, and the superseded 2026-08-18 runs) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
 
 ## 1. Evidence Rules
 
@@ -343,6 +343,63 @@ material helper, coercion, stack, or reference-count work. Any renewed IC must
 first make the feature-compiled OFF path patchless-equivalent and encode a
 per-bytecode-site slot directly; only then is a PATCHLESS-to-enabled A/B worth
 running.
+
+### ext34 post-review result (2026-08-25)
+
+The first ext34 keep record (+0.66%/+0.86%) is invalid. Review found a
+three-byte matcher buffer that could be overwritten when a two-slot
+`get_loc0_loc1` was decoded with only one byte remaining. It could miscompile
+pair+pair windows in optimized builds. The review also added missing BC27
+argument/local operand bounds and restored the original `get_array_el`
+exception-PC convention. The old timings are retained only as history.
+
+After those fixes, a same-feature-binary `0x7f` versus `0x1ff` run used seven
+balanced ABBA/BAAB pairs over eight pinned Kraken/Octane programs (224 timed
+samples). The fusion itself was strongly positive where its windows were hot:
+
+| program | candidate gain, paired 95% CI |
+| --- | ---: |
+| Kraken Beat Detection | **+9.72% [+8.80%, +10.66%]** |
+| Kraken FFT | **+9.66% [+8.70%, +10.63%]** |
+| Octane Navier-Stokes | **+3.22% [+2.39%, +4.07%]** |
+| other five programs | intervals cross zero |
+| equal-weight geomean | +2.96%, program CI [-0.46%, +6.49%] |
+
+This is valid evidence that a three/four-instruction fusion can retain the
+generic property slow path and still win by removing enough dispatches. It
+retracts the earlier blanket claim that any fused handler containing a generic
+slow path must lose.
+
+It is not a production keep. A direct patchless-runtime versus
+feature-capable-runtime comparison ran `0x7f` on both sides and verified all
+eight BC26 blobs byte-for-byte. The feature-capable binary nevertheless
+regressed by **-1.44%** equal-weight, program CI **[-2.50%, -0.37%]**. This is
+runtime handler/layout tax; byte-identical serialization never measured it.
+
+A separate direct PATCHLESS `0x7f` versus corrected enabled `0x1ff` run is the
+net product comparison: Beat Detection +8.30% [+6.63%, +10.00%], FFT +8.26%
+[+6.40%, +10.15%], Box2D **-2.21% [-2.90%, -1.51%]**, Richards **-3.22%
+[-4.42%, -2.02%]**, and the other four intervals crossed zero except the
+bytecode-identical Darkroom control at +1.65% [+0.91%, +2.39%]. Equal-weight
+gain was +1.51% with program CI [-2.07%, +5.22%]. Thus the current enabled
+binary has strong workload-specific wins but no broad keep and two significant
+regressions. Darkroom's movement despite identical bytecode is direct evidence
+that handler layout is workload-dependent.
+
+Production therefore uses a real compile gate, default OFF. With
+`CAPSID_ENABLE_EXT_FUSION34=OFF`, the ext formats, ids, reader checks and
+handlers are absent, and standalone `quickjs.c.o`, `libqjs.a`, and `qjs` are
+byte-identical to the pre-0045 build under the same flags. ON/OFF also enters
+the bytecode compatibility record. ext34 remains a measurement backend, not a
+shipped optimization. Do not add more default handlers until their final
+enabled binary beats PATCHLESS and the default binary remains exactly zero
+tax.
+
+Correctness evidence includes default-OFF and feature-ON optimizer/CFG/ext
+tests, invalid slot rejection in both readers, getter/coercion/null/exception
+differentials, exact backtrace comparison, and ASan/UBSan. The classic corpus
+proves performance and successful execution; its appended completion marker is
+not a general semantic-output oracle and must not be described as one.
 
 ## 7. Retired Checkpoints
 

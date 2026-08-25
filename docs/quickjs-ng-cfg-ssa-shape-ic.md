@@ -1,7 +1,7 @@
 # QuickJS-ng CFG+SSA, Shape IC, and Extended Opcode Plan
 
-> Status: implementation re-audited 2026-08-24. Sections 2–15 retain the
-> original design and measurement record; section 16 is the authoritative
+> Status: implementation re-audited 2026-08-25. Sections 2–19 retain the
+> original design and measurement history; section 20 is the authoritative
 > current state. R0 is retired after a −12.69% target regression, product AOT
 > emits BC26 only, and ext id 1 is permanently reserved. Source-attributed
 > exact-PC profile v3,
@@ -11,12 +11,12 @@
 > significant fresh-receiver regression and no mono/Hono win. It remains
 > compile-gated/default OFF; no ext handler is emitted in production.
 >
-> R1 (ext34, 2026-08-25): a fused loc-read + `get_array_el` ext template was
-> measured and KEPT — +0.66% equal-weight geomean with a significant positive
-> cluster (audio-beat-detection, audio-fft, navier-stokes, all 7/7 pairs) and
-> zero regressions beyond noise (section 17). The candidate remains gated
-> behind pass bits outside the deployed mask; the product pipeline is
-> unchanged BC26.
+> R1 (ext34) is retracted as a keep after review found a matcher buffer
+> overwrite plus BC27 validation and exception-PC gaps. Corrected measurements
+> prove that the fusion itself helps its three hot programs, but an ext34-
+> capable binary running with the pass OFF regresses broadly. R1 is now
+> compile-gated/default OFF; a default build preprocesses to the exact
+> pre-0045 QuickJS runtime and remains BC26. See section 20.
 
 ## 1. Decision, Evidence, and Target
 
@@ -1574,12 +1574,12 @@ legacy-suite census outputs are under
 
 ## 17. R1 Loc-Read + get_array_el Ext34 Fusion Record (2026-08-25)
 
-Status: **R1 measured — kept (modest positive)**. A run-based matcher fuses
+Status: **historical record, superseded by §20; keep decision retracted**. A run-based matcher fuses
 consecutive local-slot reads ending in `get_array_el` into two new BC27 ext
 templates (id 2, two-slot window; id 3, three-slot window). The paired
-measurement shows a significant positive cluster on three Kraken programs
-and no regression beyond noise elsewhere; the candidate is kept behind its
-pass bits, outside the deployed mask.
+measurement appeared to show a significant positive cluster on two Kraken
+programs and one Octane program with no regression beyond noise elsewhere.
+That pre-fix keep decision is invalid; §20 records the corrected status.
 
 ### 17.1 Deliverables at measurement time (§10 item 10)
 
@@ -1588,8 +1588,8 @@ pass bits, outside the deployed mask.
   `get_loc8`/`get_loc`, `get_arg0..3`/`get_arg`, and the emitter's fused
   `get_loc0_loc1`) immediately followed by `get_array_el`. Payload bytes are
   tagged: bit 7 selects the argument buffer, low 7 bits the local slot. The
-  fused ext's stack effect equals its window's (id 2: pop 2 push 1; id 3:
-  pop 2 push 2), so heights, catch offsets, and exception stack shapes are
+  fused ext's stack effect equals its complete window's (id 2: net +1;
+  id 3: net +2), so heights, catch offsets, and exception stack shapes are
   preserved; the only CFG constraint is that no jump may land strictly
   inside a window (a landing at the window start is fine). Id-3 windows win
   over id-2 windows at the same start.
@@ -1612,14 +1612,14 @@ pass bits, outside the deployed mask.
   f `[80 81]`, g `[80 81]` (const read excluded), h `[00 01]`, h3 `[80 03]`
   (the `get_loc3` short-form regression), k id3 `[00 80 01]`.
 
-### 17.2 Layout-tax probe (no code change to the window)
+### 17.2 Serialized-output identity probe (not runtime tax)
 
 A side-by-side probe compiled the 21-fixture corpus with the ext bits on and
 off and compared the serialized outputs. Both arms produced byte-identical
 BC26 streams for all 21 fixtures (commit `91e52df`): the ext matcher is a
 pure rewrite on the shrunk stream with no layout or offset side effects. The
-two arms' execution paths then differ only by the fused-vs-unfused
-instructions themselves.
+This proved only serialized-output identity. It did not prove equal runtime
+machine-code layout or zero compiled-in handler tax.
 
 ### 17.3 read_slots short-form bug found by the probe
 
@@ -1634,7 +1634,7 @@ run; the fix (`op - OP_get_loc0`) makes all goldens and the live A/B agree.
 Without the end-to-end probes this would have shipped a semantic
 mismatch in a deployed-looking arm; the fail-closed round trip caught it.
 
-### 17.4 Paired A/B results (Release, `taskset -c 2-3`, 7 ABBA/BAAB pairs per program)
+### 17.4 Invalidated pre-fix paired A/B results
 
 Runner `bench/ext34-classic-ab.sh` (commit `42694ca`): control mask 0x7f vs
 candidate 0x1ff, 8 programs of the classic suite corpus, 14 samples per arm
@@ -1653,13 +1653,15 @@ per program.
 | equal-weight geomean | **+0.66** | [−0.65, 1.98] | — |
 | kraken geomean / octane geomean | +0.99 / +0.33 | — | — |
 
-All 8/8 programs completed, zero failures, zero semantic mismatches. The
+All 8/8 programs completed with zero execution failures. The appended suite
+marker was a completion guard, not a general output oracle; this run did not
+establish “zero semantic mismatches.” The
 three programs with 7/7 positive pairs form a significant cluster with CIs
 clear of zero; darkroom (0 fused sites — clean control), oscillator,
 gameboy, box2d, and richards sit within noise. No program shows a
 regression beyond its noise band.
 
-### 17.5 Verdict — ext34 kept
+### 17.5 Historical verdict — retracted
 
 The fused template removes dispatch (two or three slot reads + the array
 access become one opcode) and the per-slot generic read work; unlike R0's
@@ -1668,22 +1670,25 @@ table-indirected one at every site — it only compresses the reads leading
 into a `get_array_el` that still executes its own generic path. The
 measured signature is exactly that: consistent small wins where
 slot-read/array windows are hot (audio DSP kernels, navier-stokes), flat
-elsewhere. Kept behind `kPassExtFuse34|kPassExtFuse4`, outside the deployed
-mask; the product pipeline remains BC26 (unchanged).
+elsewhere. This was the historical rationale for keeping the pass bits; it is
+not the current shipping decision.
 
 **R2 implication**: the next array fusion should remove the `get_array_el`
 generic path itself (the part that R0 and this record both leave intact),
 not another copy of its dispatch.
+
+The matcher used for this measurement could write beyond its three-byte slot
+buffer and miscompile pair+pair windows. The result is retained only as
+history and must not be used as keep evidence; §20 contains corrected data.
 
 Evidence is archived under `bench/results/ext34-classic-ab-20260825T014012/`
 (per-program pair gains, summary.json; bench/results is gitignored).
 
 ## 18. Corrected Full-Suite Profile + Candidate Re-Rank Record (2026-08-25)
 
-Status: **the ranked candidate pool is exhausted — no candidate clears the
-direct-binary gate; the optimization loop terminates with R1 (ext34) as the
-last kept item.** This section archives the corrected profile and the
-re-ranking that supports that verdict.
+Status: **historical profile record; its ext34 conclusion is superseded by
+§20.** The census remains useful, but the “R1 kept / direction exhausted”
+conclusion depended on invalid pre-fix evidence.
 
 ### 18.1 Why a corrected collection (task #74)
 
@@ -1783,8 +1788,8 @@ shapes): every top rank is an octane-zlib site artifact.
 **Non-zlib 3-4 len census** (52-dump re-run, zlib removed): the survivors
 are (a) ext34's own target shapes — get_loc8-run + get_array_el windows
 (66.7M/13 programs, 41.6M/6), which appear here because the deployed
-0x7f mask does not carry the kept ext bits; this is exactly the already
-implemented, already measured R1 fusion — and (b) windows whose fused
+0x7f mask does not carry the experimental ext bits; this is exactly the
+already implemented R1 fusion — and (b) windows whose fused
 handlers would have to embed a generic slow path: mul > swap > to_propkey
 > swap (41.2M/4, navier-stokes top site), get_array_el > swap >
 to_propkey > swap (37.1M/14), get_loc8 > mul > get_loc8 (56.1M/5,
@@ -1805,34 +1810,23 @@ octane-crypto), mul > add > put_loc8 > get_loc2 (47.9M, octane-crypto).
    dispatch-table overhead, and the structurally identical
    `get_locN + get_field` catalog was already rejected in §16 on the same
    cost model with a measured negative (−1.28% combined).
-3. **Generic-path duplication measures negative.** Every surviving
-   non-zlib 3+ len candidate requires the fused handler to embed a
-   generic slow path — `js_mul` (valueOf/-0/object operands),
-   `ToPropertyKey` (ToPrimitive can run user code and throw), or
-   `get_array_el`'s own generic machinery. That is precisely the
-   structure that measured −12.7% (R0's blanket get_array_el rewrite) and
-   −1.28% (arg0>get_field ext): the dispatch is removed but the generic
-   work is still executed, inside a longer handler. R2's note in §17.5 is
-   the same conclusion: the next step must *remove* the generic path, not
-   copy its dispatch — and removing it requires provable shapes, i.e. an
-   inline cache, which was explored in S1 (SHADOW IC) and stopped.
+3. **The old generic-path conclusion was too broad.** R0 and
+   `get_arg0+get_field` were negative, but corrected ext34 data in §20 shows
+   that a three/four-instruction handler can retain the original generic slow
+   path and still win when it removes enough dispatches at genuinely hot
+   sites. Each candidate therefore needs its own full-binary measurement;
+   “contains a generic slow path” is not by itself a rejection rule.
 4. **call_method** — the only spread opcode-level opportunity (155M,
    0.23% of execs) — is a runtime IC concern, not a bytecode-shape
    concern; it was explored and stopped earlier.
 
-### 18.7 Verdict — the loop terminates with R1 as the last kept item
+### 18.7 Historical verdict — superseded
 
-The corrected profile answers the tier-2 question directly: the deployed
-BC26 stream's remaining hot shapes are either zlib-single-site artifacts
-(unmeasurable on the A/B corpus), 2-len windows with zero dispatch
-saving, or shapes that require embedding a generic slow path — the exact
-structure that has measured negative in both prior ext attempts. R1
-(ext34) is the last item that cleared the gate (+0.66% geomean, kept).
-"Direction exhausted" is the honest result the methodology expects: the
-facts above are the evidence, and the next opportunity, if any, is a
-corpus/measurement decision (adding zlib-class workloads to the A/B
-corpus) before any new implementation — not an implementation decision
-made blind.
+The census still establishes concentration and candidate coverage, but the
+old R1 keep decision and the blanket generic-slow-path rejection are invalid.
+The corrected conclusion is narrower: do not add another handler until the
+current handler's compiled-in layout tax is isolated, and do not select a
+zlib-only candidate unless zlib-class workloads enter the A/B corpus.
 
 Evidence is archived under
 `bench/results/classic-profile-20260825T015948/` (54 final dumps, manifest
@@ -1842,11 +1836,9 @@ harness `bench/classic-profile-collect.sh`; ranking tool
 
 ## 19. Cumulative Baseline Freeze + Leave-One-Out Record (2026-08-25)
 
-Status: **final validation gate (handoff gate 4/5). The deployed baseline
-is frozen at BC26 + optimizer mask 0x7f + patch 0043 (mixed-numeric `mul`
-fast path); the only kept-but-off-mask items are R1 ext34's pass bits; the
-leave-one-out is the 0x7f-vs-0x1ff paired A/B, reproduced on a quiescent
-machine; fresh-directory validation is green.**
+Status: **historical pre-review freeze record, superseded by §20.** The BC26
++ 0x7f + mixed-number `mul` production baseline remains valid; the statement
+that ext34 was a kept off-mask item does not.
 
 ### 19.1 What "cumulative baseline" means
 
@@ -1968,11 +1960,147 @@ handoff), ext34-only +0.86% (this rerun), v1 compute fixtures
 The optimization loop terminates: every ranked candidate either failed the
 direct-binary gate (§18), is a runtime IC concern (call_method), or would
 embed a generic slow path measured negative twice (R0, arg0>get_field).
-Shipped configuration = BC26 + 0x7f + patch 0043; ext34 available via API
-pass bits. Evidence archives: `bench/results/classic-profile-20260825T015948/`
+The valid shipped configuration portion is BC26 + 0x7f + patch 0043. The old
+claim that ext34 was an available kept API pass is superseded by §20: it now
+requires an explicit compile-gated measurement build. Evidence archives:
+`bench/results/classic-profile-20260825T015948/`
 (54 dumps + manifest), `bench/results/ext34-classic-ab-20260825T014012/`
 (original §17.4 A/B), `bench/results/ext34-classic-ab-r1-20260825T035504/`
 (tainted run, archived), `bench/results/ext34-classic-ab-r1-20260825T0510/`
 (clean leave-one-out rerun), `bench/results/exec-throughput-r1-v8-20260825T0455/`
 (v8-suite three-state). bench/results is gitignored; the numbers above are
 the record.
+
+## 20. Authoritative ext34 Re-audit and Decision (2026-08-25)
+
+This section supersedes the ext34 keep/freeze conclusions in §§17–19. The
+profile census remains historical evidence, but the old ext34 timing cannot be
+used for a product decision.
+
+### 20.1 Correctness defects found and fixed
+
+The old matcher decoded frame slots directly into `uint8_t slots[3]`.
+`get_loc0_loc1` produces two bytes, so decoding it at `&slots[total]` when
+`total == 2` wrote one byte out of bounds. Pair+pair and singleton+pair
+prefixes could therefore corrupt the matcher stack and, under optimization,
+delete values preceding a legal suffix. This is a real miscompile, not a
+benchmark anomaly, and invalidates every earlier ext34 “keep” run.
+
+The matcher now decodes into a two-byte temporary, rejects a candidate whose
+combined width exceeds three, and only then copies the slots. Regression
+goldens prove that the preceding pair/singleton remains and the legal suffix
+still fuses. ASan/UBSan runs the full optimizer test through this sequence.
+
+Two independent gaps were also closed:
+
+- BC27 slot2/slot3 payloads are validated against the containing function's
+  separate argument and local counts by the QuickJS reader, strict optimizer
+  reader and CFG decoder before a handler can index the frame arrays.
+- the fused generic path now uses the original `get_array_el` `sf->cur_pc`
+  convention. A throwing getter produces exactly the same value, exception and
+  backtrace in the BC26 and fused runs.
+
+Directed runtime coverage includes dense-array hits and misses, string keys,
+objects, property-key coercion, getters, leftover-stack id3, null exceptions,
+invalid/truncated/unknown ext encodings and out-of-range tagged slots.
+
+### 20.2 Corrected same-binary fusion result
+
+The corrected feature-capable runtime compared `0x7f` with `0x1ff` using seven
+balanced ABBA/BAAB pairs per program (224 timed observations):
+
+| program | gain % | CI95 % | positive pairs |
+| --- | ---: | ---: | ---: |
+| kraken-audio-beat-detection | **+9.72** | [8.80, 10.66] | 7/7 |
+| kraken-audio-fft | **+9.66** | [8.70, 10.63] | 7/7 |
+| kraken-audio-oscillator | +0.04 | crosses zero | — |
+| kraken-imaging-darkroom | +0.59 | crosses zero | — |
+| octane-box2d | +0.36 | crosses zero | — |
+| octane-gameboy | +0.05 | crosses zero | — |
+| octane-navier-stokes | **+3.22** | [2.39, 4.07] | 7/7 |
+| octane-richards | +0.63 | crosses zero | — |
+| equal-weight geomean | +2.96 | program CI [-0.46, 6.49] | — |
+
+The fusion mechanism is therefore valid: when its exact loc-read/array
+windows are hot, removing two or three primary dispatches produces a material,
+repeatable win. This also corrects §18.6: retaining a generic slow path does
+not automatically make a multi-instruction fusion lose. The other five
+programs show no significant same-binary regression.
+
+The classic harness establishes successful completion and retains upstream
+suite assertions. Its appended `__capsidSuiteOk` marker is not a general
+result oracle, so the performance report does not claim “zero semantic
+mismatches.” Semantic equivalence comes from the directed differential tests.
+
+### 20.3 Compiled-in OFF tax and production containment
+
+A direct pre-0045/PATCHLESS runtime versus post-0045 feature-capable runtime
+comparison used mask `0x7f` on both sides. All eight compiled BC26 pairs were
+byte-identical, yet the feature-capable runtime regressed by **-1.44%**
+equal-weight with program-dispersion CI **[-2.50%, -0.37%]**. This fails the
+pre-registered ±0.5% OFF gate. Bytecode equality proves only serialized-output
+identity; it does not measure handler-induced interpreter layout.
+
+The accepted fix is a true compile gate. `CAPSID_ENABLE_EXT_FUSION34` defaults
+OFF and drives QuickJS `CONFIG_EXT_FUSION34`. OFF preprocessing removes the
+slot formats, live ids, reader operand path and both handlers; the optimizer
+masks the two experimental pass bits. Under identical standalone flags, the
+default-OFF and true pre-0045 artifacts are byte-for-byte equal:
+
+| artifact | shared SHA-256 |
+| --- | --- |
+| `quickjs.c.o` | `d7a4e5ab30874cb447bb23e15c3804ff007493cacefd2dabc2559a58fa9d88b8` |
+| `libqjs.a` | `909eb7cad319784505552213915a6723c487f01874dfca601f61c3037fd6f5aa` |
+| `qjs` | `e1fe59f0e5a211f53e61fce88bb9a5ea97308dfbdded304b1276b39bd50352f3` |
+
+The feature option is part of `bytecodeCompileFlags`; ON and OFF therefore
+produce different compatibility IDs and cannot silently exchange BC27 under
+one identity.
+
+The final net comparison directly measured pre-0045/PATCHLESS `0x7f` against
+the corrected enabled `0x1ff` binary rather than subtracting independent
+sessions:
+
+| program | net gain % | CI95 % |
+| --- | ---: | ---: |
+| kraken-audio-beat-detection | **+8.30** | [6.63, 10.00] |
+| kraken-audio-fft | **+8.26** | [6.40, 10.15] |
+| kraken-audio-oscillator | -1.14 | crosses zero |
+| kraken-imaging-darkroom | **+1.65** | [0.91, 2.39] |
+| octane-box2d | **-2.21** | [-2.90, -1.51] |
+| octane-gameboy | +0.18 | crosses zero |
+| octane-navier-stokes | +0.91 | crosses zero |
+| octane-richards | **-3.22** | [-4.42, -2.02] |
+| equal-weight geomean | +1.51 | program CI [-2.07, 5.22] |
+
+Beat/FFT remain strong, but the broad interval crosses zero and Box2D/Richards
+regress significantly. Darkroom emits no ext and its two bytecode blobs are
+identical, yet its runtime shifts +1.65%; enabled-handler layout can help or
+hurt independently of emission. This is why neither same-binary fusion data
+nor serialized identity is sufficient for the product gate.
+
+### 20.4 Decision and next step
+
+ext34 is **not shipped and not a kept production pass**. It remains an
+explicit measurement backend because its corrected Beat/FFT wins are strong,
+but the current enabled binary has significant Box2D/Richards regressions. The
+default product remains BC26 + `kPassAll` 0x7f + the retained
+mixed-number `mul` fast path, with exact patchless QuickJS code for ext34.
+
+Do not add another handler to the default binary. First use ext34 to study
+enabled-handler placement/outlining and compare the final enabled binary
+directly with PATCHLESS. Then resume the SableJS-style loop only with a
+candidate selected by both dynamic heat and cross-program/framework coverage.
+`add -> dup -> put_loc -> drop` remains a plausible next fusion because it can
+reuse QuickJS's complete add semantics and transfer a successful result into
+the local without type speculation or deoptimization, but it requires an exact
+census and its own final-binary gate. Object IC work remains stopped unless it
+is redesigned around compile-time per-site feedback slots, zero default tax,
+lazy state for proven-hot functions and a direct PATCHLESS win.
+
+Corrected evidence is under
+`bench/results/ext34-fixed-review-20260825/` and
+`bench/results/ext34-off-tax-fixed-review-20260825/`; direct net evidence is
+under `/tmp/capsid-ext34-fixed-net-review-20260825-r2/`. The reproducible OFF
+protocol is `bench/ext34-off-tax-ab.sh`; `bench/layout-tax-ext34.sh` is only a
+serialized-output identity check.

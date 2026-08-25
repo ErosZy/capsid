@@ -242,6 +242,10 @@ if(BUILD_TESTING)
                 test-bytecode-optimizer PRIVATE
                 capsid_bytecode_opt
                 tjs)
+            if(CAPSID_ENABLE_EXT_FUSION34)
+                target_compile_definitions(test-bytecode-optimizer PRIVATE
+                    CAPSID_ENABLE_EXT_FUSION34=1 CONFIG_EXT_FUSION34=1)
+            endif()
             set_target_properties(
                 test-bytecode-optimizer PROPERTIES
                 CXX_STANDARD 20
@@ -277,6 +281,10 @@ if(BUILD_TESTING)
                 test-bytecode-cfg PRIVATE
                 capsid_bytecode_opt
                 tjs)
+            if(CAPSID_ENABLE_EXT_FUSION34)
+                target_compile_definitions(test-bytecode-cfg PRIVATE
+                    CAPSID_ENABLE_EXT_FUSION34=1 CONFIG_EXT_FUSION34=1)
+            endif()
             set_target_properties(
                 test-bytecode-cfg PROPERTIES
                 CXX_STANDARD 20
@@ -368,10 +376,10 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_regions PROPERTIES TIMEOUT 120)
 
-            # Retained BC27/OP_ext foundation: production remains BC26-only;
-            # the retired R0 id 1 is a permanent hole, so all current BC27
-            # input must fail closed until a multi-instruction template
-            # clears the profile-weighted evidence gates.
+            # Retained BC27/OP_ext foundation: production/default remains
+            # BC26-only and the retired R0 id 1 is a permanent hole. An
+            # explicit ext34 feature build additionally validates live ids
+            # 2/3 and their tagged frame-slot payloads.
             add_executable(
                 test-ext-round-trip
                 tests/bytecode_optimizer/test_ext_round_trip.cc)
@@ -379,6 +387,10 @@ if(BUILD_TESTING)
                 test-ext-round-trip PRIVATE
                 capsid_bytecode_opt
                 tjs)
+            if(CAPSID_ENABLE_EXT_FUSION34)
+                target_compile_definitions(test-ext-round-trip PRIVATE
+                    CAPSID_ENABLE_EXT_FUSION34=1 CONFIG_EXT_FUSION34=1)
+            endif()
             set_target_properties(
                 test-ext-round-trip PROPERTIES
                 CXX_STANDARD 20
@@ -4864,6 +4876,10 @@ if(BUILD_TESTING)
             tests/test_ext_bytecode.cc
         )
         target_link_libraries(test-ext-bytecode PRIVATE tjs)
+        if(CAPSID_ENABLE_EXT_FUSION34)
+            target_compile_definitions(test-ext-bytecode PRIVATE
+                CONFIG_EXT_FUSION34=1)
+        endif()
         add_test(
             NAME ext_bytecode_directed
             COMMAND test-ext-bytecode

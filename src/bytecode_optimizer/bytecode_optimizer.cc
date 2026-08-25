@@ -662,7 +662,9 @@ bool decode_code(const uint8_t* code,
                  size_t len,
                  std::vector<Insn>* insns,
                  std::string* error,
-                 bool allow_ext = false);
+                 bool allow_ext = false,
+                 uint32_t arg_count = 0,
+                 uint32_t var_count = 0);
 
 enum class TopLevelKind { kModule, kGlobal };
 
@@ -748,7 +750,7 @@ bool parse_buffer(const uint8_t* data,
         bool run(const FuncRecord& f, std::string* error) {
             std::vector<Insn> insns;
             if (!decode_code(data + f.code_off, f.code_len, &insns, error,
-                             allow_ext)) {
+                             allow_ext, f.arg_count, f.var_count)) {
                 return false;
             }
             for (size_t i = 0; i < insns.size(); i++) {
@@ -970,7 +972,9 @@ bool decode_code(const uint8_t* code,
                  size_t len,
                  std::vector<Insn>* insns,
                  std::string* error,
-                 bool allow_ext) {
+                 bool allow_ext,
+                 uint32_t arg_count,
+                 uint32_t var_count) {
     size_t pc = 0;
     while (pc < len) {
         uint8_t op = code[pc];
@@ -1006,6 +1010,20 @@ bool decode_code(const uint8_t* code,
         if (pc + size > len) {
             *error = "bytecode optimize: truncated instruction";
             return false;
+        }
+        if (op == OP_ext) {
+            ExtInfo ei;
+            if (!ext_lookup(code[pc + 1], &ei) ||
+                !capsid::bytecode::ir::validate_ext_operands(
+                    ei, code + pc + 2, size - 2, arg_count, var_count,
+                    error)) {
+                if (error->empty()) {
+                    *error = "bytecode optimize: invalid ext operands";
+                } else if (error->compare(0, 5, "ext: ") == 0) {
+                    error->replace(0, 5, "bytecode optimize: ");
+                }
+                return false;
+            }
         }
         Insn in;
         in.op = op;
@@ -3197,9 +3215,14 @@ bool verify_code(const uint8_t* code,
                  size_t len,
                  uint32_t recorded_stack_size,
                  std::string* error,
-                 bool allow_ext = false) {
+                 bool allow_ext = false,
+                 uint32_t arg_count = 0,
+                 uint32_t var_count = 0) {
     std::vector<Insn> insns;
-    if (!decode_code(code, len, &insns, error, allow_ext)) return false;
+    if (!decode_code(code, len, &insns, error, allow_ext,
+                     arg_count, var_count)) {
+        return false;
+    }
     if (insns.empty()) {
         *error = "bytecode optimize: empty code blob";
         return false;
@@ -3446,7 +3469,7 @@ static bool tier3_apply_to_propkey(std::vector<Insn>* insns,
 // windows in the final stream. Runs after the last reshrink, so every
 // matching get_loc* is short-form (get_loc0-3/get_loc8) with aux < 256
 // — the ext payload is one byte per loc. The fused ext's stack effect
-// equals its window's (id 2: pop 2 push 1; id 3: pop 2 push 2), so
+// equals its window's (id 2: net +1; id 3: net +2), so
 // heights, catch offsets, and exception stack shapes are preserved:
 // the dispatch loop finds handlers by unwinding the stack for a
 // CATCH_OFFSET tag, never by pc range, so try regions impose no
@@ -3518,8 +3541,17 @@ static bool ext34_fuse(std::vector<Insn>* insns,
         int total = 0;
         size_t j = i;
         for (; j < n && total < 3; j++) {
-            int got = read_slots((*insns)[j], &slots[total]);
+            // Decode into a temporary first. get_loc0_loc1 produces two
+            // slots, so passing &slots[total] directly would write past the
+            // three-byte buffer when only one byte remains. An over-wide
+            // read ends this candidate run without consuming it; retrying at
+            // i+1 below can still fuse a legal suffix ending at the same
+            // get_array_el.
+            uint8_t decoded[2];
+            int got = read_slots((*insns)[j], decoded);
             if (got == 0) break;
+            if (total + got > 3) break;
+            for (int k = 0; k < got; k++) slots[total + k] = decoded[k];
             total += got;
         }
         if (j >= n) break;  // stream ended inside a run: no array
@@ -3728,7 +3760,8 @@ bool rewrite_function(const FuncRecord& f,
     // decode + ext-table stack effects the reader enforces.
     if (!verify_code(new_code->data(), new_code->size(), f.stack_size,
                      error, /*allow_ext=*/(passes & (kPassExtFuse34 |
-                                                     kPassExtFuse4)) != 0)) {
+                                                     kPassExtFuse4)) != 0,
+                     f.arg_count, f.var_count)) {
         return false;
     }
 
@@ -3836,7 +3869,7 @@ void emit_record(const FuncRecord& f,
 bool verify_tree(const FuncRecord& f, const uint8_t* data, std::string* error,
                  bool allow_ext = false) {
     if (!verify_code(data + f.code_off, f.code_len, f.stack_size, error,
-                     allow_ext)) {
+                     allow_ext, f.arg_count, f.var_count)) {
         return false;
     }
     for (size_t i = 0; i < f.children.size(); i++) {
@@ -5107,6 +5140,12 @@ static bool optimize_with_top_level(const std::vector<std::uint8_t>& in,
                                     TopLevelKind top_level,
                                     std::string* error) {
     error->clear();
+#ifndef CAPSID_ENABLE_EXT_FUSION34
+    // The two API bits remain numerically reserved, but a production/default
+    // build has neither live ext ids nor runtime handlers. Treat requests as
+    // unavailable rather than emitting BC27 that this binary cannot load.
+    passes &= ~(kPassExtFuse34 | kPassExtFuse4);
+#endif
     // F0: the retired R0 emitter no longer produces BC27, and BC27 is never
     // re-optimized. Accepting ext input would silently run the v1 passes over
     // instructions whose stack effects only the ext table knows — there
@@ -5266,6 +5305,8 @@ bool read_functions(const uint8_t* data,
             fi.dbg_pc2line_len = f.dbg_pc2line_len;
             fi.dbg_line = f.dbg_line;
             fi.dbg_col = f.dbg_col;
+            fi.arg_count = f.arg_count;
+            fi.var_count = f.var_count;
             fi.stack_size = f.stack_size;
             fi.children.reserve(f.children.size());
             for (size_t i = 0; i < f.children.size(); i++) {

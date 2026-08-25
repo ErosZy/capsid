@@ -134,6 +134,9 @@ def main() -> int:
     parser.add_argument("--cpuset", default="2")
     parser.add_argument("--program", action="append", default=[],
                         help="program name or filename; repeat to select")
+    parser.add_argument(
+        "--require-bytecode-identical", action="store_true",
+        help="fail before timing when the two compiled bytecode files differ")
     args = parser.parse_args()
     if args.pairs <= 0 or args.timeout <= 0:
         parser.error("--pairs and --timeout must be positive")
@@ -166,6 +169,7 @@ def main() -> int:
         "cpuset": args.cpuset,
         "pairs": args.pairs,
         "timeout_seconds": args.timeout,
+        "require_bytecode_identical": args.require_bytecode_identical,
         "corpus_manifest_sha256": sha256(manifest_path),
         "control": {"tool": str(args.control_tool.resolve()),
                     "sha256": sha256(args.control_tool),
@@ -179,6 +183,7 @@ def main() -> int:
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
     compiled: dict[tuple[str, str], Path] = {}
+    bytecode_identity: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
     for program in programs:
         source = args.corpus / program["file"]
@@ -208,6 +213,23 @@ def main() -> int:
                 failures.append({"program": stem, "stage": f"smoke-{arm}"})
                 break
             compiled[(stem, arm)] = output
+        control_blob = compiled.get((stem, "control"))
+        candidate_blob = compiled.get((stem, "candidate"))
+        if control_blob is not None and candidate_blob is not None:
+            control_sha = sha256(control_blob)
+            candidate_sha = sha256(candidate_blob)
+            identical = control_sha == candidate_sha
+            bytecode_identity.append({
+                "program": stem,
+                "identical": identical,
+                "control_sha256": control_sha,
+                "candidate_sha256": candidate_sha,
+            })
+            if args.require_bytecode_identical and not identical:
+                failures.append({"program": stem,
+                                 "stage": "bytecode-identity"})
+                compiled.pop((stem, "control"), None)
+                compiled.pop((stem, "candidate"), None)
 
     runnable = [program for program in programs
                 if (Path(program["file"]).stem, "control") in compiled and
@@ -261,6 +283,7 @@ def main() -> int:
     summary.update({"requested_programs": len(programs),
                     "runnable_programs": len(runnable),
                     "complete_programs": len(complete_programs),
+                    "bytecode_identity": bytecode_identity,
                     "failures": failures})
     (args.out / "summary.json").write_text(
         json.dumps(summary, indent=2) + "\n", encoding="utf-8")

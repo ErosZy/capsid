@@ -5,8 +5,8 @@
 // vendored VM or the compatibility identity; unmodified runtimes load
 // the output with JS_ReadObject as-is. The deployed optimizer emits
 // canonical BC26 only. BC27 is owned by the separate ext/fusion
-// foundation and is not emitted until a measured multi-instruction
-// template passes its independent keep gate.
+// foundation and can be emitted only by an explicitly compiled
+// CAPSID_ENABLE_EXT_FUSION34 measurement build using non-deployed bits.
 //
 // Fail-closed contract: any input the optimizer cannot fully parse
 // (unknown BCTag, unknown opcode, malformed LEB128, checksum mismatch,
@@ -88,9 +88,10 @@ enum PassFlags : uint32_t {
     // standard compaction remap.
     kPassTier3Lane2 = 1u << 6,
     // R1 (tier-3 plan §5.3.2, docs/quickjs-ng-opcode-optimization.md):
-    // BC27 ext fusion of get_loc* + get_array_el windows (measured
-    // candidate; keep gate pending). kPassExtFuse34 fuses the 3-insn
-    // window [get_loc* obj][get_loc* idx][get_array_el] into ext id 2
+    // Experimental BC27 ext fusion of get_loc* + get_array_el windows.
+    // These bits are unavailable in default builds; an explicit
+    // CAPSID_ENABLE_EXT_FUSION34 build is required. kPassExtFuse34 fuses
+    // the 3-insn window [get_loc* obj][get_loc* idx][get_array_el] into ext id 2
     // (payload [obj, idx]); kPassExtFuse4 fuses the 4-insn window
     // [get_loc* keep][get_loc* obj][get_loc* idx][get_array_el] into
     // ext id 3 (payload [keep, obj, idx]). The matcher runs on the
@@ -100,7 +101,7 @@ enum PassFlags : uint32_t {
     // try regions impose no constraint). Both emit BC27 (version byte
     // patched after the checksum write; canonical BC27 requires >= 1
     // ext), so neither is in kPassAll: the deployed pipeline stays
-    // byte-identical BC26 until a template clears its keep gate.
+    // byte-identical BC26.
     kPassExtFuse34 = 1u << 7,
     kPassExtFuse4 = 1u << 8,
     kPassAll = kPassP2 | kPassP31 | kPassP11 | kPassP14 | kPassP16 |

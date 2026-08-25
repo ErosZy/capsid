@@ -92,6 +92,11 @@ if(CAPSID_ENABLE_SHAPE_GUARD_IC AND NOT CAPSID_ENABLE_SHAPE_GUARD_ID32)
     message(FATAL_ERROR
         "CAPSID_ENABLE_SHAPE_GUARD_IC requires CAPSID_ENABLE_SHAPE_GUARD_ID32 (IC guards are ID32 shape ids)")
 endif()
+# R1 loc-read + get_array_el fusion is retained only as an experimental
+# measurement backend. Its compiled-in handlers failed the patchless-vs-OFF
+# runtime gate, so production/default builds must not contain them.
+option(CAPSID_ENABLE_EXT_FUSION34
+    "Build with the experimental BC27 ext34 fusion backend" OFF)
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY
@@ -336,7 +341,7 @@ endif()
 # value must be ONE canonical string — a multi-argument set() would form a
 # CMake semicolon list and a one-value argument would silently truncate it.
 set(CAPSID_BUILD_COMPILE_FLAGS
-    "build_type=${CMAKE_BUILD_TYPE} lto=${CAPSID_ENABLE_LTO} asan=${CAPSID_ENABLE_ASAN} ubsan=${CAPSID_ENABLE_UBSAN} mimalloc=${CAPSID_USE_MIMALLOC}")
+    "build_type=${CMAKE_BUILD_TYPE} lto=${CAPSID_ENABLE_LTO} asan=${CAPSID_ENABLE_ASAN} ubsan=${CAPSID_ENABLE_UBSAN} mimalloc=${CAPSID_USE_MIMALLOC} ext_fusion34=${CAPSID_ENABLE_EXT_FUSION34}")
 math(EXPR CAPSID_POINTER_WIDTH_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
 # Provenance target triple. A cross compiler reports its own triple; native
 # builds compose one from the platform the CMake toolchain targets.

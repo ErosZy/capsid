@@ -73,6 +73,52 @@ bool ext_lookup(uint8_t id, ExtInfo* out) {
     return true;
 }
 
+bool validate_ext_operands(const ExtInfo& info,
+                           const uint8_t* payload,
+                           size_t payload_len,
+                           uint32_t arg_count,
+                           uint32_t var_count,
+                           std::string* error) {
+    if (info.size < 2) {
+        *error = "ext: invalid instruction size";
+        return false;
+    }
+    size_t slots = 0;
+    switch (info.fmt) {
+    case EXT_FMT_none:
+        if (payload_len != static_cast<size_t>(info.size - 2)) {
+            *error = "ext: operand format/size mismatch";
+            return false;
+        }
+        return true;
+    case EXT_FMT_slot2:
+        slots = 2;
+        break;
+    case EXT_FMT_slot3:
+        slots = 3;
+        break;
+    default:
+        *error = "ext: unimplemented operand format";
+        return false;
+    }
+    if (payload_len != slots || info.size != slots + 2) {
+        *error = "ext: operand format/size mismatch";
+        return false;
+    }
+    for (size_t i = 0; i < slots; i++) {
+        const uint8_t slot = payload[i];
+        const uint32_t index = slot & 0x7fu;
+        const uint32_t limit = (slot & 0x80u) ? arg_count : var_count;
+        if (index >= limit) {
+            *error = std::string("ext: ") +
+                     ((slot & 0x80u) ? "argument" : "local") +
+                     " slot operand out of range";
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ext_round_trip(const uint8_t* data,
                     size_t size,
                     ExtRoundTripReport* out,

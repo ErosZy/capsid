@@ -22,7 +22,7 @@
 #
 # Usage (script mode):
 #   cmake -DCAPSID_SOURCE_DIR=... -DCAPSID_CMAKE_COMMAND=...
-#        [-DCAPSID_MATRIX_VARIANTS="plain;asan;ubsan;mimalloc;lto-off;quickjs-diff"]
+#        [-DCAPSID_MATRIX_VARIANTS="plain;asan;ubsan;mimalloc;lto-off;ext-fusion34;quickjs-diff"]
 #        [-DCAPSID_MATRIX_WORK_DIR=...]
 #        -P tests/test_build_identity_matrix.cmake
 
@@ -33,7 +33,7 @@ endif()
 
 if(NOT CAPSID_MATRIX_VARIANTS)
     set(CAPSID_MATRIX_VARIANTS
-        "plain;asan;ubsan;mimalloc;lto-off;quickjs-diff")
+        "plain;asan;ubsan;mimalloc;lto-off;ext-fusion34;quickjs-diff")
 endif()
 # MSVC has no UBSan/TSan runtime, and LTO is forced off (MSVC /GL binds
 # replaceable operator new/delete); those variants cannot configure or
@@ -99,6 +99,8 @@ function(capsid_matrix_configure variant build_dir)
         set(extra_flags "-DCAPSID_USE_MIMALLOC=ON")
     elseif("${variant}" STREQUAL "lto-off")
         set(extra_flags "-DCAPSID_ENABLE_LTO=OFF")
+    elseif("${variant}" STREQUAL "ext-fusion34")
+        set(extra_flags "-DCAPSID_ENABLE_EXT_FUSION34=ON")
     elseif("${variant}" STREQUAL "quickjs-diff")
         set(extra_flags
             "-DCAPSID_LOCKED_IDENTITY_MANIFEST=${MATRIX_FAKE_MANIFEST}")
@@ -153,7 +155,7 @@ function(capsid_matrix_record variant build_dir
         "^schema=capsid-bytecode-compatibility-v2\nquickjsCommit=[0-9a-f]+\n"
         "txikiOverlayManifest=[0-9a-f]+\n"
         "bytecodeCompileFlags=build_type=[^ ]* lto=(ON|OFF) asan=(ON|OFF) "
-        "ubsan=(ON|OFF) mimalloc=(ON|OFF)\n"
+        "ubsan=(ON|OFF) mimalloc=(ON|OFF) ext_fusion34=(ON|OFF)\n"
         "targetArchitecture=[^\n]+\nendianness=(little|big)\n"
         "pointerWidthBits=[0-9]+\n"
         "bytecodeFormatIdentity=quickjs-ng-bytecode-v1\n$")

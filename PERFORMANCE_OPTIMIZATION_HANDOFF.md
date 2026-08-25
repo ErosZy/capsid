@@ -1,270 +1,219 @@
-# Performance optimization handoff (2026-08-25)
+# Performance optimization handoff (reviewed 2026-08-25)
 
-This note records the profile-guided QuickJS work on branch
-`r0-array-ext-template`.  It is a handoff, not a claim that the optimization
-programme is complete.  The retained production change is the mixed-number
-multiplication fast path.  The field IC remains measurement-only, and the
-current three/four-instruction property fusion experiment must not be merged
-until its binary-layout tax is resolved.
+This is the authoritative handoff for branch `r0-array-ext-template`. The
+production result is deliberately conservative: keep the already accepted
+mixed-number multiplication fast path, keep CFG/SSA and profiling as analysis
+infrastructure, stop the field IC, and retain ext34 only as an explicitly
+compiled experimental backend. Default builds contain no ext34 reader rows,
+handlers, observer, or code-layout change and emit BC26.
 
-## Method and acceptance rule
+## Final decisions
 
-The current loop follows the approach used by SableJS:
+| Work item | Decision | Reason |
+| --- | --- | --- |
+| mixed numeric `mul` fast path | keep | +3.366% equal-weight gain on the selected classic corpus, CI [+1.262%, +5.515%] |
+| exact-PC field IC | stop/default OFF | PATCHLESS fresh-receiver latency regressed +7.31%, while mono and Hono had no significant win; feature-built OFF also carried a 2–3% centre tax |
+| CFG+SSA | keep analyze-only | useful for correctness, census and selection; the current lowering vocabulary does not itself create a speedup |
+| ext34 loc-read + array access fusion | experimental, compile-gated OFF | corrected same-binary results prove large target wins, but compiling the handlers into an otherwise-OFF runtime regresses the broad sample |
+| more ext handlers now | stop | first remove or isolate enabled-binary layout cost and select a candidate from a workload that will measure it |
 
-1. profile pinned Kraken 1.1, Octane 2.0 and SunSpider 1.0 programs, plus the
-   framework/worker workloads;
-2. rank opcode classes, slow paths and adjacent instruction sequences;
-3. implement one mechanically explainable candidate at a time;
-4. measure paired ABBA/BAAB samples on a pinned CPU;
-5. retain a local win when it is reproducible on the workloads that execute
-   the optimized path and does not cause a direct-binary regression elsewhere;
-6. periodically measure the cumulative build and perform leave-one-out tests.
+“OFF” is not merely a pass mask. `CAPSID_ENABLE_EXT_FUSION34=OFF` now removes
+the live ext ids, operand formats, reader validation and runtime handlers at
+preprocessing time. The optimizer masks the reserved ext34 pass bits. The ON
+state is included in `bytecodeCompileFlags`, so an ON compiler/runtime cannot
+silently exchange BC27 with an OFF runtime under the same compatibility ID.
 
-A candidate does not need to move the equal-weight aggregate significantly by
-itself: small, well-attributed wins can accumulate.  Conversely, a same-binary
-service win is insufficient if adding its handler changes the interpreter's
-machine-code layout and makes the final binary slower.
+## Why the old ext34 keep record is invalid
 
-The classic-suite runner uses four observations per pair, alternates ABBA and
-BAAB ordering, and reports pair-local log ratios with confidence intervals.
-Positive `gain` means lower candidate latency.
+The earlier +0.66%/+0.86% record was collected with a memory-unsafe matcher.
+Its three-byte `slots` array let `get_loc0_loc1` write two decoded slots at
+`slots[total]` even when only one element remained. A sequence containing two
+slot pairs could overwrite the stack and, in optimized builds, delete values
+that preceded the legal suffix. That invalidates all pre-fix ext34 timing as a
+keep decision, even when a particular corpus happened not to expose a visible
+wrong result.
 
-## Reproducible tooling
+The review also found two independent safety/semantic gaps:
 
-The repository now contains:
+- BC27 accepted tagged local/argument indexes without checking them against
+  the containing function's frame sizes; the handlers then indexed the frame
+  arrays directly.
+- the fused slow path set `sf->cur_pc` differently from the original
+  `get_array_el`, which could change exception source/backtrace behaviour.
 
-- `bench/prepare-js-suites.py`: builds a guarded, manifest-driven classic
-  suite corpus;
-- `bench/classic-bytecode.cc`: compiles optimized QuickJS bytecode and runs it
-  without the worker/HTTP layer;
-- `bench/classic-suite-ab.py`: paired cross-suite A/B runner;
-- `bench/classic-suite-profile.py`: opcode/source-site profile collector;
-- `bench/profile_sequences.py`: adjacent-sequence census and ext-dispatch
-  cost model;
-- field-IC worker/host/off-tax A/B and analysis scripts;
-- directed fixtures and tests for opcode profiling, IC correctness and
-  optimizer differentials.
+The matcher now decodes each slot instruction into a two-byte temporary,
+checks the combined width, and only then copies it. The strict optimizer
+reader, CFG decoder and QuickJS reader share/equivalently enforce slot payload
+length and argument/local bounds. The handler uses the original
+`get_array_el` PC convention. Directed tests cover pair+pair, singleton+pair,
+invalid frame indexes, getters, slow coercion paths and exact exception stack
+equality.
 
-The corpus used during this session is
-`/tmp/capsid-suite-corpus-v1.RPqKC5`, generated from pinned sources in
-`/tmp/capsid-js-suites-20260824`.  The complete pre-fix profile is in
-`/tmp/capsid-classic-profile-all.sFNBmo`.  A post-fix recollection was started
-in `/tmp/capsid-classic-profile-fixed.QjDVXV` but is incomplete and should be
-finished before treating exact sequence totals as final.
+## Corrected ext34 performance evidence
 
-The complete profile covers 38 runnable programs and about 12.03 billion
-dynamic opcode executions.  Its fixed-size exact-site table overflowed by
-about 1.204 billion observations.  Aggregate opcode/class counts are useful;
-sequence counts are lower bounds and should be used for candidate selection,
-not as exact coverage claims.
+Pinned corpus revisions:
 
-The highest-volume opcodes were `get_loc8`, `swap`, `get_field`,
-`get_array_el`, `add` and `mul`.  The slow-path cost model ranked
-`call_method`, `mul`, `get_array_el`, `sub`, `add` and `div` highest.
+- Kraken 1.1: `77ef4e08af23c131166762adad8cb460c49160e8`
+- Octane 2.0: `570ad1ccfe86e3eecba0636c8f932ac08edec517`
+- SunSpider/JetStream resources: `7769b693502fa80f28a97bbfacd3296e0513acc5`
 
-## Retained optimization: mixed numeric multiplication
+The corrected same-binary A/B compares pass mask `0x7f` with `0x1ff` in one
+feature-capable runtime, using seven balanced ABBA/BAAB pairs per program
+(224 timed samples):
 
-`patches/txiki/0043-quickjs-mixed-number-mul-fast-path.patch` keeps the
-existing int/int fast path and adds an inline numeric path when both operands
-are int/float values.  Objects, BigInt and coercion cases continue through the
-original slow path.
+| Program | Candidate gain | 95% CI | Positive pairs |
+| --- | ---: | ---: | ---: |
+| Kraken Beat Detection | +9.72% | [+8.80%, +10.66%] | 7/7 |
+| Kraken FFT | +9.66% | [+8.70%, +10.63%] | 7/7 |
+| Kraken Oscillator | +0.04% | crosses zero | — |
+| Kraken Darkroom | +0.59% | crosses zero | — |
+| Octane Box2D | +0.36% | crosses zero | — |
+| Octane Gameboy | +0.05% | crosses zero | — |
+| Octane Navier-Stokes | +3.22% | [+2.39%, +4.07%] | 7/7 |
+| Octane Richards | +0.63% | crosses zero | — |
+| Equal-weight geomean | +2.96% | program CI [-0.46%, +6.49%] | — |
 
-Seven paired rounds over eight programs (224 timed observations) produced:
+This answers the instruction-fusion question: the operation itself works.
+When its exact loc-read/array windows are hot, removing two or three primary
+dispatches has a material and repeatable benefit. Neutral programs do not show
+a significant same-binary regression.
 
-| Program | Gain | 95% CI / note |
-| --- | ---: | --- |
-| Kraken Beat Detection | +3.02% | [+2.45%, +3.59%] |
-| Kraken DFT | +0.78% | not significant |
-| Kraken FFT | +2.95% | [+2.62%, +3.29%] |
-| Kraken Oscillator | +5.94% | [+5.11%, +6.79%] |
-| Kraken Darkroom | +6.75% | [+5.69%, +7.82%] |
-| Octane Box2D | +1.08% | [+0.39%, +1.77%] |
-| Octane Navier-Stokes | +6.07% | [+5.56%, +6.58%] |
-| Octane Richards | +0.56% | not significant |
+The required direct PATCHLESS-vs-feature-built-OFF attribution compares two
+different runtimes while both compile and execute mask `0x7f`; every one of
+the eight bytecode pairs is byte-identical. The feature-capable binary still
+measured an equal-weight **-1.44%** regression, program-dispersion CI
+**[-2.50%, -0.37%]**. Beat, FFT, Box2D, Navier-Stokes and Richards had
+significant regressions. Therefore “serialized BC26 is identical” never proved
+zero layout tax; it proved only output identity.
 
-The equal-weight gain is **+3.366%**, with program-dispersion 95% CI
-**[+1.262%, +5.515%]**.  The raw session output is
-`/tmp/capsid-mixed-mul-ab-final.ovvMeF`.
+The final product-shaped comparison does not subtract those two sessions. It
+directly compares the pre-0045/PATCHLESS `0x7f` binary with the corrected
+feature binary running `0x1ff`:
 
-## Rejected arithmetic and short-ext candidates
+| Program | Net enabled-binary gain | 95% CI |
+| --- | ---: | ---: |
+| Kraken Beat Detection | **+8.30%** | [+6.63%, +10.00%] |
+| Kraken FFT | **+8.26%** | [+6.40%, +10.15%] |
+| Kraken Oscillator | -1.14% | crosses zero |
+| Kraken Darkroom (bytecode-identical control) | **+1.65%** | [+0.91%, +2.39%] |
+| Octane Box2D | **-2.21%** | [-2.90%, -1.51%] |
+| Octane Gameboy | +0.18% | crosses zero |
+| Octane Navier-Stokes | +0.91% | crosses zero |
+| Octane Richards | **-3.22%** | [-4.42%, -2.02%] |
+| Equal-weight geomean | +1.51% | program CI [-2.07%, +5.22%] |
 
-| Candidate | Equal-weight gain | Decision |
-| --- | ---: | --- |
-| mixed int/float `OP_sub` | +0.119%, CI [-1.750%, +2.023%] | reject |
-| numeric `OP_div` inline path | +0.067%, CI [-1.501%, +1.659%] | reject |
-| mixed int/float `OP_add` | +0.092%, CI [-0.537%, +0.724%] | reject |
-| float `add_loc` path | +0.260%, CI [-0.565%, +1.092%] | reject |
-| ext `get_arg0 + get_field` | -1.28%, CI [-1.77%, -0.77%] | reject |
+The enabled binary therefore has real workload-specific wins, but not a broad
+keep: its aggregate interval crosses zero and two Octane programs regress
+significantly. Darkroom emits no ext and has byte-identical bytecode, yet moves
+significantly in the opposite direction, directly demonstrating that runtime
+machine-code layout effects are workload-dependent and cannot be inferred from
+serialized bytes.
 
-The two-primary-opcode ext candidate cannot save a dispatch: execution still
-performs the primary `OP_ext` dispatch and the secondary ext-id dispatch.  New
-ext candidates therefore need at least three original instructions, and their
-cost model uses `max(length - 2, 0)` avoided dispatches.
+The compile gate removes that tax from production. A standalone default-OFF
+QuickJS build was compared with the true pre-0045 source using identical flags:
 
-## Field IC result
+| Artifact | Result |
+| --- | --- |
+| `quickjs.c.o` | byte-identical, SHA-256 `d7a4e5ab30874cb447bb23e15c3804ff007493cacefd2dabc2559a58fa9d88b8` |
+| `libqjs.a` | byte-identical, SHA-256 `909eb7cad319784505552213915a6723c487f01874dfca601f61c3037fd6f5aa` |
+| `qjs` executable | byte-identical, SHA-256 `e1fe59f0e5a211f53e61fce88bb9a5ea97308dfbdded304b1276b39bd50352f3` |
 
-The exact-PC adaptive field IC and its ID32 guards are compile-gated and OFF by
-default.  Repairing the terminal observer reduced the original fresh-path
-regression from about 18.98% to 2.77%, confirming the diagnosis, but the final
-direct PATCHLESS comparison remained unacceptable:
+This is stronger than another noisy OFF timing run: the production machine
+code is the patchless machine code.
 
-- fresh: **+7.31% latency regression**, 95% CI [+5.15%, +9.51%];
-- monomorphic micro: -0.25%, not significant;
-- Hono: -0.94%, not significant;
-- an IC-capable binary with the feature runtime-disabled still carried a
-  roughly 2-3% centre tax.
+Raw corrected sessions are local under:
 
-Response, serialization, round-trip, optimizer-differential and IC correctness
-tests passed.  The implementation remains useful measurement infrastructure,
-but production must remain OFF.  An interpreter-level C cache is not equivalent
-to V8's use of feedback to emit specialized machine code; observer, site-state
-and code-layout costs can consume the lookup saving.
+- `bench/results/ext34-fixed-review-20260825/` — corrected same-binary fusion;
+- `bench/results/ext34-off-tax-fixed-review-20260825/` — compiled-in OFF tax;
+- `/tmp/capsid-ext34-fixed-net-review-20260825-r2/` — direct patchless-to-enabled
+  net comparison.
 
-## Optimizer correctness fixes
+The three `summary.json` SHA-256 values in that order are
+`2ec9ea79208a47fb7f389bdc920c88396b80497bc12356a7f3623b8975d74a7d`,
+`407a714f35afebdeaf6f6e90ae29582beb97b4362eee4f4080e9257a09700392`,
+and `a77ffe5448b0cf7f9fa864961bb1bfd1ef655ca84fa7da95734eb2cb0d82cd0a`.
 
-Two real bugs were found while building the suite harness:
+`bench/classic-suite-ab.py --require-bytecode-identical` and
+`bench/ext34-off-tax-ab.sh` now make the runtime-tax protocol reproducible.
+`bench/layout-tax-ext34.sh` is explicitly described as a serialized-output
+identity check, not a runtime layout measurement.
 
-1. P11 aliases crossed branches and CFG joins.  Alias state is now cleared at
-   branch instructions and branch targets.
-2. QuickJS vardef capture flags are laid out as `[arguments..., locals...]`,
-   while local opcodes index only the local suffix.  P11, P14 and P16 now add
-   `arg_count` when consulting captured-local state.
+## Correctness and validation state
 
-Directed branch, captured-local and runtime fixtures cover these cases.
+The following are green in both relevant configurations:
 
-`patches/txiki/0044-quickjs-ext-reader-errors.patch` also makes invalid and
-truncated ext encodings install a SyntaxError before deserialization returns
-an exception.  Previously the reader could return `JS_EXCEPTION` with no
-pending exception, causing the directed test to dereference an uninitialized
-value.
+- default-OFF optimizer, ext reader and round-trip tests;
+- feature-ON optimizer goldens and live runtime differential tests;
+- feature-ON CFG and BC27 round-trip tests;
+- invalid/truncated/unknown/out-of-range BC27 reader rejection;
+- getter, property-key coercion, missing value, null exception and backtrace
+  equivalence;
+- ASan/UBSan optimizer/runtime run, including the sequence that found the old
+  overwrite.
 
-## Unresolved three/four-instruction fusion
+The classic-suite harness checks successful completion and each suite's own
+embedded assertions. Its appended `__capsidSuiteOk` marker is not a general
+output oracle, so the report must not call it “zero semantic mismatches.” The
+strong semantic evidence for ext34 is the directed base/optimized differential
+suite; the classic corpus supplies performance and execution-completion
+evidence.
 
-The experiment is intentionally not present in the repository patch series.
-Its temporary sources are:
+## What CFG+SSA can and cannot do here
 
-- QuickJS: `/tmp/capsid-qjs-mul-locarray-ext-candidate`;
-- optimizer: `/tmp/capsid-optimizer-locarray-src/bytecode_optimizer`;
-- baseline tool: `/tmp/capsid-classic-mul-current`;
-- ext-capable tool: `/tmp/capsid-classic-mul-locarray-ext34-candidate`.
+The limitation is not missing AST. QuickJS bytecode already contains enough
+control flow and dataflow to construct CFG and stack/local SSA. Lowering is
+also possible. The issue is economic: if SSA lowers back to the same BC26
+operations, QuickJS's C interpreter has already implemented most obvious local
+fast paths, so analysis alone saves little. A new fused opcode pays ext decode
+and secondary dispatch; it must eliminate enough primary dispatches,
+materialization/refcount work, or a genuinely expensive generic lookup to pay
+for that cost.
 
-It defines:
+ext34 is useful evidence because it crosses that threshold at hot sites. R0's
+single array opcode and `get_arg0 + get_field` did not. Thus CFG+SSA should
+remain the proof and selection layer, not be sold as the optimization itself.
 
-- ext id 2: `get_loc8 + get_loc8 + get_array_el`, saving one dispatch;
-- ext id 3: `get_loc8 + get_loc8 + get_loc8 + get_array_el`, saving two
-  dispatches;
-- passes `0x7f`: neither fusion; `0xff`: three-instruction fusion;
-  `0x1ff`: both fusions.
+## Why V8/Hermes can gain much more from ICs
 
-The matcher initially ran before Tier-3 local loads were re-shrunk and therefore
-never saw `get_loc8`.  Moving `apply_reshrink` before matching fixed it.
-Array/object/missing-property behavior, property-key coercion order, getters
-and null exceptions pass the temporary runtime fixtures.
+QuickJS already puts common tag/array/property cases close to the interpreter
+opcode. Wrapping that C path in another cache can save lookup work, but also
+adds training, guards, state, misses and code-layout pressure. V8 uses feedback
+to select or patch much lower-level specialized code paths; its hit path can
+become a small sequence of loads, compares and a direct branch instead of a
+trip through generic C dispatch. Hermes likewise designs bytecode/runtime
+specialization as part of the VM architecture rather than as an extra table
+around an already compact QuickJS handler.
 
-### Same-binary service measurements
+The old QuickJS-ng atom-shared four-shape ring avoided exact-PC lookup but
+mixed same-name sites and retained heavier per-function state. Repeating that
+design is not the next step. If field IC work resumes, allocate a slot per
+bytecode site at compile time, encode the slot operand directly, allocate state
+only for proven-hot functions, and benchmark the final enabled binary directly
+against PATCHLESS. A large V8-like gain still requires using the feedback for
+lower-level specialization or wider fusion; a C-level property cache alone is
+unlikely to produce it.
 
-The three-instruction fusion, measured by changing only optimizer passes in the
-same ext-capable binary, gave +0.208%, CI [-0.462%, +0.882%].  Beat Detection
-was +1.543% and FFT +2.169%, both with positive confidence intervals; the
-other programs were neutral.
+## Next plan
 
-Adding the four-instruction form over the three-instruction form gave +0.293%,
-CI [-0.135%, +0.724%].  FFT centred at +0.563%, Gameboy at +0.291%, and
-SunSpider date-format-tofte at +0.973%.  Crypto centred at -0.255% with all
-three pairs negative, although its interval narrowly crossed zero.
+1. Do not enable ext34 in production and do not add another handler to the
+   default binary. The compile gate is the accepted containment fix.
+2. Preserve ext34 as a reproducible experiment because the corrected Beat/FFT
+   wins are real. Use it to evaluate handler placement/outlining and remove the
+   Box2D/Richards regressions; do not ship the current enabled binary.
+3. Keep profiling Kraken/Octane/SunSpider plus framework workloads. Rank by
+   dynamic executions *and* number of programs, then measure one candidate at
+   a time. Do not let Octane zlib's single-program dominance choose the whole
+   catalog.
+4. Prefer fusions such as `add -> dup -> put_loc -> drop` only after an exact
+   cross-suite and framework census. It can reuse QuickJS's complete add slow
+   path and transfer the successful result directly, avoiding speculative
+   type guards/deopt, but it still needs final-binary A/B evidence.
+5. Revisit object IC only as a compile-time per-site-slot design with a zero-
+   tax default and a direct PATCHLESS gate. Stop immediately if the enabled
+   binary cannot beat PATCHLESS on both the intended stable-shape workload and
+   at least one production-shaped framework workload.
 
-These are legitimate local service wins and should not be rejected merely
-because their cross-program aggregate intervals include zero.
-
-### Direct-binary warning
-
-A direct comparison of the mixed-mul baseline (`0x7f`) with the ext-capable
-binary (`0x1ff`) was interrupted after 10 of 11 programs and 120 observations.
-The missing program is Box2D.  The partial result was -1.262%, CI
-[-3.184%, +0.699%], including:
-
-- Beat Detection +1.62%;
-- FFT +0.91%;
-- Navier-Stokes +1.97%;
-- Darkroom -5.49%, significantly negative;
-- Gameboy -1.23%, significantly negative;
-- Oscillator -5.91%, all three pairs negative;
-- date-format-tofte -1.52%.
-
-The raw file is
-`/tmp/capsid-locarray34-direct-screen-20260824/samples.jsonl`; there is no
-official `summary.json` because the run was interrupted.  The contrast with
-the same-binary results strongly suggests a handler/machine-code layout tax.
-
-Before integrating either fusion, isolate that tax with both arms compiling
-ordinary BC26 (`0x7f`):
-
-```sh
-mkdir -p /tmp/capsid-locarray34-layout-tax-ds
-python3 bench/classic-suite-ab.py \
-  --corpus /tmp/capsid-suite-corpus-v1.RPqKC5 \
-  --out /tmp/capsid-locarray34-layout-tax-ds \
-  --control-tool /tmp/capsid-classic-mul-current \
-  --candidate-tool /tmp/capsid-classic-mul-locarray-ext34-candidate \
-  --control-passes 0x7f \
-  --candidate-passes 0x7f \
-  --pairs 7 --timeout 240 --cpuset 3 \
-  --program audio-beat-detection \
-  --program audio-fft \
-  --program audio-oscillator \
-  --program imaging-darkroom \
-  --program gameboy \
-  --program navier-stokes \
-  --program richards
-```
-
-The two tools produced byte-identical BC26 for the directed fixture, SHA-256
-`2b4926d6a8aa55f196d481f3c7e5fd07981b98aae2a7bf35be560ea182b29346`.
-
-If the layout regression reproduces, reject the current handler placement or
-move/compact the handlers and remeasure.  Do not merge a service win that makes
-the final binary slower.  Use a new output directory for every retry because
-the runner truncates `samples.jsonl`.
-
-## Next profile candidates
-
-After resolving the ext-layout question, the strongest cross-program sequence
-candidates are:
-
-1. `get_array_el > mul > add`: about 55.99M lower-bound executions over seven
-   programs;
-2. `mul > add > put_loc8`: about 40.04M over four programs;
-3. `add > put_loc8 > get_loc8`: about 25.37M over six programs;
-4. `add > dup > put_loc > drop`, after an exact census.
-
-The fourth pattern is attractive because its handler can preserve the complete
-QuickJS `add` semantics: int, float, BigInt, string and object coercion can use
-the original slow path, while a successful result is transferred directly to
-the local.  It does not require speculative guards or deoptimization.
-
-`call_method` has the largest modeled slow-path cost, but it is a substantially
-higher-risk semantic change and should follow the simpler fusion work.
-
-## Validation and repository identity
-
-The current txiki series contains 45 patches.  The expected overlay identity is:
-
-- key: `9237a52d906f059931355bbd09d9f62ec51bc836634be1da2c039946d0bf34cf`;
-- manifest:
-  `1e0e8a0f582a8c3e31bf8b57aa5a2a54d6cd1e0e6c17da02078b113564244650`.
-
-`git diff --check` is clean.  Targeted optimizer, ext-bytecode and overlay
-tests passed during development, but the existing build directory was created
-before patches 0043/0044 and now has a stale overlay stamp.  Create a fresh
-build directory, run the full optimizer/ext tests and then the complete test
-suite before declaring the cumulative work finished.
-
-The final completion gate remains:
-
-1. resolve or reject the ext34 experiment;
-2. finish the corrected full-suite profile;
-3. exhaust the remaining high-value candidates until repeated candidates fail
-   their direct-binary gates;
-4. freeze a cumulative baseline and run leave-one-out measurements;
-5. validate the final build on classic suites, worker/framework workloads and
-   the full correctness suite.
+The practical conclusion is: instruction fusion is viable, CFG+SSA is useful
+to find and prove it, and the current field IC is not viable. The current
+ext34 implementation is valid experimental evidence but not a production
+optimization because its enabled runtime layout cost is too broad.

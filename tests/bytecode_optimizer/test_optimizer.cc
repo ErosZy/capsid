@@ -1715,6 +1715,7 @@ void test_determinism_and_idempotence() {
 // (it lands on the fused ext, identical behavior).
 // ---------------------------------------------------------------------------
 
+#ifdef CAPSID_ENABLE_EXT_FUSION34
 void test_ext34_fusion_goldens() {
     // id 2 (kPassExtFuse34): [get_loc8 4][get_loc8 5][get_array_el] ->
     // [OP_ext, 2, 4, 5]; BC27 version byte; ext round trip accepts the
@@ -1840,6 +1841,50 @@ void test_ext34_fusion_goldens() {
         CHECK(b.optimize_and_code(&code, &err,
                                   capsid::bytecode::kPassExtFuse34));
         const std::uint8_t expected[] = {252, 2, 0, 1, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // Regression: a pair followed by another pair used to write the second
+    // pair past slots[3] while considering the four-slot prefix. The legal
+    // pair suffix must still fuse, and the first pair must remain intact.
+    {
+        Builder b;
+        b.op(202);           // get_loc0_loc1 (must remain)
+        b.op(202);           // get_loc0_loc1 (object, index)
+        b.op(70);            // get_array_el
+        b.op(41);            // return_undef
+        b.stack_size = 4;
+        b.finish(4);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        CHECK(b.optimize_and_code(&code, &err,
+                                  capsid::bytecode::kPassExtFuse34));
+        const std::uint8_t expected[] = {202, 252, 2, 0, 1, 41};
+        CHECK(code.size() == sizeof(expected));
+        CHECK(code.size() == sizeof(expected) &&
+              std::memcmp(code.data(), expected, sizeof(expected)) == 0);
+    }
+    // The same overflow was reachable after two singleton reads. Reject the
+    // four-slot prefix without consuming it, then fuse the legal three-slot
+    // suffix beginning at get_loc3.
+    {
+        Builder b;
+        b.op(205);           // get_loc2 (must remain)
+        b.op(206);           // get_loc3 (leftover)
+        b.op(202);           // get_loc0_loc1 (object, index)
+        b.op(70);            // get_array_el
+        b.op(41);            // return_undef
+        b.stack_size = 4;
+        b.finish(4);
+        std::vector<std::uint8_t> code;
+        std::string err;
+        const bool ok = b.optimize_and_code(
+            &code, &err, capsid::bytecode::kPassExtFuse4);
+        if (!ok) std::fprintf(stderr, "  overflow-suffix error: %s\n",
+                              err.c_str());
+        CHECK(ok);
+        const std::uint8_t expected[] = {205, 252, 3, 3, 0, 1, 41};
         CHECK(code.size() == sizeof(expected));
         CHECK(code.size() == sizeof(expected) &&
               std::memcmp(code.data(), expected, sizeof(expected)) == 0);
@@ -1978,6 +2023,8 @@ void test_ext34_fusion_goldens() {
 // ---------------------------------------------------------------------------
 // Part B: full round-trip through the real runtime.
 // ---------------------------------------------------------------------------
+
+#endif
 
 struct RtResult {
     bool ok;
@@ -2293,6 +2340,7 @@ void test_roundtrip_exception_lines() {
 // executes the ext handlers; every branch — fast path, non-int index
 // slow path, fast miss, leftover form, and the null exception — must
 // agree with the unoptimized control run.
+#ifdef CAPSID_ENABLE_EXT_FUSION34
 void test_ext34_semantics() {
     JSRuntime* rt = JS_NewRuntime();
     CHECK(rt != nullptr);
@@ -2326,6 +2374,8 @@ void test_ext34_semantics() {
         "s += f([1, 2, 3], 5) + ',';\n"   // id2 fast miss -> undefined
         "s += f({ x: 9 }, 'x') + ',';\n"  // id2 non-int index slow path
         "s += f([1, 2, 3], '1') + ',';\n" // id2 coerced slow path
+        "let hits = 0; const accessor = { get x() { hits++; return 13; } };\n"
+        "s += f(accessor, 'x') + ':' + hits + ',';\n" // getter slow path
         "s += g([10, 20], 1) + ',';\n"    // id3 fast path
         "s += g({ x: 5 }, 'x') + ',';\n"  // id3 slow path
         "s += g([10, 20], 9) + ',';\n"    // id3 miss -> 7 + undefined
@@ -2384,6 +2434,41 @@ void test_ext34_semantics() {
     JS_FreeRuntime(rt);
 }
 
+// The slow path can call user code and throw. Besides value/exception
+// equivalence, lock the exact backtrace so the ext handler keeps the same
+// sf->cur_pc convention as the original get_array_el instruction.
+void test_ext34_exception_stack() {
+    JSRuntime* rt = JS_NewRuntime();
+    CHECK(rt != nullptr);
+    JSContext* ctx = JS_NewContext(rt);
+    CHECK(ctx != nullptr);
+    if (ctx == nullptr) return;
+
+    const char* src =
+        "function read(o, k) {\n"
+        "  return o[k];\n"
+        "}\n"
+        "const o = { get x() {\n"
+        "  throw new Error('getter boom');\n"
+        "} };\n"
+        "read(o, 'x');\n";
+    RtResult base = run_roundtrip(ctx, src, "ext34-stack.js", false);
+    RtResult opt = run_roundtrip(ctx, src, "ext34-stack.js", true);
+    CHECK(!base.ok);
+    CHECK(!opt.ok);
+    CHECK(base.value == opt.value);
+    CHECK(base.stack == opt.stack);
+    if (base.stack != opt.stack) {
+        std::fprintf(stderr, "  base stack: %s\n", base.stack.c_str());
+        std::fprintf(stderr, "  opt  stack: %s\n", opt.stack.c_str());
+    }
+    CHECK(base.stack.find("ext34-stack.js:5") != std::string::npos);
+    CHECK(base.stack.find("ext34-stack.js:1") != std::string::npos);
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+#endif
+
 }  // namespace
 
 int main() {
@@ -2405,8 +2490,11 @@ int main() {
     test_p14_semantics();
     test_p11_semantics();
     test_roundtrip_exception_lines();
+#ifdef CAPSID_ENABLE_EXT_FUSION34
     test_ext34_fusion_goldens();
     test_ext34_semantics();
+    test_ext34_exception_stack();
+#endif
     if (g_failures != 0) {
         std::fprintf(stderr, "test_bytecode_optimizer: %d failure(s)\n",
                      g_failures);

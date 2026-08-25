@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Layout-tax probe for the BC27 ext34 fusion foundation (task #75d).
+# Serialized-output identity probe for the BC27 ext34 fusion foundation.
 # Arms: the pre-ext34 pipeline (a00145a build: 45-patch overlay, no
 # ext34 matcher) vs the post-ext34 pipeline (current HEAD: 46-patch
 # overlay with ext ids 2/3 handlers, run-based matcher). Both compile
@@ -7,7 +7,9 @@
 # passes, ext bits 7/8 excluded), so both arms must emit byte-identical
 # BC26 bundles. A single differing byte means the ext34 infrastructure
 # (overlay patch 0045 + matcher code) perturbs the BC26 pipeline
-# (layout/observer tax) and must be fixed before any direct A/B.
+# and must be explained before any direct A/B. Byte equality proves only that
+# the compiler output is unchanged; it does not measure interpreter code-layout
+# or compiled-in runtime tax. Use ext34-off-tax-ab.sh for that measurement.
 #
 # Usage: bash bench/layout-tax-ext34.sh
 set -euo pipefail
@@ -63,7 +65,7 @@ done
 
 printf 'pass=%d fail=%d\n' "$pass" "$fail" | tee -a "$OUT/result.txt"
 if [ "$fail" -gt 0 ]; then
-    echo "LAYOUT TAX DETECTED: $fail fixture(s) differ across ext34 arms" >&2
+    echo "SERIALIZED OUTPUT DIFF: $fail fixture(s) differ across ext34 arms" >&2
     exit 1
 fi
-echo "layout tax: zero across $pass fixtures (byte-identical BC26)" | tee -a "$OUT/result.txt"
+echo "serialized output: $pass byte-identical BC26 fixtures" | tee -a "$OUT/result.txt"

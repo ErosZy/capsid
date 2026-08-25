@@ -204,10 +204,6 @@ bool decode_function(const uint8_t* code,
                 *error = "cfg: invalid ext id " + std::to_string(ext_id);
                 return false;
             }
-            if (ei.fmt != EXT_FMT_none) {
-                *error = "cfg: unimplemented ext operand format";
-                return false;
-            }
             size = ei.size;
             n_pop = ei.n_pop;
             n_push = ei.n_push;
@@ -215,6 +211,15 @@ bool decode_function(const uint8_t* code,
         if (pc + size > len) {
             *error = "cfg: truncated instruction";
             return false;
+        }
+        if (op == OP_ext) {
+            ExtInfo ei;
+            if (!ext_lookup(code[pc + 1], &ei) ||
+                !validate_ext_operands(ei, code + pc + 2, size - 2,
+                                       fi.arg_count, fi.var_count, error)) {
+                if (error->empty()) *error = "cfg: invalid ext operands";
+                return false;
+            }
         }
         const OpClass& oc = classify_op(op);
         Insn in;

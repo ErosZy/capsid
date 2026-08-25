@@ -22,10 +22,12 @@ namespace ir {
 // Operand formats, mirroring the EXT_FMT lines in the vendored
 // quickjs-ext-opcode.h (compile-time divergence: ext.cc expands
 // EXT_FMT_##fmt, so a header fmt this enum does not know fails to
-// build). Only `none` exists today; the decoders fail closed on any
-// other format until its operand handling is implemented.
+// build). slot2/slot3 contain two or three tagged frame-slot bytes:
+// bit 7 selects arg_buf, and the low 7 bits select the slot index.
 enum ExtFmt : uint8_t {
     EXT_FMT_none = 0,
+    EXT_FMT_slot2,
+    EXT_FMT_slot3,
     EXT_FMT_COUNT,
 };
 
@@ -51,6 +53,16 @@ enum { OP_EXT = 252 };
 // Table lookup. Returns false for id 0, reserved holes, and unknown
 // ids; the caller fails closed.
 bool ext_lookup(uint8_t id, ExtInfo* out);
+
+// Validate a decoded ext payload against the containing function's frame.
+// This is shared by the strict optimizer reader and the independent CFG/SSA
+// decoder so canonical BC27 cannot carry an out-of-range arg/local access.
+bool validate_ext_operands(const ExtInfo& info,
+                           const uint8_t* payload,
+                           size_t payload_len,
+                           uint32_t arg_count,
+                           uint32_t var_count,
+                           std::string* error);
 
 // Whole-bundle ext round trip (§3.1 contract, analyze-only): reads the
 // bundle (BC26 or BC27), decodes every function with ext-table sizes

@@ -111,6 +111,8 @@ struct FuncInfo {
     uint32_t dbg_pc2line_len;
     int32_t dbg_line;    // pc2line base line/col
     int32_t dbg_col;
+    uint32_t arg_count = 0;
+    uint32_t var_count = 0;
     uint32_t stack_size; // recorded max stack height
     std::vector<FuncInfo> children;
 };

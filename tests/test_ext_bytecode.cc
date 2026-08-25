@@ -1,8 +1,10 @@
 // Directed tests for the retained BC27 / OP_ext foundation. R0's array
-// specialization regressed the paired benchmark, so ext id 1 is now a
-// permanent reserved hole and no BC27 image is canonical. The matrix locks
-// BC26 compatibility and fail-closed handling for BC26+ext, reserved/unknown
-// ids, truncated instructions, noncanonical BC27, and corrupt checksums.
+// specialization regressed the paired benchmark, so ext id 1 is a permanent
+// reserved hole. Candidate fusion ids 2/3 are live only in an explicit
+// compile-gated feature build and behind non-deployed optimizer bits. The
+// matrix locks BC26 compatibility and fail-closed handling for BC26+ext,
+// reserved/unknown ids, malformed live-id operands, truncated instructions,
+// noncanonical BC27, and corrupt checksums.
 //
 // Splicing mechanism: each fixture is compiled by the runtime's own
 // compiler as a module, serialized (JS_WriteObject), and then patched in
@@ -63,6 +65,9 @@ void require(bool condition, const char *message) {
 
 constexpr uint8_t kOpExt = 0xFC;          // 252
 constexpr uint8_t kExtRetiredR0 = 0x01;  // permanently reserved ext id 1
+#ifdef CONFIG_EXT_FUSION34
+constexpr uint8_t kExtLocLocArrayGet = 0x02;
+#endif
 constexpr uint8_t kOpPush0 = 0xBA;        // 186
 constexpr uint8_t kOpGetArrayEl = 0x46;   // 70
 constexpr uint8_t kOpReturn = 0x28;       // 40
@@ -395,18 +400,24 @@ struct Blob {
         records.push_back(rec);
     }
 
-    // Replace the get_array_el at body_pos with [OP_ext][ext_id] and fix
-    // the bytecode length (body grows by one byte). Keeps ext_id in place
-    // for callers that need to corrupt it afterwards.
-    void splice_ext(uint8_t ext_id) {
+    // Replace get_array_el with [OP_ext][ext_id][payload...] and fix the
+    // bytecode length. Keeps ext_id in place for callers that corrupt it.
+    void splice_ext_payload(uint8_t ext_id,
+                            const std::vector<uint8_t> &payload) {
         require(buf[body_pos] == kOpGetArrayEl, "splice target lost");
-        buf.insert(buf.begin() + body_pos, kOpExt);
+        buf[body_pos] = kOpExt;
+        buf.insert(buf.begin() + body_pos + 1, ext_id);
+        buf.insert(buf.begin() + body_pos + 2, payload.begin(), payload.end());
         buf[body_pos + 1] = ext_id;
         require(buf[body_pos] == kOpExt && buf[body_pos + 1] == ext_id,
                 "splice failed");
-        bc_len++;
+        bc_len += 1 + static_cast<uint32_t>(payload.size());
         write_leb128(buf, bc_len_pos, bc_len);
         recompute_checksum();
+    }
+
+    void splice_ext(uint8_t ext_id) {
+        splice_ext_payload(ext_id, std::vector<uint8_t>());
     }
 };
 
@@ -613,6 +624,21 @@ struct Runtime {
         id7f.recompute_checksum();
         require(read_only(id7f).rfind("ex:", 0) == 0, "unknown ext id must "
                 "be rejected");
+
+#ifdef CONFIG_EXT_FUSION34
+        // A known live id with the right payload length is still malformed
+        // when its tagged local indexes lie outside the function frame. The
+        // reader must reject this before the direct-index runtime handler can
+        // observe the payload.
+        Blob bad_slot = base;
+        bad_slot.set_version(kVersion27);
+        bad_slot.splice_ext_payload(kExtLocLocArrayGet, {0x7f, 0x7f});
+        std::string bad_slot_result = read_only(bad_slot);
+        require(bad_slot_result.rfind("ex:", 0) == 0,
+                "out-of-range ext slot must fail closed");
+        require(bad_slot_result.find("operands") != std::string::npos,
+                "out-of-range ext error must mention operands");
+#endif
 
         // 6. truncated payload: ext prefix as the last body byte (no
         //    ext_id byte follows). Note: for the current size-2 ext an
