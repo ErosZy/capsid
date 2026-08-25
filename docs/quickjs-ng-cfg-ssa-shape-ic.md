@@ -2091,12 +2091,12 @@ Do not add another handler to the default binary. First use ext34 to study
 enabled-handler placement/outlining and compare the final enabled binary
 directly with PATCHLESS. Then resume the SableJS-style loop only with a
 candidate selected by both dynamic heat and cross-program/framework coverage.
-`add -> dup -> put_loc -> drop` remains a plausible next fusion because it can
-reuse QuickJS's complete add semantics and transfer a successful result into
-the local without type speculation or deoptimization, but it requires an exact
-census and its own final-binary gate. Object IC work remains stopped unless it
-is redesigned around compile-time per-site feedback slots, zero default tax,
-lazy state for proven-hot functions and a direct PATCHLESS win.
+The later exact census found zero residual
+`add -> dup -> put_loc -> drop` sites: QuickJS already lowers the real
+`get_loc`-prefixed assignment forms to `add_loc`. Object IC work remains
+stopped unless it is redesigned around compile-time per-site feedback slots,
+zero default tax, lazy state for proven-hot functions and a direct PATCHLESS
+win.
 
 Corrected evidence is under
 `bench/results/ext34-fixed-review-20260825/` and
@@ -2104,3 +2104,27 @@ Corrected evidence is under
 under `/tmp/capsid-ext34-fixed-net-review-20260825-r2/`. The reproducible OFF
 protocol is `bench/ext34-off-tax-ab.sh`; `bench/layout-tax-ext34.sh` is only a
 serialized-output identity check.
+
+### 20.5 First post-ext candidate: rejected store/reload lowering
+
+The first new candidate deliberately avoided another handler:
+same-slot adjacent `put_loc*; get_loc*` became the existing `set_loc*`, after
+P2/P16 had first refusal and only when the reload was not a jump target. It
+removed 811 instructions across seven of the eight gate programs without a
+format or VM change.
+
+A seven-pair, same-binary A/B compared `0x7f` with the temporary experimental
+mask `0x27f`. The equal-weight result was only +0.278%, CI
+[-0.681%, +1.246%]. Oscillator (+0.805%) and Richards (+2.930%) improved
+significantly, but FFT regressed significantly by 0.807%, CI
+[-1.431%, -0.179%]. The pass was therefore removed completely rather than
+special-cased for named benchmarks. The summary SHA-256 is
+`89f25e61bf0d6f9da38d4fbf9373d059f46d8eb52bceebfaaab478507a49c25f`.
+
+The practical threshold for the next round is now higher: select a window that
+removes at least two hot dispatches or repeated generic work, re-profile after
+the P11 observer fix, and measure both same-binary attribution and final-binary
+layout. The leading old-profile candidates are
+`get_array_el -> mul -> add` (about 56.0M conservative executions across seven
+programs) and `mul -> add -> put_loc8` (about 40.2M across six), but neither is
+approved until the corrected full profile reproduces those sites.
