@@ -915,9 +915,17 @@ these numbers.
 
 Structural body check (same benchmark-name set across source/raw/opt) passed
 for both suites. These are the pre-I0 optimizer baseline; every later gate
-re-measures against them. mod's −0.20% is inside run noise (consistent with
-the v1 finding that optimizer wins concentrate in compute-heavy fixtures);
-rt's +4.51% reproduces the v1-scale win on the deterministic compute fixture.
+re-measures against them. **Vehicle validity: rt cannot measure the AOT
+optimizer at all** — the fixture wraps the entire suite body in a string
+literal and runs it via indirect eval, so the AOT artifact is a 141-byte
+loader shell (52 insns, 0 folds) plus the suite as an opaque cpool constant;
+opt and raw blobs are byte-identical (sha256 `439fd625…` both arms). rt's
++4.51% is a noise/ordering artifact of that null vehicle (per-round spread
+±7%) and is **retracted** as an optimizer signal (§19.4). mod (real
+module-level code, 17365 insns) is the valid vehicle: −0.20% here, ≈ −0.04%
+on the frozen stack — the optimizer removes 30/17365 insns (0.17%) on this
+corpus, unmeasurable against ±7% noise; consistent with the v1 finding that
+optimizer wins concentrate in fixtures that carry the target patterns.
 **Noise note for the §9.2 ±0.5% gate**: v8-suite's own load_noise band spans
 −1.02%…+0.07%, so the F0 patchless-vs-OFF A/B cannot be resolved on this
 vehicle alone — the F0 A/B must also use deterministic fixtures (arith-rt
@@ -1856,8 +1864,12 @@ Per-configuration measured effects (handoff §6 / §17.4 / §12.4):
 
 - `mul` fast path alone (0x7f on both arms, 7 pairs × 8 classic programs,
   224 observations): **+3.366% equal-weight geomean** [1.262, 5.515].
-- optimizer alone (pre-0043 build, v8-suite-rt three-state, 5 rounds):
-  **+4.51%** opt_vs_raw (§12.4).
+- optimizer alone (v1, deterministic compute fixtures): **+38.94% /
+  +29.09%** on arith-rt / cascade-rt (G3, v1 record); on v8-suite-mod the
+  deployed pipeline removes 30/17365 insns (0.17%) → opt_vs_raw ≈ −0.2%,
+  inside that vehicle's ±7% noise (§12.4 / §19.4). (An earlier v8-suite-rt
+  +4.51% claim is retracted — that fixture is an eval shell the optimizer
+  cannot see into; §12.4/§19.4.)
 - 0x1ff vs 0x7f (ext34 on the patched stack): **+0.66% equal-weight
   geomean** [−0.65, 1.98] — the original leave-one-out; removing the ext
   bits from the candidate returns exactly the deployed 0x7f state.
@@ -1930,14 +1942,26 @@ blobs (byte-identical).
 **v8-suite three-state on the frozen stack** (gate 5 worker check,
 `bench/results/exec-throughput-r1-v8-20260825T0455/`): the opt and raw
 streams are byte-identical to the §12.4 build's blobs (the deployed
-pipeline is deterministic and unchanged), yet v8-suite-rt opt_vs_raw
-measures ≈ −0.5% (sequential 5-round median −0.40%, interleaved 9-per-mode
-median −0.64%) versus §12.4's +4.51% on the pre-0043 build. The runtime-side
-mul fast path accelerates the constant-mul sites the optimizer removes, so
-raw recovers ground — the two mechanisms overlap at mul sites and do not
-add. Both remain individually attributed: optimizer-only +4.51% (§12.4),
-mul-only +3.366% (handoff), ext34-only +0.66% (§17.4); the stacked
-combination is not additive on this noisy vehicle (per-round spread ±7%).
+pipeline is deterministic and unchanged), and on v8-suite-rt the two arms
+are byte-identical *within* a run too (sha256 `439fd625…` both): that
+fixture holds the suite body in a string literal and eval's it at runtime,
+so the AOT artifact is a 141-byte loader shell (52 insns, 0 folds).
+v8-suite-rt cannot measure the AOT optimizer at all — §12.4's +4.51% and
+this stack's ≈ −0.5% (sequential 5-round median −0.40%, interleaved
+9-per-mode median −0.64%) are both samples of that null vehicle's ±7%
+noise band, not optimizer signal. The earlier "mul fast path overlap"
+reading (that patch 0043 recovered raw's ground at mul sites) is
+**retracted**: patch 0043 does accelerate runtime-compiled muls, but
+equally in both arms of an identical blob. The valid vehicle is
+v8-suite-mod (real module-level code, 17365 insns): −0.20% (§12.4 build)
+and −0.04% (frozen stack). The deployed optimizer removes 30/17365 insns
+(0.17%) there (P14 literal-folding 0, get_array_el specializable 0/199,
+TDZ 14) — too little to move a ±7% vehicle, which is exactly why v8-suite
+reads ≈ 0 with all optimizations on. v8-suite is 2008-era sloppy code with
+none of the optimizer's target patterns; the deterministic evidence for the
+shipped stack is the classic-corpus paired A/Bs: mul-only +3.366% (224 obs,
+handoff), ext34-only +0.86% (this rerun), v1 compute fixtures
++38.94%/+29.09% (G3).
 
 ### 19.5 Final verdict
 
