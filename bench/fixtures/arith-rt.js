@@ -1,7 +1,7 @@
 // Arithmetic-dense fixture: straight-line constant arithmetic chains in a
 // hot loop. Every body iteration recomputes constants from fresh locals
 // (P2/P3 fold targets); only the counter and accumulator are live across
-// the backedge. This is the highest-foldability shape the AOT optimizer
+// the backedge. This is the highest-foldability shape the AOT rewriter
 // can produce on — G3's static ceiling anchor.
 export default {
     fetch() {

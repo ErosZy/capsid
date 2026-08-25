@@ -2,7 +2,7 @@
 
 Capsid Runtime is a process-isolated JavaScript runtime built from a pinned txiki.js vendor tree. It targets embedded HTTP hosts and provides a versioned Minimum Common Web API subset; it does not claim full ECMA-429 conformance. Capsid is the only product name; external organization names are used only to identify standard sources and historical internal implementation.
 
-The trusted-bytecode compiler consumes the independent `src/bytecode_optimizer/` library specified in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md). It runs the frozen BC26 `kPassAll` pipeline and emits standard BC26 only. Opcode profiling and CFG+SSA are analysis tools; field IC, BC27, and ext34 are not active production paths. Their measured decisions and the gate for future work are maintained in [QuickJS Optimization](quickjs-optimization.md).
+The trusted-bytecode compiler consumes the independent `src/bytecode_rewriter/` library specified in [Bytecode AOT Rewriter](bytecode-aot-rewriter.md). It runs the frozen BC26 `kPassAll` pipeline and emits standard BC26 only. Opcode profiling and CFG+SSA are analysis tools; Capsid carries no custom bytecode version, extension opcode, or field-IC runtime. Measured decisions and the gate for future work are maintained in [QuickJS Optimization](quickjs-optimization.md).
 
 ## Deliverables and Application Model
 

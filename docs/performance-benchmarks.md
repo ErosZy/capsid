@@ -39,7 +39,7 @@ idle environment.
 | OS | Ubuntu 24.04 on WSL2, kernel 6.6.87.2-microsoft-standard-WSL2 |
 | Memory | 7.9 GiB visible to WSL |
 | Measured build | commit `cfeae0b`, version 0.2.1, Release + LTO, clean tree |
-| QuickJS defaults | opcode profile OFF, field IC OFF, ext34 OFF |
+| QuickJS defaults | stock BC26 opcode set; opcode profile OFF |
 | CPU partition | SUT CPUs 0-3; load generator CPUs 4-7 |
 | Service protocol | two workers, c64, 3s warmup + 8s measured, 3 rotated rounds |
 | Hono bundle | Hono 4.12.32, SHA-256 `83ebc6c2…` |
@@ -108,8 +108,7 @@ Current per-process resources:
 | php-fpm child, each of 2 | unavailable | 14.6 | 95% |
 
 The full Capsid serving path is about 19.0 MB PSS: 6.2 MB for the host plus
-6.4 MB per worker. No growing IC sidecar state is present because the IC is
-compiled OFF.
+6.4 MB per worker. No IC sidecar state or custom-opcode runtime is compiled.
 
 ### Current profile
 
@@ -141,10 +140,10 @@ than Deno source. Capsid's request uses its in-process worker protocol; Node and
 Deno use local HTTP, so this is aligned lifecycle evidence rather than an
 isomorphic request-path comparison.
 
-## 5. Current Bytecode Optimizer Results
+## 5. Current BC26 Rewrite Results
 
 The implementation and soundness contract are in
-[Bytecode AOT Optimizer](bytecode-aot-optimizer.md). The current clean run
+[Bytecode AOT Rewriter](bytecode-aot-rewriter.md). The current clean run
 compares optimized BC26 directly with raw BC26, using one discarded warmup and
 five measured executions per mode.
 

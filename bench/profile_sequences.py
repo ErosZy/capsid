@@ -9,11 +9,11 @@ count of its members.  It is evidence for choosing a CFG+SSA fusion template,
 not permission to lower the concrete runtime-local site: CFG/effect/ownership
 proof still decides whether a static occurrence is legal.
 
-No timing from the profiling build is consumed. Ranking distinguishes a new
-primary opcode (one dispatch total) from an OP_ext handler (primary dispatch
-plus secondary ext-id dispatch). In particular, a two-instruction OP_ext
-fusion has zero dispatch saving. Property-path counters are diagnostics and
-are not converted into speculative savings.
+No timing from the profiling build is consumed. The avoided-dispatch estimate
+assumes a candidate window could become one directly dispatched operation;
+CFG/effect/ownership proof and a product A/B still decide whether that vehicle
+is worthwhile. Property-path counters are diagnostics and are not converted
+into speculative savings.
 """
 
 from __future__ import annotations
@@ -121,7 +121,6 @@ class Aggregate:
     region_exec: int = 0
     instruction_exec: int = 0
     avoided_dispatches: int = 0
-    ext_avoided_dispatches: int = 0
     byte_exec: int = 0
     property_direct: int = 0
     property_slow: int = 0
@@ -134,7 +133,6 @@ class Aggregate:
         self.region_exec += weight
         self.instruction_exec += weight * len(self.pattern)
         self.avoided_dispatches += weight * (len(self.pattern) - 1)
-        self.ext_avoided_dispatches += weight * max(len(self.pattern) - 2, 0)
         self.byte_exec += weight * byte_size
         self.property_direct += direct
         self.property_slow += slow
@@ -151,7 +149,6 @@ class Aggregate:
             "region_exec": self.region_exec,
             "instruction_exec": self.instruction_exec,
             "avoided_dispatches": self.avoided_dispatches,
-            "ext_avoided_dispatches": self.ext_avoided_dispatches,
             "byte_exec": self.byte_exec,
             "property_direct": self.property_direct,
             "property_slow": self.property_slow,
@@ -271,13 +268,12 @@ def census(profiles: Iterable[Tuple[str, dict]], sizes: Mapping[str, int],
 
     rows = sorted((row for row in aggregates.values()
                    if len(row.program_files) >= min_programs),
-                  key=lambda row: (row.ext_avoided_dispatches,
-                                   row.avoided_dispatches,
+                  key=lambda row: (row.avoided_dispatches,
                                    row.instruction_exec,
                                    len(row.pattern), row.pattern),
                   reverse=True)
     return {
-        "schema": "capsid-opcode-sequence-census-v1",
+        "schema": "capsid-opcode-sequence-census-v2",
         "identity": "source-hash+profile-file+runtime+runtime-local-function+pc",
         "selection_key": "opcode-pattern; static CFG+SSA must re-prove sites",
         "stats": dict(sorted(stats.items())),
@@ -290,14 +286,13 @@ def print_report(report: Mapping[str, object], top: int) -> None:
     assert isinstance(stats, Mapping)
     print("== exact-PC adjacent sequence census ==")
     print(" ".join(f"{key}={value}" for key, value in stats.items()))
-    print("rank ext_saved primary_saved region_exec programs occurrences len pattern")
+    print("rank dispatch_saved region_exec programs occurrences len pattern")
     sequences = report["sequences"]
     assert isinstance(sequences, Sequence)
     for rank, raw in enumerate(sequences[:top], 1):
         assert isinstance(raw, Mapping)
         pattern = " > ".join(str(op) for op in raw["pattern"])
-        print(f"{rank:>4} {int(raw['ext_avoided_dispatches']):>9,} "
-              f"{int(raw['avoided_dispatches']):>13,} "
+        print(f"{rank:>4} {int(raw['avoided_dispatches']):>14,} "
               f"{int(raw['region_exec']):>11,} {int(raw['program_count']):>8,} "
               f"{int(raw['occurrences']):>11,} "
               f"{int(raw['length']):>3} {pattern}")

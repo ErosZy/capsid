@@ -1,0 +1,424 @@
+diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
+index 54c99dc..d494a6a 100644
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -818,6 +818,9 @@ typedef struct JSFunctionBytecode {
+     int pc2line_len;
+     uint8_t *pc2line_buf;
+     char *source;
++#ifdef CONFIG_OPCODE_PROFILE
++    uint32_t opcode_profile_id; /* lazy runtime-local function id */
++#endif
+ } JSFunctionBytecode;
+ 
+ typedef struct JSBoundFunction {
+@@ -1193,6 +1196,17 @@ typedef enum OPCodeEnum {
+ } OPCodeEnum;
+ 
+ #ifdef CONFIG_OPCODE_PROFILE
++#define JS_PROFILE_SITES (1 << 16)
++typedef struct JSOpcodeSiteProfile {
++    uint32_t function_id;
++    uint32_t pc;
++    uint8_t op;
++    uint8_t reserved[7];
++    uint64_t source_hash;
++    uint64_t exec;
++    uint64_t classes[5];
++} JSOpcodeSiteProfile;
++
+ typedef struct JSOpcodeProfile {
+     uint64_t exec[OP_COUNT];
+     /* row 0 = int-int fast, row 1 = float-float fast, row 2 = slow path */
+@@ -1201,8 +1215,11 @@ typedef struct JSOpcodeProfile {
+     uint64_t branch[OP_COUNT][5];
+     /* argc buckets 0..3, index 4 = argc >= 4 */
+     uint64_t call_argc[OP_COUNT][5];
+-    /* row 0 = fast path, row 1 = slow path */
++    /* site class buckets, see JS_DumpOpcodeProfile */
+     uint64_t prop[OP_COUNT][5];
++    JSOpcodeSiteProfile sites[JS_PROFILE_SITES];
++    uint64_t site_overflow;
++    uint32_t next_function_id;
+     uint64_t id;
+ } JSOpcodeProfile;
+ 
+@@ -1213,6 +1230,8 @@ static int JS_InitAtoms(JSRuntime *rt);
+ static JSAtom __JS_NewAtomInit(JSRuntime *rt, const char *str, int len,
+                                int atom_type);
+ static void JS_FreeAtomStruct(JSRuntime *rt, JSAtomStruct *p);
++static const char *JS_AtomGetStrRT(JSRuntime *rt, char *buf, int buf_size,
++                                   JSAtom atom);
+ static void free_function_bytecode(JSRuntime *rt, JSFunctionBytecode *b);
+ static JSValue js_call_c_function(JSContext *ctx, JSValueConst func_obj,
+                                   JSValueConst this_obj,
+@@ -2606,13 +2625,73 @@ void JS_FreeRuntime(JSRuntime *rt)
+ }
+ 
+ #ifdef CONFIG_OPCODE_PROFILE
+-static inline uint8_t js_profile_fetch(JSRuntime *rt, uint8_t **pcp)
++static uint64_t js_profile_source_hash(JSRuntime *rt,
++                                       JSFunctionBytecode *b)
++{
++    char buf[256];
++    const unsigned char *s = (const unsigned char *)
++        JS_AtomGetStrRT(rt, buf, sizeof(buf), b->filename);
++    uint64_t hash = UINT64_C(14695981039346656037);
++
++    while (*s) {
++        hash ^= *s++;
++        hash *= UINT64_C(1099511628211);
++    }
++    return hash;
++}
++
++static JSOpcodeSiteProfile *js_profile_site(JSRuntime *rt,
++                                            JSOpcodeProfile *p,
++                                            JSFunctionBytecode *b,
++                                            const uint8_t *pc, int op,
++                                            bool count_overflow)
+ {
++    JSOpcodeSiteProfile *site;
++    uint32_t function_id, off, slot, probe;
++
++    if (!p || pc < b->byte_code_buf ||
++        pc >= b->byte_code_buf + b->byte_code_len)
++        return NULL;
++    function_id = b->opcode_profile_id;
++    if (function_id == 0) {
++        function_id = ++p->next_function_id;
++        if (unlikely(function_id == 0))
++            function_id = ++p->next_function_id;
++        b->opcode_profile_id = function_id;
++    }
++    off = (uint32_t)(pc - b->byte_code_buf);
++    slot = (function_id * 2654435761u ^ off * 2246822519u ^ (uint32_t)op) &
++           (JS_PROFILE_SITES - 1);
++    for (probe = 0; probe < 256; probe++) {
++        site = &p->sites[(slot + probe) & (JS_PROFILE_SITES - 1)];
++        if (site->function_id == 0) {
++            site->function_id = function_id;
++            site->pc = off;
++            site->op = op;
++            site->source_hash = js_profile_source_hash(rt, b);
++        }
++        if (site->function_id == function_id && site->pc == off &&
++            site->op == op)
++            return site;
++    }
++    if (count_overflow && p->site_overflow != UINT64_MAX)
++        p->site_overflow++;
++    return NULL;
++}
++
++static inline uint8_t js_profile_fetch(JSRuntime *rt, JSFunctionBytecode *b,
++                                       uint8_t **pcp)
++{
++    const uint8_t *pc = *pcp;
+     uint8_t op = *(*pcp)++;
+     if (unlikely(rt->opcode_profile != NULL)) {
+         JSOpcodeProfile *p = rt->opcode_profile;
++        JSOpcodeSiteProfile *site;
+         if (p->exec[op] != UINT64_MAX)
+             p->exec[op]++;
++        site = js_profile_site(rt, p, b, pc, op, true);
++        if (site && site->exec != UINT64_MAX)
++            site->exec++;
+     }
+     return op;
+ }
+@@ -2628,6 +2707,27 @@ static inline uint8_t js_profile_fetch(JSRuntime *rt, uint8_t **pcp)
+     PROFILE_CLASS((ctx_)->rt, branch, op_, (taken_) != 0)
+ #define PROFILE_PROP(ctx_, op_, cls_) PROFILE_CLASS((ctx_)->rt, prop, op_, cls_)
+ 
++static no_inline void js_profile_prop_site(JSContext *ctx,
++                                           JSFunctionBytecode *b,
++                                           const uint8_t *pc,
++                                           int op, int cls)
++{
++    JSOpcodeProfile *p = ctx->rt->opcode_profile;
++    JSOpcodeSiteProfile *site;
++
++    if (!p || cls < 0 || cls >= 5)
++        return;
++    site = js_profile_site(ctx->rt, p, b, pc, op, false);
++    if (site && site->classes[cls] != UINT64_MAX)
++        site->classes[cls]++;
++}
++
++#define PROFILE_PROP_SITE(ctx_, b_, pc_, op_, cls_) do {                       \
++        PROFILE_PROP(ctx_, op_, cls_);                                         \
++        if (unlikely((ctx_)->rt->opcode_profile != NULL))                       \
++            js_profile_prop_site(ctx_, b_, pc_, op_, cls_);                    \
++    } while (0)
++
+ #define PROFILE_CALL(ctx_, op_, argc_) do {                                     \
+         JSOpcodeProfile *p_ = (ctx_)->rt->opcode_profile;                       \
+         if (unlikely(p_ != NULL)) {                                             \
+@@ -2642,6 +2742,7 @@ static inline uint8_t js_profile_fetch(JSRuntime *rt, uint8_t **pcp)
+ #define PROFILE_ARITH(ctx_, op_, cls_) do { } while (0)
+ #define PROFILE_BRANCH(ctx_, op_, taken_) do { } while (0)
+ #define PROFILE_PROP(ctx_, op_, cls_) do { } while (0)
++#define PROFILE_PROP_SITE(ctx_, b_, pc_, op_, cls_) do { } while (0)
+ #define PROFILE_CALL(ctx_, op_, argc_) do { } while (0)
+ 
+ #endif /* CONFIG_OPCODE_PROFILE */
+@@ -2691,17 +2792,20 @@ static void js_profile_dump_matrix(FILE *fp, uint64_t (*m)[5],
+ void JS_DumpOpcodeProfile(FILE *fp, JSRuntime *rt)
+ {
+     JSOpcodeProfile *p = rt->opcode_profile;
+-    int op, first = 1;
++    int op, i, c, first = 1;
+     static const char * const arith_cols[] = { "int", "float", "other" };
+     static const char * const branch_cols[] = { "untaken", "taken" };
+     static const char * const argc_cols[] = { "0", "1", "2", "3", "4plus" };
+-    static const char * const prop_cols[] = { "fast", "slow" };
++    static const char * const prop_cols[] = {
++        "direct", "prototype_or_int_fallback", "missing_or_key_fallback",
++        "accessor_or_generic", "primitive_or_nullish"
++    };
+ 
+     if (!p) {
+         fputs("{}\n", fp);
+         return;
+     }
+-    fputs("{\"schema\":\"quickjs-ng-opcode-profile-v1\",\"runtime\":", fp);
++    fputs("{\"schema\":\"quickjs-ng-opcode-profile-v3\",\"runtime\":", fp);
+     fprintf(fp, "%llu", (unsigned long long)p->id);
+     fputs(",\"exec\":{", fp);
+     for (op = 0; op < OP_COUNT; op++) {
+@@ -2720,7 +2824,36 @@ void JS_DumpOpcodeProfile(FILE *fp, JSRuntime *rt)
+     fputs(",\"call_argc\":", fp);
+     js_profile_dump_matrix(fp, p->call_argc, argc_cols, 5);
+     fputs(",\"prop\":", fp);
+-    js_profile_dump_matrix(fp, p->prop, prop_cols, 2);
++    js_profile_dump_matrix(fp, p->prop, prop_cols, 5);
++    fputs(",\"sites\":[", fp);
++    first = 1;
++    for (i = 0; i < JS_PROFILE_SITES; i++) {
++        JSOpcodeSiteProfile *site = &p->sites[i];
++        int class_first = 1;
++
++        if (site->function_id == 0)
++            continue;
++        if (!first)
++            fputc(',', fp);
++        first = 0;
++        fprintf(fp, "{\"function\":%u,\"pc\":%u,\"op\":\"%s\","
++                    "\"source_hash\":\"%016llx\",\"exec\":%llu,\"prop\":{",
++                site->function_id, site->pc, opcode_profile_names[site->op],
++                (unsigned long long)site->source_hash,
++                (unsigned long long)site->exec);
++        for (c = 0; c < 5; c++) {
++            if (site->classes[c] == 0)
++                continue;
++            if (!class_first)
++                fputc(',', fp);
++            class_first = 0;
++            fprintf(fp, "\"%s\":%llu", prop_cols[c],
++                    (unsigned long long)site->classes[c]);
++        }
++        fputs("}}", fp);
++    }
++    fprintf(fp, "],\"site_overflow\":%llu",
++            (unsigned long long)p->site_overflow);
+     fputs("}\n", fp);
+ }
+ #endif /* CONFIG_OPCODE_PROFILE */
+@@ -9854,6 +9987,43 @@ static bool js_get_fast_array_element(JSContext *ctx, JSObject *p,
+     }
+ }
+ 
++#ifdef CONFIG_OPCODE_PROFILE
++/* Side-effect-free mirror of js_get_fast_array_element's class/bounds
++   predicate. Profiling must not call the load helper twice. */
++static int js_profile_property_value_class(JSValueConst obj, JSValueConst prop)
++{
++    JSObject *p;
++    uint32_t idx;
++
++    if (JS_VALUE_GET_TAG(obj) != JS_TAG_OBJECT)
++        return 4;
++    if (JS_VALUE_GET_TAG(prop) != JS_TAG_INT)
++        return 2;
++    p = JS_VALUE_GET_OBJ(obj);
++    idx = JS_VALUE_GET_INT(prop);
++    switch (p->class_id) {
++    case JS_CLASS_ARRAY:
++    case JS_CLASS_ARGUMENTS:
++    case JS_CLASS_MAPPED_ARGUMENTS:
++    case JS_CLASS_INT8_ARRAY:
++    case JS_CLASS_UINT8C_ARRAY:
++    case JS_CLASS_UINT8_ARRAY:
++    case JS_CLASS_INT16_ARRAY:
++    case JS_CLASS_UINT16_ARRAY:
++    case JS_CLASS_INT32_ARRAY:
++    case JS_CLASS_UINT32_ARRAY:
++    case JS_CLASS_BIG_INT64_ARRAY:
++    case JS_CLASS_BIG_UINT64_ARRAY:
++    case JS_CLASS_FLOAT16_ARRAY:
++    case JS_CLASS_FLOAT32_ARRAY:
++    case JS_CLASS_FLOAT64_ARRAY:
++        return idx < p->u.array.count ? 0 : 1;
++    default:
++        return 1;
++    }
++}
++#endif
++
+ static JSValue JS_GetPropertyValue(JSContext *ctx, JSValueConst this_obj,
+                                    JSValue prop)
+ {
+@@ -17842,7 +18012,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+ 
+ #if !DIRECT_DISPATCH
+ #ifdef CONFIG_OPCODE_PROFILE
+-#define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) switch (opcode = js_profile_fetch(rt, &pc))
++#define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) switch (opcode = js_profile_fetch(rt, b, &pc))
+ #else
+ #define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) switch (opcode = *pc++)
+ #endif
+@@ -17857,7 +18027,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+         [ OP_COUNT ... 255 ] = &&case_default
+     };
+ #ifdef CONFIG_OPCODE_PROFILE
+-#define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) __extension__ ({ goto *dispatch_table[opcode = js_profile_fetch(rt, &pc)]; });
++#define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) __extension__ ({ goto *dispatch_table[opcode = js_profile_fetch(rt, b, &pc)]; });
+ #else
+ #define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) __extension__ ({ goto *dispatch_table[opcode = *pc++]; });
+ #endif
+@@ -18015,7 +18185,6 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                 JSObject *p;
+                 JSProperty *pr;
+                 JSShapeProperty *prs;
+-
+                 atom = JS_ATOM_length;
+ 
+                 obj = sp[-1];
+@@ -19346,6 +19515,9 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                 JSObject *p;
+                 JSProperty *pr;
+                 JSShapeProperty *prs;
++#ifdef CONFIG_OPCODE_PROFILE
++                int prop_profile_class = 4;
++#endif
+ 
+                 atom = get_u32(pc);
+                 pc += 4;
+@@ -19357,9 +19529,14 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                         prs = find_own_property(&pr, p, atom);
+                         if (prs) {
+                             /* found */
+-                            if (unlikely(prs->flags & JS_PROP_TMASK))
++                            if (unlikely(prs->flags & JS_PROP_TMASK)) {
++#ifdef CONFIG_OPCODE_PROFILE
++                                prop_profile_class = 3;
++#endif
+                                 goto get_field_slow_path;
+-                            PROFILE_PROP(ctx, OP_get_field, 0);
++                            }
++                            PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field,
++                                              p == JS_VALUE_GET_OBJ(obj) ? 0 : 1);
+                             val = js_dup(pr->u.value);
+                             break;
+                         }
+@@ -19367,18 +19544,23 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                             /* XXX: should avoid the slow path for arrays
+                                and typed arrays by ensuring that 'prop' is
+                                not numeric */
++#ifdef CONFIG_OPCODE_PROFILE
++                            prop_profile_class = 3;
++#endif
+                             obj = JS_MKPTR(JS_TAG_OBJECT, p);
+                             goto get_field_slow_path;
+                         }
+                         p = p->shape->proto;
+                         if (!p) {
++                            PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field, 2);
+                             val = JS_UNDEFINED;
+                             break;
+                         }
+                     }
+                 } else {
+                 get_field_slow_path:
+-                    PROFILE_PROP(ctx, OP_get_field, 1);
++                    PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field,
++                                      prop_profile_class);
+                     sf->cur_pc = pc;
+                     val = JS_GetPropertyInternal(ctx, obj, atom, sp[-1], false);
+                     if (unlikely(JS_IsException(val)))
+@@ -19396,6 +19578,9 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                 JSObject *p;
+                 JSProperty *pr;
+                 JSShapeProperty *prs;
++#ifdef CONFIG_OPCODE_PROFILE
++                int prop_profile_class = 4;
++#endif
+ 
+                 atom = get_u32(pc);
+                 pc += 4;
+@@ -19407,9 +19592,14 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                         prs = find_own_property(&pr, p, atom);
+                         if (prs) {
+                             /* found */
+-                            if (unlikely(prs->flags & JS_PROP_TMASK))
++                            if (unlikely(prs->flags & JS_PROP_TMASK)) {
++#ifdef CONFIG_OPCODE_PROFILE
++                                prop_profile_class = 3;
++#endif
+                                 goto get_field2_slow_path;
+-                            PROFILE_PROP(ctx, OP_get_field2, 0);
++                            }
++                            PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field2,
++                                              p == JS_VALUE_GET_OBJ(obj) ? 0 : 1);
+                             val = js_dup(pr->u.value);
+                             break;
+                         }
+@@ -19417,18 +19607,23 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                             /* XXX: should avoid the slow path for arrays
+                                and typed arrays by ensuring that 'prop' is
+                                not numeric */
++#ifdef CONFIG_OPCODE_PROFILE
++                            prop_profile_class = 3;
++#endif
+                             obj = JS_MKPTR(JS_TAG_OBJECT, p);
+                             goto get_field2_slow_path;
+                         }
+                         p = p->shape->proto;
+                         if (!p) {
++                            PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field2, 2);
+                             val = JS_UNDEFINED;
+                             break;
+                         }
+                     }
+                 } else {
+                 get_field2_slow_path:
+-                    PROFILE_PROP(ctx, OP_get_field2, 1);
++                    PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field2,
++                                      prop_profile_class);
+                     sf->cur_pc = pc;
+                     val = JS_GetPropertyInternal(ctx, obj, atom, sp[-1], false);
+                     if (unlikely(JS_IsException(val)))
+@@ -19660,7 +19855,10 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+             {
+                 JSValue val;
+ 
+-                PROFILE_PROP(ctx, OP_get_array_el, 1);
++#ifdef CONFIG_OPCODE_PROFILE
++                PROFILE_PROP_SITE(ctx, b, pc - 1, OP_get_array_el,
++                                  js_profile_property_value_class(sp[-2], sp[-1]));
++#endif
+                 /* upstream quickjs-ng 377a25e: keep the common int-indexed
+                    regular/typed array path inside the ordinary opcode. */
+                 if (likely(JS_VALUE_GET_TAG(sp[-2]) == JS_TAG_OBJECT &&
+@@ -19696,6 +19894,10 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+             {
+                 JSValue val;
+ 
++#ifdef CONFIG_OPCODE_PROFILE
++                PROFILE_PROP_SITE(ctx, b, pc - 1, OP_get_array_el2,
++                                  js_profile_property_value_class(sp[-2], sp[-1]));
++#endif
+                 /* fast path: regular/typed array element by int index */
+                 if (likely(JS_VALUE_GET_TAG(sp[-2]) == JS_TAG_OBJECT &&
+                            JS_VALUE_GET_TAG(sp[-1]) == JS_TAG_INT)) {

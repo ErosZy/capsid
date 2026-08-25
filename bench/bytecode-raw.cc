@@ -1,7 +1,7 @@
 // Raw bytecode generator for the exec-throughput benchmark (Step 8).
 // Compiles a module source with the SAME path as the deployed compiler
-// (JS_Eval compile-only + JS_WriteObject) but skips the optimizer, so
-// the benchmark can compare unoptimized vs optimized bytecode on
+// (JS_Eval compile-only + JS_WriteObject) but skips the rewriter, so
+// the benchmark can compare unoptimized vs rewritten bytecode on
 // identical inputs. Not part of the product toolchain.
 //
 // Usage: bytecode-raw <source.js> <source-name> <out.qjsb>

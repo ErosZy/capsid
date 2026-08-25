@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect source-attributed opcode profiles for a classic-suite corpus.
 
-Compilation uses the production optimizer build. Execution uses a separate
+Compilation uses the production rewriter build. Execution uses a separate
 CONFIG_OPCODE_PROFILE runner, so instrumented timing is never treated as a
 performance result. Each program gets a fresh runtime and its own v3 JSONL
 profile, preserving exact source/function/PC coordinates.
@@ -115,7 +115,7 @@ def main() -> int:
         if stem in prior_programs:
             print(f"[{index}/{len(programs)}] resume-skip {stem}", flush=True)
             continue
-        bytecode = bytecode_dir / f"{stem}.opt.qjsb"
+        bytecode = bytecode_dir / f"{stem}.rewrite.qjsb"
         profile = args.out / f"{stem}.opt.profile.jsonl"
         profile_tmp = args.out / f"{stem}.opt.profile.tmp.jsonl"
         failed_profile = args.out / f"{stem}.opt.failed.jsonl"
@@ -126,7 +126,7 @@ def main() -> int:
         compile_command = [
             str(args.compiler), "compile", "--input", str(source),
             "--source-name", f"file:///{program['file']}",
-            "--output", str(bytecode), "--optimize", "--passes",
+            "--output", str(bytecode), "--rewrite", "--passes",
             args.passes, "--report",
         ]
         print(f"[{index}/{len(programs)}] compile {stem}", flush=True)

@@ -1,13 +1,13 @@
-// Classic-script bytecode compiler/runner for profile-guided optimizer work.
+// Classic-script bytecode compiler/runner for profile-guided rewriter work.
 //
 // Unlike capsid-bytecode-compile (which deliberately accepts ES modules only),
 // this benchmark-only tool preserves the classic-script semantics used by
 // Octane, Kraken, SunSpider, and V8 Suite.  It lets the exact same serialized
-// global script run as raw BC26 or through a selected optimizer pass mask.
+// global script run as raw BC26 or through a selected rewriter pass mask.
 //
 // Usage:
 //   classic-bytecode compile --input suite.js --source-name file:///suite.js
-//       --output suite.qjsb [--optimize] [--passes MASK] [--report]
+//       --output suite.qjsb [--rewrite] [--passes MASK] [--report]
 //   classic-bytecode run --input suite.qjsb [--warmup N] [--rounds N]
 //       [--expect-global-true NAME] [--opcode-profile FILE]
 
@@ -15,7 +15,7 @@
 // JS_ReadObject are deliberately outside the interval. Each sample gets a
 // fresh runtime because a global bytecode function is consumed by evaluation
 // and suite globals are intentionally not reusable across samples.
-#include "bytecode_optimizer/bytecode_optimizer.h"
+#include "bytecode_rewriter/bytecode_rewriter.h"
 
 #include <chrono>
 #include <cerrno>
@@ -127,7 +127,7 @@ struct CompileOptions {
     std::string input;
     std::string source_name;
     std::string output;
-    bool optimize = false;
+    bool rewrite = false;
     bool report = false;
     std::uint32_t passes = capsid::bytecode::kPassAll;
 };
@@ -149,8 +149,8 @@ CompileOptions parse_compile(int argc, char** argv) {
             options.output = argv[++i];
         } else if (arg == "--passes") {
             options.passes = parse_u32(argv[++i], "--passes");
-        } else if (arg == "--optimize") {
-            options.optimize = true;
+        } else if (arg == "--rewrite") {
+            options.rewrite = true;
         } else if (arg == "--report") {
             options.report = true;
         } else {
@@ -204,20 +204,20 @@ int compile_script(const CompileOptions& options) {
     JS_FreeContext(ctx);
     JS_FreeRuntime(runtime);
 
-    if (options.optimize) {
-        std::vector<std::uint8_t> optimized;
+    if (options.rewrite) {
+        std::vector<std::uint8_t> rewritten;
         std::string error;
-        if (!capsid::bytecode::optimize_classic_for_benchmark(
-                bytes, &optimized, options.passes, options.report, &error)) {
+        if (!capsid::bytecode::rewrite_classic_for_benchmark(
+                bytes, &rewritten, options.passes, options.report, &error)) {
             fail(error);
         }
-        bytes.swap(optimized);
+        bytes.swap(rewritten);
     }
     if (!write_file(options.output, bytes)) {
         fail("cannot write bytecode: " + options.output);
     }
     std::fprintf(stderr, "classic-bytecode: %s bytes=%zu version=%u\n",
-                 options.optimize ? "optimized" : "raw", bytes.size(),
+                 options.rewrite ? "rewritten" : "raw", bytes.size(),
                  bytes.empty() ? 0u : static_cast<unsigned>(bytes[0]));
     return 0;
 }
@@ -378,7 +378,7 @@ void usage(const char* argv0) {
         stderr,
         "usage:\n"
         "  %s compile --input FILE --source-name NAME --output FILE "
-        "[--optimize] [--passes MASK] [--report]\n"
+        "[--rewrite] [--passes MASK] [--report]\n"
         "  %s run --input FILE [--warmup N] [--rounds N] "
         "[--expect-global-true NAME] [--opcode-profile FILE]\n",
         argv0, argv0);

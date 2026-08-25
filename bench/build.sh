@@ -2,10 +2,10 @@
 # Builds the benchmark components into bench/bin/:
 #   - bench/bin/loadgen            (Go, no external dependencies)
 #   - bench/bin/baseline-gateway   (Go + cgo over the capsid_worker ABI)
-#   - bench/bin/bytecode-raw       (Step 8: optimizer-free bytecode generator)
+#   - bench/bin/bytecode-raw       (Step 8: rewriter-free bytecode generator)
 #   - bench/bin/exec-throughput    (Step 8: three-state timing harness)
 #   - bench/bin/analyze            (Step 8: static ceiling re-measurement)
-#   - bench/bin/classic-bytecode   (classic-suite raw/optimized compiler+runner)
+#   - bench/bin/classic-bytecode   (classic-suite raw/rewritten compiler+runner)
 # The candidate side is bench/wrappers/run-host.sh with CAPSID_BENCH_HOST_BIN
 # pointing at the built capsid-host; the worker is the built capsid-worker.
 # Every component's SHA-256 is recorded by the runner in manifest.json.
@@ -41,25 +41,22 @@ g++ -O2 -std=c++20 \
     "$SCRIPT_DIR/bytecode-raw.cc" -o "$BIN/bytecode-raw" \
     -L"$BUILD_LINUX/txiki-build/deps/quickjs" -lqjs
 
-echo "==> exec-throughput + analyze (Step 8; link capsid_bytecode_opt)"
+echo "==> exec-throughput + analyze (Step 8; link capsid_bytecode_rewriter)"
 g++ -O2 -std=c++20 -I"$SCRIPT_DIR/../include" -I"$SCRIPT_DIR/../src" \
     "$SCRIPT_DIR/exec-throughput.cc" -o "$BIN/exec-throughput" \
     -L"$BUILD_LINUX" -lcapsid_runtime -pthread
-# analyze compiles the optimizer sources directly, so it must see the
-# overlay quickjs headers (the same include the CMake target uses): the
-# pristine vendor lacks the F0/R0 ext row (quickjs-opcode.h DEF(ext))
-# and quickjs-ext-opcode.h, which are overlay patches. The ir/ sources
-# are required too (ext_lookup and the round-trip entry points live in
-# ir/ext.cc, ir/cfg.cc, ir/ssa.cc, ir/region.cc, ir/effects.cc).
+# analyze compiles the rewriter sources directly, so it must see the
+# overlay quickjs headers (the same include the CMake target uses). The IR
+# sources are linked so the analyze-only CFG, SSA and region entry points are
+# available to the benchmark tool.
 g++ -O2 -std=c++20 -I"$SCRIPT_DIR/../src" \
     -I"$BUILD_LINUX/vendor-overlay/txiki.js/deps/quickjs" \
     "$SCRIPT_DIR/analyze.cc" \
-    "$SCRIPT_DIR/../src/bytecode_optimizer/bytecode_optimizer.cc" \
-    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/ext.cc" \
-    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/cfg.cc" \
-    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/ssa.cc" \
-    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/region.cc" \
-    "$SCRIPT_DIR/../src/bytecode_optimizer/ir/effects.cc" \
+    "$SCRIPT_DIR/../src/bytecode_rewriter/bytecode_rewriter.cc" \
+    "$SCRIPT_DIR/../src/bytecode_rewriter/ir/cfg.cc" \
+    "$SCRIPT_DIR/../src/bytecode_rewriter/ir/ssa.cc" \
+    "$SCRIPT_DIR/../src/bytecode_rewriter/ir/region.cc" \
+    "$SCRIPT_DIR/../src/bytecode_rewriter/ir/effects.cc" \
     -o "$BIN/analyze"
 
 echo "==> classic-bytecode (classic-suite compiler + runner)"
@@ -67,7 +64,7 @@ g++ -O2 -std=c++20 \
     -I"$SCRIPT_DIR/../src" \
     -I"$BUILD_LINUX/vendor-overlay/txiki.js/deps/quickjs" \
     "$SCRIPT_DIR/classic-bytecode.cc" -o "$BIN/classic-bytecode" \
-    -L"$BUILD_LINUX" -lcapsid_bytecode_opt \
+    -L"$BUILD_LINUX" -lcapsid_bytecode_rewriter \
     -L"$BUILD_LINUX/txiki-build/deps/quickjs" -lqjs
 
 echo "==> components"

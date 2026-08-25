@@ -1,11 +1,11 @@
 // Static ceiling analyzer for the exec-throughput benchmark (Step 8).
-// Wraps the optimizer's analyze_only mode: parses a .qjsb bundle and
+// Wraps the rewriter's analyze_only mode: parses a .qjsb bundle and
 // reports per-function foldability statistics to stderr (never stdout).
 // This is the reproducible re-run of the Step 0 ceiling measurement on
 // the committed fixture set.
 //
 // Usage: analyze [--regions] <in.qjsb>
-#include "bytecode_optimizer/bytecode_optimizer.h"
+#include "bytecode_rewriter/bytecode_rewriter.h"
 
 #include <cstdio>
 #include <string>

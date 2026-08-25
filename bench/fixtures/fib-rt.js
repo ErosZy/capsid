@@ -1,5 +1,5 @@
 // Call-dense fixture: naive recursive Fibonacci. Every recursion level
-// is an opaque call barrier, so the optimizer can only shrink the
+// is an opaque call barrier, so the rewriter can only shrink the
 // wrapper code — the honest floor of the optimization envelope.
 export default {
     fetch() {

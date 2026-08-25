@@ -8,11 +8,8 @@
 # classic-bytecode-profile) so instrumented timing is never a
 # performance result.
 #
-# The earlier collection (bench/results/classic-profile-20260825)
-# failed two ways: --profile-tool was the non-profile binary (every
-# program: "--opcode-profile requires a CONFIG_OPCODE_PROFILE build"),
-# and --passes 0xffffffff profiled the candidate (BC27 output, which
-# the 45-patch profile qjs cannot read) instead of the deployed 0x7f.
+# The profile tool must be a CONFIG_OPCODE_PROFILE build; the compiler arm
+# remains the deployed kPassAll BC26 pipeline.
 #
 # Usage: bash bench/classic-profile-collect.sh
 set -euo pipefail
@@ -40,7 +37,7 @@ probe_out="$OUT/.probe.profile.jsonl"
 # corpus file instead.
 "$COMPILER" compile --input "$CORPUS/sunspider-math-partial-sums.js" \
     --source-name file:///probe.js --output "$probe" \
-    --optimize --passes 0x7f 2>"$OUT/.probe.compile.err"
+    --rewrite --passes 0x7f 2>"$OUT/.probe.compile.err"
 if ! taskset -c "$CPUSET" "$PROFILE_TOOL" run --input "$probe" \
         --warmup 0 --rounds 1 --opcode-profile "$probe_out" \
         >"$OUT/.probe.run.out" 2>"$OUT/.probe.run.err"; then

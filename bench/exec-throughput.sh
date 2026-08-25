@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Execution-throughput comparison for the bytecode AOT optimizer (Step 8,
-# G3/G5): source vs unoptimized bytecode vs optimized bytecode, per
+# Execution-throughput comparison for the bytecode AOT rewriter (Step 8,
+# G3/G5): source vs raw bytecode vs rewritten bytecode, per
 # compute-dense fixture. Protocol mirrors cold-start.sh (4C): CPU pinned
 # to SUT_CPUSET, 1 warmup run discarded + ROUNDS measured runs, median
 # reported; manifest records commit, runner hashes, and environment.
@@ -47,17 +47,17 @@ for name in $FIXTURES; do
     src="bench/fixtures/$name.js"
     source_name="file:///app/$name.js"
     raw_qjsb="$OUT/$name.raw.qjsb"
-    opt_qjsb="$OUT/$name.opt.qjsb"
+    rewrite_qjsb="$OUT/$name.rewrite.qjsb"
 
     # 1. Static evidence: unoptimized bundle + analyze_only ceiling +
-    #    the compiler's report line (raw -> optimized insns/bytes).
+    #    the compiler's report line (raw -> rewritten insns/bytes).
     "$RAW" "$src" "$source_name" "$raw_qjsb" 2>"$OUT/$name.raw.stderr"
     "$ANALYZE" "$raw_qjsb" 2>"$OUT/$name.analyze.stderr" || {
         echo "$name: analyze failed" >&2; continue; }
     "$COMPILE" \
         --source "$src" --source-name "$source_name" \
         --application "bench" --version "bench-1" --key-id "bench-key" \
-        --bytecode-out "$opt_qjsb" \
+        --bytecode-out "$rewrite_qjsb" \
         --attestation-out "$OUT/$name.attestation.json" \
         --signing-message-out "$OUT/$name.signing-message.bin" \
         2>"$OUT/$name.opt.stderr"
@@ -77,7 +77,7 @@ for name in $FIXTURES; do
         >"$OUT/$name.raw.jsonl" 2>"$OUT/$name.raw.err" || {
         echo "$name: raw mode failed (body mismatch?)" >&2; continue; }
     taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
-        --mode opt --input "$opt_qjsb" --source-name "$source_name" \
+        --mode opt --input "$rewrite_qjsb" --source-name "$source_name" \
         --rounds "$ROUNDS" --warmup 1 --expect-body "$body" \
         >"$OUT/$name.opt.jsonl" 2>"$OUT/$name.opt.err" || {
         echo "$name: opt mode failed (body mismatch?)" >&2; continue; }
@@ -89,7 +89,7 @@ for name in $FIXTURES; do
     opt_med=$(grep -o '"ms":[0-9.]*' "$OUT/$name.opt.jsonl" |
               cut -d: -f2 | median)
 
-    # G3 delta: optimized vs unoptimized bytecode (the honest baseline).
+    # G3 delta: rewritten vs raw bytecode (the honest baseline).
     g3_delta=$(awk -v a="$raw_med" -v b="$opt_med" \
         'BEGIN { printf "%.2f", 100.0 * (a - b) / a }')
     # Parse-skip noise reference: bytecode vs source (should be ~0).

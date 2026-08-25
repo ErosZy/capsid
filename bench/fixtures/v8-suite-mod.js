@@ -1,6 +1,6 @@
 // v8-suite-mod: the real V8 benchmark-suite source (Richards, Crypto,
 // RayTrace, DeltaBlue, EarleyBoyer, Regexp) as module-level *code* instead of
-// a string-eval'd literal, so the AOT bytecode optimizer sees the suite's
+// a string-eval'd literal, so the AOT bytecode rewriter sees the suite's
 // real instruction stream. Behavior mirrors v8-suite-rt.js (same suite body,
 // same print shim, same response body) — only the eval indirection is
 // removed.

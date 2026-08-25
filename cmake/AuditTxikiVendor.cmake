@@ -156,15 +156,13 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # probe for per-token reclaim decisions; 0035 fixes libwebsockets cookie
 # attribute indices so Secure/HttpOnly cannot overwrite the name/value.
 # Arbitrary parked Promise reactions are deliberately not a completion signal.
-# 0039 S0 shape-guard A/B backends; 0040 S1 SHADOW IC sidecars; 0041
-# exact-PC monomorphic get_field quickening and retired ext-id reservation;
-# 0042 adds source provenance to the diagnostic opcode profile; 0043 keeps
-# mixed int/float multiplication on the numeric interpreter fast path; 0044
-# preserves the reader's pending-exception contract for rejected ext forms;
-# 0045 adds the loc-loc-array fusion ext templates (ids 2/3, R1 campaign).
-if(NOT CAPSID_PATCH_COUNT EQUAL 46)
+# 0036 adds compile-gated opcode profiling; 0037 backports upstream mixed
+# int/float arithmetic and int-indexed fast-array reads inside the ordinary
+# opcode handlers, without changing the bytecode format; 0038 adds exact-site
+# source-aware counters to the compile-gated profiler only.
+if(NOT CAPSID_PATCH_COUNT EQUAL 39)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 46 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 39 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------

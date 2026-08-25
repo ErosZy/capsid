@@ -1,8 +1,6 @@
-# The bytecode fuzzer must compile against the exact patched QuickJS wire
+# The bytecode fuzzer must compile against the exact pinned QuickJS opcode
 # schema even when the worker itself is disabled. Preparing the overlay here
-# keeps quickjs-opcode.h and quickjs-ext-opcode.h single-sourced; falling back
-# to the unpatched vendor headers silently removes OP_ext/get_field_ic and no
-# longer represents the product optimizer.
+# keeps quickjs-opcode.h single-sourced for the product rewriter.
 if(CAPSID_BUILD_WORKER OR CAPSID_BUILD_FUZZERS)
     set(CAPSID_TXIKI_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/vendor-overlay/txiki.js")
     set(CAPSID_OVERLAY_STAMP "${CAPSID_TXIKI_OVERLAY}/.capsid-overlay-key")
@@ -147,23 +145,6 @@ if(CAPSID_BUILD_WORKER)
     # compiled code does, so production builds keep it OFF.
     set(CONFIG_OPCODE_PROFILE ${CAPSID_ENABLE_OPCODE_PROFILE}
         CACHE BOOL "" FORCE)
-    # S0: forward the shape-guard A/B backend into the quickjs xoptions.
-    # Same rule as the opcode-profile forwarding: the overlay key/manifest
-    # do not depend on these cache values — the compiled code does.
-    set(CONFIG_SHAPE_GUARD_ID32 ${CAPSID_ENABLE_SHAPE_GUARD_ID32}
-        CACHE BOOL "" FORCE)
-    set(CONFIG_SHAPE_GUARD_STRONG_REF ${CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF}
-        CACHE BOOL "" FORCE)
-    # Forward the exact-PC SHADOW/adaptive field IC into quickjs. The
-    # overlay identity is mode-independent; the binary is not, and the
-    # production configuration remains OFF pending paired A/B evidence.
-    set(CONFIG_SHAPE_GUARD_IC ${CAPSID_ENABLE_SHAPE_GUARD_IC}
-        CACHE BOOL "" FORCE)
-    # R1: unlike an optimizer pass mask, this removes the ext34 handlers and
-    # live ext ids from the binary entirely. OFF is the production default;
-    # candidate A/B and feature tests opt in explicitly.
-    set(CONFIG_EXT_FUSION34 ${CAPSID_ENABLE_EXT_FUSION34}
-        CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public
@@ -291,16 +272,6 @@ if(CAPSID_BUILD_WORKER)
         target_compile_definitions(capsid-worker PRIVATE
             CAPSID_OPCODE_PROFILE=1)
     endif()
-    if(CAPSID_ENABLE_SHAPE_GUARD_IC)
-        # Measurement-only worker control. CONFIG_SHAPE_GUARD_IC exposes the
-        # compile-gated QuickJS API in quickjs.h; CAPSID_SHAPE_GUARD_IC gates
-        # the environment selector/reporting code in worker_runtime.cc. The
-        # ordinary build compiles out both and the experimental build still
-        # defaults to OFF unless CAPSID_SHAPE_IC_MODE is explicitly set.
-        target_compile_definitions(capsid-worker PRIVATE
-            CONFIG_SHAPE_GUARD_IC=1
-            CAPSID_SHAPE_GUARD_IC=1)
-    endif()
     if(CAPSID_GENERATE_LINK_MAP)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
            CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -367,42 +338,37 @@ if(CAPSID_BUILD_WORKER)
                 -Wall -Wextra -Wpedantic -Werror)
         endif()
     endif()
-    # Bytecode AOT optimizer (docs/bytecode-aot-optimizer.md): pure
+    # Bytecode AOT rewriter (docs/bytecode-aot-rewriter.md): pure
     # capsid-side post-serialization rewrite of the .qjsb buffer. This is
     # product source consumed by the compiler, tests, benchmarks, and fuzzers;
     # it never changes the vendored VM or bytecode compatibility identity.
-    add_library(capsid_bytecode_opt STATIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/bytecode_optimizer.cc"
+    add_library(capsid_bytecode_rewriter STATIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/bytecode_rewriter.cc"
         # I0 bring-up CFG + I1 full-stack SSA (tier-3 plan): analyze-only
         # until the gates pass on the corpus; the production pipeline
         # never invokes them, and unmodeled functions stay byte-for-byte
         # BC26.
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/cfg.cc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/effects.cc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/ssa.cc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/region.cc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_optimizer/ir/ext.cc")
-    target_include_directories(capsid_bytecode_opt
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/ir/cfg.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/ir/effects.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/ir/ssa.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/ir/region.cc")
+    target_include_directories(capsid_bytecode_rewriter
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
         PRIVATE
         "${CAPSID_TXIKI_OVERLAY}/deps/quickjs")
-    if(CAPSID_ENABLE_EXT_FUSION34)
-        target_compile_definitions(capsid_bytecode_opt
-            PRIVATE CAPSID_ENABLE_EXT_FUSION34=1 CONFIG_EXT_FUSION34=1)
-    endif()
-    set_target_properties(capsid_bytecode_opt PROPERTIES
+    set_target_properties(capsid_bytecode_rewriter PROPERTIES
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF)
     if(CAPSID_STRICT_WARNINGS)
         if(MSVC)
-            target_compile_options(capsid_bytecode_opt PRIVATE /W4 /WX)
+            target_compile_options(capsid_bytecode_rewriter PRIVATE /W4 /WX)
         else()
-            target_compile_options(capsid_bytecode_opt PRIVATE
+            target_compile_options(capsid_bytecode_rewriter PRIVATE
                 -Wall -Wextra -Wpedantic -Werror)
         endif()
     endif()
     target_link_libraries(capsid-bytecode-compile PRIVATE
-        capsid_bytecode_opt)
+        capsid_bytecode_rewriter)
     add_dependencies(capsid_runtime capsid-worker)
 endif()

@@ -1,9 +1,9 @@
-// Execution-throughput harness for the bytecode AOT optimizer benchmark
+// Execution-throughput harness for the bytecode AOT rewriter benchmark
 // (Step 8, G3/G5). Drives one fixture through the identical request in
 // three modes over the public capsid_worker C ABI:
 //   source  -> capsid_worker_load_bundle_named(source)
 //   raw     -> capsid_worker_load_trusted_bytecode_named(unoptimized)
-//   opt     -> capsid_worker_load_trusted_bytecode_named(optimized)
+//   opt     -> capsid_worker_load_trusted_bytecode_named(rewritten)
 // Each measured round is one request; the harness times begin-request ->
 // RESPONSE_END with a steady clock and emits one JSON line per round:
 //   {"mode":"opt","round":2,"ms":41.37,"status":200,"body_len":9,"body":"...","ok":true}

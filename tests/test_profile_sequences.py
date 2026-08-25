@@ -59,7 +59,7 @@ def main() -> int:
         report = module.census(module.load_profiles(pathlib.Path(tmp), "opt"),
                                sizes, source_name="file:///app/fixture.js")
 
-    assert report["schema"] == "capsid-opcode-sequence-census-v1"
+    assert report["schema"] == "capsid-opcode-sequence-census-v2"
     assert report["stats"]["runtimes"] == 1
     assert report["stats"]["site_overflow"] == 3
     assert report["stats"]["foreign_source_sites"] == 1
@@ -68,7 +68,6 @@ def main() -> int:
     assert full in rows
     assert rows[full]["region_exec"] == 80
     assert rows[full]["avoided_dispatches"] == 320
-    assert rows[full]["ext_avoided_dispatches"] == 240
     assert rows[full]["property_direct"] == 88
     assert rows[full]["property_slow"] == 2
     assert rows[full]["program_count"] == 1

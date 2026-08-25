@@ -150,7 +150,7 @@ for (const requiredFragment of [
   "`tjs:*` modules cannot be enabled through configuration",
   "`CAPSID_EVENT_READY.flags` contains the sandbox features required by the deployment",
   "Current clean samples were captured on 2026-08-25",
-  "Retained optimizer portfolio",
+  "Retained BC26 rewrite portfolio",
   "**+2.64%**",
   "V8 Web Tooling",
   "-0.49% (neutral)",

@@ -31,11 +31,11 @@ echo "fixtures: $FIXTURES" | tee "$OUT/manifest.txt"
 for name in $FIXTURES; do
     src="bench/fixtures/$name.js"
     source_name="file:///app/$name.js"
-    opt_qjsb="$OUT/$name.opt.qjsb"
+    rewrite_qjsb="$OUT/$name.rewrite.qjsb"
     "$COMPILE" \
         --source "$src" --source-name "$source_name" \
         --application "bench" --version "bench-1" --key-id "bench-key" \
-        --bytecode-out "$opt_qjsb" \
+        --bytecode-out "$rewrite_qjsb" \
         --attestation-out "$OUT/$name.attestation.json" \
         --signing-message-out "$OUT/$name.signing-message.bin" \
         2>"$OUT/$name.compile.stderr" || {
@@ -56,7 +56,7 @@ for name in $FIXTURES; do
         expect_arg=(--expect-body "$body")
     fi
     taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
-        --mode opt --input "$opt_qjsb" --source-name "$source_name" \
+        --mode opt --input "$rewrite_qjsb" --source-name "$source_name" \
         --rounds 1 --warmup 0 "${expect_arg[@]}" \
         >"$OUT/$name.opt.jsonl" 2>"$OUT/$name.opt.profile.jsonl" || {
         echo "$name: opt mode failed" >&2; continue; }

@@ -190,29 +190,14 @@ function(capsid_compute_txiki_overlay_key)
     # 0036 CONFIG_OPCODE_PROFILE opcode counters (measurement build only;
     #      compiled out of production builds — zero-tax verified at the
     #      object and linked-binary level for the OFF configuration).
-    # 0037 BC27/OP_ext format foundation (ext table, dual reader, stack
-    #      verifier, dispatch stub; catalog empty, emission off).
-    # 0038 EXT_get_array_el handler + canonical BC27 writer selection
-    #      (retired by 0041; retained in history so the reserved id cannot
-    #      be silently reused).
-    # 0039 S0 shape-guard A/B measurement backends (compile-gated
-    #      ID32/STRONG_REF sites; no production consumer, both OFF by
-    #      default — zero tax enforced by the OFF configuration).
-    # 0040 S1 SHADOW IC bounded lazy sidecars (compile-gated; builds on
-    #      ID32); 0041 exact-PC monomorphic get_field quickening with a
-    #      runtime-only direct opcode, plus retirement/reservation of the
-    #      rejected single-op array ext id. 0042 adds source provenance to
-    #      the diagnostic opcode profile so bootstrap sites cannot rank as
-    #      application AOT candidates. 0043 backports quickjs-ng 377a25e:
+    # 0037 backports quickjs-ng 377a25e:
     #      mixed int/float add/sub/mul/div and int-indexed fast-array reads
     #      stay inside the ordinary opcode handlers, with no BC format change.
-    #      0044 makes every rejected
-    #      ext encoding install a real SyntaxError before returning. 0045
-    #      adds the measured loc-loc-array fusion ext templates (ids 2/3)
-    #      for the R1 A/B campaign; no production consumer yet.
-    if(NOT CTOK_PATCH_COUNT EQUAL 46)
+    # 0038 adds exact-site/source-aware counters to CONFIG_OPCODE_PROFILE;
+    #      production builds compile the entire profiler out.
+    if(NOT CTOK_PATCH_COUNT EQUAL 39)
         message(FATAL_ERROR
-            "expected 46 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 39 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

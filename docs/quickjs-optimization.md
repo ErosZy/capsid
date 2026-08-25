@@ -3,7 +3,7 @@
 This is the single maintained entry point for Capsid-specific QuickJS
 optimization. It records the production configuration, the measured decisions
 behind it, and the gate for future work. Implementation details for the
-deployed BC26 rewriter live in [Bytecode AOT Optimizer](bytecode-aot-optimizer.md);
+deployed BC26 rewriter live in [Bytecode AOT Rewriter](bytecode-aot-rewriter.md);
 full benchmark tables live in [Performance Evidence](performance-benchmarks.md).
 Historical plans and per-task execution logs belong in git history, not in the
 maintained documentation set.
@@ -12,19 +12,19 @@ maintained documentation set.
 
 | Component | Production state | Reason |
 |---|---|---|
-| BC26 AOT optimizer (`kPassAll`) | enabled | Sound static reductions; positive classic-suite center and neutral library-suite aggregate |
+| BC26 AOT rewriter (`kPassAll`) | enabled | Sound static reductions; positive classic-suite center and neutral library-suite aggregate |
 | Mixed-number `mul` fast path | enabled | Significant classic-suite contribution |
 | CFG and stack-to-SSA analysis | analyze-only | Useful for proofs and candidate ranking; no lowering today |
 | Exact-site opcode profiling | instrumentation build only | Selection tool, never a production default |
-| Field inline cache | compiled OFF | Direct patchless comparison regressed fresh receivers |
+| Field inline cache | removed | Direct patchless comparison regressed fresh receivers |
 | BC27 `get_arg0 + get_field` fusion | removed | Real-framework combined result was significantly negative |
-| ext34 loc-read/array fusion | compiled OFF | Targeted wins did not survive enabled-binary product gates |
+| ext34 loc-read/array fusion | removed | Targeted wins did not survive enabled-binary product gates |
 | Store/reload fusion | removed | Aggregate neutral with a significant FFT regression |
 
-Default output is ordinary quickjs-ng bytecode version 26. With
-`CAPSID_ENABLE_EXT_FUSION34=OFF`, ext34 ids, formats, readers, and handlers are
-absent, and the build flag participates in the compatibility identity. The
-field IC and opcode profiler likewise do not run in production builds.
+Default output is ordinary quickjs-ng bytecode version 26. Capsid now carries
+no custom bytecode version, extension opcode, field-IC opcode, reader, handler,
+or feature flag. The opcode profiler remains a separate instrumentation-only
+patch and compiles to byte-identical QuickJS code when disabled.
 
 The retained combination—BC26 `kPassAll` plus mixed-number `mul`—measured
 **+2.64% equal-weight gain** over eight balanced Kraken/Octane programs, with
@@ -64,6 +64,38 @@ intermediate stack values, reference-count transfers, repeated guards, or a
 helper call. Saving one cheap dispatch while still executing the full generic
 property helper is below the current threshold.
 
+### Choose the cheapest execution mechanism
+
+For a common specialization that fits entirely inside one existing opcode,
+prefer a short inline fast path in that opcode's interpreter handler. It keeps
+old bytecode eligible, needs no compiler recognition or lowering, adds no
+bytecode version, avoids an extra `OP_ext`/id dispatch, and can fall through to
+the exact existing slow path. quickjs-ng commit `377a25e` is the reference
+shape: ordinary `get_array_el{,2}` first checks object + integer index and reads
+a regular or typed fast array directly; mixed numeric `add/sub/mul/div` stays
+inside the original arithmetic handlers. Capsid backports those runtime paths
+without changing its BC26 wire contract.
+
+This is a mechanism preference, not a claim that inline code is layout-free.
+It still grows `JS_CallInternal`, can move later hot code, and can hurt the
+instruction cache when guards are large or rarely hit. An inline candidate
+therefore needs a cheap guard, broad dynamic coverage, and direct final-binary
+measurement. Keep rare or complex cases in the shared slow helper.
+
+Use a new fused/superinstruction only when the value comes from crossing
+instruction boundaries: removing several dispatches, stack shuffles,
+load/store pairs, reference-count transfers, or repeated guards that no single
+handler can see. The retired single-op array ext paid a new-format and dispatch
+cost for work that belonged in the existing opcode; ext34 was a legitimate
+cross-instruction fusion, but its measured wins did not repay final-binary
+layout cost across the portfolio. The decision order is therefore:
+
+1. optimize the existing generic helper if all callers benefit;
+2. inline a small, common specialization in the existing opcode;
+3. introduce fusion/ext only for proven cross-instruction removable work;
+4. introduce feedback/IC only when a lower execution tier consumes it more
+   cheaply than the generic interpreter path.
+
 ## 3. Why V8-Style IC Gains Do Not Transfer Directly
 
 V8 can use feedback to generate or patch low-level code at the access site. A
@@ -100,11 +132,11 @@ in git history.
 | Experiment | Best relevant evidence | Decision |
 |---|---|---|
 | R0 single-op array ext | Target fixture -12.69%; generic helper already had the same fast path | removed |
-| Exact-site field IC | PATCHLESS→enabled fresh latency +7.31% regression, CI [+5.15%, +9.51%]; mono and Hono neutral | compiled OFF |
+| Exact-site field IC | PATCHLESS→enabled fresh latency +7.31% regression, CI [+5.15%, +9.51%]; mono and Hono neutral | removed |
 | BC27 `get_arg0 + get_field` | Four-framework equal-weight -1.28%, CI [-1.77%, -0.77%] | removed |
 | Corrected ext34, same binary | Beat +9.72%, FFT +9.66%, Navier-Stokes +3.22% | mechanism proven |
 | ext34 compiled-in OFF tax | -1.44% equal-weight, program CI [-2.50%, -0.37%] | product gate failed |
-| ext34 patchless→enabled net | +1.51%, CI [-2.07%, +5.22%]; Box2D -2.21%, Richards -3.22% | compiled OFF |
+| ext34 patchless→enabled net | +1.51%, CI [-2.07%, +5.22%]; Box2D -2.21%, Richards -3.22% | removed |
 | `put_loc*; get_loc* -> set_loc*` | +0.28%, CI [-0.68%, +1.25%]; FFT -0.81% significant | removed |
 | Retained set on V8 Web Tooling | -0.49%, across-program interval [-1.34%, +0.37%]; UglifyJS -2.66% significant | keep aggregate; profile combination/layout next |
 
@@ -120,10 +152,9 @@ changed broad runtime performance and the net build significantly regressed
 Box2D and Richards. New handlers must pass the final-binary gate, not only a
 same-binary pass-mask comparison.
 
-Physically deleting every experimental foundation was also tested and was
-aggregate-neutral (-0.29%, CI [-2.83%, +2.33%]) but significantly regressed
-Beat, FFT, and Navier-Stokes through another layout change. The source remains
-available behind real compile gates; no rejected opcode is active or emitted.
+The rejected extension and IC foundations are physically deleted, not hidden
+behind production-off flags. This restores a single BC26 reader/runtime and
+keeps experimental layout out of every shipping binary.
 
 ## 5. Candidate Selection and Lowering Gate
 
@@ -181,12 +212,11 @@ differential and conformance gates.
 
 | Purpose | Entry point |
 |---|---|
-| Deployed optimizer tests | `build-m1d/test-bytecode-optimizer` |
+| Deployed rewriter tests | `build-m1d/test-bytecode-rewriter` |
 | Raw/source/optimized execution | `bench/exec-throughput.sh` |
 | Four-stack product matrix | `bench/compare-four-qps.sh` |
 | Host/worker profiles | `bench/profile-four-stacks.sh` |
 | Cold start | `bench/cold-start.sh` |
-| Field IC A/B | `bench/field-ic-ab.sh`, `bench/field-ic-host-ab.sh`, `bench/field-ic-off-tax.sh` |
 | Classic-suite balanced A/B | `bench/classic-suite-ab.py` |
 | Web Tooling corpus | `bench/prepare-web-tooling.py` |
 | Web Tooling balanced A/B | `bench/web-tooling-ab.sh` |
@@ -222,7 +252,7 @@ source-service gates.
 The authoritative retained-set evidence is
 `bench/results/all-effective-cumulative-20260825/` for Kraken/Octane and
 `bench/results/web-tooling-current-20260825/` for V8 Web Tooling. The clean
-direct execution, source-service, profile, cold-start, and current optimizer
+direct execution, source-service, profile, cold-start, and current rewriter
 checksum identities are listed in
 [Performance Evidence](performance-benchmarks.md).
 

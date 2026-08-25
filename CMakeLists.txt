@@ -71,33 +71,6 @@ option(CAPSID_BUILD_FUZZERS "Build the libFuzzer protocol boundary targets" OFF)
 # it, and zero-tax is enforced by the overlay OFF configuration.
 option(CAPSID_ENABLE_OPCODE_PROFILE
     "Build the worker with quickjs-ng opcode profiling counters" OFF)
-# S0: shape-guard A/B measurement backends (overlay patch 0039; see
-# docs/quickjs-optimization.md §3). Compile-gated in quickjs
-# via CONFIG_SHAPE_GUARD_ID32/STRONG_REF; at most one may be on.
-# Measurement builds only — production keeps both OFF (zero tax).
-option(CAPSID_ENABLE_SHAPE_GUARD_ID32
-    "Build with the quickjs shape-guard ID32 measurement backend" OFF)
-option(CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF
-    "Build with the quickjs shape-guard STRONG_REF measurement backend" OFF)
-if(CAPSID_ENABLE_SHAPE_GUARD_ID32 AND CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF)
-    message(FATAL_ERROR
-        "CAPSID_ENABLE_SHAPE_GUARD_ID32 and CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF are mutually exclusive")
-endif()
-# Compile-gated exact-PC SHADOW + adaptive monomorphic get_field IC
-# (overlay patches 0040/0041). Guards use ID32 shape ids, so this builds on
-# CAPSID_ENABLE_SHAPE_GUARD_ID32. Production remains OFF until uninstrumented
-# worker and Hono A/B evidence clears the documented gates.
-option(CAPSID_ENABLE_SHAPE_GUARD_IC
-    "Build with the quickjs exact-PC SHADOW/adaptive field IC" OFF)
-if(CAPSID_ENABLE_SHAPE_GUARD_IC AND NOT CAPSID_ENABLE_SHAPE_GUARD_ID32)
-    message(FATAL_ERROR
-        "CAPSID_ENABLE_SHAPE_GUARD_IC requires CAPSID_ENABLE_SHAPE_GUARD_ID32 (IC guards are ID32 shape ids)")
-endif()
-# R1 loc-read + get_array_el fusion is retained only as an experimental
-# measurement backend. Its compiled-in handlers failed the patchless-vs-OFF
-# runtime gate, so production/default builds must not contain them.
-option(CAPSID_ENABLE_EXT_FUSION34
-    "Build with the experimental BC27 ext34 fusion backend" OFF)
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY
@@ -342,7 +315,7 @@ endif()
 # value must be ONE canonical string — a multi-argument set() would form a
 # CMake semicolon list and a one-value argument would silently truncate it.
 set(CAPSID_BUILD_COMPILE_FLAGS
-    "build_type=${CMAKE_BUILD_TYPE} lto=${CAPSID_ENABLE_LTO} asan=${CAPSID_ENABLE_ASAN} ubsan=${CAPSID_ENABLE_UBSAN} mimalloc=${CAPSID_USE_MIMALLOC} ext_fusion34=${CAPSID_ENABLE_EXT_FUSION34}")
+    "build_type=${CMAKE_BUILD_TYPE} lto=${CAPSID_ENABLE_LTO} asan=${CAPSID_ENABLE_ASAN} ubsan=${CAPSID_ENABLE_UBSAN} mimalloc=${CAPSID_USE_MIMALLOC}")
 math(EXPR CAPSID_POINTER_WIDTH_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
 # Provenance target triple. A cross compiler reports its own triple; native
 # builds compose one from the platform the CMake toolchain targets.

@@ -230,42 +230,38 @@ if(BUILD_TESTING)
                 capsid-bytecode-compile
                 capsid-worker)
 
-            # Unit gate for the bytecode AOT optimizer
-            # (docs/bytecode-aot-optimizer.md): synthetic-buffer golden
+            # Unit gate for the bytecode AOT rewriter
+            # (docs/bytecode-aot-rewriter.md): synthetic-buffer golden
             # bytes, fail-closed matrix, P2 gates, and a full
-            # compile → serialize → optimize → deserialize → eval
-            # round-trip through tjs compared with the unoptimized path.
+            # compile → serialize → rewrite → deserialize → eval
+            # round-trip through tjs compared with the raw path.
             add_executable(
-                test-bytecode-optimizer
-                tests/bytecode_optimizer/test_optimizer.cc)
+                test-bytecode-rewriter
+                tests/bytecode_rewriter/test_rewriter.cc)
             target_link_libraries(
-                test-bytecode-optimizer PRIVATE
-                capsid_bytecode_opt
+                test-bytecode-rewriter PRIVATE
+                capsid_bytecode_rewriter
                 tjs)
-            if(CAPSID_ENABLE_EXT_FUSION34)
-                target_compile_definitions(test-bytecode-optimizer PRIVATE
-                    CAPSID_ENABLE_EXT_FUSION34=1 CONFIG_EXT_FUSION34=1)
-            endif()
             set_target_properties(
-                test-bytecode-optimizer PROPERTIES
+                test-bytecode-rewriter PROPERTIES
                 CXX_STANDARD 20
                 CXX_STANDARD_REQUIRED ON
                 CXX_EXTENSIONS OFF)
             if(CAPSID_STRICT_WARNINGS)
                 if(MSVC)
                     target_compile_options(
-                        test-bytecode-optimizer PRIVATE /W4 /WX)
+                        test-bytecode-rewriter PRIVATE /W4 /WX)
                 else()
                     target_compile_options(
-                        test-bytecode-optimizer PRIVATE
+                        test-bytecode-rewriter PRIVATE
                         -Wall -Wextra -Wpedantic -Werror)
                 endif()
             endif()
             add_test(
-                NAME bytecode_optimizer
-                COMMAND test-bytecode-optimizer)
+                NAME bytecode_rewriter
+                COMMAND test-bytecode-rewriter)
             set_tests_properties(
-                bytecode_optimizer PROPERTIES TIMEOUT 60)
+                bytecode_rewriter PROPERTIES TIMEOUT 60)
 
             # I0 CFG gate (docs/quickjs-optimization.md §2/§6): synthetic
             # malformed-function matrix (each decoder /
@@ -276,15 +272,11 @@ if(BUILD_TESTING)
             # path must decode -> CFG -> emit identical).
             add_executable(
                 test-bytecode-cfg
-                tests/bytecode_optimizer/test_cfg.cc)
+                tests/bytecode_rewriter/test_cfg.cc)
             target_link_libraries(
                 test-bytecode-cfg PRIVATE
-                capsid_bytecode_opt
+                capsid_bytecode_rewriter
                 tjs)
-            if(CAPSID_ENABLE_EXT_FUSION34)
-                target_compile_definitions(test-bytecode-cfg PRIVATE
-                    CAPSID_ENABLE_EXT_FUSION34=1 CONFIG_EXT_FUSION34=1)
-            endif()
             set_target_properties(
                 test-bytecode-cfg PROPERTIES
                 CXX_STANDARD 20
@@ -315,10 +307,10 @@ if(BUILD_TESTING)
             # emissions.
             add_executable(
                 test-bytecode-ssa
-                tests/bytecode_optimizer/test_ssa.cc)
+                tests/bytecode_rewriter/test_ssa.cc)
             target_link_libraries(
                 test-bytecode-ssa PRIVATE
-                capsid_bytecode_opt
+                capsid_bytecode_rewriter
                 tjs)
             set_target_properties(
                 test-bytecode-ssa PROPERTIES
@@ -350,10 +342,10 @@ if(BUILD_TESTING)
             # rejection behavior, never emissions.
             add_executable(
                 test-regions
-                tests/bytecode_optimizer/test_regions.cc)
+                tests/bytecode_rewriter/test_regions.cc)
             target_link_libraries(
                 test-regions PRIVATE
-                capsid_bytecode_opt
+                capsid_bytecode_rewriter
                 tjs)
             set_target_properties(
                 test-regions PROPERTIES
@@ -376,145 +368,38 @@ if(BUILD_TESTING)
             set_tests_properties(
                 bytecode_regions PROPERTIES TIMEOUT 120)
 
-            # Retained BC27/OP_ext foundation: production/default remains
-            # BC26-only and the retired R0 id 1 is a permanent hole. An
-            # explicit ext34 feature build additionally validates live ids
-            # 2/3 and their tagged frame-slot payloads.
-            add_executable(
-                test-ext-round-trip
-                tests/bytecode_optimizer/test_ext_round_trip.cc)
-            target_link_libraries(
-                test-ext-round-trip PRIVATE
-                capsid_bytecode_opt
-                tjs)
-            if(CAPSID_ENABLE_EXT_FUSION34)
-                target_compile_definitions(test-ext-round-trip PRIVATE
-                    CAPSID_ENABLE_EXT_FUSION34=1 CONFIG_EXT_FUSION34=1)
-            endif()
-            set_target_properties(
-                test-ext-round-trip PROPERTIES
-                CXX_STANDARD 20
-                CXX_STANDARD_REQUIRED ON
-                CXX_EXTENSIONS OFF)
-            if(CAPSID_STRICT_WARNINGS)
-                if(MSVC)
-                    target_compile_options(
-                        test-ext-round-trip PRIVATE /W4 /WX)
-                else()
-                    target_compile_options(
-                        test-ext-round-trip PRIVATE
-                        -Wall -Wextra -Wpedantic -Werror)
-                endif()
-            endif()
-            add_test(
-                NAME bytecode_ext_round_trip
-                COMMAND test-ext-round-trip)
-            set_tests_properties(
-                bytecode_ext_round_trip PROPERTIES TIMEOUT 120)
-
-            if(CAPSID_ENABLE_SHAPE_GUARD_ID32 OR
-               CAPSID_ENABLE_SHAPE_GUARD_STRONG_REF)
-                # S0 measurement gate (§5.1.1): drives the compile-gated
-                # backend through the invalidation matrix (and, with
-                # --bench, the selection measurements).
-                add_executable(
-                    test-shape-guard
-                    tests/test_shape_guard.cc)
-                target_link_libraries(test-shape-guard PRIVATE tjs)
-                if(CAPSID_ENABLE_SHAPE_GUARD_ID32)
-                    target_compile_definitions(
-                        test-shape-guard PRIVATE CONFIG_SHAPE_GUARD_ID32=1)
-                else()
-                    target_compile_definitions(
-                        test-shape-guard PRIVATE CONFIG_SHAPE_GUARD_STRONG_REF=1)
-                endif()
-                set_target_properties(
-                    test-shape-guard PROPERTIES
-                    CXX_STANDARD 20
-                    CXX_STANDARD_REQUIRED ON
-                    CXX_EXTENSIONS OFF)
-                if(CAPSID_STRICT_WARNINGS)
-                    if(MSVC)
-                        target_compile_options(
-                            test-shape-guard PRIVATE /W4 /WX)
-                    else()
-                        target_compile_options(
-                            test-shape-guard PRIVATE
-                            -Wall -Wextra -Wpedantic -Werror)
-                    endif()
-                endif()
-                add_test(
-                    NAME bytecode_shape_guard
-                    COMMAND test-shape-guard)
-                set_tests_properties(
-                    bytecode_shape_guard PROPERTIES TIMEOUT 300)
-            endif()
-
-            if(CAPSID_ENABLE_SHAPE_GUARD_IC)
-                # Exact-PC SHADOW/adaptive field-IC gate: locality, state
-                # transitions, quicken/dequicken, fallback semantics, and
-                # serialization canonicalization. Guards are ID32 shape ids.
-                add_executable(
-                    test-shadow-ic
-                    tests/test_shadow_ic.cc)
-                target_link_libraries(test-shadow-ic PRIVATE tjs)
-                target_compile_definitions(
-                    test-shadow-ic PRIVATE
-                    CONFIG_SHAPE_GUARD_IC=1 CONFIG_SHAPE_GUARD_ID32=1)
-                set_target_properties(
-                    test-shadow-ic PROPERTIES
-                    CXX_STANDARD 20
-                    CXX_STANDARD_REQUIRED ON
-                    CXX_EXTENSIONS OFF)
-                if(CAPSID_STRICT_WARNINGS)
-                    if(MSVC)
-                        target_compile_options(
-                            test-shadow-ic PRIVATE /W4 /WX)
-                    else()
-                        target_compile_options(
-                            test-shadow-ic PRIVATE
-                            -Wall -Wextra -Wpedantic -Werror)
-                    endif()
-                endif()
-                add_test(
-                    NAME bytecode_shadow_ic
-                    COMMAND test-shadow-ic)
-                set_tests_properties(
-                    bytecode_shadow_ic PROPERTIES TIMEOUT 300)
-            endif()
-
             # Differential gate: every fixture runs through
-            # the real deployment path — compiler (optimizer on) →
+            # the real deployment path — compiler (rewriter on) →
             # trusted-bytecode worker load — and the response must match
             # the source-loaded worker byte for byte. binding: fixtures
             # additionally declare the inline mongo Binding; failload:
             # fixtures must fail closed at load on both paths with
             # identical error text.
             add_executable(
-                test-bytecode-opt-diff
-                tests/bytecode_optimizer/test_differential.cc)
+                test-bytecode-rewrite-diff
+                tests/bytecode_rewriter/test_differential.cc)
             target_link_libraries(
-                test-bytecode-opt-diff PRIVATE
+                test-bytecode-rewrite-diff PRIVATE
                 capsid_runtime
                 Threads::Threads)
             set_target_properties(
-                test-bytecode-opt-diff PROPERTIES
+                test-bytecode-rewrite-diff PROPERTIES
                 CXX_STANDARD 20
                 CXX_STANDARD_REQUIRED ON
                 CXX_EXTENSIONS OFF)
             if(CAPSID_STRICT_WARNINGS)
                 if(MSVC)
                     target_compile_options(
-                        test-bytecode-opt-diff PRIVATE /W4 /WX)
+                        test-bytecode-rewrite-diff PRIVATE /W4 /WX)
                 else()
                     target_compile_options(
-                        test-bytecode-opt-diff PRIVATE
+                        test-bytecode-rewrite-diff PRIVATE
                         -Wall -Wextra -Wpedantic -Werror)
                 endif()
             endif()
             add_test(
-                NAME bytecode_opt_differential
-                COMMAND test-bytecode-opt-diff
+                NAME bytecode_rewrite_differential
+                COMMAND test-bytecode-rewrite-diff
                     $<TARGET_FILE:capsid-worker>
                     $<TARGET_FILE:capsid-bytecode-compile>
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
@@ -523,7 +408,7 @@ if(BUILD_TESTING)
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/host-single-worker.js"
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/p1-platform-contract.js"
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/wasm-minimal.js"
-                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/opt-slot-reuse.js"
+                    "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/rewrite-slot-reuse.js"
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/p2-midblock-join.js"
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/p16-midblock-merge.js"
                     "normal:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/p11-loop-copy.js"
@@ -531,9 +416,9 @@ if(BUILD_TESTING)
                     "normal:${CAPSID_GENERATED_DIR}/test-wasm-exported-memory-reimport.js"
                     "failload:${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/load-fail-no-fetch.js")
             set_tests_properties(
-                bytecode_opt_differential PROPERTIES TIMEOUT 300)
+                bytecode_rewrite_differential PROPERTIES TIMEOUT 300)
             add_dependencies(
-                test-bytecode-opt-diff
+                test-bytecode-rewrite-diff
                 capsid-bytecode-compile
                 capsid-worker
                 test-global-surface-fixture
@@ -2285,21 +2170,19 @@ if(BUILD_TESTING)
             src/protocol.cc
         )
         capsid_add_fuzzer(
-            fuzz-bytecode-opt
-            tests/fuzz/fuzz_bytecode_opt.cc
-            bytecode_opt
-            src/bytecode_optimizer/bytecode_optimizer.cc
-            src/bytecode_optimizer/ir/cfg.cc
-            src/bytecode_optimizer/ir/effects.cc
-            src/bytecode_optimizer/ir/ssa.cc
-            src/bytecode_optimizer/ir/region.cc
-            src/bytecode_optimizer/ir/ext.cc
+            fuzz-bytecode-rewrite
+            tests/fuzz/fuzz_bytecode_rewrite.cc
+            bytecode_rewrite
+            src/bytecode_rewriter/bytecode_rewriter.cc
+            src/bytecode_rewriter/ir/cfg.cc
+            src/bytecode_rewriter/ir/effects.cc
+            src/bytecode_rewriter/ir/ssa.cc
+            src/bytecode_rewriter/ir/region.cc
         )
         # build_worker.cmake prepares the same integrity-checked overlay for
-        # this worker-OFF configuration. The optimizer must never compile
-        # against vanilla QuickJS headers: its BC27 reader and runtime-only IC
-        # rejection depend on the patched opcode registry.
-        target_include_directories(fuzz-bytecode-opt PRIVATE
+        # this worker-OFF configuration. The rewriter consumes the pinned
+        # QuickJS opcode registry from that overlay.
+        target_include_directories(fuzz-bytecode-rewrite PRIVATE
             "${CAPSID_TXIKI_OVERLAY}/deps/quickjs")
     endif()
 
@@ -4872,25 +4755,6 @@ if(BUILD_TESTING)
             COMMAND test-tjs-shared-loop
         )
         set_tests_properties(tjs_shared_loop PROPERTIES TIMEOUT 20)
-
-        # Directed BC27/OP_ext foundation tests. Patch 0041 retires the R0
-        # array handler and permanently reserves id 1, so only fail-closed
-        # BC27 behavior is valid until a new catalog entry is approved.
-        add_executable(
-            test-ext-bytecode
-            tests/test_ext_bytecode.cc
-        )
-        target_link_libraries(test-ext-bytecode PRIVATE tjs)
-        if(CAPSID_ENABLE_EXT_FUSION34)
-            target_compile_definitions(test-ext-bytecode PRIVATE
-                CONFIG_EXT_FUSION34=1)
-        endif()
-        add_test(
-            NAME ext_bytecode_directed
-            COMMAND test-ext-bytecode
-        )
-        set_tests_properties(ext_bytecode_directed
-            PROPERTIES TIMEOUT 30)
 
         # Binding v1 §7.6: the neutral-value structured clone between the
         # User and Binding Runtimes.

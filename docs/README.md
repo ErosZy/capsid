@@ -29,7 +29,7 @@ Capsid documentation is organized around selection → integration → configura
   [framework-compatibility/README.md](framework-compatibility/README.md)
 - Test gate: [testing.md](testing.md)
 - Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
-- Deployed bytecode optimizer: [bytecode-aot-optimizer.md](bytecode-aot-optimizer.md)
+- Deployed bytecode rewriter: [bytecode-aot-rewriter.md](bytecode-aot-rewriter.md)
 - QuickJS optimization decisions and next gate:
   [quickjs-optimization.md](quickjs-optimization.md)
 

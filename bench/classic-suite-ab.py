@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Paired A/B runner for serialized classic-script benchmark corpora.
 
-Each optimizer/runtime candidate is represented by a classic-bytecode binary
+Each rewriter/runtime candidate is represented by a classic-bytecode binary
 and pass mask.  Programs are compiled once per arm, smoke-validated, then run
 in balanced ABBA/BAAB order with one fresh QuickJS runtime per sample.  The
 script records raw samples and a paired-log-ratio summary; it never decides
@@ -201,7 +201,7 @@ def main() -> int:
             output = bytecode_dir / f"{stem}.{arm}.qjsb"
             command = [str(tool), "compile", "--input", str(source),
                        "--source-name", f"file:///{program['file']}",
-                       "--output", str(output), "--optimize", "--passes",
+                       "--output", str(output), "--rewrite", "--passes",
                        passes, "--report"]
             result = run(command, args.timeout,
                          stderr=args.out / f"{stem}.{arm}.compile.stderr")
