@@ -159,10 +159,11 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # 0036 adds compile-gated opcode profiling; 0037 backports upstream mixed
 # int/float arithmetic and int-indexed fast-array reads inside the ordinary
 # opcode handlers, without changing the bytecode format; 0038 adds exact-site
-# source-aware counters to the compile-gated profiler only.
-if(NOT CAPSID_PATCH_COUNT EQUAL 39)
+# source-aware counters to the compile-gated profiler only; 0039 backports
+# quickjs-ng 9de2921's small-block arena allocator without changing BC26.
+if(NOT CAPSID_PATCH_COUNT EQUAL 40)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 39 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 40 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------
@@ -266,7 +267,7 @@ endif()
 #
 # Sparse probe: git apply only ever reads the files named in its own
 # +++ b/ headers, so the probe copies exactly those pristine files
-# (derived from the patches themselves) and applies all 39 in order —
+# (derived from the patches themselves) and applies all 40 in order —
 # the same result as probing the full 402MB vendor tree in under a
 # second. Every touched path is a real file (never a symlink), so
 # patch writes stay inside the probe. Runs after stamp verification so
