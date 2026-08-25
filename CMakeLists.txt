@@ -47,7 +47,8 @@ endif()
 option(CAPSID_BUILD_WORKER "Build the txiki.js worker process" ON)
 option(CAPSID_BUILD_HOST "Build the first-party Capsid Host" OFF)
 option(CAPSID_STRICT_WARNINGS "Treat Capsid Runtime warnings as errors" ON)
-option(CAPSID_USE_MIMALLOC "Use mimalloc for the txiki.js worker" OFF)
+option(CAPSID_USE_MIMALLOC
+    "Use mimalloc only for the txiki.js worker heap (no global override)" ON)
 option(CAPSID_ENABLE_LTO "Enable interprocedural optimization for production targets" ON)
 if(WIN32 AND CAPSID_ENABLE_LTO)
     # MSVC /GL binds operator new/delete at compile time, so replaceable

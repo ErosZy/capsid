@@ -203,8 +203,10 @@ function(capsid_compute_txiki_overlay_key)
     #      runtime-only direct opcode, plus retirement/reservation of the
     #      rejected single-op array ext id. 0042 adds source provenance to
     #      the diagnostic opcode profile so bootstrap sites cannot rank as
-    #      application AOT candidates. 0043 keeps mixed int/float multiply
-    #      in the interpreter's numeric fast path. 0044 makes every rejected
+    #      application AOT candidates. 0043 backports quickjs-ng 377a25e:
+    #      mixed int/float add/sub/mul/div and int-indexed fast-array reads
+    #      stay inside the ordinary opcode handlers, with no BC format change.
+    #      0044 makes every rejected
     #      ext encoding install a real SyntaxError before returning. 0045
     #      adds the measured loc-loc-array fusion ext templates (ids 2/3)
     #      for the R1 A/B campaign; no production consumer yet.
