@@ -157,7 +157,7 @@ function(capsid_matrix_record variant build_dir
         "^schema=capsid-bytecode-compatibility-v2\nquickjsCommit=[0-9a-f]+\n"
         "txikiOverlayManifest=[0-9a-f]+\n"
         "bytecodeCompileFlags=build_type=[^ ]* lto=(ON|OFF) asan=(ON|OFF) "
-        "ubsan=(ON|OFF) mimalloc=(ON|OFF) ext_fusion34=(ON|OFF)\n"
+        "ubsan=(ON|OFF) mimalloc=(ON|OFF)\n"
         "targetArchitecture=[^\n]+\nendianness=(little|big)\n"
         "pointerWidthBits=[0-9]+\n"
         "bytecodeFormatIdentity=quickjs-ng-bytecode-v1\n$")

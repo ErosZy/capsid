@@ -131,6 +131,15 @@ if(CAPSID_BUILD_WORKER)
     # colliding with the worker's address-space limit (std::bad_alloc in
     # static builds) and leaves libuv/libstdc++ on the system malloc.
     set(MI_OVERRIDE OFF CACHE BOOL "" FORCE)
+    # mimalloc 2.x reserves a 1 GiB arena on its first direct mi_* allocation
+    # (and retries with 128 MiB). That is incompatible with Capsid's default
+    # 256 MiB RLIMIT_AS even without the global malloc override: framework
+    # workers then fail nondeterministically before READY. Keep mimalloc's
+    # arena allocator, but use its documented minimum 32 MiB reserve so the
+    # QuickJS-only heap remains inside the process address-space contract.
+    # MI_DEFAULT_ARENA_RESERVE is expressed in KiB.
+    set(MI_EXTRA_CPPDEFS "MI_DEFAULT_ARENA_RESERVE=32768"
+        CACHE STRING "" FORCE)
     set(BUILD_WITH_ASAN OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_UBSAN OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_WASM ON CACHE BOOL "" FORCE)
