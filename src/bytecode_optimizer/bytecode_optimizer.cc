@@ -4305,7 +4305,6 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
 // JSClosureTypeEnum values (quickjs.c:678-688), spelled out to keep the
 // optimizer vendor-independent. Only the four emitted by ordinary code
 // matter here; the *_DECL/GLOBAL variants are eval-code-only.
-static const uint8_t CLOSURE_LOCAL = 0;  // var_idx: slot in parent frame
 static const uint8_t CLOSURE_ARG = 1;    // var_idx: arg in parent frame
 static const uint8_t CLOSURE_REF = 2;    // var_idx: parent's closure_var idx
 static const uint8_t CLOSURE_GLOBAL_REF = 3;  // same, module-global var

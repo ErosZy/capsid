@@ -2289,13 +2289,18 @@ if(BUILD_TESTING)
             tests/fuzz/fuzz_bytecode_opt.cc
             bytecode_opt
             src/bytecode_optimizer/bytecode_optimizer.cc
+            src/bytecode_optimizer/ir/cfg.cc
+            src/bytecode_optimizer/ir/effects.cc
+            src/bytecode_optimizer/ir/ssa.cc
+            src/bytecode_optimizer/ir/region.cc
+            src/bytecode_optimizer/ir/ext.cc
         )
-        # The optimizer's opcode table comes from the vendored quickjs
-        # header (never linked — names only). CI builds fuzzers with
-        # CAPSID_BUILD_WORKER=OFF, so the vendor-overlay variable is
-        # not defined there; the vendor path always exists.
+        # build_worker.cmake prepares the same integrity-checked overlay for
+        # this worker-OFF configuration. The optimizer must never compile
+        # against vanilla QuickJS headers: its BC27 reader and runtime-only IC
+        # rejection depend on the patched opcode registry.
         target_include_directories(fuzz-bytecode-opt PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/quickjs")
+            "${CAPSID_TXIKI_OVERLAY}/deps/quickjs")
     endif()
 
     if(CAPSID_BUILD_WORKER)

@@ -1,4 +1,9 @@
-if(CAPSID_BUILD_WORKER)
+# The bytecode fuzzer must compile against the exact patched QuickJS wire
+# schema even when the worker itself is disabled. Preparing the overlay here
+# keeps quickjs-opcode.h and quickjs-ext-opcode.h single-sourced; falling back
+# to the unpatched vendor headers silently removes OP_ext/get_field_ic and no
+# longer represents the product optimizer.
+if(CAPSID_BUILD_WORKER OR CAPSID_BUILD_FUZZERS)
     set(CAPSID_TXIKI_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/vendor-overlay/txiki.js")
     set(CAPSID_OVERLAY_STAMP "${CAPSID_TXIKI_OVERLAY}/.capsid-overlay-key")
 
@@ -114,6 +119,9 @@ if(CAPSID_BUILD_WORKER)
         ${CAPSID_TXIKI_COPIED_VENDOR_INPUTS}
     )
 
+endif()
+
+if(CAPSID_BUILD_WORKER)
     set(BUILD_WITH_FFI OFF CACHE BOOL "" FORCE)
     # Binding v1 §3.3: tjs:sqlite is a grantable module in the restricted
     # build; its paths stay behind the per-origin FS gate (patch 0018).
