@@ -287,19 +287,19 @@ public:
         : p_(data), end_(data + size), base_(data), error_(error) {}
 
     bool u8(uint8_t* out) {
-        if (p_ + 1 > end_) return fail("truncated u8");
+        if (remaining() < 1) return fail("truncated u8");
         *out = *p_++;
         return true;
     }
     bool u16le(uint16_t* out) {
-        if (p_ + 2 > end_) return fail("truncated u16");
+        if (remaining() < 2) return fail("truncated u16");
         *out = static_cast<uint16_t>(p_[0]) |
                (static_cast<uint16_t>(p_[1]) << 8);
         p_ += 2;
         return true;
     }
     bool u32le(uint32_t* out) {
-        if (p_ + 4 > end_) return fail("truncated u32");
+        if (remaining() < 4) return fail("truncated u32");
         *out = static_cast<uint32_t>(p_[0]) |
                (static_cast<uint32_t>(p_[1]) << 8) |
                (static_cast<uint32_t>(p_[2]) << 16) |
@@ -639,6 +639,10 @@ public:
     }
 
 private:
+    size_t remaining() const {
+        return static_cast<size_t>(end_ - p_);
+    }
+
     bool fail(const char* msg) {
         if (error_ && error_->empty()) {
             *error_ = std::string("bytecode optimize: ") + msg +
@@ -673,6 +677,13 @@ bool parse_buffer(const uint8_t* data,
                   std::vector<FuncRecord>* functions,
                   std::string* error,
                   TopLevelKind top_level = TopLevelKind::kModule) {
+    // std::vector::data() may be null for an empty input. Reject it before
+    // constructing Reader: even adding zero (or probing p_ + 1) on a null
+    // pointer is undefined behavior under UBSan.
+    if (data == nullptr || size == 0) {
+        *error = "bytecode optimize: truncated u8 at offset 0";
+        return false;
+    }
     Reader r(data, size, error);
     uint8_t version = 0;
     if (!r.u8(&version)) return false;

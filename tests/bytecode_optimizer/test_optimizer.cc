@@ -1018,6 +1018,8 @@ void test_fail_closed_matrix() {
         std::string err;
         CHECK(!capsid::bytecode::optimize(std::vector<std::uint8_t>(), &out,
                                           0xffffffffu, false, &err));
+        CHECK(out.empty());
+        CHECK(err == "bytecode optimize: truncated u8 at offset 0");
     }
 }
 
