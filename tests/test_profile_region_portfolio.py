@@ -43,6 +43,16 @@ bytecode region:     dynamic regions 20, insns 40, predicted 20
         assert names == {
             "web-tooling-acorn": "file:///web-tooling-acorn.js"
         }
+        manifest = {
+            "source_name": "https://compat.example/framework-reference.js",
+            "results": [{"framework": "hono"}, {"framework": "elysia"}],
+        }
+        (collection / "manifest.json").write_text(json.dumps(manifest))
+        names = module.source_names_from_manifest(collection)
+        assert names == {
+            "hono": "https://compat.example/framework-reference.js",
+            "elysia": "https://compat.example/framework-reference.js",
+        }
     output = module.build_output(Path("/tmp/portfolio"), True, [
         {"program": "ok", "templates": report["templates"]},
         {"program": "bad", "error": "failed"},

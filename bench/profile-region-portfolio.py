@@ -81,12 +81,20 @@ def source_names_from_manifest(collection: Path) -> dict[str, str]:
     obj = json.loads(path.read_text(encoding="utf-8"))
     programs = obj.get("programs", [])
     results = obj.get("results", [])
+    shared_source_name = obj.get("source_name")
     names: dict[str, str] = {}
-    for program, result in zip(programs, results):
-        stem = result.get("program")
+    for index, result in enumerate(results):
+        if not isinstance(result, dict):
+            continue
+        program = programs[index] if index < len(programs) else {}
+        if not isinstance(program, dict):
+            program = {}
+        stem = result.get("program", result.get("framework"))
         source_name = result.get("source_name")
         if source_name is None and isinstance(program.get("file"), str):
             source_name = f"file:///{program['file']}"
+        if source_name is None and isinstance(shared_source_name, str):
+            source_name = shared_source_name
         if isinstance(stem, str) and isinstance(source_name, str):
             names[stem] = source_name
     return names
