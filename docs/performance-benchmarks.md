@@ -151,6 +151,21 @@ Classic +0.02% (95% across-program interval [-0.44%, +0.49%]), Web Tooling
 response errors, timeouts, or mismatches. Because none of the three product
 views met the positive keep gate, the patch was reverted.
 
+### Current field-IC decision
+
+The BC26-preserving sparse per-site prototype was stopped after the initial
+three-pair Classic gate. It kept operands and serialization unchanged, did not
+mutate runtime bytecode, used exact-PC lazy MONO/POLY2 sidecars, and had a
+byte-identical compiled-OFF QuickJS object and CLI. Correctness, profile+IC,
+overlay, ASan, and UBSan gates passed, and all eight A/B blobs were identical.
+The final Release + LTO runtime nevertheless measured -1.11% across the eight
+programs (95% across-program interval [-5.03%, +2.97%]). Box2D regressed
+11.19% ([-12.60%, -9.75%]) in three consistently negative pairs, and
+Oscillator regressed 1.40% ([-2.12%, -0.68%]). The positive Navier-Stokes
+(+3.20%) and Darkroom (+2.47%) centers cannot offset a significant product
+regression, so the candidate was reverted without spending time on seven-pair,
+Web Tooling, or Hono gates.
+
 ## 4. Current Cold Start
 
 Each cell drops one warmup and reports the median of five runs from process
@@ -322,6 +337,7 @@ has no product value and carries measurable final-layout risk.
 | small-block arena, system allocator | `bench/results/upstream-arena-20260825/classic/` | summary `8b9e6311…` |
 | small-block arena, bounded mimalloc | `bench/results/arena-mimalloc-hono-20260826-v2/` | manifest `4f604ceb…`; samples `a40e61af…` |
 | realloc-slack removal rejection | `bench/results/upstream-drop-realloc-slack-20260826/` | Classic `78744337…`; Web Tooling `0f53bc04…`; Hono `88aa0897…` |
+| sparse per-site field IC rejection | `bench/results/per-site-field-ic-rejected-20260826/` | summary `c91752f9…`; manifest `0968151c…`; samples `7ff431a1…` |
 
 The classic and Web Tooling summary SHA-256 values are `2967f60d…` and
 `bdeb60f9…`, respectively. Every listed checksum file was verified after

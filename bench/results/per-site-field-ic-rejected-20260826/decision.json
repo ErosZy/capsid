@@ -1,0 +1,42 @@
+{
+  "schema": "capsid-per-site-field-ic-decision-v1",
+  "decision": "reject",
+  "candidate_commit": "ac95614",
+  "revert_commit": "dd17baa",
+  "design": {
+    "bytecode_format": "BC26",
+    "bytecode_mutation": false,
+    "feedback_key": "function bytecode PC offset",
+    "states": ["MONO", "POLY2", "MEGAMORPHIC"],
+    "maximum_sites_per_function": 8,
+    "runtime_budget_bytes": 262144,
+    "shape_guard": "monotonic uint32 identity",
+    "function_hot_threshold": 64,
+    "site_hot_threshold": 16
+  },
+  "validation": {
+    "compiled_off_quickjs_object_byte_identical": true,
+    "compiled_off_qjs_binary_byte_identical": true,
+    "classic_bytecode_pairs": 8,
+    "classic_bytecode_mismatches": 0,
+    "overlay_integrity": "pass",
+    "field_ic_semantics": "pass",
+    "opcode_profile_combination": "pass",
+    "asan_ubsan": "pass"
+  },
+  "classic_stage1": {
+    "programs": 8,
+    "pairs_per_program": 3,
+    "equal_weight_geomean_gain_pct": -1.1122734062667172,
+    "program_dispersion_ci95_pct": [-5.029543029115747, 2.9665727929991226],
+    "box2d_gain_pct": -11.18874074858195,
+    "box2d_ci95_pct": [-12.600928131028777, -9.753735352619685],
+    "oscillator_gain_pct": -1.4027118927659288,
+    "oscillator_ci95_pct": [-2.118828783436666, -0.6813557574607998],
+    "navier_stokes_gain_pct": 3.1958599901571683,
+    "darkroom_gain_pct": 2.466382085012242,
+    "failures": 0
+  },
+  "reason": "The candidate violates the no-significant-regression gate. Box2D, the workload with the highest direct own get_field share in the selection profile, regressed by 11.19% with three consistently negative pairs. The seven-pair, Web Tooling, and Hono gates were stopped. Online observation on every get_field and encounter-order selection of the first eight eligible sites are not viable.",
+  "next_constraint": "Any future field specialization must select sites ahead of execution or use a colder sampling trigger so non-selected get_field sites pay no steady-state observer probe. A global shape-id maintenance tax must be isolated from the serving-path experiment."
+}

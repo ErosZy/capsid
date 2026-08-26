@@ -18,7 +18,7 @@ maintained documentation set.
 | Exact-site opcode profiling | instrumentation build only | Selection tool, never a production default |
 | Upstream small-block arena (`9de2921`) | rejected | Direct final-binary portfolio regressed significantly despite identical BC26 |
 | Upstream realloc-slack removal (`b16e7bd`) | rejected | BC26 stayed identical, but Classic, Web Tooling, and Hono were all neutral |
-| Field inline cache | removed | Direct patchless comparison regressed fresh receivers |
+| Field inline-cache prototypes | rejected | Runtime quickening and BC26-preserving per-site sidecars both caused significant regressions |
 | BC27 `get_arg0 + get_field` fusion | removed | Real-framework combined result was significantly negative |
 | ext34 loc-read/array fusion | removed | Targeted wins did not survive enabled-binary product gates |
 | Store/reload fusion | removed | Aggregate neutral with a significant FFT regression |
@@ -182,6 +182,7 @@ in git history.
 |---|---|---|
 | R0 single-op array ext | Target fixture -12.69%; generic helper already had the same fast path | removed |
 | Exact-site field IC | PATCHLESS→enabled fresh latency +7.31% regression, CI [+5.15%, +9.51%]; mono and Hono neutral | removed |
+| Sparse BC26 per-site field IC | Eight-program center -1.11% [-5.03%, +2.97%]; Box2D -11.19% [-12.60%, -9.75%] | reverted after three-pair stop gate |
 | BC27 `get_arg0 + get_field` | Four-framework equal-weight -1.28%, CI [-1.77%, -0.77%] | removed |
 | Corrected ext34, same binary | Beat +9.72%, FFT +9.66%, Navier-Stokes +3.22% | mechanism proven |
 | ext34 compiled-in OFF tax | -1.44% equal-weight, program CI [-2.50%, -0.37%] | product gate failed |
@@ -196,6 +197,19 @@ feature-built OFF path itself carried roughly 2-3% centers in directed tests.
 After fixing terminal observers, the catastrophic fresh-receiver result
 improved, but the direct patchless-to-enabled product comparison still failed.
 
+A second prototype removed those earlier confounders: it preserved BC26
+operands and serialization, never mutated bytecode, keyed feedback by exact
+PC, used bounded lazy sidecars, and served only MONO/POLY2 own-data hits
+guarded by a monotonic shape identity. Its compiled-OFF QuickJS object and
+`qjs` binary were byte-identical to patchless, all eight compared bytecode
+blobs were identical, and its correctness and sanitizer gates passed. It
+still failed the first final-binary stop gate: the eight-program center was
+-1.11% (95% across-program interval [-5.03%, +2.97%]), with Box2D
+significantly regressing 11.19% ([-12.60%, -9.75%]) and Oscillator regressing
+1.40% ([-2.12%, -0.68%]). The seven-pair, Web Tooling, and Hono runs were
+therefore not started. Evidence is under
+`bench/results/per-site-field-ic-rejected-20260826/`.
+
 These data do not prove that per-site IC is intrinsically ineffective. They
 reject the tested implementation: hotness observation remained in the generic
 `get_field` path, functions gained lazy IC fields and runtime bookkeeping,
@@ -204,8 +218,10 @@ receivers. The older quickjs-ng IC was worse for locality: an atom-keyed linked
 hash selected a fixed four-shape ring shared by unrelated PCs, retained shape
 references, scanned/moduloed the ring, and wrote replacement state. Upstream
 removed it because results were mixed and memory was always higher. A future
-attempt must first measure exact-site monomorphism and invalidation behavior,
-then use compact direct-indexed per-PC state with no hit-path writes; it must
+attempt must avoid placing an observer/probe on every ordinary `get_field` and
+must select genuinely hot sites before they enter a serving path.
+Encounter-order admission of the first eight eligible sites is not a hot-site
+policy. Without such a selection vehicle, field IC is deprioritized; it must
 not revive either old structure.
 
 The upstream small-block arena is also rejected on the current pinned runtime,
@@ -365,15 +381,17 @@ Representative programs explain the aggregate:
 | H3 v2 differential | 0.11% | 38.27% | 44.23% | 2.71% |
 | itty-router differential | 1.69% | 7.13% | 7.32% | 68.05% |
 
-The data explain the old mixed IC result: Box2D and Babel contain valuable
-stable sites, while Esprima and itty-router are overwhelmingly megamorphic
+The data explain the old mixed IC result: Box2D and Babel contain apparently
+valuable stable sites, while Esprima and itty-router are overwhelmingly megamorphic
 under mutation-sound identity. A global always-on observer/cache cannot serve
 both shapes efficiently. Any next IC experiment must therefore be sparse,
 per-PC, allocate only after a hot-site threshold, stop writing after reaching
-MONO/POLY2, and permanently bypass megamorphic sites. The full selection
-portfolio now clears the gate for an isolated prototype, not for production.
-That prototype must preserve BC26 bytes and first pass a patchless
-compiled-OFF/final-layout gate before serving cached values.
+MONO/POLY2, and permanently bypass megamorphic sites. The isolated prototype
+met those structural requirements and the compiled-OFF/BC26 identity gates,
+but Box2D then regressed 11.19%. High monomorphism alone is therefore not a
+benefit proof: generic own-property lookup is already compact, shape identity
+maintenance is global, and probing all `get_field` sites can cost more than
+the selected hits save.
 
 ## 6. Required Validation
 
@@ -460,21 +478,22 @@ checksum identities are listed in
 ## 8. Next Optimization Direction
 
 Do not add another opcode that saves only one cheap dispatch, and do not revive
-the atom-shared IC ring. The next round should proceed in this order:
+either field-IC observer. The next round should proceed in this order:
 
 1. profile a representative workload portfolio with exact-site attribution;
 2. rank multi-instruction regions by removable runtime work, not frequency
    alone;
-3. implement the selected sparse per-site own-field feedback prototype in an
-   isolated build, with BC26 bytes unchanged;
+3. prefer upstream changes that shorten existing handlers or replace a costly
+   C/API implementation without adding a steady-state observer;
 4. reject it immediately if compiled-OFF is not patchless-equivalent;
 5. keep it only if the direct final-binary portfolio has no significant
    regression and a positive combined interval.
 
 The current evidence does not select a production optimization yet. It rejects
 the broad `length_lt` fusion on normalized ceiling, retains the framework-only
-unsigned sequence as a local candidate, and selects only a sparse MONO/POLY2
-own-field IC for the next isolated experiment. That experiment must reuse
-monotonic shape identity, preserve BC26 serialization, and cannot restore the
-linked atom table, fixed ring, hit-path counters, or bytecode mutation used by
-earlier attempts.
+unsigned sequence as a local candidate, and now also rejects the
+BC26-preserving sparse MONO/POLY2 field IC. Field specialization should not be
+retried until a profile-guided or sampled selection vehicle can make
+non-selected sites pay no steady-state observer probe. The immediate search
+returns to upstream existing-handler and API-level changes that preserve BC26
+and can compile out cleanly when rejected.
