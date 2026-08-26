@@ -19,6 +19,8 @@ import sys
 META_KEYS = [
     "RUN_ID", "GENERATED_AT", "COMMIT", "BUILD_ARGS", "COMMAND_ARGS",
     "BASELINE_CMD", "CANDIDATE_CMD", "WORKER_CMD", "WORKER_SHA",
+    "BASELINE_WORKER_CMD", "BASELINE_WORKER_SHA",
+    "CANDIDATE_WORKER_CMD", "CANDIDATE_WORKER_SHA",
     "BUNDLE_CMD", "BUNDLE_SHA", "LOADGEN_CMD", "LOADGEN_SHA",
     "HOST_BIN_CMD", "HOST_BIN_SHA",
     "BASELINE_HOST_BIN_CMD", "BASELINE_HOST_BIN_SHA",
@@ -176,6 +178,16 @@ def build_manifest(out, meta, evidence_status, incomplete_reasons):
             components[f"{side}_host_bin"] = {
                 "cmd": meta.get(cmd_key, ""),
                 "sha256": meta.get(f"{side.upper()}_HOST_BIN_SHA", ""),
+            }
+    # Split-worker optimization A/Bs must identify the implementation used by
+    # each side.  The legacy shared ``worker`` entry remains for consumers of
+    # older manifests and is identical to baseline in a split run.
+    for side in ("baseline", "candidate"):
+        cmd_key = f"{side.upper()}_WORKER_CMD"
+        if meta.get(cmd_key):
+            components[f"{side}_worker"] = {
+                "cmd": meta.get(cmd_key, ""),
+                "sha256": meta.get(f"{side.upper()}_WORKER_SHA", ""),
             }
     try:
         command_args = json.loads(meta.get("COMMAND_ARGS", "[]"))

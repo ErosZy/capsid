@@ -181,6 +181,39 @@ const requiredFiles = [
     }
 }
 
+// ---- GREEN: allocator/runtime A/Bs may use a different Worker binary per
+// side. The runner must pass the correct path to each gateway and retain both
+// identities instead of collapsing them into the legacy shared worker.
+{
+    const workerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-workers-'));
+    const baselineWorker = path.join(workerDir, 'baseline-worker');
+    const candidateWorker = path.join(workerDir, 'candidate-worker');
+    const fakeWorker = path.join(args.get('fake-dir'), 'fake-worker.sh');
+    fs.copyFileSync(fakeWorker, baselineWorker);
+    fs.copyFileSync(fakeWorker, candidateWorker);
+    fs.appendFileSync(baselineWorker, '\n# baseline identity\n');
+    fs.appendFileSync(candidateWorker, '\n# candidate identity\n');
+    fs.chmodSync(baselineWorker, 0o755);
+    fs.chmodSync(candidateWorker, 0o755);
+    const result = await runnerOutput(args, {
+        extraArgs: [
+            '--baseline-worker', baselineWorker,
+            '--candidate-worker', candidateWorker,
+            '--no-profile',
+        ],
+    });
+    assert.equal(result.code, 0,
+        `runner rejected split Worker identities: ${result.stderr}`);
+    const manifest = JSON.parse(fs.readFileSync(
+        path.join(result.out, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.components.baseline_worker.cmd, baselineWorker);
+    assert.equal(manifest.components.candidate_worker.cmd, candidateWorker);
+    assert.notEqual(manifest.components.baseline_worker.sha256,
+        manifest.components.candidate_worker.sha256,
+        'the two distinct Worker builds collapsed to one identity');
+    fs.rmSync(workerDir, { recursive: true, force: true });
+}
+
 // ---- RED: fewer than three rounds. ----
 {
     const result = await runnerOutput(args, { extraArgs: [ '--rounds', '2' ] });

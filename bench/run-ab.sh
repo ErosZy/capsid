@@ -33,6 +33,7 @@
 #     [--statistic mean|median] [--require-ipc-counters] \
 #     [--baseline-host-profile]
 #     [--baseline-workers N] [--candidate-workers N]
+#     [--baseline-worker PATH] [--candidate-worker PATH]
 #
 # Multi-worker profiling (M2): --baseline-workers/--candidate-workers (1/2/4,
 # default 1) make the profile run require EXACTLY that many direct worker
@@ -76,6 +77,8 @@ OUT=""
 BASELINE=""
 CANDIDATE=""
 WORKER=""
+BASELINE_WORKER=""
+CANDIDATE_WORKER=""
 WORKER_NAME="capsid-worker"
 LOADGEN=""
 BUNDLE=""
@@ -133,6 +136,8 @@ while [ $# -gt 0 ]; do
     --baseline) BASELINE="${2:?}"; shift 2 ;;
     --candidate) CANDIDATE="${2:?}"; shift 2 ;;
     --worker) WORKER="${2:?}"; shift 2 ;;
+    --baseline-worker) BASELINE_WORKER="${2:?}"; shift 2 ;;
+    --candidate-worker) CANDIDATE_WORKER="${2:?}"; shift 2 ;;
     --worker-name) WORKER_NAME="${2:?}"; shift 2 ;;
     --loadgen) LOADGEN="${2:?}"; shift 2 ;;
     --bundle) BUNDLE="${2:?}"; shift 2 ;;
@@ -164,12 +169,18 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-for var in RUN_ID OUT BASELINE CANDIDATE WORKER LOADGEN BUNDLE; do
+for var in RUN_ID OUT BASELINE CANDIDATE LOADGEN BUNDLE; do
     if [ -z "${!var}" ]; then
         echo "run-ab: missing --$(echo "$var" | tr '[:upper:]' '[:lower:]' | tr '_' '-')" >&2
         usage
     fi
 done
+BASELINE_WORKER="${BASELINE_WORKER:-$WORKER}"
+CANDIDATE_WORKER="${CANDIDATE_WORKER:-$WORKER}"
+if [ -z "$BASELINE_WORKER" ] || [ -z "$CANDIDATE_WORKER" ]; then
+    echo "run-ab: provide --worker or both --baseline-worker and --candidate-worker" >&2
+    usage
+fi
 
 if [ "$ROUNDS" -lt 3 ]; then
     echo "run-ab: --rounds must be at least 3 (got $ROUNDS)" >&2
@@ -217,7 +228,12 @@ for side_host in "$BASELINE_HOST_BIN" "$CANDIDATE_HOST_BIN"; do
 done
 [ -x "$LOADGEN" ] || { echo "run-ab: loadgen is not executable: $LOADGEN" >&2; exit 2; }
 [ -f "$BUNDLE" ] || { echo "run-ab: bundle not found: $BUNDLE" >&2; exit 2; }
-[ -f "$WORKER" ] || { echo "run-ab: worker not found: $WORKER" >&2; exit 2; }
+for side_worker in "$BASELINE_WORKER" "$CANDIDATE_WORKER"; do
+    [ -f "$side_worker" ] && [ -x "$side_worker" ] || {
+        echo "run-ab: worker is not executable: $side_worker" >&2
+        exit 2
+    }
+done
 
 if [ "$NO_PROFILE" != "1" ] && ! perf stat -e task-clock true >/dev/null 2>&1; then
     echo "run-ab: perf is not usable in this environment; evidence would be INCOMPLETE" >&2
@@ -230,7 +246,12 @@ mkdir -p "$OUT" "$OUT/perf-stat" "$OUT/.tmp"
 : >"$OUT/.tmp/ready.lines"
 
 BUNDLE_SHA="$(sha256sum "$BUNDLE" | cut -d' ' -f1)"
-WORKER_SHA="$(sha256sum "$WORKER" | cut -d' ' -f1)"
+BASELINE_WORKER_SHA="$(sha256sum "$BASELINE_WORKER" | cut -d' ' -f1)"
+CANDIDATE_WORKER_SHA="$(sha256sum "$CANDIDATE_WORKER" | cut -d' ' -f1)"
+# Preserve the shared-worker metadata contract for existing consumers.  A
+# split-worker A/B additionally records both exact per-side identities below.
+WORKER="${WORKER:-$BASELINE_WORKER}"
+WORKER_SHA="$BASELINE_WORKER_SHA"
 COMPONENT_SHA="$(sha256sum "$BASELINE" "$CANDIDATE" "$LOADGEN" | sha256sum | cut -d' ' -f1)"
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -275,12 +296,16 @@ start_component() {
     local side_env=""
     local side_workers="$BASELINE_WORKERS"
     local side_host_bin="$BASELINE_HOST_BIN"
+    local side_worker="$BASELINE_WORKER"
+    local side_worker_sha="$BASELINE_WORKER_SHA"
     if [ "$side" = "baseline" ]; then
         side_env="$BASELINE_ENV"
     else
         side_env="$CANDIDATE_ENV"
         side_workers="$CANDIDATE_WORKERS"
         side_host_bin="$CANDIDATE_HOST_BIN"
+        side_worker="$CANDIDATE_WORKER"
+        side_worker_sha="$CANDIDATE_WORKER_SHA"
     fi
 
     local ready_file="$OUT/ready.$side.$$"
@@ -299,7 +324,7 @@ start_component() {
         CAPSID_BENCH_LISTEN="127.0.0.1:0" \
         CAPSID_BENCH_READY_FD="$ready_fd" \
         CAPSID_BENCH_BUNDLE="$BUNDLE" \
-        CAPSID_BENCH_WORKER="$WORKER" \
+        CAPSID_BENCH_WORKER="$side_worker" \
         CAPSID_BENCH_APPLICATION="$APP" \
         CAPSID_BENCH_PUBLIC_AUTHORITY="$AUTHORITY" \
         CAPSID_BENCH_TIMEOUT_MS="$TIMEOUT_MS" \
@@ -358,7 +383,7 @@ start_component() {
         echo "run-ab: $side (round $round) did not report its bundle/worker identity" >&2
         exit 2
     fi
-    if [ "$reported_bundle" != "$BUNDLE_SHA" ] || [ "$reported_worker" != "$WORKER_SHA" ]; then
+    if [ "$reported_bundle" != "$BUNDLE_SHA" ] || [ "$reported_worker" != "$side_worker_sha" ]; then
         echo "run-ab: $side (round $round) identity does not match the runner's bundle/worker" >&2
         exit 2
     fi
@@ -888,6 +913,10 @@ CANDIDATE_HOST_BIN_SHA=""
         "$BASELINE" "$CANDIDATE" "$WORKER"
     printf 'WORKER_SHA=%s\nBUNDLE_CMD=%s\nBUNDLE_SHA=%s\n' \
         "$WORKER_SHA" "$BUNDLE" "$BUNDLE_SHA"
+    printf 'BASELINE_WORKER_CMD=%s\nBASELINE_WORKER_SHA=%s\n' \
+        "$BASELINE_WORKER" "$BASELINE_WORKER_SHA"
+    printf 'CANDIDATE_WORKER_CMD=%s\nCANDIDATE_WORKER_SHA=%s\n' \
+        "$CANDIDATE_WORKER" "$CANDIDATE_WORKER_SHA"
     printf 'LOADGEN_CMD=%s\nLOADGEN_SHA=%s\n' \
         "$LOADGEN" "$(sha256sum "$LOADGEN" | cut -d' ' -f1)"
     printf 'HOST_BIN_CMD=%s\nHOST_BIN_SHA=%s\n' "$HOST_BIN" "$HOST_BIN_SHA"
