@@ -1266,11 +1266,16 @@ int main(int argc, char **argv) {
     }
     std::cout << "READY" << std::endl;
 
+    bool worker_exited = false;
     std::string line;
     while (std::getline(std::cin, line)) {
         const std::vector<std::string> fields = split(line);
         if (fields.size() == 1 && fields[0] == "STOP") {
-            if (!shutdown_worker(worker, &error)) {
+            // A terminal-continuation cancel intentionally poisons the
+            // worker. run_cancel_continuation has already consumed its EXIT;
+            // shutdown is not a valid second lifecycle transition and races
+            // process reaping differently across allocators/build layouts.
+            if (!worker_exited && !shutdown_worker(worker, &error)) {
                 emit_fatal(error);
                 capsid_worker_destroy(worker);
                 return 1;
@@ -1308,6 +1313,7 @@ int main(int argc, char **argv) {
             }
             std::cout << "CANCELED " << parsed_id << std::endl;
             if (exited) {
+                worker_exited = true;
                 std::cout << "EXITED " << parsed_id << std::endl;
             }
             emit_events_block(static_cast<uint64_t>(parsed_id), events);
