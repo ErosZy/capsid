@@ -16,6 +16,7 @@ maintained documentation set.
 | Upstream arithmetic/array inline fast paths | enabled | Existing handlers, no bytecode-format change |
 | CFG and stack-to-SSA analysis | analyze-only | Useful for proofs and candidate ranking; no lowering today |
 | Exact-site opcode profiling | instrumentation build only | Selection tool, never a production default |
+| Upstream small-block arena (`9de2921`) | rejected | Direct final-binary portfolio regressed significantly despite identical BC26 |
 | Field inline cache | removed | Direct patchless comparison regressed fresh receivers |
 | BC27 `get_arg0 + get_field` fusion | removed | Real-framework combined result was significantly negative |
 | ext34 loc-read/array fusion | removed | Targeted wins did not survive enabled-binary product gates |
@@ -185,6 +186,7 @@ in git history.
 | ext34 compiled-in OFF tax | -1.44% equal-weight, program CI [-2.50%, -0.37%] | product gate failed |
 | ext34 patchless→enabled net | +1.51%, CI [-2.07%, +5.22%]; Box2D -2.21%, Richards -3.22% | removed |
 | `put_loc*; get_loc* -> set_loc*` | +0.28%, CI [-0.68%, +1.25%]; FFT -0.81% significant | removed |
+| Upstream small-block arena (`9de2921`) | system: -7.01%, across-program CI [-12.84%, -0.79%]; bounded mimalloc/Hono: -0.897%, paired CI [-1.293%, -0.501%] | removed |
 | Retained set on V8 Web Tooling | -0.49%, across-program interval [-1.34%, +0.37%]; UglifyJS -2.66% significant | keep aggregate; profile combination/layout next |
 
 The field-IC prototype also showed why same-binary OFF/ON is insufficient. The
@@ -203,6 +205,28 @@ removed it because results were mixed and memory was always higher. A future
 attempt must first measure exact-site monomorphism and invalidation behavior,
 then use compact direct-indexed per-PC state with no hit-path writes; it must
 not revive either old structure.
+
+The upstream small-block arena is also rejected on the current pinned runtime,
+not assumed beneficial from upstream's headline score. A clean Release+LTO,
+system-allocator comparison held the rewriter and eight BC26 blobs identical
+and changed only quickjs-ng's arena/object-header layout. The equal-weight
+Kraken/Octane result was -7.01%, with an across-program 95% interval of
+[-12.84%, -0.79%]. DFT (-10.21%), Oscillator (-14.53%), Darkroom (-2.40%),
+Box2D (-9.06%), Navier-Stokes (-1.59%), and Richards (-17.73%) all regressed
+significantly; Beat (+0.84%) and FFT (+0.52%) improved.
+
+The production interaction was then measured instead of inferred. Two isolated
+Release+LTO workers both used mimalloc 3.2.7 with its initial reserve bounded to
+32 MiB; their source trees differed only by patch 0039 and its overlay identity.
+Across seven interleaved Hono `/fixed` pairs, the arena worker was slower in all
+seven: QPS fell 0.897%, with a paired 95% interval of [-1.293%, -0.501%], while
+p50 latency rose 1.285%. All 14 measured rounds had zero errors, timeouts and
+response mismatches. Mimalloc therefore reduced the arena loss substantially
+but did not reverse it. The stop gate removed patch 0039 without spending more
+portfolio time on a mechanism already significantly negative in the production
+allocator configuration. Decision evidence is stored in
+`bench/results/upstream-arena-20260825/classic/` and
+`bench/results/arena-mimalloc-hono-20260826-v2/`.
 
 The corrected ext34 result is equally important: multi-instruction fusion can
 win even when its slow path eventually calls the generic helper. Beat and FFT

@@ -1,0 +1,226 @@
+{
+  "programs": {
+    "kraken-audio-beat-detection": {
+      "pairs": 7,
+      "gain_pct": 0.8389483465786052,
+      "pair_gains_pct": [
+        0.6486639751459133,
+        0.01344787826544902,
+        0.6620751886729614,
+        0.7469317690281585,
+        1.5603489283015248,
+        0.8429722235787196,
+        1.4061304192548363
+      ],
+      "positive_pairs": 7,
+      "gain_ci95_pct": [
+        0.3625027495313127,
+        1.317655748590174
+      ]
+    },
+    "kraken-audio-dft": {
+      "pairs": 7,
+      "gain_pct": -10.20711825066105,
+      "pair_gains_pct": [
+        -10.869317461585714,
+        -11.69055233819435,
+        -8.701917120819136,
+        -10.112960514205971,
+        -10.29667706179076,
+        -9.994245534448453,
+        -9.755358377328715
+      ],
+      "positive_pairs": 0,
+      "gain_ci95_pct": [
+        -11.061772225925736,
+        -9.34425145807677
+      ]
+    },
+    "kraken-audio-fft": {
+      "pairs": 7,
+      "gain_pct": 0.5165747740901727,
+      "pair_gains_pct": [
+        0.469356612787597,
+        -0.13194223989873022,
+        0.9685173759357069,
+        0.3611503835677432,
+        0.8163685924310604,
+        0.7830855365511091,
+        0.3536636595777187
+      ],
+      "positive_pairs": 6,
+      "gain_ci95_pct": [
+        0.17109152711081155,
+        0.8632495691710984
+      ]
+    },
+    "kraken-audio-oscillator": {
+      "pairs": 7,
+      "gain_pct": -14.531796706975753,
+      "pair_gains_pct": [
+        -14.588664198624024,
+        -14.035609868362343,
+        -14.736170832137352,
+        -14.723929161219706,
+        -14.973340905953037,
+        -13.785808408174184,
+        -14.872078404725087
+      ],
+      "positive_pairs": 0,
+      "gain_ci95_pct": [
+        -14.942833323411364,
+        -14.118773766440096
+      ]
+    },
+    "kraken-imaging-darkroom": {
+      "pairs": 7,
+      "gain_pct": -2.4038951473032477,
+      "pair_gains_pct": [
+        -3.1376694733501576,
+        -1.8525108299270676,
+        -2.4351387445371686,
+        -3.199641888240745,
+        -1.6965610821145671,
+        -1.956029201646825,
+        -2.5384557129370267
+      ],
+      "positive_pairs": 0,
+      "gain_ci95_pct": [
+        -2.9621721996585193,
+        -1.842406221040127
+      ]
+    },
+    "octane-box2d": {
+      "pairs": 7,
+      "gain_pct": -9.06182482086615,
+      "pair_gains_pct": [
+        -8.907534362364444,
+        -8.767087317194788,
+        -9.5769797743664,
+        -9.334227914072201,
+        -8.735449626132684,
+        -8.778276461983781,
+        -9.329317852189156
+      ],
+      "positive_pairs": 0,
+      "gain_ci95_pct": [
+        -9.379363416430685,
+        -8.743173556449646
+      ]
+    },
+    "octane-navier-stokes": {
+      "pairs": 7,
+      "gain_pct": -1.5882438265290788,
+      "pair_gains_pct": [
+        -1.5604145180604156,
+        -2.124031910378421,
+        -1.4834080314607978,
+        -1.2621077581458362,
+        -1.5861744653284937,
+        -1.5236726817299817,
+        -1.5758126651778892
+      ],
+      "positive_pairs": 0,
+      "gain_ci95_pct": [
+        -1.8299315018497686,
+        -1.3459611334672883
+      ]
+    },
+    "octane-richards": {
+      "pairs": 7,
+      "gain_pct": -17.72635595466554,
+      "pair_gains_pct": [
+        -18.36217449243056,
+        -15.877444951430576,
+        -18.26199113933571,
+        -18.387339543184776,
+        -17.72724032891607,
+        -17.934632848887567,
+        -17.505749907464963
+      ],
+      "positive_pairs": 0,
+      "gain_ci95_pct": [
+        -18.529746342195896,
+        -16.915043214057867
+      ]
+    }
+  },
+  "suites": {
+    "kraken-1.1": {
+      "programs": 5,
+      "equal_weight_geomean_gain_pct": -5.3612508459264685,
+      "program_dispersion_ci95_pct": [
+        -13.641187307224511,
+        3.712551877139525
+      ]
+    },
+    "octane-2.0": {
+      "programs": 3,
+      "equal_weight_geomean_gain_pct": -9.700644592778051,
+      "program_dispersion_ci95_pct": [
+        -27.750189511903013,
+        12.858061936413456
+      ]
+    }
+  },
+  "equal_weight_geomean_gain_pct": -7.012437518157267,
+  "program_dispersion_ci95_pct": [
+    -12.844227745978987,
+    -0.7904289905975248
+  ],
+  "requested_programs": 8,
+  "runnable_programs": 8,
+  "complete_programs": 8,
+  "smoke_only": false,
+  "bytecode_identity": [
+    {
+      "program": "kraken-audio-beat-detection",
+      "identical": true,
+      "control_sha256": "8647ea36d9bf0eb4d7a4f18f3f225db9cdcd365f19f9bdf0d65b3471d84bb312",
+      "candidate_sha256": "8647ea36d9bf0eb4d7a4f18f3f225db9cdcd365f19f9bdf0d65b3471d84bb312"
+    },
+    {
+      "program": "kraken-audio-dft",
+      "identical": true,
+      "control_sha256": "c45113b30d4085172d67805dc07ff1c2910886d429b7f36bed2f8f2526ea1eef",
+      "candidate_sha256": "c45113b30d4085172d67805dc07ff1c2910886d429b7f36bed2f8f2526ea1eef"
+    },
+    {
+      "program": "kraken-audio-fft",
+      "identical": true,
+      "control_sha256": "0a40e5f483280122cbae3018a586af6866f7e04d156218273a5053fdcc496088",
+      "candidate_sha256": "0a40e5f483280122cbae3018a586af6866f7e04d156218273a5053fdcc496088"
+    },
+    {
+      "program": "kraken-audio-oscillator",
+      "identical": true,
+      "control_sha256": "2253fc756032130a29f44f9af71795fbfcc29e602fb6c38afdb6694227c8845d",
+      "candidate_sha256": "2253fc756032130a29f44f9af71795fbfcc29e602fb6c38afdb6694227c8845d"
+    },
+    {
+      "program": "kraken-imaging-darkroom",
+      "identical": true,
+      "control_sha256": "5268e2fa6429e467f16039625b26a146ad8c9ffd8a0a4f3dc2524f3bab203983",
+      "candidate_sha256": "5268e2fa6429e467f16039625b26a146ad8c9ffd8a0a4f3dc2524f3bab203983"
+    },
+    {
+      "program": "octane-richards",
+      "identical": true,
+      "control_sha256": "1ff641047e8cb6f0d546d9d2badb80ecefbdd2d65c42185782a50cc28b25e444",
+      "candidate_sha256": "1ff641047e8cb6f0d546d9d2badb80ecefbdd2d65c42185782a50cc28b25e444"
+    },
+    {
+      "program": "octane-navier-stokes",
+      "identical": true,
+      "control_sha256": "fdbe02f70144dd7149361ca59703d0b1441aef2854f8cda4f464d6ac8c8e5459",
+      "candidate_sha256": "fdbe02f70144dd7149361ca59703d0b1441aef2854f8cda4f464d6ac8c8e5459"
+    },
+    {
+      "program": "octane-box2d",
+      "identical": true,
+      "control_sha256": "9a7b5017adf9769865216db449dbec4534a3d5396c07a4ec080ce3fb76e99fed",
+      "candidate_sha256": "9a7b5017adf9769865216db449dbec4534a3d5396c07a4ec080ce3fb76e99fed"
+    }
+  ],
+  "failures": []
+}

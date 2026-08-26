@@ -19,6 +19,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,6 +27,10 @@ import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(testDir, '..');
+
+function sha256(file) {
+    return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
 
 function parseArgs(argv) {
     const values = new Map();
@@ -140,6 +145,15 @@ const requiredFiles = [
         assert.ok(!fs.existsSync(path.join(result.out, file)),
             `--no-profile unexpectedly created ${file}`);
     }
+    const manifest = JSON.parse(fs.readFileSync(
+        path.join(result.out, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.params.profile_runs, false,
+        '--no-profile manifest incorrectly claims profiling evidence');
+    const report = fs.readFileSync(path.join(result.out, 'report.md'), 'utf8');
+    assert.match(report, /Profiling was explicitly disabled/,
+        '--no-profile report does not explain the missing profile evidence');
+    assert.ok(!report.includes('Dominant stacks (profile runs)'),
+        '--no-profile report contains a fabricated profile section');
 }
 
 // ---- GREEN: fake components produce complete evidence. The working tree
@@ -165,8 +179,13 @@ const requiredFiles = [
     // TEST_MODE=1 runs produce "diagnostic" status, not "complete".
     assert.equal(manifest.evidence_status, 'diagnostic');
     assert.notEqual(manifest.commit, 'unknown', 'commit not recorded');
-    assert.notEqual(manifest.build_args, '{}', 'build arguments not recorded');
+    assert.ok(Array.isArray(manifest.build_args) && manifest.build_args.length > 0,
+        'build arguments not recorded as a structured array');
+    assert.ok(manifest.build_args.some((arg) => arg.startsWith('CMAKE_BUILD_TYPE:')),
+        'CMAKE_BUILD_TYPE missing from build arguments');
     assert.ok(manifest.files['samples.jsonl'], 'samples digest missing from manifest');
+    assert.equal(manifest.files['report.md'], sha256(path.join(result.out, 'report.md')),
+        'report digest missing or stale in manifest');
     // Exactly one headline measured sample per side and round (1..3); the
     // profile runs (round 0) carry their own samples and are not headline.
     const sampleLines = fs.readFileSync(path.join(result.out, 'samples.jsonl'), 'utf8')

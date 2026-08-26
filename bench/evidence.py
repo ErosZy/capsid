@@ -31,6 +31,7 @@ META_KEYS = [
     "TIMEOUT_MS", "WINDOW", "TCP_NODELAY", "TEST_MODE", "UNAME", "NPROC",
     "CGROUP_CPU_MAX", "PERF_PARANOID", "BASELINE_ENV", "CANDIDATE_ENV",
     "STATISTIC", "REQUIRE_IPC_COUNTERS", "BASELINE_HOST_PROFILE",
+    "NO_PROFILE",
     "BASELINE_WORKERS", "CANDIDATE_WORKERS",
     "IPC_MECHANISM_BASELINE", "IPC_MECHANISM_CANDIDATE",
 ]
@@ -193,6 +194,10 @@ def build_manifest(out, meta, evidence_status, incomplete_reasons):
         command_args = json.loads(meta.get("COMMAND_ARGS", "[]"))
     except json.JSONDecodeError:
         command_args = []
+    try:
+        build_args = json.loads(meta.get("BUILD_ARGS", "[]"))
+    except json.JSONDecodeError:
+        build_args = []
     # Measured-window IPC mechanism counters, per side (from the profile-run
     # loadgen window; see run-ab.sh). Absent sides record {}.
     ipc_mechanism = {}
@@ -216,7 +221,7 @@ def build_manifest(out, meta, evidence_status, incomplete_reasons):
         "run_id": meta.get("RUN_ID", ""),
         "generated_at": meta.get("GENERATED_AT", ""),
         "commit": meta.get("COMMIT", ""),
-        "build_args": meta.get("BUILD_ARGS", ""),
+        "build_args": build_args,
         "components": components,
         "params": {
             "workload": meta.get("WORKLOAD", ""),
@@ -239,7 +244,7 @@ def build_manifest(out, meta, evidence_status, incomplete_reasons):
             "candidate_workers": int(meta.get("CANDIDATE_WORKERS", "1") or 1),
             "require_ipc_counters": meta.get("REQUIRE_IPC_COUNTERS", "0") == "1",
             "baseline_host_profile": meta.get("BASELINE_HOST_PROFILE", "0") == "1",
-            "profile_runs": True,
+            "profile_runs": meta.get("NO_PROFILE", "0") != "1",
         },
         "environment": {
             "uname": meta.get("UNAME", ""),
@@ -463,6 +468,12 @@ def build_report(out, meta, manifest):
             drop = (base - cand) / base * 100 if base else 0.0
             lines.append(f"| {key} | {base} | {cand} | {drop:+.2f}% |")
         lines.append("")
+    if not manifest["params"]["profile_runs"]:
+        lines.append("")
+        lines.append("## Profiling")
+        lines.append("")
+        lines.append("Profiling was explicitly disabled for this run (`--no-profile`).")
+        return "\n".join(lines) + "\n", verdict
     lines.append("")
     lines.append("## CPU/response and resources (profile runs)")
     lines.append("")
@@ -581,6 +592,7 @@ def main():
     report, acceptance_verdict = build_report(out, meta, manifest)
     with open(os.path.join(out, "report.md"), "w", encoding="utf-8") as handle:
         handle.write(report)
+    manifest["files"]["report.md"] = sha256(os.path.join(out, "report.md"))
     # The acceptance verdict is a separate field from evidence_status:
     # complete evidence can still fail acceptance, and a run must never be
     # mistaken for PASS just because its evidence is complete.

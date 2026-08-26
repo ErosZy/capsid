@@ -262,11 +262,12 @@ CGROUP_CPU_MAX="$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || echo n/a)"
 PERF_PARANOID="$(cat /proc/sys/kernel/perf_event_paranoid 2>/dev/null || echo n/a)"
 PERF_AVAILABLE=1
 
-BUILD_ARGS="{}"
+BUILD_ARGS="[]"
 if [ -n "$BUILD_DIR" ]; then
     if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
         BUILD_ARGS="$(grep -E '^(CMAKE_BUILD_TYPE|CAPSID_ENABLE_[A-Z]+|CAPSID_BUILD_[A-Z]+):' \
-            "$BUILD_DIR/CMakeCache.txt" | sort | jq -R -s 'split("\n")[:-1]' 2>/dev/null \
+            "$BUILD_DIR/CMakeCache.txt" | sort | python3 -c \
+            'import json, sys; print(json.dumps([line.rstrip() for line in sys.stdin]))' 2>/dev/null \
             || echo '"'"$(grep -E '^(CMAKE_BUILD_TYPE|CAPSID_ENABLE_[A-Z]+):' "$BUILD_DIR/CMakeCache.txt" | tr '\n' ';')"'"')"
     else
         echo "run-ab: --build-dir has no CMakeCache.txt: $BUILD_DIR" >&2
@@ -888,7 +889,7 @@ set -e
 
 # Manifest fields.
 [ "$COMMIT" != "unknown" ] || fail_evidence "commit not resolvable"
-[ "$BUILD_ARGS" != "{}" ] || fail_evidence "build arguments not recorded"
+[ "$BUILD_ARGS" != "[]" ] || fail_evidence "build arguments not recorded"
 
 # Collect the run metadata for the Python evidence generator (the only
 # component allowed to produce manifest.json and report.md).
@@ -936,8 +937,8 @@ CANDIDATE_HOST_BIN_SHA=""
     printf 'BASELINE_WORKERS=%s\nCANDIDATE_WORKERS=%s\n' \
         "$BASELINE_WORKERS" "$CANDIDATE_WORKERS"
     printf 'BASELINE_HOST_PROFILE=%s\n' "$BASELINE_HOST_PROFILE"
-    printf 'STATISTIC=%s\nREQUIRE_IPC_COUNTERS=%s\n' \
-        "$STATISTIC" "$REQUIRE_IPC_COUNTERS"
+    printf 'STATISTIC=%s\nREQUIRE_IPC_COUNTERS=%s\nNO_PROFILE=%s\n' \
+        "$STATISTIC" "$REQUIRE_IPC_COUNTERS" "$NO_PROFILE"
     printf 'IPC_MECHANISM_BASELINE=%s\n' "$IPC_MECHANISM_BASELINE"
     printf 'IPC_MECHANISM_CANDIDATE=%s\n' "$IPC_MECHANISM_CANDIDATE"
     printf 'EVIDENCE_STATUS=%s\nINCOMPLETE_REASONS=%s\n' \

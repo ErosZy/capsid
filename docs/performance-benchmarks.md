@@ -124,6 +124,23 @@ The source-Hono path remains dominated by JS calls, allocation, and framework
 regexp work. This matrix loads source and therefore does not measure BC26 AOT
 attribution.
 
+### Current allocator decision
+
+The worker keeps txiki's explicit mimalloc integration with the initial arena
+reserve bounded to 32 MiB. The separate quickjs-ng small-block arena from
+upstream commit `9de2921` is not enabled. A clean Release + LTO comparison with
+the system allocator regressed the eight-program Kraken/Octane portfolio by
+7.01%, with an across-program 95% interval of [-12.84%, -0.79%].
+
+The production interaction was measured separately on 2026-08-26. Both workers
+used mimalloc 3.2.7 with the 32 MiB reserve bound and differed only by the
+small-block arena patch and overlay identity. Across seven interleaved Hono
+`/fixed` pairs, enabling the arena reduced QPS by 0.897%, with a paired 95%
+interval of [-1.293%, -0.501%], and increased p50 latency by 1.285%. All 14
+measured rounds completed with zero errors, timeouts, or response mismatches.
+Mimalloc reduced the upstream arena's loss but did not reverse it, so the patch
+was removed while the bounded worker-only mimalloc configuration remains.
+
 ## 4. Current Cold Start
 
 Each cell drops one warmup and reports the median of five runs from process
@@ -292,6 +309,8 @@ has no product value and carries measurable final-layout risk.
 | retained classic portfolio | `bench/results/all-effective-cumulative-20260825/` | `56d86ff7…` |
 | V8 Web Tooling portfolio | `bench/results/web-tooling-current-20260825/` | `454f79c4…` |
 | custom-bytecode removal | `bench/results/no-custom-bytecode-layout-20260825/` | classic `ec980bb6…`; Web Tooling `2564f2f3…` |
+| small-block arena, system allocator | `bench/results/upstream-arena-20260825/classic/` | summary `8b9e6311…` |
+| small-block arena, bounded mimalloc | `bench/results/arena-mimalloc-hono-20260826-v2/` | manifest `4f604ceb…`; samples `a40e61af…` |
 
 The classic and Web Tooling summary SHA-256 values are `2967f60d…` and
 `bdeb60f9…`, respectively. Every listed checksum file was verified after

@@ -193,13 +193,12 @@ function(capsid_compute_txiki_overlay_key)
     # 0037 backports quickjs-ng 377a25e:
     #      mixed int/float add/sub/mul/div and int-indexed fast-array reads
     #      stay inside the ordinary opcode handlers, with no BC format change.
-    # 0038 adds exact-site/source-aware counters to CONFIG_OPCODE_PROFILE;
-    #      production builds compile the entire profiler out.
-    # 0039 backports quickjs-ng 9de2921's small-block arena allocator;
-    #      allocation layout changes, but the bytecode wire remains BC26.
-    if(NOT CTOK_PATCH_COUNT EQUAL 40)
+    # 0038 adds exact-site/source-aware counters and stable shape identities
+    #      to CONFIG_OPCODE_PROFILE; production builds compile the entire
+    #      profiler out.
+    if(NOT CTOK_PATCH_COUNT EQUAL 39)
         message(FATAL_ERROR
-            "expected 40 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 39 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

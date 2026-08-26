@@ -293,6 +293,7 @@ passed, with zero errors or timeouts:
 | Retained BC26 rewrite, V8 Web Tooling | -0.49% (neutral) | across-program 95% interval [-1.34%, +0.37%] |
 | Remove custom bytecode/IC, Kraken/Octane | +0.20% (neutral) | across-program 95% interval [-1.45%, +1.88%] |
 | Remove custom bytecode/IC, V8 Web Tooling | **+1.14%** | across-program 95% interval **[+0.80%, +1.48%]** |
+| Worker allocator | bounded mimalloc retained | upstream QuickJS small-block arena rejected: Hono **-0.90%**, 95% CI **[-1.29%, -0.50%]** |
 
 Full methodology, the 12-workload matrix (1k-32k × json/bytes/stream), per-process
 resource breakdown, and evidence rules are in

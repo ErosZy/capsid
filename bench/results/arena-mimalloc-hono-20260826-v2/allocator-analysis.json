@@ -1,0 +1,64 @@
+{
+  "schema": "capsid-allocator-ab-v1",
+  "decision": "reject-small-block-arena",
+  "baseline": {
+    "description": "bounded mimalloc, no QuickJS small-block arena",
+    "source_commit": "128220cfcfad1f64efec9b2fbf00875c35b62e87",
+    "worker_sha256": "cc8bd65b02f6a501848c2ccee4bcf020a611e1582779e074fc02eec579847856"
+  },
+  "candidate": {
+    "description": "bounded mimalloc plus QuickJS small-block arena 9de2921",
+    "source_commit": "f4038437c5ce21171f8d068070a53f23a435c9e2",
+    "worker_sha256": "443c416f749bc6854271c845e039342a306c0c5cb17cf0809ca3c324d2472e89"
+  },
+  "common_build": {
+    "build_type": "Release",
+    "lto": true,
+    "opcode_profile": false,
+    "mimalloc": true,
+    "mi_default_arena_reserve_kib": 32768,
+    "bytecode_format": "BC26"
+  },
+  "workload": {
+    "bundle": "Hono 4.12.32 compatibility bundle",
+    "bundle_sha256": "e80aaacc565348b5eb48524c98387b36197a0c8a3c4086fc42d3d35d4600ed7e",
+    "route": "/@capsid/orders/fixed",
+    "round_pairs": 7,
+    "warmup_seconds": 5,
+    "measured_seconds": 10,
+    "connections": 16,
+    "inflight": 64
+  },
+  "qps": {
+    "baseline_mean": 4163.482134079543,
+    "candidate_mean": 4126.058327171852,
+    "paired_percent_deltas": [
+      -1.28470449491761,
+      -1.253820779651493,
+      -1.253742968196736,
+      -0.495661035307371,
+      -0.79305969120741,
+      -0.182728222348205,
+      -1.015144942942881
+    ],
+    "paired_mean_percent": -0.896980304938815,
+    "paired_t_95_percent": [-1.29314124468478, -0.50081936519285],
+    "paired_bootstrap_95_percent": [-1.163137850195898, -0.588761065965449],
+    "bootstrap_seed": 12648430,
+    "bootstrap_resamples": 200000
+  },
+  "latency": {
+    "paired_p50_mean_percent": 1.284670231501412
+  },
+  "correctness": {
+    "measured_rounds": 14,
+    "errors": 0,
+    "timeouts": 0,
+    "response_mismatches": 0
+  },
+  "related_system_allocator_result": {
+    "path": "bench/results/upstream-arena-20260825/classic/summary.json",
+    "equal_weight_geomean_percent": -7.012437518157267,
+    "program_dispersion_95_percent": [-12.844227745978987, -0.790428990597525]
+  }
+}
