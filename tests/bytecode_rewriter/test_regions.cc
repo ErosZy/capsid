@@ -18,8 +18,9 @@
 // Byte values are the serialized opcode space (quickjs-opcode.h
 // physical order, temps excluded): object=11, drop=14, return_undef=41,
 // get_field=64, put_field=66, get_array_el=70, get_array_el2=71,
-// put_array_el=72, put_loc0=207, catch=107, nip_catch=110, add=156, dup=17, push_0=186,
-// push_1=187, push_i8=194, if_false8=240, if_true8=241, goto8=242.
+// put_array_el=72, put_loc0=207, catch=107, nip_catch=110, add=156,
+// shr=160, lt=165, dup=17, push_0=186, push_1=187, push_i8=194,
+// get_length=239, if_false8=240, if_true8=241, goto8=242.
 // Jump targets: pc + size + signed aux (catch aux is the 4-byte diff at
 // pc+1; if_true8/goto8 aux is the u8 at pc+1). get_field/put_field
 // carry a 4-byte atom operand; the census never reads it.
@@ -335,11 +336,17 @@ void test_r9_dynamic_weighting() {
                                             0,   0,   0,  0,  186, 187,
                                             188, 189, 161, 161, 161, 41};
     std::vector<std::uint8_t> bundle = make_bundle(code, 5);
+    std::uint64_t hash = UINT64_C(14695981039346656037);
+    for (std::uint8_t byte : code) {
+        hash ^= byte;
+        hash *= UINT64_C(1099511628211);
+    }
     ir::RegionExecutionProfile profile;
-    profile.sites.push_back({0, 1, 1000});
-    profile.sites.push_back({0, 6, 1000});
-    profile.sites.push_back({0, 16, 10});
-    profile.sites.push_back({0, 17, 10});
+    const std::uint32_t code_len = static_cast<std::uint32_t>(code.size());
+    profile.sites.push_back({hash, code_len, 0, 0, 1, 1000});
+    profile.sites.push_back({hash, code_len, 0, 0, 6, 1000});
+    profile.sites.push_back({hash, code_len, 0, 0, 16, 10});
+    profile.sites.push_back({hash, code_len, 0, 0, 17, 10});
     ir::RegionCensusReport rep;
     std::string err;
     CHECK(ir::region_round_trip_profiled(bundle.data(), bundle.size(),
@@ -365,6 +372,34 @@ void test_r9_dynamic_weighting() {
     CHECK(rep.first_templates[1] == ir::Template::COUNT);
 }
 
+// r10/r11: exact multi-family shapes discovered by the v4 framework profile.
+// The matcher must prove SSA producer/consumer identity, not merely adjacent
+// opcode bytes.
+void test_r10_profile_discovered_patterns() {
+    {
+        // push_1; push_1; add; push_0; shr; dup; drop; drop; return_undef.
+        const std::vector<std::uint8_t> code =
+            {187, 187, 156, 186, 160, 17, 14, 14, 41};
+        std::string err;
+        ir::RegionCensusReport rep;
+        CHECK(census_blob(code, 2, &rep, &err));
+        CHECK(rep.rejected_functions == 0);
+        // Four one-byte instructions, two runtime tag guards:
+        // 2*4 - 2 - 1 - 4/8 = 5.
+        check_tmpl(rep, ir::Template::U32_ADD_SHR_DUP, 1, 4, 5, 5);
+    }
+    {
+        // push_0(index); object; get_length; lt; drop; return_undef.
+        const std::vector<std::uint8_t> code = {186, 11, 239, 165, 14, 41};
+        std::string err;
+        ir::RegionCensusReport rep;
+        CHECK(census_blob(code, 2, &rep, &err));
+        CHECK(rep.rejected_functions == 0);
+        // Two one-byte instructions, two guards: 2*2 - 2 - 1 = 1.
+        check_tmpl(rep, ir::Template::LENGTH_LT, 1, 2, 1, 1);
+    }
+}
+
 void test_region_blobs() {
     test_r1_i32_chain();
     test_r2_shape_chain();
@@ -375,6 +410,7 @@ void test_region_blobs() {
     test_r7_shape_put();
     test_r8_selection();
     test_r9_dynamic_weighting();
+    test_r10_profile_discovered_patterns();
 }
 
 // ---------------------------------------------------------------------------

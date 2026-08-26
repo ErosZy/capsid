@@ -43,12 +43,16 @@ def main() -> int:
     app_hash = module.source_hash("file:///app/fixture.js")
     for site in sites:
         site["source_hash"] = app_hash
+        site["code_hash"] = "0123456789abcdef"
+        site["code_len"] = 14
+        site["line"] = 7
+        site["column"] = 3
     sites.append({
         "function": 99, "pc": 0, "op": "add", "exec": 1_000_000,
         "source_hash": module.source_hash("tjs:bootstrap"),
     })
     obj = {
-        "schema": "quickjs-ng-opcode-profile-v3",
+        "schema": "quickjs-ng-opcode-profile-v4",
         "runtime": 11,
         "sites": sites,
         "site_overflow": 3,
@@ -73,6 +77,8 @@ def main() -> int:
     assert rows[full]["program_count"] == 1
     assert rows[full]["program_files"] == ["fixture.opt.profile.jsonl"]
     assert rows[full]["evidence"][0]["function"] == 7
+    assert rows[full]["evidence"][0]["code_hash"] == "0123456789abcdef"
+    assert rows[full]["evidence"][0]["code_len"] == 14
     assert not any("goto8" in pattern for pattern in rows)
     assert max(row["length"] for row in report["sequences"]) == 5
     print("test_profile_sequences: all green")

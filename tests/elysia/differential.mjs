@@ -35,6 +35,7 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const driverPath = args.get('--driver');
 const workerPath = args.get('--worker');
 const bundlePath = args.get('--bundle');
+const runtimeBundlePath = args.get('--runtime-bundle') ?? bundlePath;
 const smokeOnly = args.get('--smoke') === 'true';
 if (!driverPath || !workerPath || !bundlePath) {
     throw new Error('expected --driver, --worker and --bundle');
@@ -219,7 +220,8 @@ const upstreamUrl = `http://127.0.0.1:${upstreamPort}/elysia-upstream`;
 
 const child = spawn(driverPath, [
     workerPath,
-    bundlePath,
+    runtimeBundlePath,
+    ...(runtimeBundlePath === bundlePath ? [] : [ '--bytecode', '1' ]),
     '--loopback-port',
     String(upstreamPort),
 ], {

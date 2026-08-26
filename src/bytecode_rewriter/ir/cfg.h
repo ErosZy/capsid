@@ -126,6 +126,14 @@ bool read_functions(const uint8_t* data,
                     std::vector<FuncInfo>* out,
                     std::string* error);
 
+// Benchmark-only counterpart for serialized top-level global scripts. This
+// keeps the classic suites on their native script semantics while sharing the
+// exact same function decoder, CFG, and SSA implementation.
+bool read_functions_classic(const uint8_t* data,
+                            size_t size,
+                            std::vector<FuncInfo>* out,
+                            std::string* error);
+
 // ---------------------------------------------------------------------------
 // I0 core.
 // ---------------------------------------------------------------------------

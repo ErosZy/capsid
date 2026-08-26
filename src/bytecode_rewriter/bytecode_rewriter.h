@@ -152,6 +152,30 @@ bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error);
 // whole-bundle parse failure, same contract as rewrite().
 bool region_census(const std::vector<std::uint8_t>& in, std::string* error);
 
+// Stable v4 exact-site evidence consumed by the analyze-only region census.
+// The function key is emitted by CONFIG_OPCODE_PROFILE from the deployed
+// bytecode itself; runtime-local first-execution ids are never accepted.
+struct RegionProfileSite {
+    std::uint64_t code_hash;
+    std::uint32_t code_len;
+    std::int32_t line;
+    std::int32_t column;
+    std::uint32_t pc;
+    std::uint64_t executions;
+};
+
+bool region_census_profiled(
+    const std::vector<std::uint8_t>& in,
+    const std::vector<RegionProfileSite>& sites,
+    std::string* error);
+
+// Benchmark-only global-script form for classic suites. It is analyze-only;
+// Capsid product bundles and emitted bytecode remain module-only.
+bool region_census_profiled_classic(
+    const std::vector<std::uint8_t>& in,
+    const std::vector<RegionProfileSite>& sites,
+    std::string* error);
+
 }  // namespace bytecode
 }  // namespace capsid
 

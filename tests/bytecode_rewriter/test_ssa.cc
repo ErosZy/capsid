@@ -594,6 +594,62 @@ std::vector<std::uint8_t> make_debug(
     return d;
 }
 
+std::vector<std::uint8_t> make_bundle_with_rejected_parent() {
+    std::vector<std::uint8_t> b;
+    b.push_back(26);  // BC_VERSION
+    put_u32(&b, 0);   // checksum, patched below
+    put_leb(&b, 1);   // atom count
+    b.push_back(0);   // atom 0: const 0
+    put_u32(&b, 0);
+    b.push_back(13);  // BC_TAG_MODULE
+    put_leb(&b, 0);   // module name atom
+    put_leb(&b, 0);   // req / export / star / import counts
+    put_leb(&b, 0);
+    put_leb(&b, 0);
+    put_leb(&b, 0);
+    b.push_back(0);   // has_tla
+
+    // Parent function with one child in its constant pool.
+    b.push_back(12);  // BC_TAG_FUNCTION_BYTECODE
+    put_u16(&b, 0);
+    b.push_back(1);   // strict
+    put_leb(&b, 0);   // function name atom
+    put_leb(&b, 0);   // arg_count
+    put_leb(&b, 0);   // var_count
+    put_leb(&b, 0);   // defined_arg_count
+    put_leb(&b, 1);   // stack_size
+    put_leb(&b, 0);   // var_ref_count
+    put_leb(&b, 0);   // closure_var_count
+    put_leb(&b, 1);   // cpool_count
+    put_leb(&b, 1);   // parent byte_code_len
+    put_leb(&b, 0);   // parent vardef count
+
+    // Independently valid child: push_0; return_undef.
+    b.push_back(12);  // BC_TAG_FUNCTION_BYTECODE
+    put_u16(&b, 0);
+    b.push_back(1);
+    put_leb(&b, 0);
+    put_leb(&b, 0);
+    put_leb(&b, 0);
+    put_leb(&b, 0);
+    put_leb(&b, 1);
+    put_leb(&b, 0);
+    put_leb(&b, 0);
+    put_leb(&b, 0);
+    put_leb(&b, 2);
+    put_leb(&b, 0);
+    b.push_back(186);  // push_0
+    b.push_back(41);   // return_undef
+
+    b.push_back(252);  // parent code: invalid serialized opcode
+    std::uint32_t c = bc_csum(b.data() + 5, b.size() - 5);
+    b[1] = static_cast<std::uint8_t>(c);
+    b[2] = static_cast<std::uint8_t>(c >> 8);
+    b[3] = static_cast<std::uint8_t>(c >> 16);
+    b[4] = static_cast<std::uint8_t>(c >> 24);
+    return b;
+}
+
 void test_ssa_bundles() {
     std::string err;
     ir::SsaReport rep;
@@ -622,6 +678,14 @@ void test_ssa_bundles() {
     std::vector<std::uint8_t> bad = make_bundle({186, 41}, 1, &bad_dbg);
     CHECK(ir::ssa_round_trip(bad.data(), bad.size(), &rep, &err));
     CHECK(rep.rejected_functions == 1);
+
+    // A rejected parent must not hide valid nested functions from coverage.
+    std::vector<std::uint8_t> nested = make_bundle_with_rejected_parent();
+    CHECK(ir::ssa_round_trip(nested.data(), nested.size(), &rep, &err));
+    CHECK(rep.functions == 2);
+    CHECK(rep.rejected_functions == 1);
+    CHECK(rep.nodes == 2);
+    CHECK(rep.values == 1);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aggregate quickjs-ng opcode-profile v3 dumps into candidate
+"""Aggregate quickjs-ng opcode-profile v4 dumps into candidate
 ranking (tier-3 plan §3.4). Input: directory of *.profile.jsonl produced by
 bench/profile-collect.sh. Output: per-mode tables to stdout — total exec by
 opcode (cost-ranked), slow-path candidates with miss ratios, and the
@@ -39,7 +39,8 @@ def load_profiles(path):
                 if obj.get("schema") not in (
                         "quickjs-ng-opcode-profile-v1",
                         "quickjs-ng-opcode-profile-v2",
-                        "quickjs-ng-opcode-profile-v3"):
+                        "quickjs-ng-opcode-profile-v3",
+                        "quickjs-ng-opcode-profile-v4"):
                     continue
                 yield mode, os.path.basename(f), obj
 

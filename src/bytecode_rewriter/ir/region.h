@@ -37,6 +37,8 @@ enum class Template : uint8_t {
     SHAPE_PUT_OWN = 3,         // put_field, own-data shape guard
     I32_ARITH_CHAIN = 4,       // provably-int32 binop runs
     F64_ARITH_CHAIN = 5,       // provably-f64 binop runs
+    U32_ADD_SHR_DUP = 6,       // add; push_0; shr; dup, guarded int32 fast body
+    LENGTH_LT = 7,             // get_length; lt, guarded length compare
     COUNT,
 };
 
@@ -51,9 +53,10 @@ uint32_t template_guards(Template t);
 // One matched candidate. first_insn/last_insn index Cfg::insns; the
 // slow-path duplication cost is the byte extent of that original
 // range. `predicted` is the §4.1 score: avoided dispatches + avoided
-// tag/class checks - guards - ext secondary dispatch - I-cache
-// penalty, in dispatch-equivalent units (positive = worth a second
-// look).
+// tag/class checks - one direct fused-opcode dispatch - guards - I-cache
+// penalty, in dispatch-equivalent units (positive = worth a second look).
+// Capsid currently has no OP_ext; wire-format and whole-binary costs are
+// deliberately outside this analyze-only local ceiling.
 struct RegionCandidate {
     Template tmpl;
     uint32_t func;       // function index in the bundle
@@ -66,12 +69,18 @@ struct RegionCandidate {
     int64_t predicted;   // §4.1 score, dispatch-equivalent units
 };
 
-// Exact dynamic execution evidence for a serialized function/site. Function
-// ids are the preorder indices used by read_functions; pc is the original
-// bytecode offset. A region's execution weight is the minimum count of its
-// member sites (the conservative path bottleneck).
+// Exact dynamic execution evidence for a serialized function/site. Runtime
+// function ids are intentionally absent: the profiler assigns those in first-
+// execution order, which is not a stable serialization identity. The key is
+// the function bytecode FNV-1a hash + length + declared debug line/column;
+// pc is the original bytecode offset. Ambiguous duplicate function identities
+// fail closed. A region's execution weight is the minimum count of its member
+// sites (the conservative path bottleneck).
 struct RegionSiteExecution {
-    uint32_t function;
+    uint64_t code_hash;
+    uint32_t code_len;
+    int32_t line;
+    int32_t column;
     uint32_t pc;
     uint64_t executions;
 };
@@ -99,6 +108,11 @@ struct RegionCensusReport {
     uint64_t dynamic_insns_covered[static_cast<size_t>(Template::COUNT)];
     int64_t dynamic_predicted_total[static_cast<size_t>(Template::COUNT)];
     uint64_t missing_profile_sites;
+    uint64_t first_missing_code_hash;
+    uint32_t first_missing_code_len;
+    int32_t first_missing_line;
+    int32_t first_missing_column;
+    uint32_t first_missing_pc;
     bool has_dynamic_profile;
     // The at-most-two selection, in order; Template::COUNT = none.
     Template first_templates[2];
@@ -124,6 +138,15 @@ bool region_round_trip_profiled(const uint8_t* data,
                                 const RegionExecutionProfile& profile,
                                 RegionCensusReport* out,
                                 std::string* error);
+
+// Benchmark-only global-script form used by Kraken/Octane/SunSpider and the
+// V8 Web Tooling corpus. Product bytecode remains module-only.
+bool region_round_trip_profiled_classic(
+    const uint8_t* data,
+    size_t size,
+    const RegionExecutionProfile& profile,
+    RegionCensusReport* out,
+    std::string* error);
 
 }  // namespace ir
 }  // namespace bytecode

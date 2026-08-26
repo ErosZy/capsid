@@ -46,7 +46,11 @@ from bytecode CFG, stack height, local-slot flow, effects, and exception edges.
 Capsid already uses those facts for constant propagation, copy propagation,
 literal property folding, TDZ-sound dead-store removal, and compaction.
 
-The practical constraint is the lowering target:
+The practical constraint is the lowering target. The current tree has no
+`OP_ext`, BC27 reader, or extension dispatcher; the analyze-only region score
+models a hypothetical **direct** fused opcode only to estimate a local upper
+bound. It is not an available lowering path and does not authorize a format
+change.
 
 - lowering back into unchanged BC26 can only select existing opcodes or delete
   work; quickjs-ng has already removed many shallow redundancies;
@@ -59,12 +63,25 @@ The practical constraint is the lowering target:
 The retired generic SSI/SCCP/GVN/LICM layer illustrates the first point. It
 removed only 2 additional instructions on a 12,645-instruction corpus (0.016%)
 over the direct passes; LICM moved nothing even on its anchor fixture. CFG
-remains valuable, but a general SSA framework is not itself a speedup.
+remains valuable, but a general SSA framework is not itself a speedup. This
+result rejects that BC26 lowering, not CFG+SSA as a proof and region-selection
+framework.
 
 The next useful lowering should collapse material work: several dispatches,
 intermediate stack values, reference-count transfers, repeated guards, or a
 helper call. Saving one cheap dispatch while still executing the full generic
 property helper is below the current threshold.
+
+The analyze-only implementation is also a resource boundary. Its original
+ownership fixpoint allocated two dense `value_count` refcount arrays per CFG
+block, which reached about 11.7 GiB RSS plus 2.9 GiB swap on Web Tooling
+Prettier and caused WSL to kill the whole Codex process group. Refcounts are
+now sparse per block and the portfolio runner independently applies a 2 GiB
+`RLIMIT_AS`. The same complete Prettier bundle analyzes at about 736 MiB peak
+RSS with zero swap (16,962 functions, zero rejection), a roughly 94% peak-RSS
+reduction. A rejected parent function no longer hides independently analyzable
+cpool children. Future whole-bundle analyses must retain both the internal
+fail-closed budget and the external process limit.
 
 ### Choose the cheapest execution mechanism
 
@@ -94,7 +111,9 @@ layout cost across the portfolio. The decision order is therefore:
 
 1. optimize the existing generic helper if all callers benefit;
 2. inline a small, common specialization in the existing opcode;
-3. introduce fusion/ext only for proven cross-instruction removable work;
+3. propose a direct fused opcode only for proven cross-instruction removable
+   work; this is a separate wire/runtime project because no extension path
+   exists in the current tree;
 4. introduce feedback/IC only when a lower execution tier consumes it more
    cheaply than the generic interpreter path.
 
@@ -125,6 +144,32 @@ This does not mean interpreter ICs can never win. It means a future IC must:
 Without lower-level specialization or broader fused execution, a property IC
 alone is unlikely to produce V8-scale gains.
 
+### Shape invalidation is part of the cache key
+
+QuickJS already has hidden classes through `JSShape`; a new parallel shape
+system would duplicate state and create two invalidation authorities. For an
+own ordinary data-property cache, structural mutation must invalidate lazily
+through the guard rather than scanning all sites:
+
+| Mutation after training | Required result |
+|---|---|
+| overwrite the same writable data property | shape and offset stay valid; read the new value |
+| add or delete an own property | new/COW shape (or new monotonic shape id); old guard misses |
+| change flags or data/accessor kind | old guard misses; accessor/autoinit is never installed |
+| freeze, seal, or make non-writable | descriptor/shape change prevents a stale write hit |
+| change the receiver prototype | receiver guard changes |
+| mutate an object on the prototype chain | receiver shape may not change, so v1 must not cache prototype hits |
+| proxy, exotic object, private field, or unknown path | always use generic semantics |
+| free and reuse a shape address | raw weak pointers are forbidden; use a non-reused id or owned reference |
+
+Every in-place shape mutation funnel—add, delete/compact, resize, descriptor
+change, and prototype change—must advance a monotonic identity before the new
+layout is visible. Counter wrap disables the cache. Directed tests must cover
+`warm -> delete -> re-add`, data-to-accessor conversion, freeze-then-write,
+prototype replacement, GC, and allocator address reuse. Prototype and negative
+lookup caches require a separate chain/version design and are not part of the
+first own-property experiment.
+
 ## 4. Measured Rejections
 
 Only final, decision-relevant numbers are maintained here. Raw manifests and
@@ -147,12 +192,43 @@ feature-built OFF path itself carried roughly 2-3% centers in directed tests.
 After fixing terminal observers, the catastrophic fresh-receiver result
 improved, but the direct patchless-to-enabled product comparison still failed.
 
+These data do not prove that per-site IC is intrinsically ineffective. They
+reject the tested implementation: hotness observation remained in the generic
+`get_field` path, functions gained lazy IC fields and runtime bookkeeping,
+sites quickened by mutating bytecode, and misses/restoration perturbed fresh
+receivers. The older quickjs-ng IC was worse for locality: an atom-keyed linked
+hash selected a fixed four-shape ring shared by unrelated PCs, retained shape
+references, scanned/moduloed the ring, and wrote replacement state. Upstream
+removed it because results were mixed and memory was always higher. A future
+attempt must first measure exact-site monomorphism and invalidation behavior,
+then use compact direct-indexed per-PC state with no hit-path writes; it must
+not revive either old structure.
+
 The corrected ext34 result is equally important: multi-instruction fusion can
 win even when its slow path eventually calls the generic helper. Beat and FFT
 proved the mechanism. It was rejected because merely compiling the handlers
 changed broad runtime performance and the net build significantly regressed
 Box2D and Richards. New handlers must pass the final-binary gate, not only a
 same-binary pass-mask comparison.
+
+The ext history also separates mechanism from vehicle. R0 was a single-opcode
+array specialization that duplicated the generic handler's existing fast path
+and added dispatch, so its -12.69% rejects that mechanism. The two-byte
+`get_arg0 + get_field` extension saved no dispatch because `OP_ext + id` still
+occupied two dispatch slots. Corrected ext34 did remove two or three primary
+dispatches and produced repeatable same-binary gains of about 9.7% on Beat and
+FFT. Its rejection was a product-binary result: compiled-in handlers shifted
+interpreter layout (-1.44% OFF tax), and direct patchless-to-enabled testing
+regressed Box2D and Richards. Therefore “all new opcodes lose” is not supported;
+the supported rule is that every handler must pay for both local execution and
+whole-binary layout, with a true patchless comparison.
+
+The V8-suite record contains a separate measurement failure. `v8-suite-rt`
+stores the suite in a string and evaluates it at runtime, so its raw and AOT
+bytecode are the same small loader; its old +4.51% optimizer claim was noise.
+`v8-suite-mod`, whose benchmark code is present in the serialized module, is
+the valid AOT vehicle. Runtime opcode profiling may still use the `-rt` form,
+but AOT attribution must use `-mod`.
 
 The rejected extension and IC foundations are physically deleted, not hidden
 behind production-off flags. This restores a single BC26 reader/runtime and
@@ -196,11 +272,73 @@ partial wins are kept when the final binary has no significant regression,
 but benchmark-specific rewrites are not accepted merely because their anchor
 improves.
 
+### 2026-08-26 cross-portfolio rerank
+
+Raw execution counts from time-budgeted suites are not comparable. The current
+rank therefore orders candidates by portfolio breadth and program breadth,
+then reports each program's matched-instruction share using only exact sites
+from the selected application source. Across microfixtures, `v8-suite-mod`,
+Kraken/Octane/SunSpider, V8 Web Tooling, and four frameworks:
+
+| Candidate | Portfolio/program breadth | Weighted matched-instruction share |
+|---|---:|---|
+| `get_length; lt` | 5/5, 58 programs | V8 0.035%; classic 1.427%; Web Tooling 1.117%; frameworks 4.546% |
+| own-data `get_field` | 5/5, 44 programs | V8 0.687%; classic 2.099%; Web Tooling 0.617%; frameworks 0.090% |
+| own-data `put_field` | 4/5, 24 programs | at most 0.025% in any broad portfolio |
+| `add; push_0; shr; dup` | 1/5, 3 programs | frameworks 8.899%; absent elsewhere |
+
+This rejects `get_length; lt` as the first broad product optimization despite
+its excellent occurrence breadth: a fusion saves only part of the matched
+share, so its V8 ceiling is effectively zero and its broad classic/tooling
+ceiling is around one percent. The framework-specific unsigned sequence
+remains a separate local candidate, not a universal opcode justification.
+
+The own-data field result required a second profile dimension before any IC
+implementation. Raw `JSShape *` is not a valid identity: QuickJS mutates
+exclusive shapes in place and the allocator reuses freed addresses. The
+instrumentation build now assigns a monotonic 32-bit identity on every shape
+creation, clone, resize, compact, property addition, and prepare-update
+mutation; wrap disables collection rather than permitting a false hit. Each
+exact site records its first two identities and classifies any further
+identity as megamorphic. This reuses the invalidation model previously proven
+by the 27-row shape-guard matrix, but remains profiling-only and compiles out
+of production.
+
+The first stable-ID sample is deliberately a selection result, not a keep
+decision:
+
+| Program | Direct own `get_field` / selected-source instructions | mono | mono or poly2 | Top-site concentration |
+|---|---:|---:|---:|---:|
+| Octane Box2D | 21.39% | 94.56% | 99.26% | 0.70% |
+| Web Tooling Babel | 5.13% | 89.73% | 91.19% | 51.40% |
+| Web Tooling Esprima | 4.89% | 8.93% | 8.93% | 6.13% |
+| Hono differential | 0.29% | 21.83% | 53.83% | 7.03% |
+| Elysia differential | 1.80% | 31.92% | 37.62% | 0.88% |
+| H3 v2 differential | 0.11% | 38.50% | 44.23% | 2.71% |
+| itty-router differential | 1.69% | 7.13% | 7.32% | 68.05% |
+
+The data explain the old mixed IC result: Box2D and Babel contain valuable
+stable sites, while Esprima and itty-router are overwhelmingly megamorphic
+under mutation-sound identity. A global always-on observer/cache cannot serve
+both shapes efficiently. Any next IC experiment must therefore be sparse,
+per-PC, allocate only after a hot-site threshold, stop writing after reaching
+MONO/POLY2, and permanently bypass megamorphic sites. A full stable-ID
+portfolio and patchless compiled-OFF gate are required before serving cached
+values. The attempted V8 stable-ID diagnostic exceeded its bounded collection
+window; the existing V8 matched-instruction ceiling (0.687%) remains the
+decision input and no V8 shape-stability claim is made.
+
 ## 6. Required Validation
 
-Every production change must pass:
+The primary semantic gates are quickjs-ng's own `tests/`, the pinned test262
+revision, and Capsid's bytecode/worker tests. Benchmark completion is not a
+correctness substitute. Every production change must pass:
 
-- native QuickJS tests and pinned test262 where applicable;
+- native QuickJS tests and pinned test262 on the patchless and candidate VM;
+- an AOT test262 adapter for rewrites/opcode emission: compile each supported
+  test and harness include, rewrite the serialized function graph, then execute
+  it on the candidate VM. Ordinary source-mode test262 alone does **not** enter
+  Capsid's AOT emission path;
 - bytecode parse/verify/round-trip and source-versus-bytecode differential
   tests;
 - exact exception/backtrace and getter/coercion/proxy cases;
@@ -209,6 +347,13 @@ Every production change must pass:
 - full source-service correctness, resource, cold-start, and separated
   host/worker profile gates when the runtime binary changes;
 - deterministic output and compatibility-identity checks.
+
+The repository does not yet contain the optimized-test262 adapter. Until it
+does, a new serialized opcode or CFG+SSA lowering is blocked from a keep
+decision even if source-mode test262 is green. Initial implementation may run
+a documented supported subset, but skips must be classified (module/harness,
+host feature, negative parse test) and its baseline must be compared with the
+same pinned quickjs-ng revision rather than silently counted as passes.
 
 The classic-suite completion marker proves successful execution, not complete
 semantic output equivalence. Correctness claims must come from the dedicated
@@ -226,6 +371,9 @@ differential and conformance gates.
 | Classic-suite balanced A/B | `bench/classic-suite-ab.py` |
 | Web Tooling corpus | `bench/prepare-web-tooling.py` |
 | Web Tooling balanced A/B | `bench/web-tooling-ab.sh` |
+| Profile → CFG+SSA portfolio | `bench/profile-region-portfolio.py` |
+| Cross-portfolio breadth/share rank | `bench/profile-region-rank.py` |
+| Stable-ID shape analysis | `bench/profile-shape-stability.py` |
 
 The Web Tooling preparer records the exact upstream revision, package-lock
 identities, resolved top-level dependency versions, bundle hashes, and build
@@ -276,5 +424,10 @@ the atom-shared IC ring. The next round should proceed in this order:
 5. keep it only if the direct final-binary portfolio has no significant
    regression and a positive combined interval.
 
-The current evidence favors multi-instruction semantic fusion before another
-property IC attempt.
+The current evidence does not select a production optimization yet. It rejects
+the broad `length_lt` fusion on normalized ceiling, retains the framework-only
+unsigned sequence as a local candidate, and reopens only a selective
+MONO/POLY2 own-field IC experiment after the full stable-ID portfolio proves
+enough application-level coverage. That experiment must reuse monotonic shape
+identity and cannot restore the linked atom table, fixed ring, hit-path
+counters, or bytecode mutation used by earlier attempts.

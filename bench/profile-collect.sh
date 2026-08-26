@@ -14,7 +14,8 @@ WORKER=${WORKER:-$BUILD/capsid-worker}
 COMPILE=${COMPILE:-$BUILD/capsid-bytecode-compile}
 THROUGHPUT=${THROUGHPUT:-bench/bin/exec-throughput}
 SUT_CPUSET=${SUT_CPUSET:-0-3}
-FIXTURES=${FIXTURES:-"arith-rt cascade-rt matrix-rt sieve-rt string-rt fib-rt json-rt prop-loop-rt prop-hoist-rt copy-chain-rt branch-const-rt cse-loop-rt licm-rt v8-suite-rt"}
+REQUEST_TIMEOUT_SECONDS=${REQUEST_TIMEOUT_SECONDS:-900}
+FIXTURES=${FIXTURES:-"arith-rt cascade-rt matrix-rt sieve-rt string-rt fib-rt json-rt prop-loop-rt prop-hoist-rt copy-chain-rt branch-const-rt cse-loop-rt licm-rt v8-suite-mod v8-suite-rt"}
 # Self-benchmarking suites whose output scores are timing-derived
 # (ops/sec over a fixed window): source vs opt bodies differ by run noise,
 # so byte equality is meaningless; they get a structural check instead.
@@ -42,7 +43,7 @@ for name in $FIXTURES; do
         echo "$name: compile failed" >&2; continue; }
     taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
         --mode source --input "$src" --source-name "$source_name" \
-        --rounds 1 --warmup 0 \
+        --rounds 1 --warmup 0 --timeout-seconds "$REQUEST_TIMEOUT_SECONDS" \
         >"$OUT/$name.source.jsonl" 2>"$OUT/$name.source.profile.jsonl" || {
         echo "$name: source mode failed" >&2; continue; }
     # exec-throughput writes the body with literal newlines inside the JSON
@@ -57,7 +58,8 @@ for name in $FIXTURES; do
     fi
     taskset -c "$SUT_CPUSET" "$THROUGHPUT" --worker "$WORKER" \
         --mode opt --input "$rewrite_qjsb" --source-name "$source_name" \
-        --rounds 1 --warmup 0 "${expect_arg[@]}" \
+        --rounds 1 --warmup 0 --timeout-seconds "$REQUEST_TIMEOUT_SECONDS" \
+        "${expect_arg[@]}" \
         >"$OUT/$name.opt.jsonl" 2>"$OUT/$name.opt.profile.jsonl" || {
         echo "$name: opt mode failed" >&2; continue; }
     if [[ " $TIMING " == *" $name "* ]]; then
@@ -74,9 +76,9 @@ for name in $FIXTURES; do
             continue
         fi
     fi
-    src_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v3"' \
+    src_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v4"' \
         "$OUT/$name.source.profile.jsonl" || true)
-    opt_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v3"' \
+    opt_n=$(grep -c '"schema":"quickjs-ng-opcode-profile-v4"' \
         "$OUT/$name.opt.profile.jsonl" || true)
     echo "$name: $src_n source profiles, $opt_n opt profiles"
 done
