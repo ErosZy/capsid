@@ -5393,9 +5393,8 @@ if(BUILD_TESTING)
     # the host coordinator. Keep them visible in the Host=OFF profiling build.
     if(CAPSID_BUILD_WORKER)
         # Runtime exact-PC evidence is first aggregated into adjacent
-        # 2..8-opcode patterns. The coordinates remain runtime-local; only the
-        # pattern is allowed to reach the static CFG+SSA census, which must
-        # re-prove effects, ownership, and boundaries.
+        # 2..8-opcode patterns. v4 stable coordinates reach the static CFG+SSA
+        # census, which must still re-prove effects, ownership, and boundaries.
         find_program(
             CAPSID_PROFILE_PYTHON_EXECUTABLE
             NAMES python3 python REQUIRED)
@@ -5406,6 +5405,36 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(
             bytecode_profile_sequences PROPERTIES TIMEOUT 30)
+        add_test(
+            NAME framework_opcode_profile_collector
+            COMMAND "${CAPSID_PROFILE_PYTHON_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_framework_profile_collect.py")
+        set_tests_properties(
+            framework_opcode_profile_collector PROPERTIES TIMEOUT 30)
+        add_test(
+            NAME bytecode_profile_region_bridge
+            COMMAND "${CAPSID_PROFILE_PYTHON_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_profile_regions.py")
+        set_tests_properties(
+            bytecode_profile_region_bridge PROPERTIES TIMEOUT 30)
+        add_test(
+            NAME bytecode_profile_region_portfolio
+            COMMAND "${CAPSID_PROFILE_PYTHON_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_profile_region_portfolio.py")
+        set_tests_properties(
+            bytecode_profile_region_portfolio PROPERTIES TIMEOUT 30)
+        add_test(
+            NAME bytecode_profile_region_rank
+            COMMAND "${CAPSID_PROFILE_PYTHON_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_profile_region_rank.py")
+        set_tests_properties(
+            bytecode_profile_region_rank PROPERTIES TIMEOUT 30)
+        add_test(
+            NAME bytecode_profile_shape_stability
+            COMMAND "${CAPSID_PROFILE_PYTHON_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_profile_shape_stability.py")
+        set_tests_properties(
+            bytecode_profile_shape_stability PROPERTIES TIMEOUT 30)
 
         if(CAPSID_ENABLE_OPCODE_PROFILE)
             add_executable(

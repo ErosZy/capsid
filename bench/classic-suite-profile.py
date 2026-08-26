@@ -3,8 +3,8 @@
 
 Compilation uses the production rewriter build. Execution uses a separate
 CONFIG_OPCODE_PROFILE runner, so instrumented timing is never treated as a
-performance result. Each program gets a fresh runtime and its own v3 JSONL
-profile, preserving exact source/function/PC coordinates.
+performance result. Each program gets a fresh runtime and its own v4 JSONL
+profile, preserving stable source/function/PC coordinates.
 """
 
 from __future__ import annotations
@@ -36,6 +36,52 @@ def run(command: list[str], timeout: int, stdout: Path, stderr: Path) -> int:
         except subprocess.TimeoutExpired:
             return 124
     return result.returncode
+
+
+def source_hash(name: str) -> str:
+    value = 14695981039346656037
+    for byte in name.encode("utf-8")[:255]:
+        value ^= byte
+        value = (value * 1099511628211) & 0xffffffffffffffff
+    return f"{value:016x}"
+
+
+def validate_profile(path: Path, source_name: str) -> dict[str, int]:
+    """Reject partial, obsolete, or non-joinable instrumentation output."""
+    runtimes = 0
+    sites = 0
+    source_sites = 0
+    overflow = 0
+    expected_source = source_hash(source_name)
+    with path.open(encoding="utf-8", errors="strict") as stream:
+        for line_number, raw in enumerate(stream, 1):
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                profile = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"invalid profile JSON on line {line_number}: {error}") from error
+            if profile.get("schema") != "quickjs-ng-opcode-profile-v4":
+                raise ValueError("classic profile requires opcode profile v4")
+            runtimes += 1
+            overflow += int(profile.get("site_overflow", 0))
+            for site in profile.get("sites", []):
+                sites += 1
+                for field in ("code_hash", "code_len", "line", "column", "pc"):
+                    if field not in site:
+                        raise ValueError(f"site missing stable field {field}")
+                if str(site.get("source_hash", "")).lower() == expected_source:
+                    source_sites += 1
+    if runtimes != 1:
+        raise ValueError(f"expected one runtime dump, got {runtimes}")
+    if overflow != 0:
+        raise ValueError(f"incomplete exact-site table: overflow={overflow}")
+    if source_sites == 0:
+        raise ValueError("profile has no sites for compiled source")
+    return {"profile_runtimes": runtimes, "profile_sites": sites,
+            "profile_source_sites": source_sites, "site_overflow": overflow}
 
 
 def main() -> int:
@@ -107,7 +153,18 @@ def main() -> int:
     manifest_path.write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
-    prior_programs = {str(row["program"]) for row in results}
+    # Resume only completed evidence. Failed/partial rows must be retried and
+    # replaced, otherwise a timeout is permanently treated as a completed
+    # program and the final failure ledger can never become green.
+    successful_programs = {
+        str(row["program"]) for row in results
+        if row.get("compile_returncode") == 0 and
+        row.get("execute_returncode") == 0 and
+        "profile_sha256" in row
+    }
+    results[:] = [row for row in results
+                  if str(row["program"]) in successful_programs]
+    prior_programs = successful_programs
 
     for index, program in enumerate(programs, 1):
         source = args.corpus / program["file"]
@@ -132,7 +189,9 @@ def main() -> int:
         print(f"[{index}/{len(programs)}] compile {stem}", flush=True)
         compile_rc = run(compile_command, args.timeout,
                          compile_stdout, compile_stderr)
+        source_name = f"file:///{program['file']}"
         row: dict[str, object] = {"program": stem,
+                                  "source_name": source_name,
                                   "compile_returncode": compile_rc}
         if compile_rc == 0:
             execute_command = [
@@ -147,9 +206,16 @@ def main() -> int:
                              args.out / f"{stem}.run.stderr")
             row["execute_returncode"] = execute_rc
             if execute_rc == 0 and profile_tmp.exists():
-                profile_tmp.replace(profile)
-                row["profile_sha256"] = sha256(profile)
-                row["profile_bytes"] = profile.stat().st_size
+                try:
+                    row.update(validate_profile(profile_tmp, source_name))
+                except (OSError, UnicodeError, ValueError) as error:
+                    row["profile_validation_error"] = str(error)
+                    row["execute_returncode"] = 125
+                    profile_tmp.replace(failed_profile)
+                else:
+                    profile_tmp.replace(profile)
+                    row["profile_sha256"] = sha256(profile)
+                    row["profile_bytes"] = profile.stat().st_size
             elif profile_tmp.exists():
                 # Keep failed/partial evidence for diagnosis, but outside the
                 # *.profile.jsonl glob consumed by ranking tools.
@@ -160,7 +226,8 @@ def main() -> int:
 
     failures = [row for row in results
                 if row.get("compile_returncode") != 0 or
-                row.get("execute_returncode") != 0]
+                row.get("execute_returncode") != 0 or
+                "profile_sha256" not in row]
     complete = len(results) - len(failures)
     print(json.dumps({"requested": len(programs), "complete": complete,
                       "failures": failures}, indent=2))

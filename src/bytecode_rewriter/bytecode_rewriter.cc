@@ -5023,14 +5023,15 @@ bool rewrite_classic_for_benchmark(const std::vector<std::uint8_t>& in,
 
 namespace ir {
 
-bool read_functions(const uint8_t* data,
-                    size_t size,
-                    std::vector<FuncInfo>* out,
-                    std::string* error) {
+static bool read_functions_impl(const uint8_t* data,
+                                size_t size,
+                                TopLevelKind top_level,
+                                std::vector<FuncInfo>* out,
+                                std::string* error) {
     error->clear();
     out->clear();
     std::vector<FuncRecord> functions;
-    if (!parse_buffer(data, size, &functions, error)) return false;
+    if (!parse_buffer(data, size, &functions, error, top_level)) return false;
     struct Conv {
         void run(const FuncRecord& f, std::vector<FuncInfo>* out) {
             FuncInfo fi;
@@ -5054,6 +5055,20 @@ bool read_functions(const uint8_t* data,
         conv.run(functions[i], out);
     }
     return true;
+}
+
+bool read_functions(const uint8_t* data,
+                    size_t size,
+                    std::vector<FuncInfo>* out,
+                    std::string* error) {
+    return read_functions_impl(data, size, TopLevelKind::kModule, out, error);
+}
+
+bool read_functions_classic(const uint8_t* data,
+                            size_t size,
+                            std::vector<FuncInfo>* out,
+                            std::string* error) {
+    return read_functions_impl(data, size, TopLevelKind::kGlobal, out, error);
 }
 
 }  // namespace ir
@@ -5138,21 +5153,26 @@ bool ssa_analyze(const std::vector<std::uint8_t>& in, std::string* error) {
 // evidence weighting used for decisions. Nothing is emitted. Returns false only on a
 // whole-bundle parse failure; functions the analyses cannot prove are
 // counted as rejected coverage and reported, never skipped silently.
-bool region_census(const std::vector<std::uint8_t>& in, std::string* error) {
-    error->clear();
-    ir::RegionCensusReport rep;
-    if (!ir::region_round_trip(in.data(), in.size(), &rep, error)) {
-        if (error->empty()) {
-            *error = "bytecode region: census failed";
-        }
-        return false;
-    }
+namespace {
+
+void print_region_census(const ir::RegionCensusReport& rep) {
     std::fprintf(stderr,
                  "bytecode region: census: %llu functions, rejected %llu "
-                 "functions / %llu insns\n",
+                 "functions / %llu insns, dynamic %s, missing sites %llu\n",
                  static_cast<unsigned long long>(rep.functions),
                  static_cast<unsigned long long>(rep.rejected_functions),
-                 static_cast<unsigned long long>(rep.rejected_insns));
+                 static_cast<unsigned long long>(rep.rejected_insns),
+                 rep.has_dynamic_profile ? "yes" : "no",
+                 static_cast<unsigned long long>(rep.missing_profile_sites));
+    if (rep.missing_profile_sites != 0) {
+        std::fprintf(stderr,
+                     "bytecode region: first missing: code %016llx/%u "
+                     "line %d:%d pc %u\n",
+                     static_cast<unsigned long long>(
+                         rep.first_missing_code_hash),
+                     rep.first_missing_code_len, rep.first_missing_line,
+                     rep.first_missing_column, rep.first_missing_pc);
+    }
     for (size_t i = 0; i < static_cast<size_t>(ir::Template::COUNT); i++) {
         const ir::Template t = static_cast<ir::Template>(i);
         std::fprintf(stderr,
@@ -5169,6 +5189,17 @@ bool region_census(const std::vector<std::uint8_t>& in, std::string* error) {
                      static_cast<long long>(
                          rep.candidates[i] == 0 ? 0
                                                 : rep.predicted_best[i]));
+        if (rep.has_dynamic_profile) {
+            std::fprintf(stderr,
+                         "bytecode region:     dynamic regions %llu, insns "
+                         "%llu, predicted %lld\n",
+                         static_cast<unsigned long long>(
+                             rep.dynamic_candidates[i]),
+                         static_cast<unsigned long long>(
+                             rep.dynamic_insns_covered[i]),
+                         static_cast<long long>(
+                             rep.dynamic_predicted_total[i]));
+        }
     }
     std::fprintf(stderr, "bytecode region: first templates: ");
     for (int k = 0; k < 2; k++) {
@@ -5177,6 +5208,68 @@ bool region_census(const std::vector<std::uint8_t>& in, std::string* error) {
                      static_cast<long long>(rep.first_predicted[k]));
     }
     std::fprintf(stderr, "\n");
+}
+
+}  // namespace
+
+bool region_census(const std::vector<std::uint8_t>& in, std::string* error) {
+    error->clear();
+    ir::RegionCensusReport rep;
+    if (!ir::region_round_trip(in.data(), in.size(), &rep, error)) {
+        if (error->empty()) {
+            *error = "bytecode region: census failed";
+        }
+        return false;
+    }
+    print_region_census(rep);
+    return true;
+}
+
+bool region_census_profiled(
+    const std::vector<std::uint8_t>& in,
+    const std::vector<RegionProfileSite>& sites,
+    std::string* error) {
+    error->clear();
+    ir::RegionExecutionProfile profile;
+    profile.sites.reserve(sites.size());
+    for (size_t i = 0; i < sites.size(); i++) {
+        const RegionProfileSite& site = sites[i];
+        profile.sites.push_back({site.code_hash, site.code_len, site.line,
+                                 site.column, site.pc, site.executions});
+    }
+    ir::RegionCensusReport rep;
+    if (!ir::region_round_trip_profiled(in.data(), in.size(), profile, &rep,
+                                         error)) {
+        if (error->empty()) {
+            *error = "bytecode region: profiled census failed";
+        }
+        return false;
+    }
+    print_region_census(rep);
+    return true;
+}
+
+bool region_census_profiled_classic(
+    const std::vector<std::uint8_t>& in,
+    const std::vector<RegionProfileSite>& sites,
+    std::string* error) {
+    error->clear();
+    ir::RegionExecutionProfile profile;
+    profile.sites.reserve(sites.size());
+    for (size_t i = 0; i < sites.size(); i++) {
+        const RegionProfileSite& site = sites[i];
+        profile.sites.push_back({site.code_hash, site.code_len, site.line,
+                                 site.column, site.pc, site.executions});
+    }
+    ir::RegionCensusReport rep;
+    if (!ir::region_round_trip_profiled_classic(
+            in.data(), in.size(), profile, &rep, error)) {
+        if (error->empty()) {
+            *error = "bytecode region: profiled classic census failed";
+        }
+        return false;
+    }
+    print_region_census(rep);
     return true;
 }
 

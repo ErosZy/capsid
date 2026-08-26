@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <climits>
 #include <cstdio>
+#include <unordered_map>
 #include <utility>
 
 
@@ -294,15 +295,32 @@ Lattice join_lattice(Lattice a, int64_t ia, bool ha, Lattice b, int64_t ib,
 // Construction + analysis state.
 // ---------------------------------------------------------------------------
 
-// Per-block analysis state. The entry fields are the joined values from
-// the predecessor edges (monotone fixpoint); `refs` is the dense local
-// refcount map (path-local: the same value id can hold different refs
-// on different paths, so each block simulates its own copy).
+// Per-block analysis state. Refcounts are sparse because a block can only
+// name its entry stack/slots and values born in that block. A dense
+// [0,value_count) vector per block made memory O(blocks * values) and reached
+// double-digit GiB on large generated bundles such as Web Tooling Prettier.
+// The sparse representation is O(live entry cells + values actually touched
+// by the block). The same value id can still hold different path-local refs.
+using RefMap = std::unordered_map<uint32_t, int>;
+
+int ref_get(const RefMap& refs, uint32_t value) {
+    const RefMap::const_iterator it = refs.find(value);
+    return it == refs.end() ? -1 : it->second;
+}
+
+void ref_set(RefMap* refs, uint32_t value, int count) {
+    if (count < 0) {
+        refs->erase(value);
+    } else {
+        (*refs)[value] = count;
+    }
+}
+
 struct AState {
     std::vector<int32_t> handlers;  // entry handler stack
     uint32_t token;                 // entry world token
-    std::vector<int> entry_refs;    // entry refcounts (dense, -1 = absent)
-    std::vector<int> refs;          // local simulation refcounts
+    RefMap entry_refs;              // joined entry refs; absent means -1
+    RefMap refs;                    // local simulation refs
 };
 
 struct Analyzer {
@@ -741,15 +759,16 @@ bool ownership(const Analyzer& A, const SsaNode& node, SsaFunc* f,
     const Insn& in = A.cfg.insns[node.insn];
     auto release = [&](uint32_t v, const char* what) -> bool {
         if (f->sentinel[v]) return true;  // borrowed: release is a no-op
-        if (v >= st.refs.size() || st.refs[v] < 1) {
+        const int refs = ref_get(st.refs, v);
+        if (refs < 1) {
             *A.error = "ssa: ownership violation: " + std::string(what) +
                        " of value " + std::to_string(v) +
                        " with no owning reference (insn " +
                        std::to_string(node.insn) + ")";
             return false;
         }
-        st.refs[v]--;
-        (*final_refs)[v] = st.refs[v];
+        ref_set(&st.refs, v, refs - 1);
+        (*final_refs)[v] = refs - 1;
         return true;
     };
     if (is_frame_slot_store(in.op)) {
@@ -767,9 +786,10 @@ bool ownership(const Analyzer& A, const SsaNode& node, SsaFunc* f,
         }
         for (size_t k = 0; k < node.slot_writes.size(); k++) {
             const uint32_t v = node.slot_writes[k];
-            if (v >= st.refs.size() || st.refs[v] != -1) continue;
-            st.refs[v] = f->sentinel[v] ? 0 : 1;
-            (*final_refs)[v] = st.refs[v];
+            if (ref_get(st.refs, v) != -1) continue;
+            const int refs = f->sentinel[v] ? 0 : 1;
+            ref_set(&st.refs, v, refs);
+            (*final_refs)[v] = refs;
         }
         return true;
     }
@@ -782,8 +802,8 @@ bool ownership(const Analyzer& A, const SsaNode& node, SsaFunc* f,
         }
         for (size_t k = 0; k < node.slot_writes.size(); k++) {
             const uint32_t v = node.slot_writes[k];
-            if (v < st.refs.size() && st.refs[v] == -1) {
-                st.refs[v] = 1;
+            if (ref_get(st.refs, v) == -1) {
+                ref_set(&st.refs, v, 1);
                 (*final_refs)[v] = 1;
             }
         }
@@ -815,24 +835,27 @@ bool ownership(const Analyzer& A, const SsaNode& node, SsaFunc* f,
         for (uint8_t k = 0; k < sd.n && k < node.results.size(); k++) {
             if (!sd.fresh[k]) continue;
             const uint32_t src = node.args[sd.src[k]];
-            if (src >= st.refs.size() || st.refs[src] < 0) continue;
-            st.refs[src]++;
-            (*final_refs)[src] = st.refs[src];
+            const int refs = ref_get(st.refs, src);
+            if (refs < 0) continue;
+            ref_set(&st.refs, src, refs + 1);
+            (*final_refs)[src] = refs + 1;
         }
     }
     // Results: fresh values are born owned (refs 1); sentinels are
     // born borrowed (refs 0); kept shuffle ids are already accounted.
     for (size_t k = 0; k < node.results.size(); k++) {
         const uint32_t v = node.results[k];
-        if (v >= st.refs.size() || st.refs[v] != -1) continue;
-        st.refs[v] = f->sentinel[v] ? 0 : 1;
-        (*final_refs)[v] = st.refs[v];
+        if (ref_get(st.refs, v) != -1) continue;
+        const int refs = f->sentinel[v] ? 0 : 1;
+        ref_set(&st.refs, v, refs);
+        (*final_refs)[v] = refs;
     }
     for (size_t k = 0; k < node.slot_writes.size(); k++) {
         const uint32_t v = node.slot_writes[k];
-        if (v >= st.refs.size() || st.refs[v] != -1) continue;
-        st.refs[v] = f->sentinel[v] ? 0 : 1;
-        (*final_refs)[v] = st.refs[v];
+        if (ref_get(st.refs, v) != -1) continue;
+        const int refs = f->sentinel[v] ? 0 : 1;
+        ref_set(&st.refs, v, refs);
+        (*final_refs)[v] = refs;
     }
     return true;
 }
@@ -1054,6 +1077,32 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
     }
     out->param_count = param_count;
 
+    // Analyze-only work must never be able to take down the compiler or its
+    // parent Codex/worker process. Account conservatively for two sparse maps
+    // per block entry plus values born during local simulation. The 48-byte
+    // factor deliberately overestimates a typical unordered_map node and its
+    // bucket share. Unsupported giant functions fail closed and are reported
+    // as rejected coverage; their bytecode is never rewritten.
+    uint64_t entry_cells = 0;
+    for (size_t b = 0; b < nb; b++) {
+        const SsaBlock& sb = out->blocks[b];
+        entry_cells += static_cast<uint64_t>(sb.entry_stack.size()) +
+                       static_cast<uint64_t>(sb.entry_args.size()) +
+                       static_cast<uint64_t>(sb.entry_locs.size());
+    }
+    const uint64_t sparse_ref_entries =
+        2 * entry_cells + static_cast<uint64_t>(out->value_count);
+    // Keep this below the portfolio driver's independent 2 GiB RLIMIT_AS so
+    // CFG/SSA nodes, profile input and allocator overhead retain headroom.
+    static const uint64_t kMaxSparseRefBytes = 1024ULL * 1024ULL * 1024ULL;
+    if (sparse_ref_entries > kMaxSparseRefBytes / 48ULL) {
+        *error = "ssa: sparse refcount budget exceeded (blocks " +
+                 std::to_string(nb) + ", values " +
+                 std::to_string(out->value_count) + ", entry cells " +
+                 std::to_string(entry_cells) + ")";
+        return false;
+    }
+
     // -------------------------------------------------------------------
     // Analyses: lattice / world token / exception successors / refcounts
     // to a monotone fixpoint. Per pass over the RPO: the block's entry
@@ -1068,8 +1117,6 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
     std::vector<int> final_refs(out->value_count, -1);
     for (size_t b = 0; b < nb; b++) {
         states[b].token = 0;
-        states[b].refs.assign(out->value_count, -1);
-        states[b].entry_refs.assign(out->value_count, -1);
     }
 
     const int kMaxIter =
@@ -1118,34 +1165,36 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
             }
 
             // ---- entry: refcounts
-            std::vector<int> entry_refs(out->value_count, -1);
+            RefMap entry_refs;
+            entry_refs.reserve(sb.entry_stack.size() + sb.entry_args.size() +
+                               sb.entry_locs.size());
             if (b == 0) {
                 for (size_t p = 0; p < out->entry_args.size(); p++) {
-                    entry_refs[out->entry_args[p]] = 1;
+                    ref_set(&entry_refs, out->entry_args[p], 1);
                 }
                 for (size_t p = 0; p < out->entry_locs.size(); p++) {
-                    entry_refs[out->entry_locs[p]] = 0;  // sentinel
+                    ref_set(&entry_refs, out->entry_locs[p], 0);  // sentinel
                 }
             } else if (A.pred_count[b] == 1) {
                 const SsaEdgeSnap& snap =
                     out->blocks[A.pred_block[b]].edge_snaps[A.pred_edge[b]];
                 for (size_t p = 0; p < snap.stack.size(); p++) {
-                    entry_refs[snap.stack[p]] =
-                        snap.stack_refs.empty() ? 1 : snap.stack_refs[p];
+                    ref_set(&entry_refs, snap.stack[p],
+                            snap.stack_refs.empty() ? 1 : snap.stack_refs[p]);
                 }
                 for (size_t p = 0; p < snap.args.size(); p++) {
-                    entry_refs[snap.args[p]] =
-                        snap.args_refs.empty() ? 1 : snap.args_refs[p];
+                    ref_set(&entry_refs, snap.args[p],
+                            snap.args_refs.empty() ? 1 : snap.args_refs[p]);
                 }
                 for (size_t p = 0; p < snap.locs.size(); p++) {
-                    entry_refs[snap.locs[p]] =
-                        snap.locs_refs.empty() ? 1 : snap.locs_refs[p];
+                    ref_set(&entry_refs, snap.locs[p],
+                            snap.locs_refs.empty() ? 1 : snap.locs_refs[p]);
                 }
                 // Phantoms (the gosub/with_* +1/+2 entry slots) are
                 // born owned.
                 for (size_t p = snap.stack.size(); p < sb.entry_stack.size();
                      p++) {
-                    entry_refs[sb.entry_stack[p]] = 1;
+                    ref_set(&entry_refs, sb.entry_stack[p], 1);
                 }
             } else {
                 // Multi-pred: a param's refs are the min over the
@@ -1193,7 +1242,7 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
                     } else if (r < 1) {
                         r = 1;
                     }
-                    entry_refs[param] = r;
+                    ref_set(&entry_refs, param, r);
                 };
                 for (size_t p = 0; p < sb.entry_stack.size(); p++) {
                     join_refs(sb.entry_stack, p);
@@ -1218,7 +1267,7 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
                     } else if (r < 1) {
                         r = 1;
                     }
-                    entry_refs[param] = r;
+                    ref_set(&entry_refs, param, r);
                 }
                 for (size_t p = 0; p < sb.entry_locs.size(); p++) {
                     int r = INT_MAX;
@@ -1240,7 +1289,7 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
                     } else if (r < 1) {
                         r = 1;
                     }
-                    entry_refs[param] = r;
+                    ref_set(&entry_refs, param, r);
                 }
             }
 
@@ -1393,8 +1442,9 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
             sb.token_in = token;
             st.entry_refs = entry_refs;
             st.refs = entry_refs;
-            for (size_t p = 0; p < entry_refs.size(); p++) {
-                if (entry_refs[p] != -1) final_refs[p] = entry_refs[p];
+            for (RefMap::const_iterator it = entry_refs.begin();
+                 it != entry_refs.end(); ++it) {
+                final_refs[it->first] = it->second;
             }
 
             // ---- entry slot ids (the construction's record)
@@ -1494,15 +1544,15 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
                     snap.token = node.token_out;
                     snap.stack_refs.assign(snap.stack.size(), 0);
                     for (size_t p = 0; p < snap.stack.size(); p++) {
-                        snap.stack_refs[p] = st.refs[snap.stack[p]];
+                        snap.stack_refs[p] = ref_get(st.refs, snap.stack[p]);
                     }
                     snap.args_refs.assign(snap.args.size(), 0);
                     for (size_t p = 0; p < snap.args.size(); p++) {
-                        snap.args_refs[p] = st.refs[snap.args[p]];
+                        snap.args_refs[p] = ref_get(st.refs, snap.args[p]);
                     }
                     snap.locs_refs.assign(snap.locs.size(), 0);
                     for (size_t p = 0; p < snap.locs.size(); p++) {
-                        snap.locs_refs[p] = st.refs[snap.locs[p]];
+                        snap.locs_refs[p] = ref_get(st.refs, snap.locs[p]);
                     }
                 }
                 if (is_catch_marker_push(in.op)) {
@@ -1521,15 +1571,15 @@ bool ssa_analyze_function(const Cfg& cfg, SsaFunc* out, std::string* error) {
                     snap.token = node.token_out;
                     snap.stack_refs.assign(snap.stack.size(), 0);
                     for (size_t p = 0; p < snap.stack.size(); p++) {
-                        snap.stack_refs[p] = st.refs[snap.stack[p]];
+                        snap.stack_refs[p] = ref_get(st.refs, snap.stack[p]);
                     }
                     snap.args_refs.assign(snap.args.size(), 0);
                     for (size_t p = 0; p < snap.args.size(); p++) {
-                        snap.args_refs[p] = st.refs[snap.args[p]];
+                        snap.args_refs[p] = ref_get(st.refs, snap.args[p]);
                     }
                     snap.locs_refs.assign(snap.locs.size(), 0);
                     for (size_t p = 0; p < snap.locs.size(); p++) {
-                        snap.locs_refs[p] = st.refs[snap.locs[p]];
+                        snap.locs_refs[p] = ref_get(st.refs, snap.locs[p]);
                     }
                 }
             }
@@ -1619,7 +1669,7 @@ bool ssa_round_trip(const uint8_t* data,
     struct Walker {
         const uint8_t* data;
         SsaReport* rep;
-        bool run(const FuncInfo& fi, std::string* error) {
+        void analyze_one(const FuncInfo& fi, std::string* error) {
             std::vector<Insn> insns;
             if (!decode_function(data + fi.code_off, fi.code_len, data, fi,
                                  &insns, error)) {
@@ -1627,7 +1677,7 @@ bool ssa_round_trip(const uint8_t* data,
                              error->c_str());
                 rep->rejected_functions++;
                 error->clear();
-                return true;
+                return;
             }
             Cfg cfg;
             if (!build_cfg(insns, &cfg, error)) {
@@ -1636,7 +1686,7 @@ bool ssa_round_trip(const uint8_t* data,
                 rep->rejected_functions++;
                 rep->rejected_insns += static_cast<uint64_t>(insns.size());
                 error->clear();
-                return true;
+                return;
             }
             cfg.recorded_stack_size = fi.stack_size;
             if (!verify_cfg(cfg, error)) {
@@ -1645,7 +1695,7 @@ bool ssa_round_trip(const uint8_t* data,
                 rep->rejected_functions++;
                 rep->rejected_insns += static_cast<uint64_t>(insns.size());
                 error->clear();
-                return true;
+                return;
             }
             SsaFunc ssa;
             if (!ssa_analyze_function(cfg, &ssa, error)) {
@@ -1654,7 +1704,7 @@ bool ssa_round_trip(const uint8_t* data,
                 rep->rejected_functions++;
                 rep->rejected_insns += static_cast<uint64_t>(insns.size());
                 error->clear();
-                return true;
+                return;
             }
             for (size_t b = 0; b < ssa.blocks.size(); b++) {
                 rep->nodes += static_cast<uint64_t>(ssa.blocks[b].nodes.size());
@@ -1668,6 +1718,13 @@ bool ssa_round_trip(const uint8_t* data,
             for (size_t v = 0; v < ssa.lattice.size(); v++) {
                 rep->lattice_count[static_cast<size_t>(ssa.lattice[v])]++;
             }
+        }
+
+        bool run(const FuncInfo& fi, std::string* error) {
+            // A parent is not an analysis-coverage boundary. Its cpool child
+            // functions have independent bytecode and may remain analyzable
+            // even when the parent's decode, CFG, or SSA is rejected.
+            analyze_one(fi, error);
             for (size_t i = 0; i < fi.children.size(); i++) {
                 if (!run(fi.children[i], error)) return false;
             }

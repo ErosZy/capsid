@@ -13,6 +13,7 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const driverPath = args.get('--driver');
 const workerPath = args.get('--worker');
 const bundlePath = args.get('--bundle');
+const runtimeBundlePath = args.get('--runtime-bundle') ?? bundlePath;
 const variant = args.get('--variant');
 if (
     !driverPath ||
@@ -253,7 +254,8 @@ const upstreamUrl = `http://127.0.0.1:${upstreamPort}/itty-upstream`;
 
 const child = spawn(driverPath, [
     workerPath,
-    bundlePath,
+    runtimeBundlePath,
+    ...(runtimeBundlePath === bundlePath ? [] : [ '--bytecode', '1' ]),
     '--loopback-port',
     String(upstreamPort),
 ], {

@@ -1,4 +1,4 @@
-// Opcode profile v3 contract: every executed instruction has source
+// Opcode profile v4 contract: every executed instruction has source
 // provenance plus an exact runtime-local function id + original PC record,
 // and property sites classify the path actually taken. The profile build is
 // diagnostic only.
@@ -29,11 +29,15 @@ int main() {
 
     const char* src =
         "function field(o) { return o.x; }"
+        "function mutate(o) { return o.m; }"
         "const own = {x: 1}; const proto = {x: 2};"
         "const inherited = Object.create(proto);"
         "const accessor = {get x() { return 3; }};"
         "let s = 0; for (let i = 0; i < 200; i++) s += field(own);"
         "s += field(inherited) + field(accessor); field(3);"
+        "const changing = {m: 4}; s += mutate(changing);"
+        "changing.n = 1; s += mutate(changing);"
+        "delete changing.n; s += mutate(changing);"
         "const a = [4, 5]; s += a[0]; void a[99]; globalThis.__r = s;";
     JSValue value = JS_Eval(ctx, src, std::strlen(src), "profile.js",
                             JS_EVAL_TYPE_GLOBAL);
@@ -58,9 +62,14 @@ int main() {
         std::fclose(fp);
     }
 
-    check("profile_schema_v3",
-          dump.find("\"schema\":\"quickjs-ng-opcode-profile-v3\"") !=
+    check("profile_schema_v4",
+          dump.find("\"schema\":\"quickjs-ng-opcode-profile-v4\"") !=
               std::string::npos);
+    check("profile_stable_function_identity",
+          dump.find("\"code_hash\":\"") != std::string::npos &&
+              dump.find("\"code_len\":") != std::string::npos &&
+              dump.find("\"line\":") != std::string::npos &&
+              dump.find("\"column\":") != std::string::npos);
     check("profile_exact_sites",
           dump.find("\"sites\":[{") != std::string::npos &&
               dump.find("\"function\":") != std::string::npos &&
@@ -79,6 +88,10 @@ int main() {
           dump.find("\"accessor_or_generic\":") != std::string::npos);
     check("profile_primitive",
           dump.find("\"primitive_or_nullish\":") != std::string::npos);
+    check("profile_shape_stability",
+          dump.find("\"shape\":{\"first\":") != std::string::npos &&
+              dump.find("\"second\":1,\"other\":1}") !=
+                  std::string::npos);
 
     JS_FreeContext(ctx);
     JS_FreeRuntime(rt);

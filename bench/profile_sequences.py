@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Rank dynamically hot, physically adjacent QuickJS opcode sequences.
 
-The opcode-profile v3 dump records every executed bytecode site as
-``(source hash, runtime-local function id, exact PC, opcode, count)``. This tool joins
+The opcode-profile v4 dump records every executed bytecode site as
+``(source hash, code hash/length/line/column, exact PC, opcode, count)``. This tool joins
 those sites with the canonical opcode sizes and enumerates adjacent windows of
 2..8 instructions.  A window's conservative execution weight is the minimum
 count of its members.  It is evidence for choosing a CFG+SSA fusion template,
 not permission to lower the concrete runtime-local site: CFG/effect/ownership
-proof still decides whether a static occurrence is legal.
+proof still decides whether a static occurrence is legal. For v4 profiles the
+ranked evidence retains the stable serialized-function identity, so the static
+analyzer can re-prove that exact hot occurrence instead of rediscovering it by
+runtime-local function number.
 
 No timing from the profiling build is consumed. The avoided-dispatch estimate
 assumes a candidate window could become one directly dispatched operation;
@@ -100,7 +103,8 @@ def load_profiles(path: pathlib.Path, mode: str) -> Iterable[Tuple[str, dict]]:
                     continue
                 if obj.get("schema") not in (
                         "quickjs-ng-opcode-profile-v2",
-                        "quickjs-ng-opcode-profile-v3"):
+                        "quickjs-ng-opcode-profile-v3",
+                        "quickjs-ng-opcode-profile-v4"):
                     continue
                 yield os.path.basename(name), obj
 
@@ -256,12 +260,22 @@ def census(profiles: Iterable[Tuple[str, dict]], sizes: Mapping[str, int],
                     coordinate = {
                         "file": evidence_file,
                         "runtime": int(obj.get("runtime", 0)),
-                        # Runtime-local coordinate: the pattern, not this id,
-                        # is what the static CFG census is allowed to consume.
+                        # Kept for diagnostics and old archives only. v4
+                        # consumers must use the stable fields below.
                         "function": function,
                         "pc": start_pc,
                         "executions": weight,
                     }
+                    first = window[0]
+                    if all(name in first for name in
+                           ("code_hash", "code_len", "line", "column")):
+                        coordinate.update({
+                            "source_hash": str(first.get("source_hash", "")),
+                            "code_hash": str(first["code_hash"]),
+                            "code_len": int(first["code_len"]),
+                            "line": int(first["line"]),
+                            "column": int(first["column"]),
+                        })
                     aggregate = aggregates.setdefault(pattern, Aggregate(pattern))
                     aggregate.add(weight, byte_size, direct, slow, coordinate)
                     stats["candidate_windows"] += 1
@@ -274,7 +288,7 @@ def census(profiles: Iterable[Tuple[str, dict]], sizes: Mapping[str, int],
                   reverse=True)
     return {
         "schema": "capsid-opcode-sequence-census-v2",
-        "identity": "source-hash+profile-file+runtime+runtime-local-function+pc",
+        "identity": "source+code-hash+length+line+column+pc (v4); runtime-local fallback for archives",
         "selection_key": "opcode-pattern; static CFG+SSA must re-prove sites",
         "stats": dict(sorted(stats.items())),
         "sequences": [row.as_dict() for row in rows],
@@ -299,9 +313,12 @@ def print_report(report: Mapping[str, object], top: int) -> None:
         evidence = raw.get("evidence", [])
         if evidence:
             first = evidence[0]
+            stable = (f"code={first['code_hash']}/{first['code_len']}:"
+                      f"{first['line']}:{first['column']}:pc{first['pc']}"
+                      if "code_hash" in first else
+                      f"f{first['function']}:pc{first['pc']}")
             print("     top_site="
-                  f"{first['file']}:r{first['runtime']}:"
-                  f"f{first['function']}:pc{first['pc']} "
+                  f"{first['file']}:r{first['runtime']}:{stable} "
                   f"exec={int(first['executions']):,} "
                   f"prop_direct={int(raw['property_direct']):,} "
                   f"prop_slow={int(raw['property_slow']):,}")
