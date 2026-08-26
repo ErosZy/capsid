@@ -5460,5 +5460,31 @@ if(BUILD_TESTING)
             add_test(NAME bytecode_opcode_profile COMMAND test-opcode-profile)
             set_tests_properties(bytecode_opcode_profile PROPERTIES TIMEOUT 120)
         endif()
+
+        if(CAPSID_ENABLE_PRE_IC)
+            add_executable(test-pre-ic tests/test_pre_ic.cc)
+            target_link_libraries(test-pre-ic PRIVATE tjs)
+            target_compile_definitions(test-pre-ic PRIVATE CONFIG_PRE_IC=1)
+            if(CAPSID_ENABLE_PRE_IC_STATS)
+                target_compile_definitions(
+                    test-pre-ic PRIVATE CONFIG_PRE_IC_STATS=1)
+            endif()
+            set_target_properties(
+                test-pre-ic PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-pre-ic PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-pre-ic PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(NAME bytecode_pre_ic COMMAND test-pre-ic)
+            set_tests_properties(bytecode_pre_ic PROPERTIES TIMEOUT 120)
+        endif()
     endif()
 endif()
