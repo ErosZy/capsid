@@ -5460,5 +5460,30 @@ if(BUILD_TESTING)
             add_test(NAME bytecode_opcode_profile COMMAND test-opcode-profile)
             set_tests_properties(bytecode_opcode_profile PROPERTIES TIMEOUT 120)
         endif()
+
+        if(CAPSID_ENABLE_FIELD_IC)
+            add_executable(
+                test-field-ic
+                tests/test_field_ic.cc)
+            target_link_libraries(test-field-ic PRIVATE tjs)
+            target_compile_definitions(
+                test-field-ic PRIVATE CONFIG_FIELD_IC=1)
+            set_target_properties(
+                test-field-ic PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON
+                CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-field-ic PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(
+                        test-field-ic PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(NAME bytecode_field_ic COMMAND test-field-ic)
+            set_tests_properties(bytecode_field_ic PROPERTIES TIMEOUT 120)
+        endif()
     endif()
 endif()

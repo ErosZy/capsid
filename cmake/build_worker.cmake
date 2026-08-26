@@ -154,6 +154,11 @@ if(CAPSID_BUILD_WORKER)
     # compiled code does, so production builds keep it OFF.
     set(CONFIG_OPCODE_PROFILE ${CAPSID_ENABLE_OPCODE_PROFILE}
         CACHE BOOL "" FORCE)
+    # Experimental BC26-preserving field IC. The complete implementation is
+    # compiled out when OFF; ON keeps canonical operands and serialized bytes
+    # unchanged and stores feedback in lazy per-function sidecars.
+    set(CONFIG_FIELD_IC ${CAPSID_ENABLE_FIELD_IC}
+        CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public

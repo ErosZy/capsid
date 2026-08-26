@@ -1,0 +1,531 @@
+diff --git a/deps/quickjs/CMakeLists.txt b/deps/quickjs/CMakeLists.txt
+index 066346c..3ce501c 100644
+--- a/deps/quickjs/CMakeLists.txt
++++ b/deps/quickjs/CMakeLists.txt
+@@ -41,6 +41,7 @@ xoption(QJS_ENABLE_MSAN "Enable MemorySanitizer (MSan)" OFF)
+ xoption(QJS_ENABLE_TSAN "Enable ThreadSanitizer (TSan)" OFF)
+ xoption(QJS_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan)" OFF)
+ xoption(CONFIG_OPCODE_PROFILE "Enable opcode profiling counters" OFF)
++xoption(CONFIG_FIELD_IC "Enable Capsid sparse per-site field inline cache" OFF)
+ 
+ # Used to properly define JS_LIBC_EXTERN.
+ add_compile_definitions(QUICKJS_NG_BUILD)
+diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
+index 7ee1586..b04746e 100644
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -267,6 +267,37 @@ typedef struct JSValueLink {
+     JSValueConst value;
+ } JSValueLink;
+ 
++#ifdef CONFIG_FIELD_IC
++#define JS_FIELD_IC_FUNCTION_HOT 64
++#define JS_FIELD_IC_SITE_HOT 16
++#define JS_FIELD_IC_MAX_SITES 8
++#define JS_FIELD_IC_MAX_MISSES 8
++#define JS_FIELD_IC_SLOT_BASE 0x80
++#define JS_FIELD_IC_DISABLED 0xff
++#define JS_FIELD_IC_BUDGET_BYTES (256 * 1024)
++
++typedef enum JSFieldICState {
++    JS_FIELD_IC_MONO = 1,
++    JS_FIELD_IC_POLY2 = 2,
++} JSFieldICState;
++
++typedef struct JSFieldICEntry {
++    uint32_t shape_id[2];
++    uint32_t prop_offset[2];
++    uint8_t state;
++    uint8_t miss_streak;
++    uint16_t reserved;
++} JSFieldICEntry;
++
++typedef struct JSFieldICFunction {
++    size_t alloc_size;
++    uint8_t site_count;
++    uint8_t reserved[7];
++    JSFieldICEntry sites[JS_FIELD_IC_MAX_SITES];
++    uint8_t site_map[];
++} JSFieldICFunction;
++#endif
++
+ struct JSRuntime {
+     JSMallocFunctions mf;
+     JSMallocState malloc_state;
+@@ -352,9 +383,18 @@ struct JSRuntime {
+     int shape_hash_bits;
+     int shape_hash_size;
+     int shape_hash_count; /* number of hashed shapes */
+-#ifdef CONFIG_OPCODE_PROFILE
+-    uint32_t opcode_profile_shape_id;
+-    bool opcode_profile_shape_disabled;
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    uint32_t shape_identity_id;
++    bool shape_identity_disabled;
++#endif
++#ifdef CONFIG_FIELD_IC
++    size_t field_ic_budget_remaining;
++    uint64_t field_ic_sidecars;
++    uint64_t field_ic_sites;
++    uint64_t field_ic_mono;
++    uint64_t field_ic_poly2;
++    uint64_t field_ic_megamorphic;
++    uint64_t field_ic_budget_denials;
+ #endif
+     JSShape **shape_hash;
+     void *user_opaque;
+@@ -800,7 +840,10 @@ typedef struct JSFunctionBytecode {
+     uint8_t super_allowed : 1;
+     uint8_t arguments_allowed : 1;
+     uint8_t backtrace_barrier : 1; /* stop backtrace on this function */
+-    /* XXX: 5 bits available */
++#ifdef CONFIG_FIELD_IC
++    uint8_t field_ic_denied : 1;
++#endif
++    /* XXX: 4 bits available with CONFIG_FIELD_IC, otherwise 5 */
+     uint8_t *byte_code_buf; /* (self pointer) */
+     int byte_code_len;
+     JSAtom func_name;
+@@ -822,6 +865,10 @@ typedef struct JSFunctionBytecode {
+     int pc2line_len;
+     uint8_t *pc2line_buf;
+     char *source;
++#ifdef CONFIG_FIELD_IC
++    JSFieldICFunction *field_ic;
++    uint16_t field_ic_hot_count;
++#endif
+ #ifdef CONFIG_OPCODE_PROFILE
+     uint32_t opcode_profile_id; /* lazy runtime-local function id */
+ #endif
+@@ -1045,8 +1092,8 @@ struct JSShape {
+        JSShape.hash is not valid */
+     uint8_t is_hashed;
+     uint32_t hash; /* current hash value */
+-#ifdef CONFIG_OPCODE_PROFILE
+-    uint32_t opcode_profile_id;
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    uint32_t shape_identity_id;
+ #endif
+     uint32_t prop_hash_mask;
+     int prop_size; /* allocated properties */
+@@ -2796,7 +2843,7 @@ static no_inline void js_profile_shape_site(JSContext *ctx,
+ {
+     JSOpcodeProfile *p = ctx->rt->opcode_profile;
+     JSOpcodeSiteProfile *site;
+-    uint32_t key = shape->opcode_profile_id;
++    uint32_t key = shape->shape_identity_id;
+     int i;
+ 
+     if (!p || !shape || key == 0)
+@@ -5713,9 +5760,12 @@ static int init_shape_hash(JSRuntime *rt)
+     rt->shape_hash_bits = 6;   /* 64 shapes */
+     rt->shape_hash_size = 1 << rt->shape_hash_bits;
+     rt->shape_hash_count = 0;
+-#ifdef CONFIG_OPCODE_PROFILE
+-    rt->opcode_profile_shape_id = 0;
+-    rt->opcode_profile_shape_disabled = false;
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    rt->shape_identity_id = 0;
++    rt->shape_identity_disabled = false;
++#endif
++#ifdef CONFIG_FIELD_IC
++    rt->field_ic_budget_remaining = JS_FIELD_IC_BUDGET_BYTES;
+ #endif
+     rt->shape_hash = js_mallocz_rt(rt, sizeof(rt->shape_hash[0]) *
+                                    rt->shape_hash_size);
+@@ -5794,25 +5844,25 @@ static void js_shape_hash_unlink(JSRuntime *rt, JSShape *sh)
+ }
+ 
+ /* create a new empty shape with prototype 'proto'. It is not hashed */
+-#ifdef CONFIG_OPCODE_PROFILE
+-/* Profiling shape identity must survive allocator address reuse and must
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++/* Shape identity must survive allocator address reuse and must
+    change on every in-place structural mutation. A wrap disables identity
+-   collection for the runtime rather than allowing a stale false hit. */
+-static inline uint32_t js_profile_shape_assign_id(JSRuntime *rt, JSShape *sh)
++   checks for the runtime rather than allowing a stale false hit. */
++static inline uint32_t js_shape_assign_identity(JSRuntime *rt, JSShape *sh)
+ {
+     uint32_t id;
+ 
+-    if (unlikely(rt->opcode_profile_shape_disabled)) {
+-        sh->opcode_profile_id = 0;
++    if (unlikely(rt->shape_identity_disabled)) {
++        sh->shape_identity_id = 0;
+         return 0;
+     }
+-    id = ++rt->opcode_profile_shape_id;
++    id = ++rt->shape_identity_id;
+     if (unlikely(id == 0)) {
+-        rt->opcode_profile_shape_disabled = true;
+-        sh->opcode_profile_id = 0;
++        rt->shape_identity_disabled = true;
++        sh->shape_identity_id = 0;
+         return 0;
+     }
+-    sh->opcode_profile_id = id;
++    sh->shape_identity_id = id;
+     return id;
+ }
+ #endif
+@@ -5840,8 +5890,8 @@ static inline JSShape *js_new_shape_nohash(JSContext *ctx, JSObject *proto,
+     sh->prop_count = 0;
+     sh->deleted_prop_count = 0;
+     sh->is_hashed = false;
+-#ifdef CONFIG_OPCODE_PROFILE
+-    js_profile_shape_assign_id(rt, sh);
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    js_shape_assign_identity(rt, sh);
+ #endif
+     return sh;
+ }
+@@ -5936,8 +5986,8 @@ static JSShape *js_clone_shape(JSContext *ctx, JSShape *sh1)
+     for(i = 0, pr = sh->prop; i < sh->prop_count; i++, pr++) {
+         JS_DupAtom(ctx, pr->atom);
+     }
+-#ifdef CONFIG_OPCODE_PROFILE
+-    js_profile_shape_assign_id(ctx->rt, sh);
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    js_shape_assign_identity(ctx->rt, sh);
+ #endif
+     return sh;
+ }
+@@ -6043,8 +6093,8 @@ static no_inline int resize_properties(JSContext *ctx, JSShape **psh,
+         sh = get_shape_from_alloc(sh_alloc, new_hash_size);
+         list_add_tail(&sh->header.link, &ctx->rt->gc_obj_list);
+     }
+-#ifdef CONFIG_OPCODE_PROFILE
+-    js_profile_shape_assign_id(ctx->rt, sh);
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    js_shape_assign_identity(ctx->rt, sh);
+ #endif
+     *psh = sh;
+     sh->prop_size = new_size;
+@@ -6108,8 +6158,8 @@ static int compact_properties(JSContext *ctx, JSObject *p)
+     sh->prop_size = new_size;
+     sh->deleted_prop_count = 0;
+     sh->prop_count = j;
+-#ifdef CONFIG_OPCODE_PROFILE
+-    js_profile_shape_assign_id(ctx->rt, sh);
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    js_shape_assign_identity(ctx->rt, sh);
+ #endif
+ 
+     p->shape = sh;
+@@ -6159,8 +6209,8 @@ static int add_shape_property(JSContext *ctx, JSShape **psh,
+     pr->flags = prop_flags;
+     /* add in hash table */
+     hash_mask = sh->prop_hash_mask;
+-#ifdef CONFIG_OPCODE_PROFILE
+-    js_profile_shape_assign_id(ctx->rt, sh);
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    js_shape_assign_identity(ctx->rt, sh);
+ #endif
+     h = atom & hash_mask;
+     pr->hash_next = prop_hash_end(sh)[-h - 1];
+@@ -7016,6 +7066,202 @@ static inline JSShapeProperty *find_own_property(JSProperty **ppr,
+     return NULL;
+ }
+ 
++#ifdef CONFIG_FIELD_IC
++/* BC26 remains canonical. A hot function owns a one-byte direct map indexed
++   by the original instruction PC; only hot sites consume one of eight fixed
++   MONO/POLY2 entries. The hit path never mutates bytecode or cache state. */
++static no_inline JSFieldICFunction *js_field_ic_function_new(
++    JSContext *ctx, JSFunctionBytecode *b)
++{
++    JSRuntime *rt = ctx->rt;
++    JSFieldICFunction *fs;
++    size_t alloc_size;
++
++    if (b->byte_code_len <= 0)
++        return NULL;
++    alloc_size = offsetof(JSFieldICFunction, site_map) +
++                 (size_t)b->byte_code_len;
++    if (alloc_size > rt->field_ic_budget_remaining) {
++        rt->field_ic_budget_denials++;
++        return NULL;
++    }
++    fs = js_mallocz(ctx, alloc_size);
++    if (!fs) {
++        rt->field_ic_budget_denials++;
++        return NULL;
++    }
++    fs->alloc_size = alloc_size;
++    b->field_ic = fs;
++    rt->field_ic_budget_remaining -= alloc_size;
++    rt->field_ic_sidecars++;
++    return fs;
++}
++
++static void js_field_ic_function_free(JSRuntime *rt, JSFunctionBytecode *b)
++{
++    JSFieldICFunction *fs = b->field_ic;
++
++    if (!fs)
++        return;
++    assert(fs->alloc_size <= JS_FIELD_IC_BUDGET_BYTES -
++                             rt->field_ic_budget_remaining);
++    rt->field_ic_budget_remaining += fs->alloc_size;
++    assert(rt->field_ic_sidecars != 0);
++    rt->field_ic_sidecars--;
++    b->field_ic = NULL;
++    js_free_rt(rt, fs);
++}
++
++static inline bool js_field_ic_get(JSRuntime *rt, JSFunctionBytecode *b,
++                                   const uint8_t *pc, JSValueConst obj,
++                                   JSValue *pval)
++{
++    JSFieldICFunction *fs = b->field_ic;
++    JSFieldICEntry *entry;
++    JSObject *p;
++    uint32_t off, shape_id, prop_offset;
++    uint8_t token;
++
++    if (unlikely(!fs || rt->shape_identity_disabled ||
++                 JS_VALUE_GET_TAG(obj) != JS_TAG_OBJECT))
++        return false;
++    off = (uint32_t)(pc - b->byte_code_buf);
++    if (unlikely(off >= (uint32_t)b->byte_code_len))
++        return false;
++    token = fs->site_map[off];
++    if (likely(token >= JS_FIELD_IC_SLOT_BASE &&
++               token < JS_FIELD_IC_DISABLED)) {
++        uint32_t sid = token - JS_FIELD_IC_SLOT_BASE;
++        if (unlikely(sid >= fs->site_count))
++            return false;
++        entry = &fs->sites[sid];
++        p = JS_VALUE_GET_OBJ(obj);
++        shape_id = p->shape->shape_identity_id;
++        if (likely(shape_id == entry->shape_id[0])) {
++            prop_offset = entry->prop_offset[0];
++        } else if (entry->state == JS_FIELD_IC_POLY2 &&
++                   shape_id == entry->shape_id[1]) {
++            prop_offset = entry->prop_offset[1];
++        } else {
++            return false;
++        }
++        if (unlikely(prop_offset >= (uint32_t)p->shape->prop_count))
++            return false;
++        *pval = js_dup(p->prop[prop_offset].u.value);
++        return true;
++    }
++    return false;
++}
++
++static no_inline void js_field_ic_observe(JSContext *ctx,
++                                          JSFunctionBytecode *b,
++                                          const uint8_t *pc,
++                                          JSValueConst obj,
++                                          bool cacheable,
++                                          uint32_t prop_offset)
++{
++    JSRuntime *rt = ctx->rt;
++    JSFieldICFunction *fs;
++    JSFieldICEntry *entry;
++    uint32_t off, shape_id;
++    uint8_t token;
++
++    if (unlikely(b->field_ic_denied || rt->shape_identity_disabled))
++        return;
++    fs = b->field_ic;
++    if (!fs) {
++        if (++b->field_ic_hot_count < JS_FIELD_IC_FUNCTION_HOT)
++            return;
++        fs = js_field_ic_function_new(ctx, b);
++        if (!fs) {
++            b->field_ic_denied = 1;
++            return;
++        }
++    }
++    off = (uint32_t)(pc - b->byte_code_buf);
++    if (unlikely(off >= (uint32_t)b->byte_code_len))
++        return;
++    token = fs->site_map[off];
++    if (token == JS_FIELD_IC_DISABLED)
++        return;
++    if (token < JS_FIELD_IC_SLOT_BASE) {
++        if (token + 1 < JS_FIELD_IC_SITE_HOT) {
++            fs->site_map[off] = token + 1;
++            return;
++        }
++        if (!cacheable || JS_VALUE_GET_TAG(obj) != JS_TAG_OBJECT ||
++            fs->site_count >= JS_FIELD_IC_MAX_SITES) {
++            fs->site_map[off] = JS_FIELD_IC_DISABLED;
++            return;
++        }
++        shape_id = JS_VALUE_GET_OBJ(obj)->shape->shape_identity_id;
++        if (unlikely(shape_id == 0)) {
++            fs->site_map[off] = JS_FIELD_IC_DISABLED;
++            return;
++        }
++        token = JS_FIELD_IC_SLOT_BASE + fs->site_count++;
++        fs->site_map[off] = token;
++        entry = &fs->sites[token - JS_FIELD_IC_SLOT_BASE];
++        entry->shape_id[0] = shape_id;
++        entry->prop_offset[0] = prop_offset;
++        entry->state = JS_FIELD_IC_MONO;
++        rt->field_ic_sites++;
++        rt->field_ic_mono++;
++        return;
++    }
++
++    entry = &fs->sites[token - JS_FIELD_IC_SLOT_BASE];
++    if (!cacheable || JS_VALUE_GET_TAG(obj) != JS_TAG_OBJECT) {
++        if (++entry->miss_streak < JS_FIELD_IC_MAX_MISSES)
++            return;
++        fs->site_map[off] = JS_FIELD_IC_DISABLED;
++        rt->field_ic_megamorphic++;
++        return;
++    }
++    shape_id = JS_VALUE_GET_OBJ(obj)->shape->shape_identity_id;
++    if (shape_id == entry->shape_id[0] &&
++        prop_offset == entry->prop_offset[0]) {
++        entry->miss_streak = 0;
++        return;
++    }
++    if (entry->state == JS_FIELD_IC_POLY2 &&
++        shape_id == entry->shape_id[1] &&
++        prop_offset == entry->prop_offset[1]) {
++        entry->miss_streak = 0;
++        return;
++    }
++    if (entry->state == JS_FIELD_IC_MONO && shape_id != 0) {
++        entry->shape_id[1] = shape_id;
++        entry->prop_offset[1] = prop_offset;
++        entry->state = JS_FIELD_IC_POLY2;
++        entry->miss_streak = 0;
++        rt->field_ic_poly2++;
++        return;
++    }
++    fs->site_map[off] = JS_FIELD_IC_DISABLED;
++    rt->field_ic_megamorphic++;
++}
++
++void JS_GetFieldICReport(JSRuntime *rt, JSFieldICReport *out)
++{
++    memset(out, 0, sizeof(*out));
++    out->current_bytes = JS_FIELD_IC_BUDGET_BYTES -
++                         rt->field_ic_budget_remaining;
++    out->current_sidecars = rt->field_ic_sidecars;
++    out->selected_sites = rt->field_ic_sites;
++    out->mono_sites = rt->field_ic_mono;
++    out->poly2_sites = rt->field_ic_poly2;
++    out->megamorphic_sites = rt->field_ic_megamorphic;
++    out->budget_denials = rt->field_ic_budget_denials;
++}
++
++void JS_FieldICSetShapeCounterForTest(JSRuntime *rt, uint32_t value)
++{
++    rt->shape_identity_id = value;
++    rt->shape_identity_disabled = false;
++}
++#endif
++
+ static void free_var_ref(JSRuntime *rt, JSVarRef *var_ref)
+ {
+     if (var_ref) {
+@@ -11336,8 +11582,8 @@ static int js_shape_prepare_update(JSContext *ctx, JSObject *p,
+             sh->is_hashed = false;
+         }
+     }
+-#ifdef CONFIG_OPCODE_PROFILE
+-    js_profile_shape_assign_id(ctx->rt, sh);
++#if defined(CONFIG_OPCODE_PROFILE) || defined(CONFIG_FIELD_IC)
++    js_shape_assign_identity(ctx->rt, sh);
+ #endif
+     return 0;
+ }
+@@ -19672,6 +19918,11 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                 JSObject *p;
+                 JSProperty *pr;
+                 JSShapeProperty *prs;
++#ifdef CONFIG_FIELD_IC
++                const uint8_t *field_ic_pc = pc - 1;
++                uint32_t field_ic_prop_offset = 0;
++                bool field_ic_cacheable = false;
++#endif
+ #ifdef CONFIG_OPCODE_PROFILE
+                 int prop_profile_class = 4;
+ #endif
+@@ -19680,6 +19931,15 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                 pc += 4;
+ 
+                 obj = sp[-1];
++#ifdef CONFIG_FIELD_IC
++                if (js_field_ic_get(ctx->rt, b, field_ic_pc, obj, &val)) {
++                    p = JS_VALUE_GET_OBJ(obj);
++                    PROFILE_PROP_SITE(ctx, b, field_ic_pc, OP_get_field, 0);
++                    PROFILE_SHAPE_SITE(ctx, b, field_ic_pc,
++                                       OP_get_field, p->shape);
++                    goto get_field_done;
++                }
++#endif
+                 if (likely(JS_VALUE_GET_TAG(obj) == JS_TAG_OBJECT)) {
+                     p = JS_VALUE_GET_OBJ(obj);
+                     for(;;) {
+@@ -19697,6 +19957,13 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                             if (p == JS_VALUE_GET_OBJ(obj))
+                                 PROFILE_SHAPE_SITE(ctx, b, pc - 5,
+                                                    OP_get_field, p->shape);
++#ifdef CONFIG_FIELD_IC
++                            if (p == JS_VALUE_GET_OBJ(obj)) {
++                                field_ic_cacheable = true;
++                                field_ic_prop_offset =
++                                    (uint32_t)(pr - p->prop);
++                            }
++#endif
+                             val = js_dup(pr->u.value);
+                             break;
+                         }
+@@ -19726,6 +19993,12 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+                     if (unlikely(JS_IsException(val)))
+                         goto exception;
+                 }
++#ifdef CONFIG_FIELD_IC
++                js_field_ic_observe(ctx, b, field_ic_pc, sp[-1],
++                                    field_ic_cacheable,
++                                    field_ic_prop_offset);
++            get_field_done:
++#endif
+                 JS_FreeValue(ctx, sp[-1]);
+                 sp[-1] = val;
+             }
+@@ -37070,6 +37343,9 @@ static void free_function_bytecode(JSRuntime *rt, JSFunctionBytecode *b)
+ {
+     int i;
+ 
++#ifdef CONFIG_FIELD_IC
++    js_field_ic_function_free(rt, b);
++#endif
+     if (b->byte_code_buf)
+         free_bytecode_atoms(rt, b->byte_code_buf, b->byte_code_len, true);
+ 
+diff --git a/deps/quickjs/quickjs.h b/deps/quickjs/quickjs.h
+index c1ccb51..2d74c6c 100644
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -508,6 +508,20 @@ JS_EXTERN void JS_FreeRuntime(JSRuntime *rt);
+    quickjs-ng-opcode-profile-v1). Only in the profiling build. */
+ JS_EXTERN void JS_DumpOpcodeProfile(FILE *fp, JSRuntime *rt);
+ #endif
++#ifdef CONFIG_FIELD_IC
++typedef struct JSFieldICReport {
++    uint64_t current_bytes;
++    uint64_t current_sidecars;
++    uint64_t selected_sites;
++    uint64_t mono_sites;
++    uint64_t poly2_sites;
++    uint64_t megamorphic_sites;
++    uint64_t budget_denials;
++} JSFieldICReport;
++JS_EXTERN void JS_GetFieldICReport(JSRuntime *rt, JSFieldICReport *out);
++JS_EXTERN void JS_FieldICSetShapeCounterForTest(JSRuntime *rt,
++                                                uint32_t value);
++#endif
+ JS_EXTERN void *JS_GetRuntimeOpaque(JSRuntime *rt);
+ JS_EXTERN void JS_SetRuntimeOpaque(JSRuntime *rt, void *opaque);
+ JS_EXTERN int JS_AddRuntimeFinalizer(JSRuntime *rt,
+
