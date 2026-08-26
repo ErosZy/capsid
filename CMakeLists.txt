@@ -71,8 +71,6 @@ option(CAPSID_BUILD_FUZZERS "Build the libFuzzer protocol boundary targets" OFF)
 # it, and zero-tax is enforced by the overlay OFF configuration.
 option(CAPSID_ENABLE_OPCODE_PROFILE
     "Build the worker with quickjs-ng opcode profiling counters" OFF)
-option(CAPSID_ENABLE_FIELD_IC
-    "Build the worker with the experimental sparse per-site field IC" OFF)
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY
