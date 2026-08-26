@@ -17,6 +17,7 @@ maintained documentation set.
 | CFG and stack-to-SSA analysis | analyze-only | Useful for proofs and candidate ranking; no lowering today |
 | Exact-site opcode profiling | instrumentation build only | Selection tool, never a production default |
 | Upstream small-block arena (`9de2921`) | rejected | Direct final-binary portfolio regressed significantly despite identical BC26 |
+| Upstream realloc-slack removal (`b16e7bd`) | rejected | BC26 stayed identical, but Classic, Web Tooling, and Hono were all neutral |
 | Field inline cache | removed | Direct patchless comparison regressed fresh receivers |
 | BC27 `get_arg0 + get_field` fusion | removed | Real-framework combined result was significantly negative |
 | ext34 loc-read/array fusion | removed | Targeted wins did not survive enabled-binary product gates |
@@ -134,9 +135,9 @@ move unrelated programs even when their bytecode is identical.
 
 This does not mean interpreter ICs can never win. It means a future IC must:
 
-1. allocate feedback slots per bytecode site at compile time;
-2. encode the slot directly in the operand—no exact-PC lookup or atom-shared
-   ring;
+1. identify feedback slots per bytecode site, never per atom;
+2. keep the BC26 atom operand unchanged and use a direct PC-offset sidecar—no
+   exact-PC hash lookup, bytecode mutation, or atom-shared ring;
 3. make the compiled-OFF runtime byte/layout equivalent to patchless;
 4. prove a direct patchless-to-enabled win on stable and unstable receivers;
 5. remain bounded in memory and preserve canonical serialization and fallback
@@ -187,6 +188,7 @@ in git history.
 | ext34 patchless→enabled net | +1.51%, CI [-2.07%, +5.22%]; Box2D -2.21%, Richards -3.22% | removed |
 | `put_loc*; get_loc* -> set_loc*` | +0.28%, CI [-0.68%, +1.25%]; FFT -0.81% significant | removed |
 | Upstream small-block arena (`9de2921`) | system: -7.01%, across-program CI [-12.84%, -0.79%]; bounded mimalloc/Hono: -0.897%, paired CI [-1.293%, -0.501%] | removed |
+| Upstream realloc-slack removal (`b16e7bd`) | Classic +0.02% [-0.44%, +0.49%]; Web Tooling -0.18% [-1.36%, +1.01%]; Hono paired +0.17% [-2.13%, +2.46%] | removed |
 | Retained set on V8 Web Tooling | -0.49%, across-program interval [-1.34%, +0.37%]; UglifyJS -2.66% significant | keep aggregate; profile combination/layout next |
 
 The field-IC prototype also showed why same-binary OFF/ON is insufficient. The
@@ -227,6 +229,19 @@ portfolio time on a mechanism already significantly negative in the production
 allocator configuration. Decision evidence is stored in
 `bench/results/upstream-arena-20260825/classic/` and
 `bench/results/arena-mimalloc-hono-20260826-v2/`.
+
+The realloc-slack feedback removal from upstream `b16e7bd` was also tested in
+the production allocator configuration. It eliminated the usable-size query
+after QuickJS reallocations without changing opcode definitions or serialized
+bytecode: 59/59 Classic and Web Tooling blobs were byte-identical. The final
+Release+LTO+mimalloc binary was neutral on all three product views: +0.02% on
+eight Classic programs (95% interval [-0.44%, +0.49%]), -0.18% on all 18 Web
+Tooling workloads ([-1.36%, +1.01%]), and +0.17% paired Hono QPS
+([-2.13%, +2.46%]). Darkroom (+0.87%) and JSHint (+5.12%) were individually
+positive, but the pre-registered positive combined interval gate was not met.
+The patch was therefore reverted rather than retained for isolated wins. The
+decision evidence is under
+`bench/results/upstream-drop-realloc-slack-20260826/`.
 
 The corrected ext34 result is equally important: multi-instruction fusion can
 win even when its slow path eventually calls the generic helper. Beat and FFT
@@ -328,17 +343,26 @@ identity as megamorphic. This reuses the invalidation model previously proven
 by the 27-row shape-guard matrix, but remains profiling-only and compiles out
 of production.
 
-The first stable-ID sample is deliberately a selection result, not a keep
-decision:
+The complete stable-ID portfolio is deliberately a selection result, not a
+keep decision. Instrumentation completed 36/41 Classic programs (five
+oversized programs hit the bounded collection timeout), all 18 Web Tooling
+workloads, and all four framework differential workloads:
+
+| Portfolio | completed | Direct own `get_field` share | mono | mono or poly2 |
+|---|---:|---:|---:|---:|
+| Classic | 36/41 | 7.00% | 65.05% | 66.66% |
+| V8 Web Tooling | 18/18 | 2.74% | 51.84% | 61.69% |
+
+Representative programs explain the aggregate:
 
 | Program | Direct own `get_field` / selected-source instructions | mono | mono or poly2 | Top-site concentration |
 |---|---:|---:|---:|---:|
 | Octane Box2D | 21.39% | 94.56% | 99.26% | 0.70% |
 | Web Tooling Babel | 5.13% | 89.73% | 91.19% | 51.40% |
 | Web Tooling Esprima | 4.89% | 8.93% | 8.93% | 6.13% |
-| Hono differential | 0.29% | 21.83% | 53.83% | 7.03% |
+| Hono differential | 0.29% | 20.83% | 53.83% | 7.03% |
 | Elysia differential | 1.80% | 31.92% | 37.62% | 0.88% |
-| H3 v2 differential | 0.11% | 38.50% | 44.23% | 2.71% |
+| H3 v2 differential | 0.11% | 38.27% | 44.23% | 2.71% |
 | itty-router differential | 1.69% | 7.13% | 7.32% | 68.05% |
 
 The data explain the old mixed IC result: Box2D and Babel contain valuable
@@ -346,11 +370,10 @@ stable sites, while Esprima and itty-router are overwhelmingly megamorphic
 under mutation-sound identity. A global always-on observer/cache cannot serve
 both shapes efficiently. Any next IC experiment must therefore be sparse,
 per-PC, allocate only after a hot-site threshold, stop writing after reaching
-MONO/POLY2, and permanently bypass megamorphic sites. A full stable-ID
-portfolio and patchless compiled-OFF gate are required before serving cached
-values. The attempted V8 stable-ID diagnostic exceeded its bounded collection
-window; the existing V8 matched-instruction ceiling (0.687%) remains the
-decision input and no V8 shape-stability claim is made.
+MONO/POLY2, and permanently bypass megamorphic sites. The full selection
+portfolio now clears the gate for an isolated prototype, not for production.
+That prototype must preserve BC26 bytes and first pass a patchless
+compiled-OFF/final-layout gate before serving cached values.
 
 ## 6. Required Validation
 
@@ -442,16 +465,16 @@ the atom-shared IC ring. The next round should proceed in this order:
 1. profile a representative workload portfolio with exact-site attribution;
 2. rank multi-instruction regions by removable runtime work, not frequency
    alone;
-3. implement one guard-free fusion or a compile-time per-site feedback-slot
-   prototype in an isolated build;
+3. implement the selected sparse per-site own-field feedback prototype in an
+   isolated build, with BC26 bytes unchanged;
 4. reject it immediately if compiled-OFF is not patchless-equivalent;
 5. keep it only if the direct final-binary portfolio has no significant
    regression and a positive combined interval.
 
 The current evidence does not select a production optimization yet. It rejects
 the broad `length_lt` fusion on normalized ceiling, retains the framework-only
-unsigned sequence as a local candidate, and reopens only a selective
-MONO/POLY2 own-field IC experiment after the full stable-ID portfolio proves
-enough application-level coverage. That experiment must reuse monotonic shape
-identity and cannot restore the linked atom table, fixed ring, hit-path
-counters, or bytecode mutation used by earlier attempts.
+unsigned sequence as a local candidate, and selects only a sparse MONO/POLY2
+own-field IC for the next isolated experiment. That experiment must reuse
+monotonic shape identity, preserve BC26 serialization, and cannot restore the
+linked atom table, fixed ring, hit-path counters, or bytecode mutation used by
+earlier attempts.

@@ -1,0 +1,62 @@
+{
+  "schema": "capsid-upstream-drop-realloc-slack-decision-v1",
+  "decision": "reject",
+  "upstream_commit": "b16e7bd",
+  "candidate_commit": "990f3a67a1d43cec0b0d3aa3ebd4a6e52be04880",
+  "revert_commit": "8825687",
+  "invariants": {
+    "bytecode_format": "BC26",
+    "full_identity_pairs": 59,
+    "full_identity_mismatches": 0,
+    "release_lto": true,
+    "mimalloc": true
+  },
+  "classic": {
+    "programs": 8,
+    "pairs_per_program": 7,
+    "equal_weight_geomean_gain_pct": 0.02183707458045525,
+    "program_dispersion_ci95_pct": [
+      -0.4398321421981044,
+      0.485647091945296
+    ],
+    "failures": 0
+  },
+  "web_tooling": {
+    "programs": 18,
+    "pairs_per_program": 3,
+    "equal_weight_geomean_gain_pct": -0.18059991707999323,
+    "program_dispersion_ci95_pct": [
+      -1.3610820195762319,
+      1.014009854523401
+    ],
+    "failures": 0
+  },
+  "hono": {
+    "round_pairs": 7,
+    "baseline_mean_qps": 3767.08,
+    "candidate_mean_qps": 3772.40,
+    "mean_of_paired_qps_deltas_pct": 0.16614362869874816,
+    "paired_qps_deltas_pct": [
+      -1.6547828725248626,
+      -1.8569815767320752,
+      1.2951069970707607,
+      5.030356624164312,
+      -0.7606464536969559,
+      -1.6560551570141135,
+      0.7660078396241721
+    ],
+    "paired_t_ci95_pct": [
+      -2.1269572120599087,
+      2.459244469457405
+    ],
+    "paired_bootstrap_ci95_pct": [
+      -1.3008305891965761,
+      2.029483420147173
+    ],
+    "mean_p50_delta_pct": 0.3211739477709728,
+    "errors": 0,
+    "timeouts": 0,
+    "response_mismatches": 0
+  },
+  "reason": "All three final-binary product portfolios are neutral and the pre-registered positive combined interval gate is not met. The isolated upstream microbenchmark gain does not transfer to Capsid's mimalloc worker."
+}

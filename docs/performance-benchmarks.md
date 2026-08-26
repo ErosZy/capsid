@@ -141,6 +141,16 @@ measured rounds completed with zero errors, timeouts, or response mismatches.
 Mimalloc reduced the upstream arena's loss but did not reverse it, so the patch
 was removed while the bounded worker-only mimalloc configuration remains.
 
+Upstream commit `b16e7bd`, which removes QuickJS realloc-slack feedback and its
+`malloc_usable_size` query, was also tested in that production allocator
+configuration. All 59 Classic and Web Tooling bytecode pairs remained
+byte-identical BC26. The clean Release + LTO + mimalloc result was neutral:
+Classic +0.02% (95% across-program interval [-0.44%, +0.49%]), Web Tooling
+-0.18% ([-1.36%, +1.01%]), and paired Hono QPS +0.17% (paired-t interval
+[-2.13%, +2.46%]) with p50 latency 0.32% slower. Correctness completed without
+response errors, timeouts, or mismatches. Because none of the three product
+views met the positive keep gate, the patch was reverted.
+
 ## 4. Current Cold Start
 
 Each cell drops one warmup and reports the median of five runs from process
@@ -311,6 +321,7 @@ has no product value and carries measurable final-layout risk.
 | custom-bytecode removal | `bench/results/no-custom-bytecode-layout-20260825/` | classic `ec980bb6…`; Web Tooling `2564f2f3…` |
 | small-block arena, system allocator | `bench/results/upstream-arena-20260825/classic/` | summary `8b9e6311…` |
 | small-block arena, bounded mimalloc | `bench/results/arena-mimalloc-hono-20260826-v2/` | manifest `4f604ceb…`; samples `a40e61af…` |
+| realloc-slack removal rejection | `bench/results/upstream-drop-realloc-slack-20260826/` | Classic `78744337…`; Web Tooling `0f53bc04…`; Hono `88aa0897…` |
 
 The classic and Web Tooling summary SHA-256 values are `2967f60d…` and
 `bdeb60f9…`, respectively. Every listed checksum file was verified after
