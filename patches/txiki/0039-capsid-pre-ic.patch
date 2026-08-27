@@ -1,5 +1,5 @@
 diff --git a/deps/quickjs/CMakeLists.txt b/deps/quickjs/CMakeLists.txt
-index 066346c..0bc3f16 100644
+index 066346c..3f9cda6 100644
 --- a/deps/quickjs/CMakeLists.txt
 +++ b/deps/quickjs/CMakeLists.txt
 @@ -41,6 +41,12 @@ xoption(QJS_ENABLE_MSAN "Enable MemorySanitizer (MSan)" OFF)
@@ -16,24 +16,23 @@ index 066346c..0bc3f16 100644
  # Used to properly define JS_LIBC_EXTERN.
  add_compile_definitions(QUICKJS_NG_BUILD)
 diff --git a/deps/quickjs/quickjs-opcode.h b/deps/quickjs/quickjs-opcode.h
-index ec2a5ad..50c884c 100644
+index ec2a5ad..f718991 100644
 --- a/deps/quickjs/quickjs-opcode.h
 +++ b/deps/quickjs/quickjs-opcode.h
-@@ -372,6 +372,12 @@ DEF(        is_null, 1, 1, 1, none)
+@@ -372,6 +372,11 @@ DEF(        is_null, 1, 1, 1, none)
  DEF(typeof_is_undefined, 1, 1, 1, none)
  DEF( typeof_is_function, 1, 1, 1, none)
  
 +#ifdef CONFIG_PRE_IC
-+/* In-memory only. Writers canonicalize these back to BC26 get_field{,2}. */
++/* In-memory only. Writers canonicalize this back to BC26 get_field. */
 +DEF( get_field_preic, 5, 1, 1, u32)
-+DEF(get_field2_preic, 5, 1, 2, u32)
 +#endif
 +
  #undef DEF
  #undef def
  #endif  /* DEF */
 diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
-index 7ee1586..5b75225 100644
+index 7ee1586..fcba791 100644
 --- a/deps/quickjs/quickjs.c
 +++ b/deps/quickjs/quickjs.c
 @@ -364,6 +364,17 @@ struct JSRuntime {
@@ -60,7 +59,7 @@ index 7ee1586..5b75225 100644
  
 +#ifdef CONFIG_PRE_IC
 +typedef struct JSPreICSlot {
-+    uintptr_t shape_key;
++    JSShape *shape;
 +    JSAtom atom;
 +    uint32_t prop_offset;
 +} JSPreICSlot;
@@ -119,9 +118,9 @@ index 7ee1586..5b75225 100644
 +static inline void js_pre_ic_install(JSContext *ctx, JSPreICSlot *slot,
 +                                     JSShape *shape, uint32_t prop_offset)
 +{
-+    if (slot->shape_key == 0) {
++    if (slot->shape == NULL && shape->is_hashed && shape->prop_count <= 64) {
 +        slot->prop_offset = prop_offset;
-+        slot->shape_key = (uintptr_t)shape;
++        slot->shape = js_dup_shape(shape);
 +        ctx->rt->pre_ic_installs++;
 +    }
 +}
@@ -130,13 +129,29 @@ index 7ee1586..5b75225 100644
  static void free_var_ref(JSRuntime *rt, JSVarRef *var_ref)
  {
      if (var_ref) {
-@@ -19793,6 +19852,118 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+@@ -7446,6 +7505,16 @@ static void mark_children(JSRuntime *rt, JSGCObjectHeader *gp,
+             }
+             if (b->realm)
+                 mark_func(rt, &b->realm->header);
++#ifdef CONFIG_PRE_IC
++            if (b->pre_ic) {
++                uint32_t j;
++                for (j = 0; j < b->pre_ic->site_count; j++) {
++                    JSShape *sh = b->pre_ic->slots[j].shape;
++                    if (sh)
++                        mark_func(rt, &sh->header);
++                }
++            }
++#endif
+         }
+         break;
+     case JS_GC_OBJ_TYPE_VAR_REF:
+@@ -19793,6 +19862,95 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
              }
              BREAK;
  
 +#ifdef CONFIG_PRE_IC
 +        CASE(OP_get_field_preic):
-+        CASE(OP_get_field2_preic):
 +            {
 +                JSValue val, obj;
 +                JSObject *p, *receiver;
@@ -145,7 +160,6 @@ index 7ee1586..5b75225 100644
 +                JSPreICData *data = b->pre_ic;
 +                uint32_t slot_index = get_u32(pc);
 +                JSPreICSlot *slot;
-+                bool keep_object = opcode == OP_get_field2_preic;
 +#ifdef CONFIG_OPCODE_PROFILE
 +                int prop_profile_class = 4;
 +#endif
@@ -156,28 +170,15 @@ index 7ee1586..5b75225 100644
 +                obj = sp[-1];
 +                if (likely(JS_VALUE_GET_TAG(obj) == JS_TAG_OBJECT)) {
 +                    receiver = p = JS_VALUE_GET_OBJ(obj);
-+                    if (likely(slot->shape_key != 0)) {
-+                        JSShape *shape = p->shape;
-+                        uint32_t offset = slot->prop_offset;
-+                        if (likely((uintptr_t)shape == slot->shape_key) &&
-+                            likely(offset < (uint32_t)shape->prop_count)) {
-+                            prs = &shape->prop[offset];
-+                            if (likely(prs->atom == slot->atom) &&
-+                                likely(!(prs->flags & JS_PROP_TMASK))) {
++                    if (likely(p->shape == slot->shape)) {
 +#ifdef CONFIG_PRE_IC_STATS
-+                                rt->pre_ic_hits++;
++                        rt->pre_ic_hits++;
 +#endif
-+                                PROFILE_PROP_SITE(ctx, b, pc - 5,
-+                                                  keep_object ?
-+                                                  OP_get_field2 :
-+                                                  OP_get_field, 0);
-+                                if (!keep_object)
-+                                    PROFILE_SHAPE_SITE(ctx, b, pc - 5,
-+                                                       OP_get_field, shape);
-+                                val = js_dup(p->prop[offset].u.value);
-+                                goto pre_ic_done;
-+                            }
-+                        }
++                        PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field, 0);
++                        PROFILE_SHAPE_SITE(ctx, b, pc - 5, OP_get_field,
++                                           p->shape);
++                        val = js_dup(p->prop[slot->prop_offset].u.value);
++                        goto pre_ic_get_field_done;
 +                    }
 +#ifdef CONFIG_PRE_IC_STATS
 +                    rt->pre_ic_misses++;
@@ -189,45 +190,40 @@ index 7ee1586..5b75225 100644
 +#ifdef CONFIG_OPCODE_PROFILE
 +                                prop_profile_class = 3;
 +#endif
-+                                goto pre_ic_slow_path;
++                                goto pre_ic_get_field_slow;
 +                            }
-+                            if (p == receiver && slot->shape_key == 0)
++                            if (p == receiver && slot->shape == NULL)
 +                                js_pre_ic_install(ctx, slot, p->shape,
 +                                                  prs - p->shape->prop);
-+                            PROFILE_PROP_SITE(ctx, b, pc - 5,
-+                                              keep_object ? OP_get_field2 :
-+                                              OP_get_field,
++                            PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field,
 +                                              p == receiver ? 0 : 1);
-+                            if (!keep_object && p == receiver)
++                            if (p == receiver)
 +                                PROFILE_SHAPE_SITE(ctx, b, pc - 5,
 +                                                   OP_get_field, p->shape);
 +                            val = js_dup(pr->u.value);
-+                            goto pre_ic_done;
++                            goto pre_ic_get_field_done;
 +                        }
 +                        if (unlikely(p->is_exotic)) {
 +#ifdef CONFIG_OPCODE_PROFILE
 +                            prop_profile_class = 3;
 +#endif
 +                            obj = JS_MKPTR(JS_TAG_OBJECT, p);
-+                            goto pre_ic_slow_path;
++                            goto pre_ic_get_field_slow;
 +                        }
 +                        p = p->shape->proto;
 +                        if (!p) {
-+                            PROFILE_PROP_SITE(ctx, b, pc - 5,
-+                                              keep_object ? OP_get_field2 :
-+                                              OP_get_field, 2);
++                            PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field, 2);
 +                            val = JS_UNDEFINED;
-+                            goto pre_ic_done;
++                            goto pre_ic_get_field_done;
 +                        }
 +                    }
 +                } else {
 +#ifdef CONFIG_PRE_IC_STATS
 +                    rt->pre_ic_misses++;
 +#endif
-+                pre_ic_slow_path:
-+                    PROFILE_PROP_SITE(ctx, b, pc - 5,
-+                                      keep_object ? OP_get_field2 :
-+                                      OP_get_field, prop_profile_class);
++                pre_ic_get_field_slow:
++                    PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field,
++                                      prop_profile_class);
 +                    sf->cur_pc = pc;
 +                    val = JS_GetPropertyInternal(ctx, obj, slot->atom, sp[-1],
 +                                                 false);
@@ -235,21 +231,18 @@ index 7ee1586..5b75225 100644
 +                        goto exception;
 +                }
 +
-+            pre_ic_done:
-+                if (keep_object) {
-+                    *sp++ = val;
-+                } else {
-+                    JS_FreeValue(ctx, sp[-1]);
-+                    sp[-1] = val;
-+                }
++            pre_ic_get_field_done:
++                JS_FreeValue(ctx, sp[-1]);
++                sp[-1] = val;
 +            }
 +            BREAK;
++
 +#endif
 +
          CASE(OP_put_field):
              {
                  int ret;
-@@ -22597,6 +22768,90 @@ static const JSOpCode opcode_info[OP_COUNT + (OP_TEMP_END - OP_TEMP_START)] = {
+@@ -22597,6 +22755,91 @@ static const JSOpCode opcode_info[OP_COUNT + (OP_TEMP_END - OP_TEMP_START)] = {
      opcode_info[(op) >= OP_TEMP_START ? \
                  (op) + (OP_TEMP_END - OP_TEMP_START) : (op)]
  
@@ -277,7 +270,7 @@ index 7ee1586..5b75225 100644
 +        if (unlikely(oi->size == 0 || pos > b->byte_code_len - oi->size))
 +            return;
 +        pos_next = pos + oi->size;
-+        if (op == OP_get_field || op == OP_get_field2)
++        if (op == OP_get_field)
 +            site_count++;
 +    }
 +    if (site_count == 0)
@@ -306,11 +299,10 @@ index 7ee1586..5b75225 100644
 +        op = insn[0];
 +        oi = &short_opcode_info(op);
 +        pos_next = pos + oi->size;
-+        if (op != OP_get_field && op != OP_get_field2)
++        if (op != OP_get_field)
 +            continue;
 +        data->slots[site_index].atom = get_u32(insn + 1);
-+        insn[0] = op == OP_get_field ? OP_get_field_preic
-+                                     : OP_get_field2_preic;
++        insn[0] = OP_get_field_preic;
 +        put_u32(insn + 1, site_index++);
 +    }
 +    assert(site_index == site_count);
@@ -328,6 +320,8 @@ index 7ee1586..5b75225 100644
 +    if (data == NULL)
 +        return;
 +    for (i = 0; i < data->site_count; i++) {
++        if (data->slots[i].shape != NULL)
++            js_free_shape(rt, data->slots[i].shape);
 +        JS_FreeAtomRT(rt, data->slots[i].atom);
 +    }
 +    assert(rt->pre_ic_bytes >= data->alloc_size);
@@ -340,7 +334,7 @@ index 7ee1586..5b75225 100644
  static void json_free_token(JSParseState *s, JSToken *token) {
      // Only free actual allocated values
      switch(token->val) {
-@@ -37046,6 +37301,9 @@ static JSValue js_create_function(JSContext *ctx, JSFunctionDef *fd)
+@@ -37046,6 +37289,9 @@ static JSValue js_create_function(JSContext *ctx, JSFunctionDef *fd)
      b->realm = JS_DupContext(ctx);
  
      add_gc_object(ctx->rt, &b->header, JS_GC_OBJ_TYPE_FUNCTION_BYTECODE);
@@ -350,7 +344,7 @@ index 7ee1586..5b75225 100644
  
  #ifdef ENABLE_DUMPS // JS_DUMP_BYTECODE_FINAL
      if (check_dump_flag(ctx->rt, JS_DUMP_BYTECODE_FINAL))
-@@ -37070,6 +37328,9 @@ static void free_function_bytecode(JSRuntime *rt, JSFunctionBytecode *b)
+@@ -37070,6 +37316,9 @@ static void free_function_bytecode(JSRuntime *rt, JSFunctionBytecode *b)
  {
      int i;
  
@@ -360,18 +354,17 @@ index 7ee1586..5b75225 100644
      if (b->byte_code_buf)
          free_bytecode_atoms(rt, b->byte_code_buf, b->byte_code_len, true);
  
-@@ -38600,6 +38861,18 @@ static int JS_WriteFunctionBytecode(BCWriterState *s,
+@@ -38600,6 +38849,17 @@ static int JS_WriteFunctionBytecode(BCWriterState *s,
      pos = 0;
      while (pos < bc_len) {
          op = bc_buf[pos];
 +#ifdef CONFIG_PRE_IC
-+        if (op == OP_get_field_preic || op == OP_get_field2_preic) {
++        if (op == OP_get_field_preic) {
 +            uint32_t slot_index = get_u32(bc_buf + pos + 1);
 +            if (b->pre_ic == NULL ||
 +                slot_index >= b->pre_ic->site_count)
 +                goto fail;
-+            bc_buf[pos] = op = op == OP_get_field_preic ? OP_get_field
-+                                                        : OP_get_field2;
++            bc_buf[pos] = op = OP_get_field;
 +            put_u32(bc_buf + pos + 1,
 +                    b->pre_ic->slots[slot_index].atom);
 +        }
@@ -379,13 +372,13 @@ index 7ee1586..5b75225 100644
          len = short_opcode_info(op).size;
          switch(short_opcode_info(op).fmt) {
          case OP_FMT_atom:
-@@ -39508,6 +39781,13 @@ static int JS_ReadFunctionBytecode(BCReaderState *s, JSFunctionBytecode *b,
+@@ -39508,6 +39768,13 @@ static int JS_ReadFunctionBytecode(BCReaderState *s, JSFunctionBytecode *b,
      pos = 0;
      while (pos < bc_len) {
          op = bc_buf[pos];
 +#ifdef CONFIG_PRE_IC
 +        /* Pre-IC opcodes are an in-memory representation, never BC26. */
-+        if (op == OP_get_field_preic || op == OP_get_field2_preic) {
++        if (op == OP_get_field_preic) {
 +            JS_ThrowSyntaxError(s->ctx, "invalid bytecode opcode");
 +            return -1;
 +        }
@@ -393,7 +386,7 @@ index 7ee1586..5b75225 100644
          len = short_opcode_info(op).size;
          switch(short_opcode_info(op).fmt) {
          case OP_FMT_atom:
-@@ -39840,6 +40120,9 @@ static JSValue JS_ReadFunctionTag(BCReaderState *s)
+@@ -39840,6 +40107,9 @@ static JSValue JS_ReadFunctionTag(BCReaderState *s)
  
   nodebug:
      b->realm = JS_DupContext(ctx);
@@ -426,3 +419,4 @@ index c1ccb51..dcbf3ac 100644
  JS_EXTERN void *JS_GetRuntimeOpaque(JSRuntime *rt);
  JS_EXTERN void JS_SetRuntimeOpaque(JSRuntime *rt, void *opaque);
  JS_EXTERN int JS_AddRuntimeFinalizer(JSRuntime *rt,
+
