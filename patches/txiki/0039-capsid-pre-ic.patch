@@ -245,7 +245,7 @@ index 7ee1586..fcba791 100644
                  pc += 4;
  
                  obj = sp[-1];
-@@ -19793,6 +19921,96 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+@@ -19793,6 +19921,71 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
              }
              BREAK;
  
@@ -253,15 +253,12 @@ index 7ee1586..fcba791 100644
 +        CASE(OP_get_field_preic):
 +            {
 +                JSValue val, obj;
-+                JSObject *p, *receiver;
++                JSObject *p;
 +                JSProperty *pr;
 +                JSShapeProperty *prs;
 +                JSPreICState *data = rt->pre_ic;
 +                uint32_t slot_index = get_u32(pc);
 +                JSPreICSlot *slot;
-+#ifdef CONFIG_OPCODE_PROFILE
-+                int prop_profile_class = 4;
-+#endif
 +
 +                pc += 4;
 +                assert(data != NULL && slot_index < data->site_count);
@@ -269,7 +266,7 @@ index 7ee1586..fcba791 100644
 +                assert(slot->atom != JS_ATOM_NULL);
 +                obj = sp[-1];
 +                if (likely(JS_VALUE_GET_TAG(obj) == JS_TAG_OBJECT)) {
-+                    receiver = p = JS_VALUE_GET_OBJ(obj);
++                    p = JS_VALUE_GET_OBJ(obj);
 +                    if (likely(p->shape == slot->shape)) {
 +#ifdef CONFIG_PRE_IC_STATS
 +                        data->hits++;
@@ -283,37 +280,17 @@ index 7ee1586..fcba791 100644
 +#ifdef CONFIG_PRE_IC_STATS
 +                    data->misses++;
 +#endif
-+                    for (;;) {
++                    if (likely(!p->is_exotic)) {
 +                        prs = find_own_property(&pr, p, slot->atom);
-+                        if (prs) {
-+                            if (unlikely(prs->flags & JS_PROP_TMASK)) {
-+#ifdef CONFIG_OPCODE_PROFILE
-+                                prop_profile_class = 3;
-+#endif
-+                                goto pre_ic_get_field_slow;
-+                            }
-+                            if (p == receiver && slot->shape == NULL)
++                        if (prs && likely(!(prs->flags & JS_PROP_TMASK))) {
++                            if (slot->shape == NULL)
 +                                js_pre_ic_install(ctx, slot, p->shape,
 +                                                  prs - p->shape->prop);
-+                            PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field,
-+                                              p == receiver ? 0 : 1);
-+                            if (p == receiver)
-+                                PROFILE_SHAPE_SITE(ctx, b, pc - 5,
-+                                                   OP_get_field, p->shape);
++                            PROFILE_PROP_SITE(ctx, b, pc - 5,
++                                              OP_get_field, 0);
++                            PROFILE_SHAPE_SITE(ctx, b, pc - 5,
++                                               OP_get_field, p->shape);
 +                            val = js_dup(pr->u.value);
-+                            goto pre_ic_get_field_done;
-+                        }
-+                        if (unlikely(p->is_exotic)) {
-+#ifdef CONFIG_OPCODE_PROFILE
-+                            prop_profile_class = 3;
-+#endif
-+                            obj = JS_MKPTR(JS_TAG_OBJECT, p);
-+                            goto pre_ic_get_field_slow;
-+                        }
-+                        p = p->shape->proto;
-+                        if (!p) {
-+                            PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field, 2);
-+                            val = JS_UNDEFINED;
 +                            goto pre_ic_get_field_done;
 +                        }
 +                    }
@@ -321,15 +298,13 @@ index 7ee1586..fcba791 100644
 +#ifdef CONFIG_PRE_IC_STATS
 +                    data->misses++;
 +#endif
-+                pre_ic_get_field_slow:
-+                    PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field,
-+                                      prop_profile_class);
-+                    sf->cur_pc = pc;
-+                    val = JS_GetPropertyInternal(ctx, obj, slot->atom, sp[-1],
-+                                                 false);
-+                    if (unlikely(JS_IsException(val)))
-+                        goto exception;
 +                }
++                PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field, 3);
++                sf->cur_pc = pc;
++                val = JS_GetPropertyInternal(ctx, obj, slot->atom, sp[-1],
++                                             false);
++                if (unlikely(JS_IsException(val)))
++                    goto exception;
 +
 +            pre_ic_get_field_done:
 +                JS_FreeValue(ctx, sp[-1]);
