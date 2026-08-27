@@ -315,7 +315,8 @@ public:
     bool sleb128(int32_t* out) {
         uint32_t v;
         if (!leb128(&v)) return false;
-        *out = static_cast<int32_t>((v >> 1) ^ static_cast<uint32_t>(-(v & 1)));
+        *out = static_cast<int32_t>(
+            (v >> 1) ^ static_cast<uint32_t>(-static_cast<int32_t>(v & 1)));
         return true;
     }
     bool skip(size_t n) {
@@ -2158,7 +2159,7 @@ bool apply_dead_store_p16(std::vector<Insn>* insns, std::vector<uint8_t>* dead,
     {
         std::vector<uint8_t> live(var_count, 0);
         for (size_t b = 0; b < nb; b++) {
-            std::fill(live.begin(), live.end(), 0);
+            std::fill(live.begin(), live.end(), uint8_t{0});
             for (size_t s : succ[b]) {
                 const uint8_t* p = &live_in[s * var_count];
                 for (uint32_t k = 0; k < var_count; k++) live[k] |= p[k];
@@ -3322,7 +3323,7 @@ bool decode_pc2line(const uint8_t* p,
             uint32_t sv;
             if (!pc2line_read_leb(p, len, &i, &sv)) return false;
             line_delta = static_cast<int32_t>(
-                (sv >> 1) ^ static_cast<uint32_t>(-(sv & 1)));
+                (sv >> 1) ^ static_cast<uint32_t>(-static_cast<int32_t>(sv & 1)));
         } else {
             uint32_t op = b - PC2LINE_OP_FIRST;
             pc_delta = op / PC2LINE_RANGE;
@@ -3332,7 +3333,7 @@ bool decode_pc2line(const uint8_t* p,
         uint32_t cv;
         if (!pc2line_read_leb(p, len, &i, &cv)) return false;
         int32_t col_delta = static_cast<int32_t>(
-            (cv >> 1) ^ static_cast<uint32_t>(-(cv & 1)));
+            (cv >> 1) ^ static_cast<uint32_t>(-static_cast<int32_t>(cv & 1)));
         pc += pc_delta;
         line += line_delta;
         col += col_delta;
@@ -4693,7 +4694,7 @@ static void tier3_arrayidx(const std::vector<Insn>& insns,
                 // them), everything else converts to a string/symbol
                 // atom, so the class SC_KEY is provable on the stack
                 // (and in a slot if stored). prev (the base) survives.
-                top = (top == SC_INT) ? SC_INT : SC_KEY;
+                top = static_cast<uint8_t>((top == SC_INT) ? SC_INT : SC_KEY);
             } else if (op == OP_get_array_el || op == OP_get_array_el2) {
                 // Pops obj idx (either push order): specializable iff one
                 // operand is provably an array and the other provably an
