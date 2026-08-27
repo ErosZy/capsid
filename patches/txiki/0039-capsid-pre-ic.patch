@@ -19,13 +19,22 @@ diff --git a/deps/quickjs/quickjs-opcode.h b/deps/quickjs/quickjs-opcode.h
 index ec2a5ad..f718991 100644
 --- a/deps/quickjs/quickjs-opcode.h
 +++ b/deps/quickjs/quickjs-opcode.h
+@@ -24,5 +24,8 @@
+ 
+ #ifdef FMT
++#ifdef CONFIG_PRE_IC
++FMT(preic)
++#endif
+ FMT(none)
+ FMT(none_int)
+ FMT(none_loc)
 @@ -372,6 +372,11 @@ DEF(        is_null, 1, 1, 1, none)
  DEF(typeof_is_undefined, 1, 1, 1, none)
  DEF( typeof_is_function, 1, 1, 1, none)
  
 +#ifdef CONFIG_PRE_IC
 +/* In-memory only. Writers canonicalize this back to BC26 get_field. */
-+DEF( get_field_preic, 5, 1, 1, u32)
++DEF( get_field_preic, 5, 1, 1, preic)
 +#endif
 +
  #undef DEF
@@ -415,20 +424,19 @@ index 7ee1586..fcba791 100644
          len = short_opcode_info(op).size;
          switch(short_opcode_info(op).fmt) {
          case OP_FMT_atom:
-@@ -39508,6 +39768,13 @@ static int JS_ReadFunctionBytecode(BCReaderState *s, JSFunctionBytecode *b,
-     pos = 0;
-     while (pos < bc_len) {
-         op = bc_buf[pos];
+@@ -39525,6 +39849,12 @@ static int JS_ReadFunctionBytecode(BCReaderState *s, JSFunctionBytecode *b,
+             }
+             put_u32(bc_buf + pos + 1, atom);
+             break;
 +#ifdef CONFIG_PRE_IC
-+        /* Pre-IC opcodes are an in-memory representation, never BC26. */
-+        if (op == OP_get_field_preic) {
++        case OP_FMT_preic:
++            /* This format exists only after in-memory quickening. */
 +            JS_ThrowSyntaxError(s->ctx, "invalid bytecode opcode");
 +            return -1;
-+        }
 +#endif
-         len = short_opcode_info(op).size;
-         switch(short_opcode_info(op).fmt) {
-         case OP_FMT_atom:
+         default:
+             break;
+         }
 diff --git a/deps/quickjs/quickjs.h b/deps/quickjs/quickjs.h
 index c1ccb51..dcbf3ac 100644
 --- a/deps/quickjs/quickjs.h
