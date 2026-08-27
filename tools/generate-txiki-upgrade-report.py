@@ -17,7 +17,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-EXPECTED_TXIKI_PATCH_COUNT = 46
+EXPECTED_TXIKI_PATCH_COUNT = 40
 REQUIRED_AUDIT_TESTS = {
     "txiki_vendor_patch_integrity",
     "txiki_overlay_audit_negative_controls",
