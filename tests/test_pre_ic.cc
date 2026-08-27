@@ -85,6 +85,11 @@ int main() {
     } else {
         const std::vector<uint8_t> second = write_bytecode(ctx, loaded);
         check("canonical_bc26_roundtrip", first == second);
+        JSPreICStats cold_stats{};
+        JS_GetPreICStats(rt, &cold_stats);
+        check("cold_load_no_sidecar",
+              cold_stats.bytes == initial_stats.bytes &&
+                  cold_stats.selected_sites == initial_stats.selected_sites);
         JSValue result = JS_EvalFunction(ctx, loaded);
         check("semantics", !JS_IsException(result));
         if (JS_IsException(result))
@@ -94,7 +99,8 @@ int main() {
 
     JSPreICStats stats{};
     JS_GetPreICStats(rt, &stats);
-    check("per_site_selection", stats.selected_sites >= 3);
+    check("executed_site_selection",
+          stats.selected_sites >= initial_stats.selected_sites + 2);
     // readA and readB use get_field. callF uses get_field2, which is
     // deliberately outside the first mono pre-IC experiment.
     check("one_time_training", stats.installs >= initial_stats.installs + 2);
