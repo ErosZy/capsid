@@ -2709,7 +2709,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
                 // nested function is invisible here), so every slot
                 // falls back to unknown — folding a get_loc on stale
                 // state would change behavior.
-                std::fill(vals.begin(), vals.end(), kP2Unknown);
+                std::fill(vals.begin(), vals.end(), uint8_t{kP2Unknown});
                 prev = kP2Unknown;
                 top = kP2Unknown;
             } else {
@@ -4158,8 +4158,8 @@ static CapInfo cap_compute(const uint8_t* data, FuncRecord* f) {
         }
     }
     if (info.opaque) {
-        std::fill(info.obj_writes.begin(), info.obj_writes.end(), 1);
-        std::fill(f->cwritable.begin(), f->cwritable.end(), 1);
+        std::fill(info.obj_writes.begin(), info.obj_writes.end(), uint8_t{1});
+        std::fill(f->cwritable.begin(), f->cwritable.end(), uint8_t{1});
     }
     return info;
 }
