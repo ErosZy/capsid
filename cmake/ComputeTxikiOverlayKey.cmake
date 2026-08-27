@@ -196,13 +196,11 @@ function(capsid_compute_txiki_overlay_key)
     # 0038 adds exact-site/source-aware counters and stable shape identities
     #      to CONFIG_OPCODE_PROFILE; production builds compile the entire
     #      profiler out.
-    # 0039 backports quickjs-ng b16e7bd: drop allocation-slack feedback and
-    #      its redundant usable-size query; the BC26 format is unchanged.
     # 0040 backports Bellard's dense Array slice/splice fast paths while
     #      retaining the existing BC26 opcode and serialization contract.
-    if(NOT CTOK_PATCH_COUNT EQUAL 41)
+    if(NOT CTOK_PATCH_COUNT EQUAL 40)
         message(FATAL_ERROR
-            "expected 41 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 40 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

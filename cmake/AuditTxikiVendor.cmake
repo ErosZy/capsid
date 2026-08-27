@@ -160,11 +160,10 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # int/float arithmetic and int-indexed fast-array reads inside the ordinary
 # opcode handlers, without changing the bytecode format; 0038 adds exact-site
 # source-aware counters and stable shape identities to the compile-gated
-# profiler only; 0039 drops upstream's unproductive realloc-slack feedback;
-# 0040 adds BC26-preserving dense Array slice/splice fast paths.
-if(NOT CAPSID_PATCH_COUNT EQUAL 41)
+# profiler only; 0040 adds BC26-preserving dense Array slice/splice fast paths.
+if(NOT CAPSID_PATCH_COUNT EQUAL 40)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 41 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 40 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------
