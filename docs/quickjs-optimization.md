@@ -13,11 +13,13 @@ maintained documentation set.
 | Component | Production state | Reason |
 |---|---|---|
 | BC26 AOT rewriter (`kPassAll`) | enabled | Sound static reductions; positive classic-suite center and neutral library-suite aggregate |
-| Upstream arithmetic/array inline fast paths | enabled | Existing handlers, no bytecode-format change |
+| Upstream arithmetic/array inline fast paths (`0037`) | enabled | Mixed numeric arithmetic and integer-indexed array reads stay in existing handlers; BC26 unchanged |
+| Dense `Array.prototype.slice`/`splice` fast paths (`0040`) | enabled | Dense ordinary arrays use direct storage where semantics permit; BC26 unchanged |
+| Worker-only mimalloc | enabled | QuickJS worker heap uses bounded mimalloc; host/global allocator is unchanged |
 | CFG and stack-to-SSA analysis | analyze-only | Useful for proofs and candidate ranking; no lowering today |
 | Exact-site opcode profiling | instrumentation build only | Selection tool, never a production default |
 | Upstream small-block arena (`9de2921`) | rejected | Direct final-binary portfolio regressed significantly despite identical BC26 |
-| Upstream realloc-slack removal (`b16e7bd`) | rejected | BC26 stayed identical, but Classic, Web Tooling, and Hono were all neutral |
+| Upstream realloc-slack removal (`b16e7bd`) | rejected | Current final-binary re-audit regressed Darkroom 1.37% significantly despite a JSHint gain |
 | Field inline-cache prototypes | rejected | Runtime quickening and BC26-preserving per-site sidecars both caused significant regressions |
 | BC27 `get_arg0 + get_field` fusion | removed | Real-framework combined result was significantly negative |
 | ext34 loc-read/array fusion | removed | Targeted wins did not survive enabled-binary product gates |
@@ -28,7 +30,8 @@ no custom bytecode version, extension opcode, field-IC opcode, reader, handler,
 or feature flag. The opcode profiler remains a separate instrumentation-only
 patch and compiles to byte-identical QuickJS code when disabled.
 
-The retained-set attribution—BC26 `kPassAll` plus mixed-number `mul`—measured
+The retained-set attribution—BC26 `kPassAll` plus the existing interpreter fast
+paths—measured
 **+2.64% equal-weight gain** over eight balanced Kraken/Octane programs, with
 an across-program 95% interval of **[-0.04%, +5.39%]**. The 18-program V8 Web
 Tooling library portfolio measured **-0.49%**, interval **[-1.34%, +0.37%]**:
@@ -37,7 +40,7 @@ significant negative result; UglifyJS was confirmed as an optimizer-combination
 effect, but disable-one tests did not identify a removable pass. This is a
 qualified keep decision, not a promise of a gain for every application or HTTP
 request. The runtime now carries the broader upstream add/sub/mul/div and
-fast-array-read inline patch; the latest final-binary result below isolates the
+fast-array-read and dense-array slice patch; the latest final-binary result below isolates the
 physical deletion of the rejected custom-bytecode mechanisms.
 
 ## 2. What CFG+SSA Can and Cannot Do
@@ -189,7 +192,8 @@ in git history.
 | ext34 patchless→enabled net | +1.51%, CI [-2.07%, +5.22%]; Box2D -2.21%, Richards -3.22% | removed |
 | `put_loc*; get_loc* -> set_loc*` | +0.28%, CI [-0.68%, +1.25%]; FFT -0.81% significant | removed |
 | Upstream small-block arena (`9de2921`) | system: -7.01%, across-program CI [-12.84%, -0.79%]; bounded mimalloc/Hono: -0.897%, paired CI [-1.293%, -0.501%] | removed |
-| Upstream realloc-slack removal (`b16e7bd`) | Classic +0.02% [-0.44%, +0.49%]; Web Tooling -0.18% [-1.36%, +1.01%]; Hono paired +0.17% [-2.13%, +2.46%] | removed |
+| Upstream realloc-slack removal (`b16e7bd`) | Current Release+LTO+mimalloc re-audit: Darkroom -1.37% [-2.27%, -0.46%]; JSHint +1.53% [+1.12%, +1.94%]; BC26 identical | removed |
+| Dense `Array.prototype.slice` fast path | dense-slice micro +724% (256 items), +261% (small); Web Tooling +0.70% aggregate; Hono -0.12% paired, neutral | retained/default |
 | Retained set on V8 Web Tooling | -0.49%, across-program interval [-1.34%, +0.37%]; UglifyJS -2.66% significant | keep aggregate; profile combination/layout next |
 
 The field-IC prototype also showed why same-binary OFF/ON is insufficient. The

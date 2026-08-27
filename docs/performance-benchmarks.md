@@ -38,8 +38,8 @@ idle environment.
 | CPU | AMD Ryzen 3 3300X, 4C/8T |
 | OS | Ubuntu 24.04 on WSL2, kernel 6.6.87.2-microsoft-standard-WSL2 |
 | Memory | 7.9 GiB visible to WSL |
-| Serving/cold-start build | commit `cfeae0b`, version 0.2.1, Release + LTO, clean tree |
-| QuickJS defaults | stock BC26 opcode set; opcode profile OFF |
+| Serving/cold-start build | Release + LTO, clean tree; current branch identity is emitted by the build |
+| QuickJS defaults | BC26 `kPassAll`, interpreter fast paths (`0037`), dense array slice/splice paths (`0040`); profiling and IC experiments OFF |
 | CPU partition | SUT CPUs 0-3; load generator CPUs 4-7 |
 | Service protocol | two workers, c64, 3s warmup + 8s measured, 3 rotated rounds |
 | Hono bundle | Hono 4.12.32, SHA-256 `83ebc6c2…` |
@@ -141,15 +141,22 @@ measured rounds completed with zero errors, timeouts, or response mismatches.
 Mimalloc reduced the upstream arena's loss but did not reverse it, so the patch
 was removed while the bounded worker-only mimalloc configuration remains.
 
-Upstream commit `b16e7bd`, which removes QuickJS realloc-slack feedback and its
-`malloc_usable_size` query, was also tested in that production allocator
-configuration. All 59 Classic and Web Tooling bytecode pairs remained
-byte-identical BC26. The clean Release + LTO + mimalloc result was neutral:
-Classic +0.02% (95% across-program interval [-0.44%, +0.49%]), Web Tooling
--0.18% ([-1.36%, +1.01%]), and paired Hono QPS +0.17% (paired-t interval
-[-2.13%, +2.46%]) with p50 latency 0.32% slower. Correctness completed without
-response errors, timeouts, or mismatches. Because none of the three product
-views met the positive keep gate, the patch was reverted.
+The upstream realloc-slack removal was re-audited against the current final
+binary on 2026-08-27. Bytecode stayed identical. Darkroom regressed 1.37%
+(95% CI [-2.27%, -0.46%]), while JSHint improved 1.53% (95% CI
+[+1.12%, +1.94%]). The target-specific gain did not compensate for the
+significant non-target regression, so the patch remains rejected.
+
+### Current dense-array slice result
+
+Patch `0040` is enabled in the normal QuickJS build and preserves BC26. Its
+dense ordinary-array slice path measured +724% on a 256-element microcase and
++261% on a small dense case. The full 18-workload Web Tooling run measured
++0.70% overall with no workload's confidence interval wholly negative. A
+seven-pair Hono run measured -0.12% paired QPS (CI [-1.53%, +1.30%]), with
+zero correctness failures. This is a targeted API fast path with neutral
+non-target service behavior; it is retained. Splice uses the same BC26-safe
+upstream implementation, but no separate splice speedup claim is made.
 
 ### Current field-IC decision
 
@@ -336,7 +343,6 @@ has no product value and carries measurable final-layout risk.
 | custom-bytecode removal | `bench/results/no-custom-bytecode-layout-20260825/` | classic `ec980bb6…`; Web Tooling `2564f2f3…` |
 | small-block arena, system allocator | `bench/results/upstream-arena-20260825/classic/` | summary `8b9e6311…` |
 | small-block arena, bounded mimalloc | `bench/results/arena-mimalloc-hono-20260826-v2/` | manifest `4f604ceb…`; samples `a40e61af…` |
-| realloc-slack removal rejection | `bench/results/upstream-drop-realloc-slack-20260826/` | Classic `78744337…`; Web Tooling `0f53bc04…`; Hono `88aa0897…` |
 | sparse per-site field IC rejection | `bench/results/per-site-field-ic-rejected-20260826/` | summary `c91752f9…`; manifest `0968151c…`; samples `7ff431a1…` |
 
 The classic and Web Tooling summary SHA-256 values are `2967f60d…` and

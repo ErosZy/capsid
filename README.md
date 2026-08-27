@@ -299,6 +299,13 @@ Full methodology, the 12-workload matrix (1k-32k × json/bytes/stream), per-proc
 resource breakdown, and evidence rules are in
 [performance-benchmarks.md](docs/performance-benchmarks.md).
 
+The default QuickJS optimization set is deliberately BC26-preserving: the
+`kPassAll` AOT rewriter, mixed-number and integer-indexed array interpreter
+fast paths, dense ordinary-array `slice`/`splice` fast paths, worker-only
+bounded mimalloc, and Release LTO. Opcode profiling is measurement-only;
+per-site field IC, `OP_ext`/BC27 fusion, and QuickJS's small-block arena are
+not enabled.
+
 ## Platform Support
 
 - **Linux**: full support. `single-worker` / `static-pool` (multi-shard) /
