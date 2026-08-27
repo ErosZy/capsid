@@ -35,12 +35,17 @@ diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
 index 7ee1586..fcba791 100644
 --- a/deps/quickjs/quickjs.c
 +++ b/deps/quickjs/quickjs.c
-@@ -364,6 +364,18 @@ struct JSRuntime {
+@@ -364,6 +364,23 @@ struct JSRuntime {
      /* opcode profiling counters, see JS_DumpOpcodeProfile; NULL on OOM */
      void *opcode_profile;
  #endif
 +#ifdef CONFIG_PRE_IC
++    struct JSPreICSlot *pre_ic_slots;
 +    size_t pre_ic_bytes;
++    uint32_t pre_ic_slot_count;
++    uint32_t pre_ic_slot_capacity;
++    uint32_t pre_ic_active_slots;
++    uint32_t pre_ic_free_slot; /* free index + 1, zero means none */
 +    uint64_t pre_ic_prepared_functions;
 +    uint64_t pre_ic_selected_sites;
 +    uint64_t pre_ic_installs;
@@ -54,7 +59,7 @@ index 7ee1586..fcba791 100644
  };
  
  struct JSClass {
-@@ -786,6 +798,22 @@ typedef enum JSFunctionKindEnum {
+@@ -786,6 +803,15 @@ typedef enum JSFunctionKindEnum {
      JS_FUNC_ASYNC_GENERATOR = (JS_FUNC_GENERATOR | JS_FUNC_ASYNC),
  } JSFunctionKindEnum;
  
@@ -63,30 +68,25 @@ index 7ee1586..fcba791 100644
 +    JSShape *shape;
 +    JSAtom atom;
 +    uint32_t prop_offset;
++    uint32_t next_free; /* free index + 1, zero means none */
 +} JSPreICSlot;
-+
-+typedef struct JSPreICData {
-+    size_t alloc_size;
-+    uint32_t site_count;
-+    uint32_t site_capacity;
-+    /* A quickened in-memory opcode operand directly indexes this array. */
-+    JSPreICSlot slots[];
-+} JSPreICData;
 +#endif
 +
  typedef struct JSFunctionBytecode {
      JSGCObjectHeader header; /* must come first */
      uint8_t is_strict_mode : 1;
-@@ -825,6 +851,9 @@ typedef struct JSFunctionBytecode {
- #ifdef CONFIG_OPCODE_PROFILE
-     uint32_t opcode_profile_id; /* lazy runtime-local function id */
- #endif
+@@ -801,7 +827,10 @@ typedef struct JSFunctionBytecode {
+     uint8_t super_allowed : 1;
+     uint8_t arguments_allowed : 1;
+     uint8_t backtrace_barrier : 1; /* stop backtrace on this function */
+-    /* XXX: 5 bits available */
 +#ifdef CONFIG_PRE_IC
-+    JSPreICData *pre_ic;
++    uint8_t has_pre_ic : 1;
 +#endif
- } JSFunctionBytecode;
- 
- typedef struct JSBoundFunction {
++    /* XXX: 4 bits available */
+     uint8_t *byte_code_buf; /* (self pointer) */
+     int byte_code_len;
+     JSAtom func_name;
 @@ -2427,6 +2456,24 @@ void JS_SetRuntimeInfo(JSRuntime *rt, const char *s)
          rt->rt_info = s;
  }
@@ -112,7 +112,7 @@ index 7ee1586..fcba791 100644
  void JS_FreeRuntime(JSRuntime *rt)
  {
      struct list_head *el, *el1;
-@@ -7016,6 +7064,78 @@ static inline JSShapeProperty *find_own_property(JSProperty **ppr,
+@@ -7016,6 +7065,85 @@ static inline JSShapeProperty *find_own_property(JSProperty **ppr,
      return NULL;
  }
  
@@ -136,47 +136,51 @@ index 7ee1586..fcba791 100644
 +                                   uint8_t *insn, JSAtom atom)
 +{
 +    JSRuntime *rt = ctx->rt;
-+    JSPreICData *data = b->pre_ic;
++    JSPreICSlot *slots;
 +    uint32_t site_index;
 +
-+    if (unlikely(rt->pre_ic_budget_full))
-+        return;
-+    if (data == NULL || data->site_count == data->site_capacity) {
-+        JSPreICData *new_data;
-+        uint32_t new_capacity = data == NULL ? 1 : data->site_capacity * 2;
-+        size_t slots_size, alloc_size, old_size = 0;
-+
-+        if (unlikely(new_capacity == 0 ||
-+                     (data != NULL &&
-+                      new_capacity <= data->site_capacity)))
-+            goto budget_denied;
-+        slots_size = (size_t)new_capacity * sizeof(data->slots[0]);
-+        if (unlikely(slots_size / sizeof(data->slots[0]) != new_capacity ||
-+                     slots_size > SIZE_MAX - sizeof(*data)))
-+            goto budget_denied;
-+        alloc_size = sizeof(*data) + slots_size;
-+        if (data != NULL)
-+            old_size = data->alloc_size;
-+        if (unlikely(alloc_size - old_size > JS_PRE_IC_RUNTIME_BUDGET ||
-+                     rt->pre_ic_bytes > JS_PRE_IC_RUNTIME_BUDGET -
-+                                            (alloc_size - old_size)))
-+            goto budget_denied;
-+        new_data = js_realloc_rt(rt, data, alloc_size);
-+        if (unlikely(new_data == NULL))
++    if (rt->pre_ic_free_slot != 0) {
++        site_index = rt->pre_ic_free_slot - 1;
++        slots = rt->pre_ic_slots;
++        rt->pre_ic_free_slot = slots[site_index].next_free;
++    } else {
++        if (unlikely(rt->pre_ic_budget_full))
 +            return;
-+        memset((uint8_t *)new_data + old_size, 0, alloc_size - old_size);
-+        new_data->alloc_size = alloc_size;
-+        new_data->site_capacity = new_capacity;
-+        if (data == NULL) {
-+            new_data->site_count = 0;
-+            rt->pre_ic_prepared_functions++;
++        if (rt->pre_ic_slot_count == rt->pre_ic_slot_capacity) {
++            JSPreICSlot *new_slots;
++            uint32_t old_capacity = rt->pre_ic_slot_capacity;
++            uint32_t new_capacity = old_capacity == 0 ? 1 : old_capacity * 2;
++            size_t old_size = (size_t)old_capacity * sizeof(*new_slots);
++            size_t alloc_size;
++
++            if (unlikely(new_capacity <= old_capacity))
++                goto budget_denied;
++            alloc_size = (size_t)new_capacity * sizeof(*new_slots);
++            if (unlikely(alloc_size / sizeof(*new_slots) != new_capacity ||
++                         alloc_size > JS_PRE_IC_RUNTIME_BUDGET))
++                goto budget_denied;
++            new_slots = js_realloc_rt(rt, rt->pre_ic_slots, alloc_size);
++            if (unlikely(new_slots == NULL))
++                return;
++            memset((uint8_t *)new_slots + old_size, 0,
++                   alloc_size - old_size);
++            rt->pre_ic_slots = new_slots;
++            rt->pre_ic_slot_capacity = new_capacity;
++            rt->pre_ic_bytes = alloc_size;
 +        }
-+        b->pre_ic = data = new_data;
-+        rt->pre_ic_bytes += alloc_size - old_size;
++        site_index = rt->pre_ic_slot_count++;
++        slots = rt->pre_ic_slots;
 +    }
 +
-+    site_index = data->site_count++;
-+    data->slots[site_index].atom = atom;
++    slots[site_index].shape = NULL;
++    slots[site_index].atom = atom;
++    slots[site_index].prop_offset = 0;
++    slots[site_index].next_free = 0;
++    rt->pre_ic_active_slots++;
++    if (!b->has_pre_ic) {
++        b->has_pre_ic = true;
++        rt->pre_ic_prepared_functions++;
++    }
 +    insn[0] = OP_get_field_preic;
 +    put_u32(insn + 1, site_index);
 +    rt->pre_ic_selected_sites++;
@@ -186,24 +190,21 @@ index 7ee1586..fcba791 100644
 +    rt->pre_ic_budget_denials++;
 +    rt->pre_ic_budget_full = true;
 +}
++
++static void js_pre_ic_mark(JSRuntime *rt, JSFunctionBytecode *b,
++                           JS_MarkFunc *mark_func);
 +#endif
 +
  static void free_var_ref(JSRuntime *rt, JSVarRef *var_ref)
  {
      if (var_ref) {
-@@ -7446,6 +7505,16 @@ static void mark_children(JSRuntime *rt, JSGCObjectHeader *gp,
+@@ -7446,6 +7574,10 @@ static void mark_children(JSRuntime *rt, JSGCObjectHeader *gp,
              }
              if (b->realm)
                  mark_func(rt, &b->realm->header);
 +#ifdef CONFIG_PRE_IC
-+            if (b->pre_ic) {
-+                uint32_t j;
-+                for (j = 0; j < b->pre_ic->site_count; j++) {
-+                    JSShape *sh = b->pre_ic->slots[j].shape;
-+                    if (sh)
-+                        mark_func(rt, &sh->header);
-+                }
-+            }
++            if (b->has_pre_ic)
++                js_pre_ic_mark(rt, b, mark_func);
 +#endif
          }
          break;
@@ -238,7 +239,6 @@ index 7ee1586..fcba791 100644
 +                JSObject *p, *receiver;
 +                JSProperty *pr;
 +                JSShapeProperty *prs;
-+                JSPreICData *data = b->pre_ic;
 +                uint32_t slot_index = get_u32(pc);
 +                JSPreICSlot *slot;
 +#ifdef CONFIG_OPCODE_PROFILE
@@ -246,8 +246,9 @@ index 7ee1586..fcba791 100644
 +#endif
 +
 +                pc += 4;
-+                assert(data != NULL && slot_index < data->site_count);
-+                slot = &data->slots[slot_index];
++                assert(slot_index < rt->pre_ic_slot_count);
++                slot = &rt->pre_ic_slots[slot_index];
++                assert(slot->atom != JS_ATOM_NULL);
 +                obj = sp[-1];
 +                if (likely(JS_VALUE_GET_TAG(obj) == JS_TAG_OBJECT)) {
 +                    receiver = p = JS_VALUE_GET_OBJ(obj);
@@ -323,28 +324,68 @@ index 7ee1586..fcba791 100644
          CASE(OP_put_field):
              {
                  int ret;
-@@ -22597,6 +22824,27 @@ static const JSOpCode opcode_info[OP_COUNT + (OP_TEMP_END - OP_TEMP_START)] = {
+@@ -22597,6 +22943,67 @@ static const JSOpCode opcode_info[OP_COUNT + (OP_TEMP_END - OP_TEMP_START)] = {
      opcode_info[(op) >= OP_TEMP_START ? \
                  (op) + (OP_TEMP_END - OP_TEMP_START) : (op)]
  
 +#ifdef CONFIG_PRE_IC
++static void js_pre_ic_mark(JSRuntime *rt, JSFunctionBytecode *b,
++                           JS_MarkFunc *mark_func)
++{
++    int pos = 0;
++
++    while (pos < b->byte_code_len) {
++        int op = b->byte_code_buf[pos];
++        if (op == OP_get_field_preic) {
++            uint32_t slot_index = get_u32(b->byte_code_buf + pos + 1);
++            JSPreICSlot *slot;
++            assert(slot_index < rt->pre_ic_slot_count);
++            slot = &rt->pre_ic_slots[slot_index];
++            assert(slot->atom != JS_ATOM_NULL);
++            if (slot->shape != NULL)
++                mark_func(rt, &slot->shape->header);
++        }
++        pos += short_opcode_info(op).size;
++    }
++}
++
 +static void js_pre_ic_free(JSRuntime *rt, JSFunctionBytecode *b)
 +{
-+    JSPreICData *data = b->pre_ic;
-+    uint32_t i;
++    int pos = 0;
 +
-+    if (data == NULL)
++    if (!b->has_pre_ic)
 +        return;
-+    for (i = 0; i < data->site_count; i++) {
-+        if (data->slots[i].shape != NULL)
-+            js_free_shape(rt, data->slots[i].shape);
-+        JS_FreeAtomRT(rt, data->slots[i].atom);
++    while (pos < b->byte_code_len) {
++        int op = b->byte_code_buf[pos];
++        if (op == OP_get_field_preic) {
++            uint32_t slot_index = get_u32(b->byte_code_buf + pos + 1);
++            JSPreICSlot *slot;
++            assert(slot_index < rt->pre_ic_slot_count);
++            slot = &rt->pre_ic_slots[slot_index];
++            assert(slot->atom != JS_ATOM_NULL);
++            if (slot->shape != NULL)
++                js_free_shape(rt, slot->shape);
++            b->byte_code_buf[pos] = OP_get_field;
++            put_u32(b->byte_code_buf + pos + 1, slot->atom);
++            slot->shape = NULL;
++            slot->atom = JS_ATOM_NULL;
++            slot->next_free = rt->pre_ic_free_slot;
++            rt->pre_ic_free_slot = slot_index + 1;
++            assert(rt->pre_ic_active_slots > 0);
++            rt->pre_ic_active_slots--;
++        }
++        pos += short_opcode_info(op).size;
 +    }
-+    assert(rt->pre_ic_bytes >= data->alloc_size);
-+    rt->pre_ic_bytes -= data->alloc_size;
++    b->has_pre_ic = false;
 +    rt->pre_ic_budget_full = false;
-+    js_free_rt(rt, data);
-+    b->pre_ic = NULL;
++    if (rt->pre_ic_active_slots == 0) {
++        js_free_rt(rt, rt->pre_ic_slots);
++        rt->pre_ic_slots = NULL;
++        rt->pre_ic_bytes = 0;
++        rt->pre_ic_slot_count = 0;
++        rt->pre_ic_slot_capacity = 0;
++        rt->pre_ic_free_slot = 0;
++    }
 +}
 +#endif
 +
@@ -368,12 +409,12 @@ index 7ee1586..fcba791 100644
 +#ifdef CONFIG_PRE_IC
 +        if (op == OP_get_field_preic) {
 +            uint32_t slot_index = get_u32(bc_buf + pos + 1);
-+            if (b->pre_ic == NULL ||
-+                slot_index >= b->pre_ic->site_count)
++            JSRuntime *rt = s->ctx->rt;
++            if (slot_index >= rt->pre_ic_slot_count ||
++                rt->pre_ic_slots[slot_index].atom == JS_ATOM_NULL)
 +                goto fail;
 +            bc_buf[pos] = op = OP_get_field;
-+            put_u32(bc_buf + pos + 1,
-+                    b->pre_ic->slots[slot_index].atom);
++            put_u32(bc_buf + pos + 1, rt->pre_ic_slots[slot_index].atom);
 +        }
 +#endif
          len = short_opcode_info(op).size;
