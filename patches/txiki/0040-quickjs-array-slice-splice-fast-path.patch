@@ -184,7 +184,6 @@ index fcba791..c33b22a 100644
 +    ctor = JS_ArraySpeciesGetCtor(ctx, obj);
 +    if (JS_IsException(ctor))
          goto exception;
-+    {
  
 -    k = start;
      final = start + count;
@@ -286,6 +285,7 @@ index fcba791..c33b22a 100644
 +    ctor = JS_ArraySpeciesGetCtor(ctx, obj);
 +    if (JS_IsException(ctor))
          goto exception;
++    {
  
 -    if (splice) {
 -        new_len = len + item_count - del_count;
