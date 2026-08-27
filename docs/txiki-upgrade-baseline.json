@@ -8,8 +8,8 @@
     "commit": "bf8988fc401e737f9946cd10a3463b48aab0fd7e"
   },
   "overlay": {
-    "key": "6cdb56201d346b7ba1001a2d69b406aae7f6fa6014ebff61308056a737a5df54",
-    "manifest": "8f4d798056abd5676a01c935591eca9c126582485a7606934a253e77277e380b"
+    "key": "312d298d8f8f0184179cc171c33384ce9a8054354babb3f558daa472d8c78551",
+    "manifest": "9c7d5bf1904143434f82a334dbb9e6ce8d7ad8010d6f29938cceaeffe94de874"
   },
   "conformance_deviations": {
     "CAPSID-D001": "Accepted profile exclusion",

@@ -154,10 +154,6 @@ if(CAPSID_BUILD_WORKER)
     # compiled code does, so production builds keep it OFF.
     set(CONFIG_OPCODE_PROFILE ${CAPSID_ENABLE_OPCODE_PROFILE}
         CACHE BOOL "" FORCE)
-    set(CONFIG_PRE_IC ${CAPSID_ENABLE_PRE_IC}
-        CACHE BOOL "" FORCE)
-    set(CONFIG_PRE_IC_STATS ${CAPSID_ENABLE_PRE_IC_STATS}
-        CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public
