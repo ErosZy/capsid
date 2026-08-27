@@ -2709,7 +2709,7 @@ bool apply_crossbb(std::vector<Insn>* insns,
                 // nested function is invisible here), so every slot
                 // falls back to unknown — folding a get_loc on stale
                 // state would change behavior.
-                std::fill(vals.begin(), vals.end(), uint8_t{kP2Unknown});
+                std::fill(vals.begin(), vals.end(), kP2Unknown);
                 prev = kP2Unknown;
                 top = kP2Unknown;
             } else {
