@@ -101,12 +101,13 @@ index 7ee1586..fcba791 100644
      uint8_t *byte_code_buf; /* (self pointer) */
      int byte_code_len;
      JSAtom func_name;
-@@ -2427,6 +2458,29 @@ void JS_SetRuntimeInfo(JSRuntime *rt, const char *s)
+@@ -2427,6 +2458,30 @@ void JS_SetRuntimeInfo(JSRuntime *rt, const char *s)
          rt->rt_info = s;
  }
  
 +#ifdef CONFIG_PRE_IC
-+void JS_GetPreICStats(JSRuntime *rt, JSPreICStats *stats)
++__attribute__((cold)) void JS_GetPreICStats(JSRuntime *rt,
++                                             JSPreICStats *stats)
 +{
 +    JSPreICState *data;
 +
@@ -131,11 +132,15 @@ index 7ee1586..fcba791 100644
  void JS_FreeRuntime(JSRuntime *rt)
  {
      struct list_head *el, *el1;
-@@ -7016,6 +7075,92 @@ static inline JSShapeProperty *find_own_property(JSProperty **ppr,
+@@ -7016,6 +7076,126 @@ static inline JSShapeProperty *find_own_property(JSProperty **ppr,
      return NULL;
  }
  
 +#ifdef CONFIG_PRE_IC
++static JSValue JS_GetPropertyInternal(JSContext *ctx, JSValueConst obj,
++                                      JSAtom prop, JSValueConst this_obj,
++                                      bool throw_ref_error);
++
 +static inline void js_pre_ic_install(JSContext *ctx, JSPreICSlot *slot,
 +                                     JSShape *shape, uint32_t prop_offset)
 +{
@@ -151,8 +156,9 @@ index 7ee1586..fcba791 100644
 +/* Quicken only a site that actually executes. The atom ownership moves from
 +   the ordinary bytecode operand into the sidecar slot before the operand is
 +   replaced by its direct slot index. */
-+static void js_pre_ic_quicken_site(JSContext *ctx, JSFunctionBytecode *b,
-+                                   uint8_t *insn, JSAtom atom)
++static no_inline __attribute__((cold))
++void js_pre_ic_quicken_site(JSContext *ctx, JSFunctionBytecode *b,
++                            uint8_t *insn, JSAtom atom)
 +{
 +    JSRuntime *rt = ctx->rt;
 +    JSPreICState *data = rt->pre_ic;
@@ -217,8 +223,37 @@ index 7ee1586..fcba791 100644
 +    data->budget_full = true;
 +}
 +
-+static void js_pre_ic_mark(JSRuntime *rt, JSFunctionBytecode *b,
-+                           JS_MarkFunc *mark_func);
++static no_inline __attribute__((cold))
++JSValue js_pre_ic_get_field_miss(JSContext *ctx, JSStackFrame *sf,
++                                 JSFunctionBytecode *b, uint8_t *pc,
++                                 JSValueConst obj, JSPreICSlot *slot)
++{
++    JSObject *p;
++    JSProperty *pr;
++    JSShapeProperty *prs;
++
++    if (JS_VALUE_GET_TAG(obj) == JS_TAG_OBJECT) {
++        p = JS_VALUE_GET_OBJ(obj);
++        if (!p->is_exotic) {
++            prs = find_own_property(&pr, p, slot->atom);
++            if (prs && !(prs->flags & JS_PROP_TMASK)) {
++                if (slot->shape == NULL)
++                    js_pre_ic_install(ctx, slot, p->shape,
++                                      prs - p->shape->prop);
++                PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field, 0);
++                PROFILE_SHAPE_SITE(ctx, b, pc - 5, OP_get_field, p->shape);
++                return js_dup(pr->u.value);
++            }
++        }
++    }
++    PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field, 3);
++    sf->cur_pc = pc;
++    return JS_GetPropertyInternal(ctx, obj, slot->atom, obj, false);
++}
++
++static no_inline __attribute__((cold))
++void js_pre_ic_mark(JSRuntime *rt, JSFunctionBytecode *b,
++                    JS_MarkFunc *mark_func);
 +#endif
 +
  static void free_var_ref(JSRuntime *rt, JSVarRef *var_ref)
@@ -254,7 +289,7 @@ index 7ee1586..fcba791 100644
                  pc += 4;
  
                  obj = sp[-1];
-@@ -19793,6 +19921,71 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
+@@ -19793,6 +19952,52 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
              }
              BREAK;
  
@@ -263,8 +298,6 @@ index 7ee1586..fcba791 100644
 +            {
 +                JSValue val, obj;
 +                JSObject *p;
-+                JSProperty *pr;
-+                JSShapeProperty *prs;
 +                JSPreICState *data = rt->pre_ic;
 +                uint32_t slot_index = get_u32(pc);
 +                JSPreICSlot *slot;
@@ -289,29 +322,12 @@ index 7ee1586..fcba791 100644
 +#ifdef CONFIG_PRE_IC_STATS
 +                    data->misses++;
 +#endif
-+                    if (likely(!p->is_exotic)) {
-+                        prs = find_own_property(&pr, p, slot->atom);
-+                        if (prs && likely(!(prs->flags & JS_PROP_TMASK))) {
-+                            if (slot->shape == NULL)
-+                                js_pre_ic_install(ctx, slot, p->shape,
-+                                                  prs - p->shape->prop);
-+                            PROFILE_PROP_SITE(ctx, b, pc - 5,
-+                                              OP_get_field, 0);
-+                            PROFILE_SHAPE_SITE(ctx, b, pc - 5,
-+                                               OP_get_field, p->shape);
-+                            val = js_dup(pr->u.value);
-+                            goto pre_ic_get_field_done;
-+                        }
-+                    }
 +                } else {
 +#ifdef CONFIG_PRE_IC_STATS
 +                    data->misses++;
 +#endif
 +                }
-+                PROFILE_PROP_SITE(ctx, b, pc - 5, OP_get_field, 3);
-+                sf->cur_pc = pc;
-+                val = JS_GetPropertyInternal(ctx, obj, slot->atom, sp[-1],
-+                                             false);
++                val = js_pre_ic_get_field_miss(ctx, sf, b, pc, obj, slot);
 +                if (unlikely(JS_IsException(val)))
 +                    goto exception;
 +
@@ -326,13 +342,14 @@ index 7ee1586..fcba791 100644
          CASE(OP_put_field):
              {
                  int ret;
-@@ -22597,6 +23042,68 @@ static const JSOpCode opcode_info[OP_COUNT + (OP_TEMP_END - OP_TEMP_START)] = {
+@@ -22597,6 +23054,70 @@ static const JSOpCode opcode_info[OP_COUNT + (OP_TEMP_END - OP_TEMP_START)] = {
      opcode_info[(op) >= OP_TEMP_START ? \
                  (op) + (OP_TEMP_END - OP_TEMP_START) : (op)]
  
 +#ifdef CONFIG_PRE_IC
-+static void js_pre_ic_mark(JSRuntime *rt, JSFunctionBytecode *b,
-+                           JS_MarkFunc *mark_func)
++static no_inline __attribute__((cold))
++void js_pre_ic_mark(JSRuntime *rt, JSFunctionBytecode *b,
++                    JS_MarkFunc *mark_func)
 +{
 +    JSPreICState *data = rt->pre_ic;
 +    int pos = 0;
@@ -353,7 +370,8 @@ index 7ee1586..fcba791 100644
 +    }
 +}
 +
-+static void js_pre_ic_free(JSRuntime *rt, JSFunctionBytecode *b)
++static no_inline __attribute__((cold))
++void js_pre_ic_free(JSRuntime *rt, JSFunctionBytecode *b)
 +{
 +    JSPreICState *data;
 +    int pos = 0;
