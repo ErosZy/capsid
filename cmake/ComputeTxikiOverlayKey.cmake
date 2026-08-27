@@ -197,9 +197,11 @@ function(capsid_compute_txiki_overlay_key)
     #      to CONFIG_OPCODE_PROFILE; production builds compile the entire
     #      profiler out.
     # 0039 adds the compile-gated per-site pre-IC experiment.
-    if(NOT CTOK_PATCH_COUNT EQUAL 40)
+    # 0040 backports Bellard's dense Array slice/splice fast paths while
+    #      retaining the existing BC26 opcode and serialization contract.
+    if(NOT CTOK_PATCH_COUNT EQUAL 41)
         message(FATAL_ERROR
-            "expected 40 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 41 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

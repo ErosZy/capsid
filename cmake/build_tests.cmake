@@ -5436,6 +5436,29 @@ if(BUILD_TESTING)
         set_tests_properties(
             bytecode_profile_shape_stability PROPERTIES TIMEOUT 30)
 
+        # Bellard's dense Array slice/splice fast paths stay within the
+        # existing BC26 runtime, but directly move ref-counted backing-store
+        # values. Keep the semantic and ownership stress gate enabled for
+        # every worker build, independently of profiling feature flags.
+        add_executable(test-array-fast-paths tests/test_array_fast_paths.cc)
+        target_link_libraries(test-array-fast-paths PRIVATE tjs)
+        set_target_properties(
+            test-array-fast-paths PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-array-fast-paths PRIVATE /W4 /WX)
+            else()
+                target_compile_options(
+                    test-array-fast-paths PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME quickjs_array_fast_paths COMMAND test-array-fast-paths)
+        set_tests_properties(quickjs_array_fast_paths PROPERTIES TIMEOUT 120)
+
         if(CAPSID_ENABLE_OPCODE_PROFILE)
             add_executable(
                 test-opcode-profile
