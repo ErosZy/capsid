@@ -186,21 +186,10 @@ function(capsid_compute_txiki_overlay_key)
     # 0032 keepalive-evicted queued fetch requests fail closed with their
     #      user_space intact; 0033 only pool onto connections whose peer
     #      already proved keepalive; 0034 per-token pending-job probe;
-    # 0035 correct libwebsockets Secure/HttpOnly cookie attribute mapping;
-    # 0036 CONFIG_OPCODE_PROFILE opcode counters (measurement build only;
-    #      compiled out of production builds — zero-tax verified at the
-    #      object and linked-binary level for the OFF configuration).
-    # 0037 backports quickjs-ng 377a25e:
-    #      mixed int/float add/sub/mul/div and int-indexed fast-array reads
-    #      stay inside the ordinary opcode handlers, with no BC format change.
-    # 0038 adds exact-site/source-aware counters and stable shape identities
-    #      to CONFIG_OPCODE_PROFILE; production builds compile the entire
-    #      profiler out.
-    # 0040 backports Bellard's dense Array slice/splice fast paths while
-    #      retaining the existing BC26 opcode and serialization contract.
-    if(NOT CTOK_PATCH_COUNT EQUAL 40)
+    # 0035 correct libwebsockets Secure/HttpOnly cookie attribute mapping.
+    if(NOT CTOK_PATCH_COUNT EQUAL 36)
         message(FATAL_ERROR
-            "expected 40 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 36 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

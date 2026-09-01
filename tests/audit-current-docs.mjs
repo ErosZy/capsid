@@ -149,12 +149,6 @@ for (const requiredFragment of [
   "`strict_sandbox` is off by default",
   "`tjs:*` modules cannot be enabled through configuration",
   "`CAPSID_EVENT_READY.flags` contains the sandbox features required by the deployment",
-  "Current clean samples were captured on 2026-08-25",
-  "Retained BC26 rewrite portfolio",
-  "**+2.64%**",
-  "V8 Web Tooling",
-  "-0.49% (neutral)",
-  "docs/quickjs-optimization.md",
 ]) {
   assert.ok(
     readme.includes(requiredFragment),
@@ -166,12 +160,6 @@ assert.ok(
   !readme.includes("v0.2.0-rc.04"),
   "README.md still points users at a release that did not carry install.sh",
 );
-for (const stalePerformanceFragment of ["2026-08-20", "v0.2.0-rc.07"]) {
-  assert.ok(
-    !readme.includes(stalePerformanceFragment),
-    `README.md contains a superseded performance snapshot: ${stalePerformanceFragment}`,
-  );
-}
 for (const [documentName, content] of [
   ["CONTRIBUTING.md", contributing],
   ["SECURITY.md", securityPolicy],
@@ -242,9 +230,8 @@ for (const [documentName, content, requiredFragments] of [
     "docs/performance-benchmarks.md",
     performanceGuide,
     [
-      "This document contains only the latest maintained performance results.",
-      "144/144",
-      "equal-weight geometric mean",
+      "the first round does not wait for request body, streaming, cancel, or timeout to be implemented",
+      "Once those contracts land, they must be benchmarked on the same runner",
     ],
   ],
   [
@@ -265,23 +252,9 @@ for (const [documentName, content, requiredFragments] of [
   }
 }
 
-for (const stalePerformanceFragment of [
-  "2026-08-20",
-  "Retired Checkpoints",
-  "superseded experiments",
-]) {
-  assert.ok(
-    !performanceGuide.includes(stalePerformanceFragment),
-    `docs/performance-benchmarks.md contains historical results: ${stalePerformanceFragment}`,
-  );
-}
-
 const removedDocuments = [
-  "PERFORMANCE_OPTIMIZATION_HANDOFF.md",
   "docs/host-architecture-plan.md",
   "docs/project-status.md",
-  "docs/quickjs-ng-cfg-ssa-shape-ic.md",
-  "docs/quickjs-ng-opcode-optimization.md",
   "docs/txiki-upgrade-report.md",
   "docs/txiki-upgrade-report.json",
 ];

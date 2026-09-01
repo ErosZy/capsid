@@ -1,26 +1,26 @@
 {
-  "schema_version": 1,
-  "vendor": {
-    "tag": "v26.6.0",
-    "commit": "1a230d31183f062fae7a6c4fd2cff466cecc1787"
-  },
-  "quickjs": {
-    "commit": "bf8988fc401e737f9946cd10a3463b48aab0fd7e"
-  },
-  "overlay": {
-    "key": "3a11a80f5c45df204baca02cf9334d5f715f92029599bdd7b914bd0a546fc50d",
-    "manifest": "28a2e298598fa80df96c9ef64e40285ea7d741afd116407554b9a32340445f2e"
-  },
-  "conformance_deviations": {
-    "CAPSID-D001": "Accepted profile exclusion",
-    "CAPSID-D002": "Accepted profile exclusion",
-    "CAPSID-D003": "Closed implementation gap",
-    "CAPSID-D004": "Closed implementation gap",
-    "CAPSID-D005": "Closed implementation gap",
-    "CAPSID-D006": "Closed implementation gap",
-    "CAPSID-D007": "Accepted profile exclusion",
-    "CAPSID-D008": "Accepted profile exclusion",
-    "CAPSID-D009": "Provisional engine deviation",
-    "CAPSID-D010": "Accepted WPT upstream divergence"
-  }
+ "schema_version": 1,
+ "vendor": {
+  "tag": "v26.6.0",
+  "commit": "1a230d31183f062fae7a6c4fd2cff466cecc1787"
+ },
+ "quickjs": {
+  "commit": "bf8988fc401e737f9946cd10a3463b48aab0fd7e"
+ },
+ "overlay": {
+  "key": "d852a1213a54176bbfdee04ea504e315df9e20bf9c67af903e917ca15e0f692f",
+  "manifest": "e38d9845db864ea031e95b0885982b24077b15117f2b5066fc6dd6ead7b49539"
+ },
+ "conformance_deviations": {
+  "CAPSID-D001": "Accepted profile exclusion",
+  "CAPSID-D002": "Accepted profile exclusion",
+  "CAPSID-D003": "Closed implementation gap",
+  "CAPSID-D004": "Closed implementation gap",
+  "CAPSID-D005": "Closed implementation gap",
+  "CAPSID-D006": "Closed implementation gap",
+  "CAPSID-D007": "Accepted profile exclusion",
+  "CAPSID-D008": "Accepted profile exclusion",
+  "CAPSID-D009": "Provisional engine deviation",
+  "CAPSID-D010": "Accepted WPT upstream divergence"
+ }
 }

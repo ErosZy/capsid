@@ -24,7 +24,7 @@ echo "rounds: $ROUNDS sut_cpuset: $SUT_CPUSET" | tee "$OUT/manifest.txt"
 {
     echo "generated_at: $(date --iso-8601=seconds)"
     echo "commit: $(git rev-parse HEAD)"
-    echo "tag: $(git describe --exact-match --tags HEAD 2>/dev/null || echo untagged)"
+    echo "tag: $(git describe --exact-match --tags HEAD)"
     echo "runner_sha256: $(sha256sum bench/cold-start.sh | cut -d' ' -f1)"
     echo "runner_diff_sha256: $(git diff --no-ext-diff --binary -- bench/cold-start.sh | sha256sum | cut -d' ' -f1)"
     echo "command: OUT=$OUT HOST_BIN=$HOST_BIN WORKER=$WORKER COLD=$COLD COMPILE=$COMPILE APPS=$APPS bash bench/cold-start.sh"

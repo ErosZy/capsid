@@ -78,6 +78,4 @@
 !/bench/results/dual-ab-r2-*/**
 !/bench/results/m1p-gate0-*/
 !/bench/results/m1p-gate0-*/**
-!/bench/results/no-custom-bytecode-layout-20260825/
-!/bench/results/no-custom-bytecode-layout-20260825/**
 /0

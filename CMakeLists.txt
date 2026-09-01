@@ -47,8 +47,7 @@ endif()
 option(CAPSID_BUILD_WORKER "Build the txiki.js worker process" ON)
 option(CAPSID_BUILD_HOST "Build the first-party Capsid Host" OFF)
 option(CAPSID_STRICT_WARNINGS "Treat Capsid Runtime warnings as errors" ON)
-option(CAPSID_USE_MIMALLOC
-    "Use mimalloc only for the txiki.js worker heap (no global override)" ON)
+option(CAPSID_USE_MIMALLOC "Use mimalloc for the txiki.js worker" OFF)
 option(CAPSID_ENABLE_LTO "Enable interprocedural optimization for production targets" ON)
 if(WIN32 AND CAPSID_ENABLE_LTO)
     # MSVC /GL binds operator new/delete at compile time, so replaceable
@@ -65,12 +64,6 @@ option(CAPSID_ENABLE_ASAN "Build all runtime targets with AddressSanitizer" OFF)
 option(CAPSID_ENABLE_UBSAN "Build all runtime targets with UndefinedBehaviorSanitizer" OFF)
 option(CAPSID_ENABLE_TSAN "Build all runtime targets with ThreadSanitizer" OFF)
 option(CAPSID_BUILD_FUZZERS "Build the libFuzzer protocol boundary targets" OFF)
-# A1: quickjs-ng opcode profiling counters (overlay patch 0036). The
-# worker dumps one JSON object per runtime to stderr at teardown. This is
-# a measurement build only — production performance is never measured with
-# it, and zero-tax is enforced by the overlay OFF configuration.
-option(CAPSID_ENABLE_OPCODE_PROFILE
-    "Build the worker with quickjs-ng opcode profiling counters" OFF)
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY
@@ -239,15 +232,7 @@ if(CAPSID_ENABLE_LTO)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT CAPSID_IPO_SUPPORTED OUTPUT CAPSID_IPO_ERROR)
     if(CAPSID_IPO_SUPPORTED)
-        # LTO is a production-target optimization (the flag above is the
-        # documented intent). Debug links non-LTO test objects against the
-        # LTO archive members, and GCC 13 then drops always_inline
-        # libstdc++ ctors from the LTO partitions ("undefined reference to
-        # std::_Vector_base<...>::_Vector_impl_data()"); at -O0 LTO gains
-        # nothing anyway, so Debug builds stay LTO-free.
-        if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-            set_property(TARGET capsid_runtime PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-        endif()
+        set_property(TARGET capsid_runtime PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
     else()
         message(WARNING
             "CAPSID_ENABLE_LTO requested but unsupported: ${CAPSID_IPO_ERROR}")

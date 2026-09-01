@@ -359,55 +359,6 @@ bool wait_ready(capsid_worker *worker, std::string *error) {
     return false;
 }
 
-// STOP is a normal lifecycle edge, not an abort. Waiting for the worker's
-// EXIT also matters to instrumentation builds: their exact-site opcode dump
-// is written during runtime teardown and a short destroy timeout can truncate
-// the final JSON object by a few bytes on large framework bundles.
-bool shutdown_worker(capsid_worker *worker, std::string *error) {
-    const capsid_result requested = capsid_worker_shutdown(worker);
-    if (requested != CAPSID_OK) {
-        *error = std::string("shutdown request: ") +
-            capsid_result_string(requested);
-        return false;
-    }
-    const std::chrono::steady_clock::time_point deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(60);
-    while (std::chrono::steady_clock::now() < deadline) {
-        const capsid_result flush = capsid_worker_flush(worker);
-        if (!acceptable_flush(flush)) {
-            *error = std::string("shutdown flush: ") +
-                capsid_result_string(flush);
-            return false;
-        }
-        for (;;) {
-            capsid_event event = {};
-            event.struct_size = sizeof(event);
-            const capsid_result result =
-                capsid_worker_next_event(worker, &event);
-            if (result == CAPSID_WOULD_BLOCK) {
-                break;
-            }
-            if (result != CAPSID_OK) {
-                *error = std::string("shutdown event: ") +
-                    capsid_result_string(result);
-                return false;
-            }
-            if (event.type == CAPSID_EVENT_EXIT) {
-                return true;
-            }
-            if (event.type == CAPSID_EVENT_ERROR) {
-                error->assign(
-                    reinterpret_cast<const char *>(event.payload.data),
-                    event.payload.size);
-                return false;
-            }
-        }
-        poll_worker(worker, flush);
-    }
-    *error = "worker shutdown timeout";
-    return false;
-}
-
 bool copy_response_headers(const capsid_event &event,
                            std::vector<Header> *headers,
                            std::string *error) {
@@ -1192,7 +1143,6 @@ int main(int argc, char **argv) {
     config.strict_sandbox = 0;
     config.initial_stream_window = 1024;
     config.request_timeout_ms = 5000;
-    bool load_bytecode = false;
 
     capsid_egress_rule loopback_rule;
     capsid_egress_rule_init(&loopback_rule);
@@ -1209,8 +1159,6 @@ int main(int argc, char **argv) {
         const std::string option(argv[index]);
         if (option == "--timeout-ms" && parsed != 0) {
             config.request_timeout_ms = parsed;
-        } else if (option == "--bytecode" && parsed == 1) {
-            load_bytecode = true;
         } else if (option == "--collect-events") {
             collect_events = parsed != 0;
         } else if (
@@ -1239,19 +1187,11 @@ int main(int argc, char **argv) {
             std::string("spawn worker: ") + capsid_result_string(result));
         return 1;
     }
-    if (load_bytecode) {
-        result = capsid_worker_load_trusted_bytecode_named(
-            worker,
-            reinterpret_cast<const uint8_t *>(bundle.data()),
-            bundle.size(),
-            "https://compat.example/framework-reference.js");
-    } else {
-        result = capsid_worker_load_bundle_named(
-            worker,
-            reinterpret_cast<const uint8_t *>(bundle.data()),
-            bundle.size(),
-            "https://compat.example/framework-reference.js");
-    }
+    result = capsid_worker_load_bundle_named(
+        worker,
+        reinterpret_cast<const uint8_t *>(bundle.data()),
+        bundle.size(),
+        "https://compat.example/framework-reference.js");
     if (result != CAPSID_OK) {
         emit_fatal(
             std::string("load framework bundle: ") + capsid_result_string(result));
@@ -1266,20 +1206,10 @@ int main(int argc, char **argv) {
     }
     std::cout << "READY" << std::endl;
 
-    bool worker_exited = false;
     std::string line;
     while (std::getline(std::cin, line)) {
         const std::vector<std::string> fields = split(line);
         if (fields.size() == 1 && fields[0] == "STOP") {
-            // A terminal-continuation cancel intentionally poisons the
-            // worker. run_cancel_continuation has already consumed its EXIT;
-            // shutdown is not a valid second lifecycle transition and races
-            // process reaping differently across allocators/build layouts.
-            if (!worker_exited && !shutdown_worker(worker, &error)) {
-                emit_fatal(error);
-                capsid_worker_destroy(worker);
-                return 1;
-            }
             capsid_worker_destroy(worker);
             return 0;
         }
@@ -1313,7 +1243,6 @@ int main(int argc, char **argv) {
             }
             std::cout << "CANCELED " << parsed_id << std::endl;
             if (exited) {
-                worker_exited = true;
                 std::cout << "EXITED " << parsed_id << std::endl;
             }
             emit_events_block(static_cast<uint64_t>(parsed_id), events);

@@ -1,7 +1,4 @@
-# The bytecode fuzzer must compile against the exact pinned QuickJS opcode
-# schema even when the worker itself is disabled. Preparing the overlay here
-# keeps quickjs-opcode.h single-sourced for the product rewriter.
-if(CAPSID_BUILD_WORKER OR CAPSID_BUILD_FUZZERS)
+if(CAPSID_BUILD_WORKER)
     set(CAPSID_TXIKI_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/vendor-overlay/txiki.js")
     set(CAPSID_OVERLAY_STAMP "${CAPSID_TXIKI_OVERLAY}/.capsid-overlay-key")
 
@@ -117,9 +114,6 @@ if(CAPSID_BUILD_WORKER OR CAPSID_BUILD_FUZZERS)
         ${CAPSID_TXIKI_COPIED_VENDOR_INPUTS}
     )
 
-endif()
-
-if(CAPSID_BUILD_WORKER)
     set(BUILD_WITH_FFI OFF CACHE BOOL "" FORCE)
     # Binding v1 §3.3: tjs:sqlite is a grantable module in the restricted
     # build; its paths stay behind the per-origin FS gate (patch 0018).
@@ -131,15 +125,6 @@ if(CAPSID_BUILD_WORKER)
     # colliding with the worker's address-space limit (std::bad_alloc in
     # static builds) and leaves libuv/libstdc++ on the system malloc.
     set(MI_OVERRIDE OFF CACHE BOOL "" FORCE)
-    # mimalloc 2.x reserves a 1 GiB arena on its first direct mi_* allocation
-    # (and retries with 128 MiB). That is incompatible with Capsid's default
-    # 256 MiB RLIMIT_AS even without the global malloc override: framework
-    # workers then fail nondeterministically before READY. Keep mimalloc's
-    # arena allocator, but use its documented minimum 32 MiB reserve so the
-    # QuickJS-only heap remains inside the process address-space contract.
-    # MI_DEFAULT_ARENA_RESERVE is expressed in KiB.
-    set(MI_EXTRA_CPPDEFS "MI_DEFAULT_ARENA_RESERVE=32768"
-        CACHE STRING "" FORCE)
     set(BUILD_WITH_ASAN OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_UBSAN OFF CACHE BOOL "" FORCE)
     set(BUILD_WITH_WASM ON CACHE BOOL "" FORCE)
@@ -149,11 +134,6 @@ if(CAPSID_BUILD_WORKER)
     set(BUILD_TJS_TEST_LIBS OFF CACHE BOOL "" FORCE)
     set(BUILD_TJS_RESTRICTED_CORE ON CACHE BOOL "" FORCE)
     set(BUILD_TJS_BENCHMARK_SQLITE OFF CACHE BOOL "" FORCE)
-    # A1: forward the profiling option into the quickjs xoption. The
-    # overlay key/manifest do not depend on this cache value — the
-    # compiled code does, so production builds keep it OFF.
-    set(CONFIG_OPCODE_PROFILE ${CAPSID_ENABLE_OPCODE_PROFILE}
-        CACHE BOOL "" FORCE)
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public
@@ -272,15 +252,6 @@ if(CAPSID_BUILD_WORKER)
         capsid-worker PRIVATE
         "CAPSID_RUNTIME_VERSION=\"${PROJECT_VERSION}\""
     )
-    if(CAPSID_ENABLE_OPCODE_PROFILE)
-        # A1: gate the teardown-time profile dump hook in worker_runtime.cc.
-        # The quickjs CONFIG_OPCODE_PROFILE counters are enabled via the
-        # forwarded cache value above; this define enables the capsid-side
-        # observer that calls JS_DumpOpcodeProfile before each
-        # TJS_FreeRuntime.
-        target_compile_definitions(capsid-worker PRIVATE
-            CAPSID_OPCODE_PROFILE=1)
-    endif()
     if(CAPSID_GENERATE_LINK_MAP)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
            CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -347,37 +318,6 @@ if(CAPSID_BUILD_WORKER)
                 -Wall -Wextra -Wpedantic -Werror)
         endif()
     endif()
-    # Bytecode AOT rewriter (docs/bytecode-aot-rewriter.md): pure
-    # capsid-side post-serialization rewrite of the .qjsb buffer. This is
-    # product source consumed by the compiler, tests, benchmarks, and fuzzers;
-    # it never changes the vendored VM or bytecode compatibility identity.
-    add_library(capsid_bytecode_rewriter STATIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/bytecode_rewriter.cc"
-        # I0 bring-up CFG + I1 full-stack SSA (tier-3 plan): analyze-only
-        # until the gates pass on the corpus; the production pipeline
-        # never invokes them, and unmodeled functions stay byte-for-byte
-        # BC26.
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/ir/cfg.cc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/ir/effects.cc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/ir/ssa.cc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/bytecode_rewriter/ir/region.cc")
-    target_include_directories(capsid_bytecode_rewriter
-        PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        PRIVATE
-        "${CAPSID_TXIKI_OVERLAY}/deps/quickjs")
-    set_target_properties(capsid_bytecode_rewriter PROPERTIES
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF)
-    if(CAPSID_STRICT_WARNINGS)
-        if(MSVC)
-            target_compile_options(capsid_bytecode_rewriter PRIVATE /W4 /WX)
-        else()
-            target_compile_options(capsid_bytecode_rewriter PRIVATE
-                -Wall -Wextra -Wpedantic -Werror)
-        endif()
-    endif()
-    target_link_libraries(capsid-bytecode-compile PRIVATE
-        capsid_bytecode_rewriter)
+
     add_dependencies(capsid_runtime capsid-worker)
 endif()

@@ -17,7 +17,6 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const driverPath = args.get('--driver');
 const workerPath = args.get('--worker');
 const bundlePath = args.get('--bundle');
-const runtimeBundlePath = args.get('--runtime-bundle') ?? bundlePath;
 const selectedId = args.get('--id');
 const smoke = args.has('--smoke');
 if (!driverPath || !workerPath || !bundlePath) {
@@ -362,11 +361,8 @@ const upstream = await startUpstream();
 const worker = new FrameworkWorker({
     driverPath,
     workerPath,
-    bundlePath: runtimeBundlePath,
-    flags: [
-        ...(runtimeBundlePath === bundlePath ? [] : [ '--bytecode', '1' ]),
-        '--loopback-port', String(upstream.port),
-    ],
+    bundlePath,
+    flags: [ '--loopback-port', String(upstream.port) ],
 });
 
 let passed = 0;

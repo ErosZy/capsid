@@ -22,6 +22,8 @@ Capsid documentation is organized around selection → integration → configura
 - Host-authored Binding packages and isolated runtimes:
   [binding-technical-design.md](binding-technical-design.md) ·
   [binding-modules.md](binding-modules.md)
+- Binding v1 adversarial audit and TDD remediation plan:
+  [2026-08-16-binding-v1-security-audit-remediation.md](superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md)
 
 **Compatibility and Quality**
 
@@ -29,9 +31,6 @@ Capsid documentation is organized around selection → integration → configura
   [framework-compatibility/README.md](framework-compatibility/README.md)
 - Test gate: [testing.md](testing.md)
 - Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
-- Deployed bytecode rewriter: [bytecode-aot-rewriter.md](bytecode-aot-rewriter.md)
-- QuickJS optimization decisions and next gate:
-  [quickjs-optimization.md](quickjs-optimization.md)
 
 ## Maintenance Rules
 

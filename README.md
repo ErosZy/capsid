@@ -37,12 +37,13 @@ and ambient process APIs. In return, the Host gets a non-blocking C ABI/C++11
 data plane with streaming, credit backpressure, explicit lifecycle control,
 and a capability boundary designed for hostile code.
 
-The implementation is small and measurable. The current clean run reaches
-about **7,042 QPS** on JSON 1 KiB, starts a 10 KiB bundle in **8.43 ms** from
-source or **7.45 ms** from trusted bytecode, and serves from about **6.2 MB
-PSS** for the host plus **6.4 MB** per worker. Claims are backed by pinned WPT,
-framework differentials, sanitizers, fuzzing, privileged sandbox probes, and
-identity-linked performance evidence.
+The implementation is small and measurable: the v0.2.0 release baseline uses
+the conclusion-level samples captured on 2026-08-20 from the final rc.07
+implementation. They reach about **7,261 QPS** on JSON 1 KiB,
+start a 10 KiB bundle in **8.34 ms** source / **7.29 ms** trusted bytecode, and
+serve from about **5.9 MB PSS** (host) plus **6.4 MB** per worker. Claims are
+backed by pinned WPT, framework differentials, sanitizers, fuzzing, privileged
+sandbox probes, and identity-linked performance evidence.
 
 ## Install Prebuilt Release
 
@@ -276,35 +277,24 @@ See [framework compatibility](docs/framework-compatibility/README.md).
 
 ## Performance
 
-Current clean samples were captured on 2026-08-25 (AMD Ryzen 3 3300X 4C/8T,
-Ubuntu 24.04/WSL2, conns=64, three rotated rounds). All 144 correctness checks
-passed, with zero errors or timeouts:
+Conclusion-level v0.2.0 baseline samples (captured from `v0.2.0-rc.07` on
+2026-08-20, AMD Ryzen 3 3300X 4C/8T, Ubuntu 24.04/WSL2,
+conns=64, 3 rounds; correctness checked every round — all 144 rounds OK, capsid
+host/worker perf profiles collected):
 
 | Dimension | Capsid | Comparison |
 | --- | ---: | ---: |
-| JSON 1 KiB throughput | **7,042 QPS** | FastAPI 6,260<br>Flask 5,068<br>Slim 1,872 |
-| JSON 16 KiB throughput | 5,070 QPS | FastAPI **5,520** |
-| Static bytes (1k-32k) | 3,273-5,168 QPS | FastAPI 4,667-5,954 QPS (leads) |
-| Stream 1 KiB throughput | **4,753 QPS** | Flask 4,608<br>FastAPI 2,160 |
-| Serving path memory (host + 2 workers) | **6.2 MB PSS host, 6.4 MB per worker** | Gunicorn worker 23.7 MB PSS<br>Uvicorn worker 42.1 MB PSS |
-| Small bundle cold start (10 KiB) | **8.43 ms** source / **7.45 ms** bytecode | Node 110 ms<br>Deno 39 ms |
-| 1 MB trusted bytecode cold start | **36.23 ms** | Node 137 ms<br>Deno 52 ms |
-| Retained BC26 rewrite portfolio (Kraken/Octane) | **+2.64%** | across-program 95% interval **[-0.04%, +5.39%]** |
-| Retained BC26 rewrite, V8 Web Tooling | -0.49% (neutral) | across-program 95% interval [-1.34%, +0.37%] |
-| Remove custom bytecode/IC, Kraken/Octane | +0.20% (neutral) | across-program 95% interval [-1.45%, +1.88%] |
-| Remove custom bytecode/IC, V8 Web Tooling | **+1.14%** | across-program 95% interval **[+0.80%, +1.48%]** |
-| Worker allocator | bounded mimalloc retained | upstream QuickJS small-block arena rejected: Hono **-0.90%**, 95% CI **[-1.29%, -0.50%]** |
+| JSON 1 KiB throughput | **7,261 QPS** | FastAPI 6,330<br>Flask 5,139<br>Slim 1,894 |
+| JSON 16 KiB throughput | 5,141 QPS | FastAPI **5,520** |
+| Static bytes (1k-32k) | 3,520-5,343 QPS | FastAPI 4,869-6,205 QPS (leads) |
+| Stream 1 KiB throughput | **4,845 QPS** | Flask 4,704<br>FastAPI 2,246 |
+| Serving path memory (host + 2 workers) | **5.9 MB PSS host, 6.4 MB per worker** | gunicorn worker 23.7 MB PSS<br>uvicorn worker 42.0 MB PSS |
+| Small bundle cold start (10 KiB) | **8.34 ms** source / **7.29 ms** bytecode | Node 108 ms<br>Deno 39 ms |
+| 1 MB trusted bytecode cold start | **35.89 ms** | Node 135 ms<br>Deno 52 ms |
 
 Full methodology, the 12-workload matrix (1k-32k × json/bytes/stream), per-process
 resource breakdown, and evidence rules are in
 [performance-benchmarks.md](docs/performance-benchmarks.md).
-
-The default QuickJS optimization set is deliberately BC26-preserving: the
-`kPassAll` AOT rewriter, mixed-number and integer-indexed array interpreter
-fast paths, dense ordinary-array `slice`/`splice` fast paths, worker-only
-bounded mimalloc, and Release LTO. Opcode profiling is measurement-only;
-per-site field IC, `OP_ext`/BC27 fusion, and QuickJS's small-block arena are
-not enabled.
 
 ## Platform Support
 
@@ -338,7 +328,7 @@ The full matrix and build requirements are in
 | Host Bindings | [binding-technical-design.md](docs/binding-technical-design.md) · [binding-modules.md](docs/binding-modules.md) |
 | Security & sandbox | [capability-policy.md](docs/capability-policy.md) · [linux-sandbox.md](docs/linux-sandbox.md) |
 | Compatibility | [conformance.md](docs/conformance.md) · [framework-compatibility/](docs/framework-compatibility/README.md) |
-| Quality & performance | [testing.md](docs/testing.md) · [performance-benchmarks.md](docs/performance-benchmarks.md) · [bytecode-aot-rewriter.md](docs/bytecode-aot-rewriter.md) · [quickjs-optimization.md](docs/quickjs-optimization.md) |
+| Quality & performance | [testing.md](docs/testing.md) · [performance-benchmarks.md](docs/performance-benchmarks.md) |
 | Versioned compatibility plan | [ROADMAP.md](ROADMAP.md) |
 
 The full task index is in [docs/README.md](docs/README.md).

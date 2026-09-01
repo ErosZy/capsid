@@ -22,7 +22,7 @@
 #
 # Usage (script mode):
 #   cmake -DCAPSID_SOURCE_DIR=... -DCAPSID_CMAKE_COMMAND=...
-#        [-DCAPSID_MATRIX_VARIANTS="plain;asan;ubsan;system-allocator;lto-off;quickjs-diff"]
+#        [-DCAPSID_MATRIX_VARIANTS="plain;asan;ubsan;mimalloc;lto-off;quickjs-diff"]
 #        [-DCAPSID_MATRIX_WORK_DIR=...]
 #        -P tests/test_build_identity_matrix.cmake
 
@@ -33,7 +33,7 @@ endif()
 
 if(NOT CAPSID_MATRIX_VARIANTS)
     set(CAPSID_MATRIX_VARIANTS
-        "plain;asan;ubsan;system-allocator;lto-off;quickjs-diff")
+        "plain;asan;ubsan;mimalloc;lto-off;quickjs-diff")
 endif()
 # MSVC has no UBSan/TSan runtime, and LTO is forced off (MSVC /GL binds
 # replaceable operator new/delete); those variants cannot configure or
@@ -92,15 +92,11 @@ function(capsid_matrix_configure variant build_dir)
     if("${variant}" STREQUAL "plain")
         set(extra_flags)
     elseif("${variant}" STREQUAL "asan")
-        set(extra_flags
-            "-DCAPSID_ENABLE_ASAN=ON"
-            "-DCAPSID_USE_MIMALLOC=OFF")
+        set(extra_flags "-DCAPSID_ENABLE_ASAN=ON")
     elseif("${variant}" STREQUAL "ubsan")
-        set(extra_flags
-            "-DCAPSID_ENABLE_UBSAN=ON"
-            "-DCAPSID_USE_MIMALLOC=OFF")
-    elseif("${variant}" STREQUAL "system-allocator")
-        set(extra_flags "-DCAPSID_USE_MIMALLOC=OFF")
+        set(extra_flags "-DCAPSID_ENABLE_UBSAN=ON")
+    elseif("${variant}" STREQUAL "mimalloc")
+        set(extra_flags "-DCAPSID_USE_MIMALLOC=ON")
     elseif("${variant}" STREQUAL "lto-off")
         set(extra_flags "-DCAPSID_ENABLE_LTO=OFF")
     elseif("${variant}" STREQUAL "quickjs-diff")

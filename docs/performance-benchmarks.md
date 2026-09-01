@@ -1,350 +1,148 @@
-# Performance Evidence and Current Results
+# Performance: Evidence Rules and Current State
 
-This document contains only the latest maintained performance results. QuickJS
-experiment decisions are maintained separately in
-[QuickJS Optimization](quickjs-optimization.md).
+This document is the single maintained document for performance topics; it keeps the evidence rules and the current (2026-08-20) conclusion-level samples. The `v0.2.0` stable release adopts these final-RC runs as its published performance baseline. Measurements retain their `v0.2.0-rc.07` labels because that is the exact binary identity used to collect them; the stable release changes only documentation and release metadata. Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, and the superseded 2026-08-18 runs) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
 
 ## 1. Evidence Rules
 
-A product performance conclusion requires all of the following:
+### Conclusion Threshold
 
-- the same hardware, OS, build type, runtime, worker, bundle, and resource limits;
-- the same load generator, connection count, inflight limit, response content,
-  and validation logic;
-- separate warmup and measured phases with at least three interleaved samples;
-- QPS, p50/p95/p99, errors, timeouts, CPU, and memory saved together;
-- separate host and worker profiles when the runtime binary changes;
-- commit, dependency identity, build flags, command, environment, and artifact
-  SHA-256 values;
-- a positive control for exact response content and a negative control proving
-  that error responses are not counted as success.
+To write a performance conclusion into product documentation, all of the following must be present at once:
 
-Full HTTP throughput, single-worker execution, cold start, and memory density
-answer different questions and must not be combined into one percentage.
-Rewritten-bytecode attribution always compares rewritten with raw bytecode;
-source mode also includes parsing and compilation.
+- same hardware, OS, build type, Runtime, worker, bundle, and resource limits;
+- same load generator, connection count, inflight, response content, and validation logic;
+- warm-up and measured phases separated, with at least three interleaved A/B raw samples;
+- QPS, p50/p95/p99, errors, timeouts, cancellation, drain, CPU, and memory saved together;
+- profiles collected separately for gateway and worker to explain which layer time is spent in;
+- record commit, dependency identity, build flags, commands, environment, and result file SHA-256;
+- positive control proves returned content is correct; negative control proves error responses are not counted as success.
 
-Raw samples, correctness verdicts, profiles, manifests, and checksum lists are
-stored together under `bench/results/`. A large microbenchmark gain is a
-mechanism result, not a general request-throughput claim.
+When raw A/B samples or either side's profile are missing, you may report "observed samples", but must not write "optimization works", "improved N%", or adjust default capacity based on it.
 
-## 2. Current Test Environment
+### Measurements That Must Not Be Mixed
 
-All current results were collected on 2026-08-25 after rebooting WSL into an
-idle environment.
+The following data answer different questions, and reports must keep them separate: full HTTP stack total cost; Host A/B; single-worker execution and memory; cold start (process creation, handshake, validation, loading, READY, and first response); density/stability. Full-container RSS/PSS cannot be compared directly with single-worker PSS; source and trusted-bytecode cold start also cannot substitute for warm request throughput testing.
 
-| Item | Current value |
+### Result Storage Format
+
+Each run must save at least the manifest (commit, identity, environment, commands, and file digests), raw samples (not just aggregates), correctness results, both-side profiles, and a report generated only from those files. Automated audit should reject orphaned reports, "improvement" conclusions missing profiles, results not bound to a commit, and changes that submit only summary numbers without raw samples.
+
+### Current Optimization Principles
+
+- find hotspots with profiles first, then write the optimization and matching RED benchmark;
+- do not introduce io_uring, shared-memory IPC, a custom HTTP parser, or complex scheduling for speculative gains;
+- correctness, isolation, and fail-closed contracts cannot be bypassed for QPS;
+- default worker/inflight/queue numbers can only be frozen after a representative workload scan;
+- every performance change runs correctness, sanitizer, fault-injection, and same-condition regression.
+
+The early M1 baseline is only used to freeze the magnitude of the minimal common data plane: the first round does not wait for request body, streaming, cancel, or timeout to be implemented, and cannot be extrapolated into conclusions about the full data plane. Once those contracts land, they must be benchmarked on the same runner, and the new checkpoint must be recorded while keeping rather than overwriting the first-round samples.
+
+## 2. Test Environment (2026-08-20)
+
+The current runs share the following environment:
+
+| Item | Value |
 |---|---|
-| CPU | AMD Ryzen 3 3300X, 4C/8T |
+| CPU | AMD Ryzen 3 3300X (4C/8T) |
 | OS | Ubuntu 24.04 on WSL2, kernel 6.6.87.2-microsoft-standard-WSL2 |
 | Memory | 7.9 GiB visible to WSL |
-| Serving/cold-start build | Release + LTO, clean tree; current branch identity is emitted by the build |
-| QuickJS defaults | BC26 `kPassAll`, interpreter fast paths (`0037`), dense array slice/splice paths (`0040`); profiling and IC experiments OFF |
-| CPU partition | SUT CPUs 0-3; load generator CPUs 4-7 |
-| Service protocol | two workers, c64, 3s warmup + 8s measured, 3 rotated rounds |
-| Hono bundle | Hono 4.12.32, SHA-256 `83ebc6c2…` |
-| Load generator | SHA-256 `58011e51…` |
+| Process protocol | SUT taskset 0-3 / loadgen 4-7; two-process model |
+| Load protocol | conns=64, 12 workloads × 3 rounds (warmup 3s + measured 8s), correctness checked each round; workload order rotates the starting stack to cancel drift |
+| capsid release / commit | `v0.2.0-rc.07` / `17206e4` (clean tree at build time) |
 
-Comparison stacks:
+The stacks under test (versions and artifact SHA-256 values are recorded in `bench/results/four-qps-rc07-clean-20260820T170500/manifest.txt` and `bench/results/cold-start-rc07-clean-20260820T173500/manifest.txt`):
 
-| Stack | Version and mode |
+| Stack | Component and version |
 |---|---|
-| capsid + Hono | static pool, 2 workers, initial stream window 16,384 |
-| PHP + Slim | PHP 8.5.9, Slim 4.15.2, nginx 1.30.4, php-fpm static 2 children |
-| Flask + Gunicorn | Python 3.14.5, Flask 3.1.3, Gunicorn 26.0.0, 2 sync workers |
-| FastAPI + Uvicorn | Python 3.14.5, FastAPI 0.141.1, Uvicorn 0.52.3, uvloop + httptools, 2 workers |
-| Cold-start references | Node 24.18.0 and Deno 2.9.3 |
+| capsid + hono | capsid `v0.2.0-rc.07` (`17206e4`; Release + LTO; host `dd0fa171…`, worker `8950ca6d…`) + Hono 4.12.32 (self-contained bundle `83ebc6c2…`); static-pool 2 workers, `initial-stream-window 16384` |
+| PHP + Slim | PHP 8.5.9 + Slim 4.15.2 + nginx 1.30.4 + php-fpm `pm=static max_children=2` (clean docker container `capsid-php-bench-clean`, port 8080, pinned to CPUs 0-3) |
+| Python + Flask | Python 3.14.5 + Flask 3.1.3 + Gunicorn 26.0.0 (2 sync workers) |
+| Python + FastAPI | Python 3.14.5 + FastAPI 0.141.1 + Uvicorn 0.52.3 (2 workers, uvloop + httptools) |
+| Cold-start extras | Node v24.18.0, Deno 2.9.3 |
 
-## 3. Current Four-Stack Matrix
+Workload matrix: json / bytes / stream at 1k, 4k, 16k, 32k (4k cells use the loadgen `matrix-<kind>-<label>` names; the legacy 1k/16k/32k names are `json`/`json16k`/`json32k` etc.). Payloads are byte-aligned and the loadgen verifies exact content every round: `matrix-bytes` is exact 0x62 bytes, `matrix-stream` 's' bytes, legacy bytes 0x61, legacy stream b/c/d thirds, legacy JSON compact or spaced marker.
 
-The current run completed 12 workloads × 4 stacks × 3 rounds: **144/144
-correctness checks passed**, with zero errors or timeouts. The negative control
-returned 1,402 HTTP 404 responses; all 1,402 were rejected and successful QPS
-was zero.
+## 3. Four-Stack Matrix (2026-08-20, c64, 3 rounds)
 
-Median QPS over three rotated rounds:
+12 workloads × 4 stacks × 3 rounds, warmup 3s + measured 8s, correctness checked every round — **all 144 rounds OK**. The negative control returned HTTP 404 for 1,404/1,404 responses and the correctness verifier rejected every response; the load generator's process exit code alone must not be treated as a correctness verdict. This run meets the conclusion threshold: raw samples, correctness verdicts, per-process resource samples, and capsid host/worker perf profiles are all saved. Raw data: `bench/results/four-qps-rc07-clean-20260820T170500/` (144 samples + 144 correctness files; 349 manifest checksum entries), profiles: `bench/results/four-qps-rc07-clean-profile-20260820T173200/`.
 
-| workload | capsid + Hono | PHP + Slim | Flask + Gunicorn | FastAPI + Uvicorn |
+Median QPS over 3 rounds (winner per row in bold):
+
+| workload | capsid + hono | PHP 8 + Slim | Flask + Gunicorn | FastAPI + Uvicorn |
 |---|---:|---:|---:|---:|
-| JSON 1k | **7042** | 1872 | 5068 | 6260 |
-| JSON 4k | **5601** | 1746 | 4663 | 5504 |
-| JSON 16k | 5070 | 1731 | 4730 | **5520** |
-| JSON 32k | 4077 | 1573 | 4011 | **4617** |
-| bytes 1k | 5168 | 1839 | 4985 | **5954** |
-| bytes 4k | 4714 | 1705 | 4704 | **5665** |
-| bytes 16k | 4214 | 1670 | 4596 | **5401** |
-| bytes 32k | 3273 | 1579 | 4071 | **4667** |
-| stream 1k | **4753** | 1749 | 4608 | 2160 |
-| stream 4k | 4728 | 1748 | **4861** | 3042 |
-| stream 16k | **3830** | 1676 | 3743 | 2131 |
-| stream 32k | 3218 | 1574 | **4180** | 2081 |
+| json 1k | **7261** | 1894 | 5139 | 6330 |
+| matrix-json-4k | 5479 | 1751 | 4631 | **5562** |
+| json 16k | 5141 | 1720 | 4703 | **5520** |
+| json 32k | 4286 | 1628 | 4129 | **4788** |
+| bytes 1k | 5343 | 1901 | 5113 | **6205** |
+| matrix-bytes-4k | 4956 | 1757 | 4877 | **5898** |
+| bytes 16k | 4432 | 1730 | 4729 | **5594** |
+| bytes 32k | 3520 | 1631 | 4159 | **4869** |
+| stream 1k | **4845** | 1793 | 4704 | 2246 |
+| matrix-stream-4k | 4831 | 1763 | **4861** | 3049 |
+| stream 16k | **3961** | 1669 | 3725 | 2149 |
+| stream 32k | 3267 | 1567 | **4165** | 2088 |
 
-Capsid latency from the same samples:
+p50/p95/p99 latency (ms, median over rounds, from the same samples):
 
-| workload | p50 ms | p95 ms | p99 ms |
+| workload | capsid | PHP | Flask | FastAPI |
+|---|---:|---:|---:|---:|
+| json 1k | 8.60 / 11.19 / 12.51 | 33.69 / 35.05 / 36.16 | 12.44 / 13.05 / 13.43 | 10.21 / 13.24 / 15.17 |
+| json 16k | 12.40 / 15.22 / 16.86 | 37.08 / 38.51 / 39.37 | 13.53 / 14.25 / 15.32 | 11.39 / 13.88 / 15.63 |
+| json 32k | 14.72 / 18.25 / 20.48 | 39.26 / 40.51 / 41.29 | 15.39 / 16.32 / 17.58 | 13.18 / 15.89 / 17.75 |
+| bytes 1k | 11.96 / 14.15 / 15.90 | 33.63 / 34.66 / 35.31 | 12.48 / 13.19 / 13.87 | 10.09 / 12.63 / 14.46 |
+| bytes 32k | 18.42 / 23.70 / 25.34 | 39.17 / 40.41 / 41.09 | 15.29 / 16.19 / 18.28 | 12.96 / 16.10 / 18.10 |
+| stream 1k | 13.03 / 16.03 / 18.27 | 35.46 / 37.29 / 38.54 | 13.57 / 14.25 / 14.63 | 28.18 / 33.01 / 36.98 |
+| stream 16k | 16.73 / 21.05 / 23.07 | 38.16 / 40.20 / 41.53 | 17.10 / 17.97 / 19.44 | 29.44 / 34.31 / 37.95 |
+| stream 32k | 19.54 / 23.91 / 26.06 | 40.69 / 42.01 / 43.17 | 15.31 / 16.11 / 17.47 | 30.25 / 35.62 / 39.35 |
+
+Per-process resources (median over the 5s sampling window; PSS from `smaps_rollup`, RSS from `statm`; PSS is `n/a` where the sampler (non-root) cannot read another user's `smaps_rollup` — nginx/php-fpm run as root in the container. CPU is the max window-average % of one core observed for any process of the role):
+
+| role | PSS (MB) | RSS (MB) | CPU max observed |
 |---|---:|---:|---:|
-| JSON 1k | 8.82 | 11.38 | 13.30 |
-| JSON 4k | 11.01 | 14.02 | 16.20 |
-| JSON 16k | 12.71 | 16.31 | 17.90 |
-| JSON 32k | 15.53 | 19.56 | 22.00 |
-| bytes 1k | 12.43 | 14.99 | 17.17 |
-| bytes 4k | 13.38 | 16.32 | 18.23 |
-| bytes 16k | 15.03 | 18.40 | 20.27 |
-| bytes 32k | 19.45 | 22.87 | 25.87 |
-| stream 1k | 13.38 | 16.84 | 18.82 |
-| stream 4k | 13.40 | 16.28 | 18.12 |
-| stream 16k | 18.05 | 22.56 | 24.87 |
-| stream 32k | 20.57 | 26.65 | 28.92 |
+| capsid host (static-pool) | 5.9 | 7.6 | 105% |
+| capsid worker (each of 2) | 6.4 | 9.8 | 91% |
+| gunicorn worker (each of 2) | 23.7 | 32.7 | 94% |
+| uvicorn worker (each of 2) | 42.0 | 51.5 | 110% |
+| nginx (container, root) | n/a | 6.1 | 25% |
+| php-fpm child (each of 2, root) | n/a | 14.6 | 96% |
 
-Current per-process resources:
+capsid's full serving path (host + 2 workers) stays at ≈5.9 MB PSS for the host plus ≈6.4 MB per worker (≈18.7 MB total); a gunicorn sync worker alone uses 23.7 MB PSS, and a uvicorn worker 42.0 MB PSS. Resource sampling is scoped to each launched process tree, so unrelated host processes are not included.
 
-| role | PSS MB | RSS MB | maximum observed CPU |
-|---|---:|---:|---:|
-| capsid host | 6.2 | 7.7 | 104% |
-| capsid worker, each of 2 | 6.4 | 9.7 | 95% |
-| Gunicorn worker, each of 2 | 23.7 | 32.7 | 94% |
-| Uvicorn worker, each of 2 | 42.1 | 51.8 | 110% |
-| nginx | unavailable | 6.2 | 25% |
-| php-fpm child, each of 2 | unavailable | 14.6 | 95% |
+### Profiles (capsid host and worker, json16k, 30s, `perf record -F 99`)
 
-The full Capsid serving path is about 19.0 MB PSS: 6.2 MB for the host plus
-6.4 MB per worker. No IC sidecar state or custom-opcode runtime is compiled.
+`bench/results/four-qps-rc07-clean-profile-20260820T173200/` — perf data + full `perf report` text + correctness (163,654 responses checked, 0 mismatches, errors, or timeouts during the profile session). Only capsid is profiled: it is the stack under test; the PHP/Flask/FastAPI stacks serve as comparison references and are not profiled.
 
-### Current profile
+capsid **host** (873 samples): 5.84% `memcpy`, 5.73% `__libc_malloc_impl`, 3.32% `get_meta`, 2.86% `normalize_public_request`, and 2.86% `alloc_slot` — the host's share is dominated by request/response buffer handling, metadata lookup, and allocation on the scheduling path.
 
-A 30-second JSON 16k profile validated 163,203 responses with no mismatch,
-error, timeout, or lost perf sample.
+capsid **worker** (3,711 samples): 21.18% `JS_CallInternal` (QuickJS entry into the Hono handler), 9.59% `malloc_usable_size`, 6.58% `__libc_malloc_impl`, 6.20% `lre_exec_backtrack` (regexp execution), and 3.96% `free` — the worker's time is dominated by JS handler execution and allocation in the application/framework path.
 
-| process | leading symbols |
-|---|---|
-| host, 831 samples | `memcpy` 7.22%, allocator 6.02%, `get_meta` 3.01% |
-| workers, 3,694 samples | `JS_CallInternal` 20.36%, `malloc_usable_size` 10.42%, malloc 6.74%, regexp backtracking 5.44%, `JS_GetPropertyInternal` 3.68% |
+### Reading the matrix
 
-The source-Hono path remains dominated by JS calls, allocation, and framework
-regexp work. This matrix loads source and therefore does not measure BC26 AOT
-attribution.
+- **Small JSON: capsid wins at 1k** (7,261 vs fastapi 6,330 vs flask 5,139 vs php 1,894); FastAPI narrowly wins 4k (5,562 vs capsid 5,479). PHP is the consistent laggard at ~1.6-1.9k QPS with p95 ≈35-42 ms.
+- **Static medium payloads: FastAPI (uvloop + httptools + precomputed bodies) leads** on json16k/32k and all bytes cells. Capsid remains ahead of Flask on every JSON cell and on bytes 1k/4k, while Flask leads capsid on bytes 16k/32k.
+- **Streaming: FastAPI's response path is the outlier.** Its `StreamingResponse` reaches 2,246 QPS at 1k versus 6,205 for static bytes and trails capsid by 2.16× at stream 1k and 1.84× at stream 16k. Flask's plain generator + WSGI holds up better and wins stream 4k/32k. Capsid streams at 89-98% of its corresponding static-bytes throughput.
+- **Payload scaling varies by stack and response path**: from 1k to 32k, capsid JSON loses 41%, FastAPI JSON 24%, and PHP JSON 14%; capsid bytes and stream both lose about one third. Baseline and response construction therefore matter alongside payload size.
+- **Density**: capsid's full host + 2-worker serving path is ≈18.7 MB PSS; one gunicorn worker is 23.7 MB PSS and one uvicorn worker is 42.0 MB PSS. Container-owned php-fpm PSS is unavailable, so its 14.6 MB child RSS is reported without treating it as directly comparable to PSS.
 
-### Current allocator decision
+Across all 12 cells, geometric-mean QPS moved from the retired 2026-08-18 AMD checkpoint to this run by +1.40% for capsid, +3.98% for PHP, +1.22% for Flask, and +0.06% for FastAPI. Because every stack and the clean-run setup moved together, this supports **no observed capsid throughput regression**; it is not evidence that a specific capsid change caused an improvement.
 
-The worker keeps txiki's explicit mimalloc integration with the initial arena
-reserve bounded to 32 MiB. The separate quickjs-ng small-block arena from
-upstream commit `9de2921` is not enabled. A clean Release + LTO comparison with
-the system allocator regressed the eight-program Kraken/Octane portfolio by
-7.01%, with an across-program 95% interval of [-12.84%, -0.79%].
+## 4. Cold-Start Comparison (2026-08-20, median ms, 5 rounds)
 
-The production interaction was measured separately on 2026-08-26. Both workers
-used mimalloc 3.2.7 with the 32 MiB reserve bound and differed only by the
-small-block arena patch and overlay identity. Across seven interleaved Hono
-`/fixed` pairs, enabling the arena reduced QPS by 0.897%, with a paired 95%
-interval of [-1.293%, -0.501%], and increased p50 latency by 1.285%. All 14
-measured rounds completed with zero errors, timeouts, or response mismatches.
-Mimalloc reduced the upstream arena's loss but did not reverse it, so the patch
-was removed while the bounded worker-only mimalloc configuration remains.
+Measurement class 4 (process creation, handshake, validation, loading, READY, and first response). Fixture is real-shaped JS source (three template rotations: loop + object-literal function, class, arrow/map/filter/sort chain), at 10k/100k/1M sizes; each side loads the same function body byte-aligned, differing only in entry point. capsid uses C ABI spawn→load (source/trusted bytecode)→READY→first response (bodyless IPC request); Node/Deno use process start→stdout READY→curl first request. Each cell drops 1 warmup round and takes the median of 5 rounds. Capsid was rebuilt from `v0.2.0-rc.07` / `17206e4`; raw data and 20 manifest checksum entries are in `bench/results/cold-start-rc07-clean-20260820T173500/`.
 
-The upstream realloc-slack removal was re-audited against the current final
-binary on 2026-08-27. Bytecode stayed identical. Darkroom regressed 1.37%
-(95% CI [-2.27%, -0.46%]), while JSHint improved 1.53% (95% CI
-[+1.12%, +1.94%]). The target-specific gain did not compensate for the
-significant non-target regression, so the patch remains rejected.
-
-### Current dense-array slice result
-
-Patch `0040` is enabled in the normal QuickJS build and preserves BC26. Its
-dense ordinary-array slice path measured +724% on a 256-element microcase and
-+261% on a small dense case. The full 18-workload Web Tooling run measured
-+0.70% overall with no workload's confidence interval wholly negative. A
-seven-pair Hono run measured -0.12% paired QPS (CI [-1.53%, +1.30%]), with
-zero correctness failures. This is a targeted API fast path with neutral
-non-target service behavior; it is retained. Splice uses the same BC26-safe
-upstream implementation, but no separate splice speedup claim is made.
-
-### Current field-IC decision
-
-The BC26-preserving sparse per-site prototype was stopped after the initial
-three-pair Classic gate. It kept operands and serialization unchanged, did not
-mutate runtime bytecode, used exact-PC lazy MONO/POLY2 sidecars, and had a
-byte-identical compiled-OFF QuickJS object and CLI. Correctness, profile+IC,
-overlay, ASan, and UBSan gates passed, and all eight A/B blobs were identical.
-The final Release + LTO runtime nevertheless measured -1.11% across the eight
-programs (95% across-program interval [-5.03%, +2.97%]). Box2D regressed
-11.19% ([-12.60%, -9.75%]) in three consistently negative pairs, and
-Oscillator regressed 1.40% ([-2.12%, -0.68%]). The positive Navier-Stokes
-(+3.20%) and Darkroom (+2.47%) centers cannot offset a significant product
-regression, so the candidate was reverted without spending time on seven-pair,
-Web Tooling, or Hono gates.
-
-## 4. Current Cold Start
-
-Each cell drops one warmup and reports the median of five runs from process
-creation through READY and the first validated response.
-
-| source size | capsid source | capsid trusted bytecode | Node source | Deno source |
+| Size | capsid source | capsid trusted bytecode | Node 24.18 source | Deno 2.9.3 source |
 |---:|---:|---:|---:|---:|
-| 10k | **8.43 ms** | **7.45 ms** | 110 ms | 39 ms |
-| 100k | 18.35 ms | **9.58 ms** | 109 ms | 39 ms |
-| 1M | 133.63 ms | **36.23 ms** | 137 ms | 52 ms |
+| 10k | **8.34** | **7.29** | 108 | 39 |
+| 100k | **18.24** | **9.68** | 108 | 39 |
+| 1M | **134.09** | **35.89** | 135 | 52 |
 
-At 1M, trusted bytecode is 3.69× faster than Capsid source and 1.44× faster
-than Deno source. Capsid's request uses its in-process worker protocol; Node and
-Deno use local HTTP, so this is aligned lifecycle evidence rather than an
-isomorphic request-path comparison.
+READY times (same samples): capsid source 8.00/17.85/133.71, bytecode 6.91/9.27/35.55, Node 96/97/123, Deno 31/31/44.
 
-## 5. Current BC26 Rewrite Results
+- **Startup baseline dominates small sizes**: capsid 10k source at 8.34 ms is about 13× faster than Node (108 ms) and 4.7× faster than Deno (39 ms), and it remains fastest at 100k (18.24 vs 108/39 ms).
+- **Trusted bytecode pays off as compile cost grows**: at 1M, bytecode at 35.89 ms is 3.74× faster than capsid source, 3.76× faster than Node, and 31% faster than Deno. Node's ~108 ms small-bundle floor is process + V8 bootstrap; Deno's ~39 ms floor is smaller, but capsid bytecode beats it at every measured size.
+- **At 1M source capsid and Node are effectively tied in these medians** (134.09 vs 135 ms), while Deno remains faster at 52 ms. Trusted bytecode erases that source-compilation gap.
+- Semantic note: capsid first response goes through in-process IPC, while Node/Deno use local HTTP curl; "first request completes after ready" is aligned, but the request path implementation differs, so this is not an isomorphic comparison.
 
-The implementation and soundness contract are in
-[Bytecode AOT Rewriter](bytecode-aot-rewriter.md). The current clean run
-compares rewritten BC26 directly with raw BC26, using one discarded warmup and
-five measured executions per mode.
+## 5. Retired Checkpoints
 
-| fixture | raw median | rewritten median | gain |
-|---|---:|---:|---:|
-| arith-rt | 172.659 ms | 13.659 ms | **+92.09%** |
-| cascade-rt | 68.192 ms | 37.246 ms | **+45.38%** |
-| matrix-rt | 7.639 ms | 7.396 ms | +3.18% |
-| sieve-rt | 49.625 ms | 48.650 ms | +1.96% |
-| string-rt | 2.016 ms | 2.028 ms | -0.60% |
-| fib-rt | 50.246 ms | 50.192 ms | +0.11% |
-| json-rt | 4.118 ms | 4.028 ms | +2.19% |
-| prop-loop-rt | 94.985 ms | 79.122 ms | **+16.70%** |
-| prop-hoist-rt | 13.012 ms | 9.965 ms | **+23.42%** |
-| copy-chain-rt | 14.857 ms | 11.952 ms | **+19.55%** |
-| branch-const-rt | 13.491 ms | 13.429 ms | +0.46% |
-| cse-loop-rt | 19.149 ms | 18.571 ms | +3.02% |
-| licm-rt | 8.157 ms | 8.304 ms | -1.80% |
-
-Eleven of thirteen centers are positive. The equal-fixture geometric-mean
-speedup is +25.89%, but the aggregate is dominated by synthetic arith/cascade
-fixtures and is not an HTTP throughput claim.
-
-The retained-set attribution gate enables BC26 `kPassAll` plus the
-mixed-number `mul` fast path—against the patchless/add-loc control. This run
-uses the final 0.2.2 release-candidate worktree, including the P11/P16
-control-flow fixes and the catch-state verifier. Eight Kraken/Octane programs
-use seven balanced pairs each:
-
-| program | gain, paired 95% CI |
-|---|---:|
-| Kraken Beat Detection | **+3.38% [+1.46%, +5.34%]** |
-| Kraken DFT | **-2.78% [-5.13%, -0.37%]** |
-| Kraken FFT | **+3.03% [+1.40%, +4.68%]** |
-| Kraken Oscillator | **+4.76% [+0.49%, +9.20%]** |
-| Kraken Darkroom | **+5.35% [+4.42%, +6.29%]** |
-| Octane Box2D | **+1.56% [+0.54%, +2.58%]** |
-| Octane Navier-Stokes | **+6.91% [+3.56%, +10.37%]** |
-| Octane Richards | -0.74% [-3.10%, +1.68%] |
-| **equal-weight geometric mean** | **+2.64%**; across-program 95% interval **[-0.04%, +5.39%]** |
-
-Six of eight centers are positive; five are significantly positive and DFT is
-significantly negative in this batch. The combined center remains positive,
-but its across-program interval touches zero.
-
-The same final binaries were also run over all 18 V8 Web Tooling Benchmark
-0.5.3 library workloads. Each target is a separately generated static webpack
-bundle. Three balanced pairs provide 12 fresh-process samples per target:
-
-| workload | gain, paired 95% CI |
-|---|---:|
-| Acorn | -0.86% [-2.57%, +0.87%] |
-| Babel | +0.33% [-2.89%, +3.65%] |
-| Babel Minify | -1.91% [-14.14%, +12.06%] |
-| Babylon | +1.32% [-2.47%, +5.25%] |
-| Bublé | +0.11% [-14.09%, +16.66%] |
-| Chai | -3.60% [-7.13%, +0.06%] |
-| CoffeeScript | -2.20% [-11.06%, +7.53%] |
-| Espree | -0.96% [-3.16%, +1.28%] |
-| Esprima | -0.28% [-2.04%, +1.51%] |
-| JSHint | -2.59% [-13.75%, +10.02%] |
-| Lebab | +1.74% [-5.37%, +9.39%] |
-| PostCSS | +2.28% [-1.26%, +5.96%] |
-| Prepack | +1.62% [-5.58%, +9.36%] |
-| Prettier | -1.28% [-12.66%, +11.58%] |
-| source-map | +0.45% [-7.55%, +9.15%] |
-| Terser | +1.06% [-3.43%, +5.76%] |
-| TypeScript | -1.07% [-4.28%, +2.24%] |
-| UglifyJS | **-2.66% [-4.59%, -0.70%]** |
-| **equal-weight geometric mean** | **-0.49%**; across-program 95% interval **[-1.34%, +0.37%]** |
-
-The library suite is neutral overall, with UglifyJS the only significant
-single-program regression. A same-runtime seven-pair triangle confirmed that
-raw-to-`kPassAll` UglifyJS regressed 2.55% [2.05%, 3.03%], while disabling any
-one deployed pass did not reproduce a significant penalty; P3.1 was instead
-significantly helpful. The evidence therefore does not support deleting a
-specific pass. The current decision is to retain the positive combined
-portfolio, record the library result as neutral rather than a win, and make
-the UglifyJS combination/layout effect a next-round gate. IC, BC27, ext34, and
-store/reload fusion are removed as recorded in
-[QuickJS Optimization](quickjs-optimization.md).
-
-### Custom-bytecode removal gate
-
-The latest final-binary gate compares clean Release + LTO/system-allocator
-builds at `03e79bd` and `04de1fc`. Both use the same upstream interpreter fast
-paths and `kPassAll`; the candidate only physically deletes the field-IC,
-BC27, and `OP_ext` implementations and renames the remaining conservative
-component to the BC26 rewriter. All 26 compared bytecode files are identical.
-Positive numbers mean the deletion candidate is faster.
-
-Seven balanced pairs over the retained Kraken/Octane portfolio produced:
-
-| program | deletion gain, paired 95% CI |
-|---|---:|
-| Kraken Beat Detection | +0.09% [-1.88%, +2.10%] |
-| Kraken DFT | -3.81% [-8.25%, +0.85%] |
-| Kraken FFT | **+0.63% [+0.13%, +1.14%]** |
-| Kraken Oscillator | **+1.50% [+1.21%, +1.79%]** |
-| Kraken Darkroom | -0.64% [-2.00%, +0.74%] |
-| Octane Box2D | **+3.06% [+2.42%, +3.70%]** |
-| Octane Navier-Stokes | +0.88% [-0.21%, +1.98%] |
-| Octane Richards | -0.00% [-0.91%, +0.92%] |
-| **equal-weight geometric mean** | **+0.20%**; across-program 95% interval **[-1.45%, +1.88%]** |
-
-The same deletion over all 18 V8 Web Tooling workloads, with three balanced
-pairs per target, produced:
-
-| workload | deletion gain, paired 95% CI |
-|---|---:|
-| Acorn | +0.38% [-0.79%, +1.57%] |
-| Babel | +0.92% [-0.80%, +2.68%] |
-| Babel Minify | **+1.82% [+1.20%, +2.45%]** |
-| Babylon | **+1.19% [+0.08%, +2.31%]** |
-| Bublé | **+1.61% [+1.24%, +1.98%]** |
-| Chai | +1.75% [-3.30%, +7.06%] |
-| CoffeeScript | +0.31% [-0.28%, +0.90%] |
-| Espree | -0.08% [-2.25%, +2.15%] |
-| Esprima | **+1.14% [+0.54%, +1.74%]** |
-| JSHint | +2.03% [-1.21%, +5.37%] |
-| Lebab | **+1.28% [+0.35%, +2.22%]** |
-| PostCSS | +0.15% [-2.02%, +2.37%] |
-| Prepack | +1.67% [-0.54%, +3.93%] |
-| Prettier | **+0.62% [+0.13%, +1.11%]** |
-| source-map | **+1.18% [+0.51%, +1.87%]** |
-| Terser | **+2.03% [+0.93%, +3.14%]** |
-| TypeScript | **+1.90% [+1.60%, +2.20%]** |
-| UglifyJS | +0.58% [-0.82%, +2.00%] |
-| **equal-weight geometric mean** | **+1.14%**; across-program 95% interval **[+0.80%, +1.48%]** |
-
-The removal is therefore accepted: the classic portfolio is neutral with no
-significant negative program, while the library portfolio improves
-significantly. Both summaries have empty failure sets, and 26/26 programs
-completed with byte-identical BC26. Keeping the rejected code behind OFF flags
-has no product value and carries measurable final-layout risk.
-
-## 6. Evidence Identities
-
-| current evidence | directory | checksum-list SHA-256 |
-|---|---|---|
-| four-stack matrix | `bench/results/four-qps-current-clean-20260825T161800/` | `67ffb510…` |
-| focused stability repeat | `bench/results/four-qps-current-clean-focused-20260825T164700/` | `94272dee…` |
-| host/worker profile | `bench/results/four-qps-current-clean-profile-20260825T164600/` | `c134cda4…` |
-| raw/rewritten execution | `bench/results/exec-throughput-current-clean-20260825T164400/` | `4b0c21b8…` |
-| cold start | `bench/results/cold-start-current-clean-20260825T164500/` | `1de6b30c…` |
-| retained classic portfolio | `bench/results/all-effective-cumulative-20260825/` | `56d86ff7…` |
-| V8 Web Tooling portfolio | `bench/results/web-tooling-current-20260825/` | `454f79c4…` |
-| custom-bytecode removal | `bench/results/no-custom-bytecode-layout-20260825/` | classic `ec980bb6…`; Web Tooling `2564f2f3…` |
-| small-block arena, system allocator | `bench/results/upstream-arena-20260825/classic/` | summary `8b9e6311…` |
-| small-block arena, bounded mimalloc | `bench/results/arena-mimalloc-hono-20260826-v2/` | manifest `4f604ceb…`; samples `a40e61af…` |
-| sparse per-site field IC rejection | `bench/results/per-site-field-ic-rejected-20260826/` | summary `c91752f9…`; manifest `0968151c…`; samples `7ff431a1…` |
-
-The classic and Web Tooling summary SHA-256 values are `2967f60d…` and
-`bdeb60f9…`, respectively. Every listed checksum file was verified after
-collection.
+The previous 2026-08-18 AMD Ryzen 3 3300X checkpoint (`c943e35`, `four-qps-final-20260818T131300`, `four-qps-profile-20260818T132600`, and `cold-start-20260818T134435`) was superseded by the clean rc.07 run above. The 2026-08-18 Intel i5-12400F 6C/12T conclusion-adjacent tables (commit `b39acee`/`build-win`) and the 2026-08-14 4C tables are also retired. They remain available in git history and in the raw artifacts under `bench/results/` referenced by the older revisions of this document.
