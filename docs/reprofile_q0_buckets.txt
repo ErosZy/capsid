@@ -1,0 +1,19 @@
+
+=== Q0 interpreter — parser/AST workload (deterministic Ir)  total Ir = 16,918,587,633 ===
+bucket                        Ir    share
+interp-core        4,797,721,228   28.36%
+property           4,246,288,481   25.10%
+alloc-gc           2,792,090,389   16.50%
+arith-other        2,686,580,748   15.88%
+rc-free            1,212,418,944    7.17%
+atom-string        1,088,084,728    6.43%
+call-helper           95,403,115    0.56%
+
+-- top functions per big bucket --
+[interp-core] JS_CallInternal'2=27.5%, JS_CallInternal'2=0.5%, JS_CallInternal=0.3%, JS_CallInternal=0.0%
+[property] JS_DefineProperty=4.5%, add_shape_property=3.8%, add_property=3.8%, JS_CreateProperty=3.2%, find_own_property=3.0%, JS_DefinePropertyValue=1.6%
+[rc-free] JS_FreeValue=2.4%, free_object=1.2%, js_free_shape=1.1%, set_value.isra.0=1.0%, free_property=0.9%, JS_FreeValueRT=0.4%
+[alloc-gc] js_arena_malloc=4.8%, js_realloc_rt=3.6%, js_arena_free=2.5%, js_arena_usable_size=1.3%, js_malloc=1.3%, js_free_rt.part.0=1.2%
+[atom-string] js_string_memcmp=1.7%, __JS_AtomToValue=1.6%, js_new_string8_len=0.7%, js_alloc_string=0.7%, __JS_NewAtom=0.4%, JS_ValueToAtomInternal=0.3%
+[call-helper] js_call_c_function=0.6%
+[arith-other] js_relational_slow=1.9%, js_strict_eq_slow=1.8%, js_strict_eq2.isra.0=1.4%, __memcpy_avx_unaligned_erms=1.3%, JS_ToPrimitiveFree=1.1%, js_poll_interrupts=0.8%

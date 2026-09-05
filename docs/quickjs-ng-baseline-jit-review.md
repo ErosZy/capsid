@@ -42,6 +42,67 @@ hole it cannot climb out of by copying more fast paths.
 
 ---
 
+## Independent re-profile (this reviewer, callgrind)
+
+I re-profiled to check the story with my own hands. **`perf` is not usable in
+this environment** — it is a Firecracker/docker microVM (`uname -r` =
+`6.18.44-fc-v24`), no PMU is exposed, `linux-perf` has no install candidate, and
+`perf_event_paranoid=2`. So I used **valgrind/callgrind 3.22**, which needs no
+PMU and, unlike `perf`, is **deterministic** (instruction reads, `Ir`, not
+time-samples). I built the packaged tree myself (`quickjs.c` SHA `23d4a59e…`
+verified; RelWithDebInfo; capsid ON) and drove **both** modes from that **one
+binary** — `Q0` = `--capsid off`, `H0` = the read/write-IC preset — matching the
+authoritative same-binary principle.
+
+**Caveats, stated plainly.** `Ir` is instruction count, not cycles or wall-time
+(cache/branch effects differ). And **the frozen Babylon/Terser bundles are not in
+the package** (they were git-ignored, referenced only by SHA), so I used
+parser/compiler-shaped proxies, not Babylon. This corroborates *mechanism and
+family exposure*; it does **not** reproduce the authoritative `-2.493%` throughput
+number, which needs Babylon on a clean timing host.
+
+### Finding A — Q0 interpreter decomposition (a recursive-descent parser + AST transform; 16.9 B Ir)
+
+| Bucket | Ir share | What is in it |
+| --- | ---: | --- |
+| `interp-core` (`JS_CallInternal` self) | **28.4%** | dispatch + **inline** arithmetic and RC inc/dec |
+| `property` | **25.1%** | `JS_DefineProperty` 4.5, `add_shape_property` 3.8, `add_property` 3.8, `JS_CreateProperty` 3.2, `find_own_property` 3.0 … |
+| `alloc-gc` | 16.5% | arena malloc/realloc/free |
+| `arith-other` | 15.9% | `js_relational_slow`, `js_strict_eq*`, coercion, `js_poll_interrupts` … |
+| `rc-free` (**out-of-line only**) | **7.2%** | `JS_FreeValue` 2.4, `free_object` 1.2, `js_free_shape` 1.1, `set_value` 1.0, `free_property` 0.9 … |
+| `atom-string` | 6.4% | atom intern, string alloc/compare |
+
+Two numbers matter for the direction in Q3/Q4. **Property is ~25%**, matching
+codex's Babylon `property-runtime` 24.55% almost exactly — good cross-workload
+agreement. **Out-of-line reference counting is 7.2%** — *higher* than codex's
+Babylon `rc-free` 5.21%, and this **excludes** the inline inc/dec folded into the
+28.4% `JS_CallInternal` self-cost. So total RC traffic is comfortably a ≥5%,
+plausibly ≥10% family. That is the empirical basis for the Q4 experiment: RC is
+real, large, and — unlike property — never directly attacked.
+
+### Finding B — the JIT's focused best case works (monomorphic `object.value` loop, 4 M reads)
+
+`H0` executes **32% fewer instructions** than `Q0` (1.16 B vs 1.72 B). The
+compiled loop runs as generated machine code (71% of `H0`, an anonymous RX
+region) with the shape-guard+load **inlined**; `capsid_object_op` is essentially
+unused (0.00%, ~4.5 K Ir). This confirms the fast-path mechanism is sound when a
+site is monomorphic and stable — exactly codex's focused wins.
+
+### Finding C — the JIT cannot stay resident on realistic parser code
+
+Running `H0` on the parser workload: `seen=8, compiled=2, disabled=8,
+side_exits=64, ic_hits=0`. It compiles two functions, immediately side-exits, and
+**disables itself**. This independently reproduces the focused-win / macro-loss
+split: the JIT helps only where Finding B holds, and real parser/compiler code —
+polymorphic shapes, recursion, calls, string work — is Finding C, not B. That is
+the same conclusion codex reached on Babylon, arrived at from a different tree and
+tool.
+
+Raw bucketed output is saved alongside this file as
+`reprofile_q0_buckets.txt` and `reprofile_microbench_and_macro.txt`.
+
+---
+
 ## Q1 — Is the STOP decision justified? Any methodological error that could reverse it?
 
 **Yes, justified. No error large enough to reverse it; two caveats that bound its
@@ -203,9 +264,10 @@ interpreter*, where there is no frame tax, no W^X, no new GC rooting, and minima
 code-size cost. Two candidate mechanisms:
 
 - **[I] Reference-count / value-move elision as a static bytecode analysis.**
-  QuickJS reference-counts pervasively; `rc-free` alone is 5.21% of Q0 Babylon,
-  and the inc/dec arithmetic is *additionally* smeared through the 54.84%
-  `interpreter-call-core` bucket. Many operand-stack `js_dup`/`JS_FreeValue` pairs
+  QuickJS reference-counts pervasively; `rc-free` alone is 5.21% of Q0 Babylon
+  (independently, 7.2% out-of-line on my parser proxy — see *Independent
+  re-profile*, Finding A), and the inc/dec arithmetic is *additionally* smeared
+  through the 54.84% `interpreter-call-core` bucket. Many operand-stack `js_dup`/`JS_FreeValue` pairs
   provably cancel (e.g. `OP_get_field2` dups a value at `quickjs.c:21467/21490`
   that the very next consuming op frees). A per-basic-block stack-ownership pass,
   run once at `js_create_function`/bytecode-prepare time and consumed by a handful

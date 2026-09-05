@@ -1,0 +1,4 @@
+microbench own-get (4M monomorphic reads): Q0 Ir=1,715,303,103  H0 Ir=1,159,408,967  (H0 -32.4%)
+Q0 top: JS_CallInternal 79.33%, find_own_property 5.37%, JS_FreeValue 4.67%
+H0 top: generated-code[anon RX] 71.44%, capsid_value_op 22.78%, js_poll_interrupts 5.52%; capsid_object_op 0.00% (inlined into generated code)
+parser workload under H0: seen=8 compiled=2 disabled=8 side_exits=64 ic_hits=0 (JIT self-disables on realistic parser code)
