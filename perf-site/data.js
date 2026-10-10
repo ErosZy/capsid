@@ -7,124 +7,172 @@ window.CAPSID_PERF_DATA = {
    "coldStart": {
     "cells": [
      {
-      "pssMb": 0.9,
-      "readyMs": 20.88,
+      "pssMb": 0.8,
+      "readyMs": 17.81,
       "size": "10k",
       "stack": "capsid-source",
-      "totalMs": 21.99,
-      "warmMs": 0.13
-     },
-     {
-      "pssMb": 1.2,
-      "readyMs": 26.62,
-      "size": "100k",
-      "stack": "capsid-source",
-      "totalMs": 27.39,
-      "warmMs": 0.13
-     },
-     {
-      "pssMb": 4.7,
-      "readyMs": 87.12,
-      "size": "1m",
-      "stack": "capsid-source",
-      "totalMs": 87.9,
-      "warmMs": 0.14
-     },
-     {
-      "pssMb": 1.0,
-      "readyMs": 18.43,
-      "size": "10k",
-      "stack": "capsid-bytecode",
-      "totalMs": 19.11,
+      "totalMs": 18.43,
       "warmMs": 0.12
      },
      {
-      "pssMb": 1.8,
-      "readyMs": 20.09,
+      "pssMb": 1.2,
+      "readyMs": 21.91,
       "size": "100k",
+      "stack": "capsid-source",
+      "totalMs": 22.82,
+      "warmMs": 0.12
+     },
+     {
+      "pssMb": 4.6,
+      "readyMs": 75.17,
+      "size": "1m",
+      "stack": "capsid-source",
+      "totalMs": 76.1,
+      "warmMs": 0.12
+     },
+     {
+      "pssMb": 0.9,
+      "readyMs": 16.67,
+      "size": "10k",
       "stack": "capsid-bytecode",
-      "totalMs": 20.78,
+      "totalMs": 17.35,
       "warmMs": 0.13
      },
      {
+      "pssMb": 1.7,
+      "readyMs": 17.6,
+      "size": "100k",
+      "stack": "capsid-bytecode",
+      "totalMs": 18.28,
+      "warmMs": 0.12
+     },
+     {
       "pssMb": 10.2,
-      "readyMs": 31.94,
+      "readyMs": 27.64,
       "size": "1m",
       "stack": "capsid-bytecode",
-      "totalMs": 32.65,
-      "warmMs": 0.14
+      "totalMs": 28.33,
+      "warmMs": 0.12
      },
      {
-      "pssMb": 59.5,
-      "readyMs": 52.0,
+      "pssMb": 59.6,
+      "readyMs": 49.0,
       "size": "10k",
       "stack": "node",
-      "totalMs": 436.0,
-      "warmMs": 6.0
+      "totalMs": 57.0,
+      "warmMs": 4.0
      },
      {
-      "pssMb": 38.4,
-      "readyMs": 27.0,
-      "size": "10k",
-      "stack": "deno",
-      "totalMs": 395.0,
-      "warmMs": 5.0
-     },
-     {
-      "pssMb": 49.6,
-      "readyMs": 16.0,
+      "pssMb": 49.8,
+      "readyMs": 15.0,
       "size": "10k",
       "stack": "workerd",
-      "totalMs": 416.0,
-      "warmMs": 6.0
+      "totalMs": 20.0,
+      "warmMs": 4.0
      },
      {
       "pssMb": 60.2,
-      "readyMs": 52.0,
+      "readyMs": 49.0,
       "size": "100k",
       "stack": "node",
-      "totalMs": 439.0,
-      "warmMs": 5.0
+      "totalMs": 57.0,
+      "warmMs": 4.0
      },
      {
-      "pssMb": 39.8,
-      "readyMs": 28.0,
-      "size": "100k",
-      "stack": "deno",
-      "totalMs": 407.0,
-      "warmMs": 5.0
-     },
-     {
-      "pssMb": 51.5,
-      "readyMs": 16.0,
+      "pssMb": 51.7,
+      "readyMs": 15.0,
       "size": "100k",
       "stack": "workerd",
-      "totalMs": 401.0,
+      "totalMs": 22.0,
       "warmMs": 5.0
      },
      {
       "pssMb": 76.3,
-      "readyMs": 78.0,
+      "readyMs": 73.0,
       "size": "1m",
       "stack": "node",
-      "totalMs": 480.0,
-      "warmMs": 5.0
+      "totalMs": 81.0,
+      "warmMs": 4.0
      },
      {
-      "pssMb": 44.9,
-      "readyMs": 51.0,
-      "size": "1m",
-      "stack": "deno",
-      "totalMs": 435.0,
-      "warmMs": 5.0
-     },
-     {
-      "pssMb": 64.3,
-      "readyMs": 23.0,
+      "pssMb": 64.4,
+      "readyMs": 15.0,
       "size": "1m",
       "stack": "workerd",
-      "totalMs": 399.0,
-      "warmMs": 5.0
+      "totalMs": 38.0,
+      "warmMs": 4.0
+     },
+     {
+      "pssMb": 0.8,
+      "readyMs": 17.2,
+      "size": "10k",
+      "stack": "capsid-source",
+      "totalMs": 17.75,
+      "warmMs": 0.12
+     },
+     {
+      "pssMb": 1.2,
+      "readyMs": 21.51,
+      "size": "100k",
+      "stack": "capsid-source",
+      "totalMs": 22.14,
+      "warmMs": 0.12
+     },
+     {
+      "pssMb": 4.6,
+      "readyMs": 74.91,
+      "size": "1m",
+      "stack": "capsid-source",
+      "totalMs": 75.85,
+      "warmMs": 0.12
+     },
+     {
+      "pssMb": 0.9,
+      "readyMs": 15.62,
+      "size": "10k",
+      "stack": "capsid-bytecode",
+      "totalMs": 16.17,
+      "warmMs": 0.12
+     },
+     {
+      "pssMb": 1.7,
+      "readyMs": 17.11,
+      "size": "100k",
+      "stack": "capsid-bytecode",
+      "totalMs": 17.74,
+      "warmMs": 0.12
+     },
+     {
+      "pssMb": 10.2,
+      "readyMs": 26.45,
+      "size": "1m",
+      "stack": "capsid-bytecode",
+      "totalMs": 27.21,
+      "warmMs": 0.12
+     },
+     {
+      "pssMb": 34.9,
+      "readyMs": 14.0,
+      "size": "10k",
+      "stack": "deno",
+      "totalMs": 20.0,
+      "warmMs": 4.0
+     },
+     {
+      "pssMb": 36.4,
+      "readyMs": 26.0,
+      "size": "100k",
+      "stack": "deno",
+      "totalMs": 31.0,
+      "warmMs": 4.0
+     },
+     {
+      "pssMb": 41.4,
+      "readyMs": 49.0,
+      "size": "1m",
+      "stack": "deno",
+      "totalMs": 55.0,
+      "warmMs": 4.0
      }
     ],
     "pssMb": [],
@@ -132,32 +180,6 @@ window.CAPSID_PERF_DATA = {
    },
    "date": "2026-10-10",
    "evidence": {
-    "coldrun-final/cells.txt": "ca9dce0c96e63c6a12b37cfb7b056f8e2dc7a19a8b6a90dcb1c5bab0e72e393a",
-    "coldrun-final/err.bytecode.100k": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/err.bytecode.10k": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/err.bytecode.1m": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/err.source.100k": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/err.source.10k": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/err.source.1m": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/err.workerd.100k": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/err.workerd.10k": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/err.workerd.1m": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "coldrun-final/manifest.txt": "a920b93c874ba2a16b75268090622e2ab19ca2edcb8e7d71ea54f230d143a673",
-    "coldrun-final/raw.capsid-bytecode.100k.jsonl": "9081466be581e5867e42b647bdf8f354394432ba06bd0ac35a2c0d060d0e742c",
-    "coldrun-final/raw.capsid-bytecode.10k.jsonl": "8f1744ae96ea525400a67653a8a5847fba6ba9892552620a1911fd1160276ecd",
-    "coldrun-final/raw.capsid-bytecode.1m.jsonl": "674d02e84ed4f7f111affda636f3208cfbbfff33440339e2cf22c97ab3618fd2",
-    "coldrun-final/raw.capsid-source.100k.jsonl": "28b626ffea07c401423bab255cc97172ee87f6002b36530e1311e235d6b511c2",
-    "coldrun-final/raw.capsid-source.10k.jsonl": "bce0ecaecfcca5d2f8b811f5a26b9646e042732e3f16900a447c14a6ea6b20e5",
-    "coldrun-final/raw.capsid-source.1m.jsonl": "6b04264e2e921e673e6ee5dfa8674b2bce75e4aa076c06a31a9f2dadad4db210",
-    "coldrun-final/raw.deno.100k.jsonl": "a1179c3e10157c8012e6a2f2f841700983ae069c0b154bc4742843f8653f1b69",
-    "coldrun-final/raw.deno.10k.jsonl": "dc8cb529cb92d1cea7295b75f171813123219b42c726bbf5f6a137751c6cb9cb",
-    "coldrun-final/raw.deno.1m.jsonl": "f146cce7f52696c39eac9a8ac2ed5af6723f639b72f454b5a1611f816217873b",
-    "coldrun-final/raw.node.100k.jsonl": "734d101a62fbe5c3e752788d694ee7c83156bbe4b430bba30144abfbfc960527",
-    "coldrun-final/raw.node.10k.jsonl": "708a192827a3b8bd7aa17ae69eb48af2bd986e540a65a80dae7f337856b0a2cb",
-    "coldrun-final/raw.node.1m.jsonl": "fbc292a7746d3103c2611864c2d8a59b77daec8725c4bda827f4369d994ec758",
-    "coldrun-final/raw.workerd.100k.jsonl": "4bf33f8a733a2d0d86f423a6f585e58029eaa5d46a6ba951693240405bfc468f",
-    "coldrun-final/raw.workerd.10k.jsonl": "3526d063dddc11eb1f1771b66f832fb8db55856e64bb5bd9556c0123d5dd155b",
-    "coldrun-final/raw.workerd.1m.jsonl": "1cf23b363fc0e5d5cc8f527fa586090f59aba32f28ff416432e1df6977ccc461",
     "qps-rr/.gunicorn.pid": "2966b933417ac4866414612610897d93dcf2d1585fd58bf552638e69c45bf1d0",
     "qps-rr/.uvicorn.pid": "9d60b09ab7d03f9cc5115bddf643f718a5cd2db60bc3116c6aa24ce243e96733",
     "qps-rr/cells.txt": "7a11d36786e80c4d6765c6f6f6e4c4704ef4ae4edee8d5dd30dbb448466b97b5",
@@ -322,15 +344,15 @@ window.CAPSID_PERF_DATA = {
     "qps-rr/ready.capsid": "bb513d234320af60b750d0932c32c50908a41fd46bd71a46bb7ca7926b00eb00"
    },
    "git": {
-    "commit": "bbc3885ab88e23ca8f6fca4b2c0d556b72809abc",
+    "commit": "50d0e4287784de6370a287f0396ea2b828e6e047",
     "tag": ""
    },
    "machine": {
-    "command": "OUT=/tmp/opencode/coldrun-final BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh",
-    "commit": "aef602081134d6e87fd141a5693bbbb7c9ad7f2e",
+    "command": "OUT=/tmp/opencode/cold-vmfix BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh",
+    "commit": "50d0e4287784de6370a287f0396ea2b828e6e047",
     "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
-    "deno": "deno 2.9.7 (stable, release, x86_64-unknown-linux-gnu)",
-    "generated_at": "2026-10-10T13:59:19+08:00",
+    "deno": "absent",
+    "generated_at": "2026-10-10T22:35:42+08:00",
     "nginx": "nginx version: nginx/1.24.0 (Ubuntu)",
     "node": "v24.14.0",
     "nproc": "12",
@@ -342,7 +364,7 @@ window.CAPSID_PERF_DATA = {
     "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
     "workerd_version": "workerd 2026-10-10"
    },
-   "notes": "Single quiet session, all five stacks back-to-back, 5-round medians; symmetric single-serving-process configs (uvicorn x1 no-access-log + async generators, gunicorn sync x1, php-fpm x1 with JIT + fastcgi keep-alive).",
+   "notes": "Single quiet session, 5-round medians; symmetric single-serving-process serving configs; cold-start total_ms redefined to spawn->first validated response for shell stacks (warm loop and PSS walk no longer leak into the cold metric).",
    "qps": {
     "cells": [
      {

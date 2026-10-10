@@ -186,6 +186,11 @@ measure_vm() {
                 echo "$name $label failed first-response validation" >&2
                 return 1
             fi
+            # total = spawn -> first validated response (the cold-start.cc
+            # definition). Everything after this point (warm rounds, PSS
+            # walk) is reported separately and must not leak into total.
+            end_ns=$(date +%s%N)
+            total_ms=$(( (end_ns - start_ns) / 1000000 ))
         else
             kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
@@ -203,8 +208,6 @@ measure_vm() {
         local pss_kb
         pss_kb=$(proc_tree_pss_kb "$pid" Pss:)
         [ "${pss_kb:-0}" -gt 0 ] 2>/dev/null && pss_vals+=("$pss_kb")
-        end_ns=$(date +%s%N)
-        total_ms=$(( (end_ns - start_ns) / 1000000 ))
         kill "$pid" 2>/dev/null || true
         wait "$pid" 2>/dev/null || true
         rm -f "$outfile"
@@ -265,6 +268,9 @@ measure_workerd() {
                 echo "$name $label failed first-response validation" >&2
                 return 1
             fi
+            # total = spawn -> first validated response; warm/PSS follow.
+            end_ns=$(date +%s%N)
+            total_ms=$(( (end_ns - start_ns) / 1000000 ))
         else
             kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
@@ -281,8 +287,6 @@ measure_workerd() {
         local pss_kb
         pss_kb=$(proc_tree_pss_kb "$pid" Pss:)
         [ "${pss_kb:-0}" -gt 0 ] 2>/dev/null && pss_vals+=("$pss_kb")
-        end_ns=$(date +%s%N)
-        total_ms=$(( (end_ns - start_ns) / 1000000 ))
         kill "$pid" 2>/dev/null || true
         wait "$pid" 2>/dev/null || true
         if [ "$round" -gt 1 ]; then
