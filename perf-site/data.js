@@ -103,54 +103,6 @@ window.CAPSID_PERF_DATA = {
       "warmMs": 4.0
      },
      {
-      "pssMb": 0.8,
-      "readyMs": 17.2,
-      "size": "10k",
-      "stack": "capsid-source",
-      "totalMs": 17.75,
-      "warmMs": 0.12
-     },
-     {
-      "pssMb": 1.2,
-      "readyMs": 21.51,
-      "size": "100k",
-      "stack": "capsid-source",
-      "totalMs": 22.14,
-      "warmMs": 0.12
-     },
-     {
-      "pssMb": 4.6,
-      "readyMs": 74.91,
-      "size": "1m",
-      "stack": "capsid-source",
-      "totalMs": 75.85,
-      "warmMs": 0.12
-     },
-     {
-      "pssMb": 0.9,
-      "readyMs": 15.62,
-      "size": "10k",
-      "stack": "capsid-bytecode",
-      "totalMs": 16.17,
-      "warmMs": 0.12
-     },
-     {
-      "pssMb": 1.7,
-      "readyMs": 17.11,
-      "size": "100k",
-      "stack": "capsid-bytecode",
-      "totalMs": 17.74,
-      "warmMs": 0.12
-     },
-     {
-      "pssMb": 10.2,
-      "readyMs": 26.45,
-      "size": "1m",
-      "stack": "capsid-bytecode",
-      "totalMs": 27.21,
-      "warmMs": 0.12
-     },
-     {
       "pssMb": 34.9,
       "readyMs": 14.0,
       "size": "10k",
@@ -344,7 +296,7 @@ window.CAPSID_PERF_DATA = {
     "qps-rr/ready.capsid": "bb513d234320af60b750d0932c32c50908a41fd46bd71a46bb7ca7926b00eb00"
    },
    "git": {
-    "commit": "1aafc5a2fdcaee14643d89678c9ffba48af2b62c",
+    "commit": "64715b07a25e0d4238d1505d78a82cb4e1d21b7c",
     "tag": ""
    },
    "machine": {
@@ -364,7 +316,7 @@ window.CAPSID_PERF_DATA = {
     "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
     "workerd_version": "workerd 2026-10-10"
    },
-   "notes": "Single quiet session, 5-round medians; symmetric single-serving-process serving configs; cold-start total_ms = spawn to first validated response (deno pass ran separately, deno 2.9.7).",
+   "notes": "",
    "qps": {
     "cells": [
      {

@@ -311,10 +311,13 @@
   <section id="memory">
     <div class="eyebrow">02 — Density</div>
     <h2>Serving memory</h2>
-    <p class="lede">Proportional set size, sampled from
-       <span class="mono">smaps_rollup</span> immediately after the last
-       measured round and decomposed into each stack's real processes.
-       This is the number that decides how many tenants fit on one box.</p>
+    <p class="lede">Proportional set size from
+       <span class="mono">smaps_rollup</span>, decomposed into each stack's
+       real processes. Two windows: an <b>equal-load trickle</b> (10 req/s on
+       a fresh process — same request volume everywhere) and <b>after the
+       last measured round</b> of the 64-connection load. The trickle read is
+       the fair at-rest comparison; the loaded read shows how each runtime
+       behaves under real pressure.</p>
 
     <div class="card chart">
       <h3>At a trickle — 10 req/s</h3>
@@ -466,7 +469,9 @@ function renderHero() {
   cpu = cpu.split(" ").slice(-1)[0] || "—";
   var lane = (m.uname || "").indexOf("WSL2") >= 0 ? "WSL2" : "Linux";
   var tags = [
-    [P ? P.release : "—", "release point", true],
+    [P ? P.release + (P.git && P.git.tag ? "" :
+        " · commit " + String(P.git && P.git.commit || "").slice(0, 8))
+      : "—", "release point", true],
     [P ? P.date : "—", "measured on", false],
     [cpu + " \u00b7 " + lane, "cpu \u00b7 lane", false]
   ];
@@ -474,7 +479,10 @@ function renderHero() {
     return '<span class="tag' + (t[2] ? " live" : "") + '" title="' +
            esc(t[1]) + '"><b>' + esc(t[0]) + "</b></span>";
   }).join("");
-  $("nav-meta").textContent = P ? P.release + " · " + P.date : "";
+  $("nav-meta").textContent = P ? P.release +
+    (P.git && P.git.tag ? "" :
+      " · commit " + String(P.git && P.git.commit || "").slice(0, 8)) +
+    " · " + P.date : "";
 
   var q = P && P.qps, c = P && P.coldStart;
   var cards = "";
@@ -822,25 +830,42 @@ function renderMem() {
   renderWorkerCost(sp, spLow);
 
   var spc = spLow && spLow.capsid ? spLow : sp;
-  if (spc.capsid && spc.workerd && spc.php) {
-    var ca = 0, cw = 0, ph = 0;
+  if (spc.capsid && spc.workerd) {
+    var ca = 0, cw = 0;
     spc.capsid.forEach(function (x) { ca += x.mb; });
     spc.workerd.forEach(function (x) { cw += x.mb; });
-    spc.php.forEach(function (x) { ph += x.mb; });
-    $("mem-callout").innerHTML =
-      "<b>Density is the product.</b> Under identical 64-connection load, " +
-      "Capsid's full serving path — one host plus one <b>isolated tenant worker</b> — holds <span class=\"hl\">" + fmt(ca, 1) + " MB</span> " +
-      "resident: " + fmt(cw / ca, 0) + "× less than workerd's single " +
-      "process (" + fmt(cw, 1) + " MB). The php-fpm pool is leaner still at " +
-      fmt(ph, 1) + " MB, but every Capsid tenant is a separate, " +
-      "sandboxable process — that is the boundary you are measuring.";
+    var isTrickle = spc === spLow;
+    var phase = isTrickle
+      ? "At an identical <b>10 req/s</b> — the same request volume for " +
+        "every stack, so heap growth and GC timing cannot skew the read — "
+      : "Under the full 64-connection load — where workerd also completes " +
+        "several times more requests than Capsid in the same window — ";
+    var msg = "<b>Density is the product.</b> " + phase +
+      "Capsid's full serving path — one host plus one <b>isolated tenant " +
+      "worker</b> — holds <span class=\"hl\">" + fmt(ca, 1) + " MB</span> " +
+      "resident: " + fmt(cw / ca, 1) + "× less than workerd's single " +
+      "process (" + fmt(cw, 1) + " MB).";
+    if (spc.php) {
+      var ph = 0;
+      spc.php.forEach(function (x) { ph += x.mb; });
+      msg += ph < ca
+        ? " The php-fpm pool sits at " + fmt(ph, 1) + " MB."
+        : " The php-fpm pool is heavier at " + fmt(ph, 1) + " MB — and " +
+          "every Capsid tenant is additionally a separate, sandboxable " +
+          "process. That is the boundary being measured.";
+    }
+    $("mem-callout").innerHTML = msg;
   }
   var cw2 = workerPart(sp.capsid);
   if (cw2 != null) {
     $("mem-callout").innerHTML +=
       " Each additional Capsid tenant adds <b>" + fmt(cw2, 1) +
-      " MB</b> — the host is shared infrastructure, so a 1 GB budget fits " +
-      "roughly " + fmt(1024 / cw2, 0) + " isolated tenants.";
+      " MB</b> of measured worker PSS — a <b>theoretical</b> ceiling of " +
+      "roughly " + fmt(1024 / cw2, 0) + " workers per GB. That is not a " +
+      "verified deployment density: scheduling, kernel memory, file " +
+      "descriptors, CPU quota, and each application's real heap sit on " +
+      "top. A dedicated density benchmark (100/500/1000 live workers) is " +
+      "planned to replace this estimate.";
   }
 }
 

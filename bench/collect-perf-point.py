@@ -33,6 +33,7 @@ def median(values):
 
 def parse_cold_start(path):
     point = {"coldStart": {"cells": [], "warm": [], "pssMb": []}}
+    seen = {}
     with open(os.path.join(path, "cells.txt")) as f:
         for line in f:
             m = re.match(
@@ -45,6 +46,13 @@ def parse_cold_start(path):
                 continue
             stack, mode, size, total, ready, warm, pss = m.groups()
             name = stack if stack != "capsid" else "capsid-" + mode
+            key = (name, size)
+            if key in seen:
+                raise SystemExit(
+                    f"{path}/cells.txt: duplicate cold cell {key} "
+                    "(same stack measured twice in one point); keep exactly "
+                    "one same-origin, same-config record per cell")
+            seen[key] = True
             point["coldStart"]["cells"].append({
                 "stack": name,
                 "size": size,
@@ -180,6 +188,21 @@ def main():
     ap.add_argument("--data", default="perf-site/data.js")
     args = ap.parse_args()
 
+    cold = parse_cold_start(args.cold_start)
+    qps = parse_qps(args.qps)
+    machine = machine_fingerprint([args.cold_start, args.qps])
+
+    # Environment cross-checks: a point may not carry results for a stack
+    # whose identity the fingerprint cannot corroborate.
+    cold_stack_names = {c["stack"] for c in cold["cells"]}
+    for stack, fp_key in (("deno", "deno"), ("node", "node"),
+                          ("workerd", "workerd_version")):
+        identity = machine.get(fp_key)
+        if stack in cold_stack_names and (not identity or identity == "absent"):
+            raise SystemExit(
+                f"cold-start cells contain {stack} results but the "
+                f"fingerprint lacks a {fp_key} identity")
+
     point = {
         "schema": 1,
         "version": args.version,
@@ -187,9 +210,9 @@ def main():
         "date": datetime.date.today().isoformat(),
         "notes": os.environ.get("CAPSID_PERF_NOTES", ""),
         "git": git_info(),
-        "machine": machine_fingerprint([args.cold_start, args.qps]),
-        "coldStart": parse_cold_start(args.cold_start),
-        "qps": parse_qps(args.qps),
+        "machine": machine,
+        "coldStart": cold,
+        "qps": qps,
         "evidence": evidence_files([args.cold_start, args.qps]),
     }
 
