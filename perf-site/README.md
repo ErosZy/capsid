@@ -54,3 +54,5 @@ The workflow publishes the contents of `perf-site/` on every push to
    and start a new series instead of rewriting history.
 3. The raw result directories backing a point are preserved with their
    `sha256sums.txt` (referenced from the point's `evidence` map).
+
+Current point: v0.2.2, quiet single-worker session, 5-round medians (2026-10-10).
