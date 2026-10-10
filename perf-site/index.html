@@ -348,11 +348,12 @@
       <h3>Measured density — fill a pool until it hits 2 GB</h3>
       <div class="sub">Real runs: grow capsid's static pool (or workerd's cell
         count in one process) until the process tree's PSS reaches the 2048 MB
-        budget, touching every worker with real requests before sampling.
-        Binary-searched boundary, largest count that fit; final pool PSS in
-        parentheses. Sizes without a measured run fall back to the footprint
-        estimate (floor((2048 MB − host PSS) ÷ cold worker PSS)), marked
-        <span class="mono">est</span>.</div>
+        budget. Every worker/cell is then <b>warmed with 100 real requests</b>
+        (baseline JIT + heap steady state — a single touch would understate
+        workerd, whose V8 grows sharply under traffic) before a settled,
+        stability-checked PSS sample. Binary-searched boundary; final pool
+        PSS in parentheses. Sizes without a measured run fall back to the
+        footprint estimate, marked <span class="mono">est</span>.</div>
       <div class="scroll-x" id="budget-table"></div>
     </div>
 
@@ -875,8 +876,8 @@ function renderBudget(sp, spLow) {
     head += row + "</tr>";
   });
   var cap = measured
-    ? "measured: largest pool whose process-tree PSS stayed under 2048 MB — " +
-      "final pool PSS in parentheses; every worker touched before sampling"
+    ? "measured: largest pool whose PSS stayed under 2048 MB after warming " +
+      "every worker/cell with 100 real requests — final PSS in parentheses"
     : "floor((2048 − " + fmt(host, 1) +
       " MB host) ÷ cold worker PSS) — theoretical ceiling";
   el.innerHTML = head + "</tbody></table>" + '<div class="tbl-cap">' + cap + "</div>";
@@ -923,8 +924,8 @@ function renderMem() {
     $("mem-callout").innerHTML +=
       " Each additional Capsid tenant adds <b>" + fmt(cw2, 1) +
       " MB</b> of measured worker PSS. A real fill-to-budget benchmark — " +
-      "growing the pool until the process tree reaches 2048 MB — puts " +
-      "<b>904</b> Capsid 10k workers (or <b>1061</b> workerd cells) in 2 GB; " +
+      "grown, warmed (100 req/worker) and filled to 2048 MB — puts " +
+      "<b>894</b> Capsid 10k workers (or <b>638</b> workerd cells) in 2 GB; " +
       "see the measured-density table below. Scheduling, kernel memory, CPU " +
       "quota, and per-app heap sit on top of these counts.";
   }

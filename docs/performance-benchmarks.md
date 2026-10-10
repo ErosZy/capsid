@@ -102,15 +102,15 @@ Serving-path memory (process-tree PSS after the last round; trickle = fresh proc
 
 ### Measured density: fill a pool to 2 GB (2026-10-10)
 
-Real capacity runs, not footprint arithmetic: grow capsid's `static-pool` (or workerd's cell count in one process) until the process-tree PSS reaches 2048 MB, touching every worker/cell with real requests before sampling, binary-searching the boundary, and requiring the recorded count to verify under budget (PSS jitter guard). Source bundles; per-run probes and manifests in `bench/results/density-v022-20261010/`.
+Real capacity runs, not footprint arithmetic: grow capsid's `static-pool` (or workerd's cell count in one process) until the process-tree PSS reaches 2048 MB. After the initial touch, every worker/cell is warmed with 100 real requests — workerd's V8 grows sharply under traffic (a single-touch cold read understated its per-cell cost by ~1.7×, flipping its 10k capacity from 1061 to 638) — and the sample is taken after a settle with a stability check. The boundary is binary-searched, and the recorded count must verify under budget. Source bundles; probes and manifest in `bench/results/density-v022-20261010/`.
 
 | fixture size | capsid workers | capsid final PSS | workerd cells | workerd final PSS |
 |---:|---:|---:|---:|---:|
-| 10 KiB | **904** | 2047.5 MB | 1,061 | 2047.5 MB |
-| 100 KiB | **568** | 2045.5 MB | 917 | 2047.0 MB |
-| 1 MiB | **127** | 2033.5 MB | 244 | 2013.3 MB |
+| 10 KiB | **894** | 2045.8 MB | 638 | 2045.6 MB |
+| 100 KiB | **567** | 2047.4 MB | 580 | 2045.9 MB |
+| 1 MiB | **127** | 2036.2 MB | 222 | 1990.5 MB |
 
-workerd packs more code-cells per 2 GB because its cells share one process (marginal cell cost ≈1.9-8.1 MB versus capsid's per-worker ≈2.3-16.0 MB); every capsid tenant is nonetheless a separate, sandboxable process. These are fill-to-budget counts — sustained-traffic density (every tenant serving under load) remains future work.
+workerd still packs more 1 MiB code-cells per 2 GB because its cells share one process; warming narrows the gap at 10k/100k to near parity (638 vs 894, 580 vs 567). Every capsid tenant remains a separate, sandboxable process. These are warmed fill-to-budget counts — sustained per-tenant traffic density remains future work.
 
 ## 4. Cold-Start Comparison (2026-10-10, median ms, 5 rounds)
 

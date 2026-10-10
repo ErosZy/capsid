@@ -28,12 +28,16 @@ SUT_CPUSET=${SUT_CPUSET:-0-3}
 MAX_WORKERS=${MAX_WORKERS:-4096}   # capsid static-pool hard limit
 MAX_CELLS=${MAX_CELLS:-1024}       # probe cap for workerd cells
 CURL_PAR=${CURL_PAR:-64}
+WARM_REQS=${WARM_REQS:-100}        # real requests per worker/cell before
+                                   # sampling: drives baseline JIT + heap to
+                                   # steady state (a single touch only proves
+                                   # initialization, not loaded footprint)
 mkdir -p "$OUT"
 : >"$OUT/cells.txt"
 : >"$OUT/probes.jsonl"
 
 {
-    echo "rounds: density fill-to-budget budget_mb=$BUDGET_MB sut_cpuset: $SUT_CPUSET"
+    echo "rounds: density fill-to-budget budget_mb=$BUDGET_MB warm_reqs=$WARM_REQS sut_cpuset: $SUT_CPUSET"
     echo "generated_at: $(date +%Y-%m-%dT%H:%M:%S%:z)"
     echo "commit: $(git rev-parse HEAD 2>/dev/null || echo '')"
     echo "tag: $(git describe --exact-match --tags HEAD 2>/dev/null || echo '')"
@@ -74,6 +78,15 @@ tree_pss_mb() { # $1 = parent pid
     awk '/^Pss:/{s+=$2} END{printf "%.1f", (s+0)/1024}' $files
 }
 
+warm_pool() { # $1 port  $2 total requests  $3 file — warm the capsid pool:
+    # the pool-level acceptor spreads connections across shards, so this
+    # many keep-alive-less requests reach every worker WARM_REQS times
+    local port=$1 total=$2 out=$3
+    local per_worker=$((total / $([ "$2" -gt 0 ] && echo 1 || echo 1)))
+    seq 1 "$total" | sed "s|.*|http://127.0.0.1:$port/@capsid/orders/bench/json|" >"$out"
+    touch_pool "$out"
+}
+
 touch_pool() { # $1 = url-list file; one curl per URL so every response is
     # discarded (-o binds to the first URL only when curl gets a list)
     xargs -a "$1" -P "$CURL_PAR" -I{} \
@@ -110,7 +123,8 @@ probe_capsid() { # $1 size  $2 workers  -> pss_mb or "fail"
     seq 1 $((n * 2)) | sed "s|.*|http://127.0.0.1:$port/@capsid/orders/bench/json|" \
         >"$OUT/urls.$size.$n"
     touch_pool "$OUT/urls.$size.$n"
-    sleep 1
+    warm_pool "$port" $((n * WARM_REQS)) "$OUT/urls.$size.$n"
+    sleep 2
     if ! kill -0 "$hpid" 2>/dev/null; then
         wait "$hpid" 2>/dev/null || true
         echo fail
@@ -169,6 +183,12 @@ probe_workerd() { # $1 size  $2 cells -> pss_mb or "fail"
         echo "http://127.0.0.1:$((19700 + i))/"
     done >"$OUT/urls.w.$size.$n"
     touch_pool "$OUT/urls.w.$size.$n"
+    # round-robin warm across cell ports so every cell gets its dose
+    awk -v n="$n" -v w="$WARM_REQS" \
+        'BEGIN { for (i = 0; i < w; i++) for (j = 0; j < n; j++) \
+                 printf "http://127.0.0.1:%d/\n", 19700 + j }' \
+        >"$OUT/urls.w.$size.$n.warm"
+    touch_pool "$OUT/urls.w.$size.$n.warm"
     # A pool that died under the touch (OOM, internal cap) must not yield a
     # half-loaded PSS sample: require the process alive, then a stable read.
     sleep 1
