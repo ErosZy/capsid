@@ -37,11 +37,11 @@ and ambient process APIs. In return, the Host gets a non-blocking C ABI/C++11
 data plane with streaming, credit backpressure, explicit lifecycle control,
 and a capability boundary designed for hostile code.
 
-The implementation is small and measurable: the v0.2.0 release baseline uses
-the conclusion-level samples captured on 2026-08-20 from the final rc.07
-implementation. They reach about **7,261 QPS** on JSON 1 KiB,
-start a 10 KiB bundle in **8.34 ms** source / **7.29 ms** trusted bytecode, and
-serve from about **5.9 MB PSS** (host) plus **6.4 MB** per worker. Claims are
+The implementation is small and measurable: the v0.2.2 performance point uses
+the conclusion-level samples captured on 2026-10-10 in one quiet five-stack
+session. Capsid reaches about **9,264 QPS** on JSON 1 KiB, starts a 10 KiB
+bundle in **18.4 ms** source / **17.4 ms** trusted bytecode, and serves from a
+**12.2 MB PSS** serving path (5.3 MB host + 6.9 MB worker). Claims are
 backed by pinned WPT, framework differentials, sanitizers, fuzzing, privileged
 sandbox probes, and identity-linked performance evidence.
 
@@ -277,23 +277,26 @@ See [framework compatibility](docs/framework-compatibility/README.md).
 
 ## Performance
 
-Conclusion-level v0.2.0 baseline samples (captured from `v0.2.0-rc.07` on
-2026-08-20, AMD Ryzen 3 3300X 4C/8T, Ubuntu 24.04/WSL2,
-conns=64, 3 rounds; correctness checked every round — all 144 rounds OK, capsid
-host/worker perf profiles collected):
+Conclusion-level v0.2.2 samples (captured 2026-10-10 in one quiet session,
+Intel i5-12400F 6C/12T on WSL2, single serving process per stack, conns=64 /
+inflight=64, warmup 5 s + 5 measured rounds of 15 s, exact-body correctness
+checked every round — all rounds OK). The comparison stacks run their
+framework-optimal single-process configs; the interactive history page with
+full charts lives at <https://eroszy.github.io/capsid/>.
 
 | Dimension | Capsid | Comparison |
 | --- | ---: | ---: |
-| JSON 1 KiB throughput | **7,261 QPS** | FastAPI 6,330<br>Flask 5,139<br>Slim 1,894 |
-| JSON 16 KiB throughput | 5,141 QPS | FastAPI **5,520** |
-| Static bytes (1k-32k) | 3,520-5,343 QPS | FastAPI 4,869-6,205 QPS (leads) |
-| Stream 1 KiB throughput | **4,845 QPS** | Flask 4,704<br>FastAPI 2,246 |
-| Serving path memory (host + 2 workers) | **5.9 MB PSS host, 6.4 MB per worker** | gunicorn worker 23.7 MB PSS<br>uvicorn worker 42.0 MB PSS |
-| Small bundle cold start (10 KiB) | **8.34 ms** source / **7.29 ms** bytecode | Node 108 ms<br>Deno 39 ms |
-| 1 MB trusted bytecode cold start | **35.89 ms** | Node 135 ms<br>Deno 52 ms |
+| JSON 1 KiB throughput | **9,264 QPS** | workerd 26,624<br>FastAPI 12,948<br>Flask 3,568<br>PHP Slim 2,095 |
+| JSON 16 KiB throughput | 4,341 QPS | workerd **20,189**<br>FastAPI 12,599<br>Flask 2,878<br>PHP Slim 2,008 |
+| Stream 1 KiB throughput | **7,020 QPS** | workerd 14,192<br>FastAPI 6,671<br>Flask 3,987<br>PHP Slim 2,032 |
+| Serving path memory | **12.2 MB PSS** (5.3 host + 6.9 worker) | Flask 17.0<br>PHP Slim 28.1<br>FastAPI 46.1<br>workerd 581.0 (untuned V8) |
+| Small bundle cold start (10 KiB) | **17.4 ms** bytecode / 18.4 ms source | Deno 20<br>workerd 20<br>Node 57 |
+| 1 MB trusted bytecode cold start | **28.3 ms** | workerd 38<br>Deno 55<br>Node 81 |
 
-Full methodology, the 12-workload matrix (1k-32k × json/bytes/stream), per-process
-resource breakdown, and evidence rules are in
+workerd leads raw throughput on every cell but its process grows to ≈581 MB
+PSS under the 64-connection load and never returns it; capsid holds the
+density point at ≈12 MB for the whole serving path. Full methodology, the
+five-stack protocol, per-process memory breakdowns, and evidence rules are in
 [performance-benchmarks.md](docs/performance-benchmarks.md).
 
 ## Platform Support

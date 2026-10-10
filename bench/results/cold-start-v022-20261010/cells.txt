@@ -1,0 +1,12 @@
+capsid source 10k         total_ms=   18.43 ready_ms=   17.81 warm_ms=  0.120 pss_mb=0.8
+capsid source 100k        total_ms=   22.82 ready_ms=   21.91 warm_ms=  0.120 pss_mb=1.2
+capsid source 1m          total_ms=   76.10 ready_ms=   75.17 warm_ms=  0.120 pss_mb=4.6
+capsid bytecode 10k         total_ms=   17.35 ready_ms=   16.67 warm_ms=  0.130 pss_mb=0.9
+capsid bytecode 100k        total_ms=   18.28 ready_ms=   17.60 warm_ms=  0.120 pss_mb=1.7
+capsid bytecode 1m          total_ms=   28.33 ready_ms=   27.64 warm_ms=  0.120 pss_mb=10.2
+node        10k         total_ms=   57.00 ready_ms=   49.00 warm_ms=  4.000 pss_mb=59.6
+workerd        10k         total_ms=   20.00 ready_ms=   15.00 warm_ms=  4.000 pss_mb=49.8
+node        100k        total_ms=   57.00 ready_ms=   49.00 warm_ms=  4.000 pss_mb=60.2
+workerd        100k        total_ms=   22.00 ready_ms=   15.00 warm_ms=  5.000 pss_mb=51.7
+node        1m          total_ms=   81.00 ready_ms=   73.00 warm_ms=  4.000 pss_mb=76.3
+workerd        1m          total_ms=   38.00 ready_ms=   15.00 warm_ms=  4.000 pss_mb=64.4

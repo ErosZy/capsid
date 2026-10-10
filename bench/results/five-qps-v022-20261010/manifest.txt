@@ -1,0 +1,22 @@
+generated_at: 2026-10-10T21:57:09+08:00
+commit: 00e079724af15707c7172831270305b595bbd57e
+command: OUT=/tmp/opencode/qps-rr CONNECTIONS=64 INFLIGHT=64 WARMUP=5 DURATION=15 ROUNDS=5 STACKS='capsid workerd fastapi flask php' bash bench/qps-lane.sh
+uname: Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+cpu: 12th Gen Intel(R) Core(TM) i5-12400F
+nproc: 12
+python: Python 3.13.11
+python_pkgs: fastapi==0.143.0 Flask==3.1.3 gunicorn==26.2.0 starlette==1.7.0 uvicorn==0.54.0 
+php_fpm: PHP 8.3.6 (fpm-fcgi) (built: Sep  2 2026 12:56:02)
+php_pool: static max_children=1, opcache on, validate_timestamps=0
+nginx: nginx version: nginx/1.24.0 (Ubuntu)
+workerd_version: workerd 2026-10-10
+2136f37cb41060af254046dd1ecb1fce79f6b7a674e7fbe36ef0884d7f32bf0a  /home/eroszhao/capsid/build-release/capsid-host
+a627bbc16389d9a69b77f952d5571a2f2cac8c49afae6005e8e06fe96d1c196d  /home/eroszhao/capsid/build-release/capsid-worker
+50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd  /tmp/opencode/workerd-bin/workerd-linux-64
+cae2985b13befc17f579132dd703f62fa5a0d2264330d398bb2e0330af97ca8f  bench/bin/loadgen
+31875b23e4004a51c19045cb7cf48e29f779cb85334fa81f8927500e52743224  /tmp/opencode/qps/app-workerd.mjs
+0e8a55024234ee40e79d3992f029b95dff45f9c12716f0882ecdbbf524013c01  /tmp/opencode/qps/workerd-qps.capnp
+7aeeb230221fd9c5a837a3690822b97655b1839c18531c861c3f758c5c0d3647  /home/eroszhao/capsid/bench/bench-apps/fastapi_app.py
+20006519103ffc0da0235ea1c320a8bedba0053a2bd7a13dba60944043316856  /home/eroszhao/capsid/bench/bench-apps/flask_app.py
+89fd6357210aac329a5120f4dc1e304c6a90d9df2f0d01f9eb03914c0d5688e5  /home/eroszhao/capsid/bench/bench-apps/php-slim/public/index.php
+404808854be829b73e109453f3c7016f9aa8b0c22e9668d80daf0fb1ff64d3a0  /home/eroszhao/capsid/bench/bench-apps/php-slim/composer.json

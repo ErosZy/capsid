@@ -1,0 +1,9 @@
+capsid source 10k         total_ms=   17.75 ready_ms=   17.20 warm_ms=  0.120 pss_mb=0.8
+capsid source 100k        total_ms=   22.14 ready_ms=   21.51 warm_ms=  0.120 pss_mb=1.2
+capsid source 1m          total_ms=   75.85 ready_ms=   74.91 warm_ms=  0.120 pss_mb=4.6
+capsid bytecode 10k         total_ms=   16.17 ready_ms=   15.62 warm_ms=  0.120 pss_mb=0.9
+capsid bytecode 100k        total_ms=   17.74 ready_ms=   17.11 warm_ms=  0.120 pss_mb=1.7
+capsid bytecode 1m          total_ms=   27.21 ready_ms=   26.45 warm_ms=  0.120 pss_mb=10.2
+deno        10k         total_ms=   20.00 ready_ms=   14.00 warm_ms=  4.000 pss_mb=34.9
+deno        100k        total_ms=   31.00 ready_ms=   26.00 warm_ms=  4.000 pss_mb=36.4
+deno        1m          total_ms=   55.00 ready_ms=   49.00 warm_ms=  4.000 pss_mb=41.4

@@ -1,0 +1,8 @@
+[2026-10-10 21:57:10 +0800] [122654] [INFO] Starting gunicorn 26.2.0
+[2026-10-10 21:57:10 +0800] [122654] [INFO] Listening at: http://127.0.0.1:18998 (122654)
+[2026-10-10 21:57:10 +0800] [122654] [INFO] Using worker: sync
+[2026-10-10 21:57:10 +0800] [122659] [INFO] Booting worker with pid: 122659
+[2026-10-10 21:57:10 +0800] [122654] [INFO] Control socket listening at /run/user/1000/gunicorn.ctl
+[2026-10-10 22:24:19 +0800] [122654] [INFO] Handling signal: term
+[2026-10-10 22:24:19 +0800] [122659] [INFO] Worker exiting (pid: 122659)
+[2026-10-10 22:24:20 +0800] [122654] [INFO] Shutting down: Master

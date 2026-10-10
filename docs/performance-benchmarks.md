@@ -1,6 +1,6 @@
 # Performance: Evidence Rules and Current State
 
-This document is the single maintained document for performance topics; it keeps the evidence rules and the current (2026-08-20) conclusion-level samples. The `v0.2.0` stable release adopts these final-RC runs as its published performance baseline. Measurements retain their `v0.2.0-rc.07` labels because that is the exact binary identity used to collect them; the stable release changes only documentation and release metadata. Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, and the superseded 2026-08-18 runs) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
+This document is the single maintained document for performance topics; it keeps the evidence rules and the current (2026-10-10) conclusion-level samples, which the `v0.2.2` release adopts as its published performance point (commit `aef6020`, clean `v0.2.2` release build). Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, the 2026-08-18 runs, and the superseded 2026-08-20 `v0.2.0-rc.07` checkpoint) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
 
 ## 1. Evidence Rules
 
@@ -36,113 +36,86 @@ Each run must save at least the manifest (commit, identity, environment, command
 
 The early M1 baseline is only used to freeze the magnitude of the minimal common data plane: the first round does not wait for request body, streaming, cancel, or timeout to be implemented, and cannot be extrapolated into conclusions about the full data plane. Once those contracts land, they must be benchmarked on the same runner, and the new checkpoint must be recorded while keeping rather than overwriting the first-round samples.
 
-## 2. Test Environment (2026-08-20)
+## 2. Test Environment (2026-10-10)
 
 The current runs share the following environment:
 
 | Item | Value |
 |---|---|
-| CPU | AMD Ryzen 3 3300X (4C/8T) |
-| OS | Ubuntu 24.04 on WSL2, kernel 6.6.87.2-microsoft-standard-WSL2 |
-| Memory | 7.9 GiB visible to WSL |
-| Process protocol | SUT taskset 0-3 / loadgen 4-7; two-process model |
-| Load protocol | conns=64, 12 workloads × 3 rounds (warmup 3s + measured 8s), correctness checked each round; workload order rotates the starting stack to cancel drift |
-| capsid release / commit | `v0.2.0-rc.07` / `17206e4` (clean tree at build time) |
+| CPU | Intel i5-12400F (6C/12T) |
+| OS | WSL2, kernel 6.18.40.1-microsoft-standard-WSL2 |
+| Memory | 11.6 GiB visible to WSL |
+| Process protocol | SUT taskset 0-3; **one serving process per stack** (capsid single JS worker, workerd single process, uvicorn/gunicorn/php-fpm × 1) |
+| Load protocol | conns=64, inflight=64, 3 workloads × 5 rounds (warmup 5 s + measured 15 s), exact-body correctness checked every round (verdict-gated: a wrong body fails the lane) |
+| capsid release / commit | `v0.2.2` / `aef6020` (Release build, host `2136f37c…`, worker `a627bbc1…`) |
 
-The stacks under test (versions and artifact SHA-256 values are recorded in `bench/results/four-qps-rc07-clean-20260820T170500/manifest.txt` and `bench/results/cold-start-rc07-clean-20260820T173500/manifest.txt`):
+The stacks under test (versions and artifact SHA-256 values are recorded in `bench/results/five-qps-v022-20261010/manifest.txt` and `bench/results/cold-start-v022-20261010/manifest.txt`):
 
 | Stack | Component and version |
 |---|---|
-| capsid + hono | capsid `v0.2.0-rc.07` (`17206e4`; Release + LTO; host `dd0fa171…`, worker `8950ca6d…`) + Hono 4.12.32 (self-contained bundle `83ebc6c2…`); static-pool 2 workers, `initial-stream-window 16384` |
-| PHP + Slim | PHP 8.5.9 + Slim 4.15.2 + nginx 1.30.4 + php-fpm `pm=static max_children=2` (clean docker container `capsid-php-bench-clean`, port 8080, pinned to CPUs 0-3) |
-| Python + Flask | Python 3.14.5 + Flask 3.1.3 + Gunicorn 26.0.0 (2 sync workers) |
-| Python + FastAPI | Python 3.14.5 + FastAPI 0.141.1 + Uvicorn 0.52.3 (2 workers, uvloop + httptools) |
-| Cold-start extras | Node v24.18.0, Deno 2.9.3 |
+| capsid | `v0.2.2` (`aef6020`; Release; host `2136f37c…`, worker `a627bbc1…`), `--mode single-worker`, precomputed-response JS fixture |
+| Cloudflare workerd | workerd 2026-10-10 (single process, minimal capnp config, same fixture logic) |
+| Python + FastAPI | Python 3.13 + FastAPI 0.143.0 + Uvicorn 0.54.0 (1 worker, uvloop + httptools, `--no-access-log`; framework-optimal fixture: precomputed matrix bodies, async endpoints, async stream generators) |
+| Python + Flask | Python 3.13 + Flask 3.1.3 + Gunicorn 26.2.0 (1 sync worker; sync measured faster than gthread — GIL contention outweighs the keep-alive it adds) |
+| PHP + Slim | PHP 8.3.6 + Slim 4 + nginx 1.24.0 + php-fpm `pm=static max_children=1`, opcache `validate_timestamps=0` + JIT tracing, nginx `fastcgi_keep_conn on` |
+| Cold-start extras | Node v24.14.0, Deno 2.9.7 |
 
-Workload matrix: json / bytes / stream at 1k, 4k, 16k, 32k (4k cells use the loadgen `matrix-<kind>-<label>` names; the legacy 1k/16k/32k names are `json`/`json16k`/`json32k` etc.). Payloads are byte-aligned and the loadgen verifies exact content every round: `matrix-bytes` is exact 0x62 bytes, `matrix-stream` 's' bytes, legacy bytes 0x61, legacy stream b/c/d thirds, legacy JSON compact or spaced marker.
+Workload set: `matrix-json-1k`, `matrix-json-16k`, `stream` (1 KiB b/c/d thirds). Payloads are byte-aligned and the loadgen verifies exact content every round. The 12-workload matrix of the rc.07 checkpoint is retired with it; these three lanes are the maintained history lanes and back the published page.
 
-## 3. Four-Stack Matrix (2026-08-20, c64, 3 rounds)
+## 3. Five-Stack Serving Matrix (2026-10-10, c64, 5 rounds)
 
-12 workloads × 4 stacks × 3 rounds, warmup 3s + measured 8s, correctness checked every round — **all 144 rounds OK**. The negative control returned HTTP 404 for 1,404/1,404 responses and the correctness verifier rejected every response; the load generator's process exit code alone must not be treated as a correctness verdict. This run meets the conclusion threshold: raw samples, correctness verdicts, per-process resource samples, and capsid host/worker perf profiles are all saved. Raw data: `bench/results/four-qps-rc07-clean-20260820T170500/` (144 samples + 144 correctness files; 349 manifest checksum entries), profiles: `bench/results/four-qps-rc07-clean-profile-20260820T173200/`.
+One quiet session, all five stacks back-to-back, warmup 5 s + 5 measured rounds of 15 s per workload, verdict-gated correctness every round. Raw samples, correctness verdicts, and manifests: `bench/results/five-qps-v022-20261010/`. The interactive history page built from this point: <https://eroszy.github.io/capsid/>.
 
-Median QPS over 3 rounds (winner per row in bold):
+Median QPS over 5 rounds (winner per row in bold):
 
-| workload | capsid + hono | PHP 8 + Slim | Flask + Gunicorn | FastAPI + Uvicorn |
-|---|---:|---:|---:|---:|
-| json 1k | **7261** | 1894 | 5139 | 6330 |
-| matrix-json-4k | 5479 | 1751 | 4631 | **5562** |
-| json 16k | 5141 | 1720 | 4703 | **5520** |
-| json 32k | 4286 | 1628 | 4129 | **4788** |
-| bytes 1k | 5343 | 1901 | 5113 | **6205** |
-| matrix-bytes-4k | 4956 | 1757 | 4877 | **5898** |
-| bytes 16k | 4432 | 1730 | 4729 | **5594** |
-| bytes 32k | 3520 | 1631 | 4159 | **4869** |
-| stream 1k | **4845** | 1793 | 4704 | 2246 |
-| matrix-stream-4k | 4831 | 1763 | **4861** | 3049 |
-| stream 16k | **3961** | 1669 | 3725 | 2149 |
-| stream 32k | 3267 | 1567 | **4165** | 2088 |
+| workload | capsid | workerd | FastAPI | Flask | PHP Slim |
+|---|---:|---:|---:|---:|---:|
+| json 1k | 9,264 | **26,624** | 12,948 | 3,568 | 2,095 |
+| json 16k | 4,341 | **20,189** | 12,599 | 2,878 | 2,008 |
+| stream 1k | 7,020 | **14,192** | 6,671 | 3,987 | 2,032 |
 
-p50/p95/p99 latency (ms, median over rounds, from the same samples):
+p50/p95 latency (ms, median over rounds, from the same samples):
 
-| workload | capsid | PHP | Flask | FastAPI |
-|---|---:|---:|---:|---:|
-| json 1k | 8.60 / 11.19 / 12.51 | 33.69 / 35.05 / 36.16 | 12.44 / 13.05 / 13.43 | 10.21 / 13.24 / 15.17 |
-| json 16k | 12.40 / 15.22 / 16.86 | 37.08 / 38.51 / 39.37 | 13.53 / 14.25 / 15.32 | 11.39 / 13.88 / 15.63 |
-| json 32k | 14.72 / 18.25 / 20.48 | 39.26 / 40.51 / 41.29 | 15.39 / 16.32 / 17.58 | 13.18 / 15.89 / 17.75 |
-| bytes 1k | 11.96 / 14.15 / 15.90 | 33.63 / 34.66 / 35.31 | 12.48 / 13.19 / 13.87 | 10.09 / 12.63 / 14.46 |
-| bytes 32k | 18.42 / 23.70 / 25.34 | 39.17 / 40.41 / 41.09 | 15.29 / 16.19 / 18.28 | 12.96 / 16.10 / 18.10 |
-| stream 1k | 13.03 / 16.03 / 18.27 | 35.46 / 37.29 / 38.54 | 13.57 / 14.25 / 14.63 | 28.18 / 33.01 / 36.98 |
-| stream 16k | 16.73 / 21.05 / 23.07 | 38.16 / 40.20 / 41.53 | 17.10 / 17.97 / 19.44 | 29.44 / 34.31 / 37.95 |
-| stream 32k | 19.54 / 23.91 / 26.06 | 40.69 / 42.01 / 43.17 | 15.31 / 16.11 / 17.47 | 30.25 / 35.62 / 39.35 |
+| workload | capsid | workerd | FastAPI | Flask | PHP Slim |
+|---|---:|---:|---:|---:|---:|
+| json 1k | 6.9 / 10.5 | 1.7 / 3.9 | 5.0 / 7.6 | 18.6 / 20.6 | 30.3 / 36.3 |
+| json 16k | 14.7 / 16.8 | 2.4 / 5.5 | 4.9 / 9.1 | 22.2 / 24.1 | 32.7 / 38.2 |
+| stream 1k | 8.9 / 9.9 | 3.6 / 9.3 | 9.3 / 12.7 | 16.1 / 17.1 | 31.5 / 32.5 |
 
-Per-process resources (median over the 5s sampling window; PSS from `smaps_rollup`, RSS from `statm`; PSS is `n/a` where the sampler (non-root) cannot read another user's `smaps_rollup` — nginx/php-fpm run as root in the container. CPU is the max window-average % of one core observed for any process of the role):
+Serving-path memory (process-tree PSS after the last round; trickle = fresh process after 15 s of 10 req/s):
 
-| role | PSS (MB) | RSS (MB) | CPU max observed |
-|---|---:|---:|---:|
-| capsid host (static-pool) | 5.9 | 7.6 | 105% |
-| capsid worker (each of 2) | 6.4 | 9.8 | 91% |
-| gunicorn worker (each of 2) | 23.7 | 32.7 | 94% |
-| uvicorn worker (each of 2) | 42.0 | 51.5 | 110% |
-| nginx (container, root) | n/a | 6.1 | 25% |
-| php-fpm child (each of 2, root) | n/a | 14.6 | 96% |
-
-capsid's full serving path (host + 2 workers) stays at ≈5.9 MB PSS for the host plus ≈6.4 MB per worker (≈18.7 MB total); a gunicorn sync worker alone uses 23.7 MB PSS, and a uvicorn worker 42.0 MB PSS. Resource sampling is scoped to each launched process tree, so unrelated host processes are not included.
-
-### Profiles (capsid host and worker, json16k, 30s, `perf record -F 99`)
-
-`bench/results/four-qps-rc07-clean-profile-20260820T173200/` — perf data + full `perf report` text + correctness (163,654 responses checked, 0 mismatches, errors, or timeouts during the profile session). Only capsid is profiled: it is the stack under test; the PHP/Flask/FastAPI stacks serve as comparison references and are not profiled.
-
-capsid **host** (873 samples): 5.84% `memcpy`, 5.73% `__libc_malloc_impl`, 3.32% `get_meta`, 2.86% `normalize_public_request`, and 2.86% `alloc_slot` — the host's share is dominated by request/response buffer handling, metadata lookup, and allocation on the scheduling path.
-
-capsid **worker** (3,711 samples): 21.18% `JS_CallInternal` (QuickJS entry into the Hono handler), 9.59% `malloc_usable_size`, 6.58% `__libc_malloc_impl`, 6.20% `lre_exec_backtrack` (regexp execution), and 3.96% `free` — the worker's time is dominated by JS handler execution and allocation in the application/framework path.
+| stack | serving PSS (MB) | breakdown (MB) | trickle PSS (MB) |
+|---|---:|---|---:|
+| capsid | 12.2 | host 5.3 + worker 6.9 | 9.5 |
+| Flask | 17.0 | gunicorn master 0.4 + worker 16.5 | 16.3 |
+| PHP Slim | 28.1 | nginx 0.7 + nginx-worker 3.6 + fpm-master 14.0 + fpm-worker 9.8 | 27.5 |
+| FastAPI | 46.1 | uvicorn master 0.4 + worker 45.7 | 42.2 |
+| workerd | 581.0 | single process | 44.2 |
 
 ### Reading the matrix
 
-- **Small JSON: capsid wins at 1k** (7,261 vs fastapi 6,330 vs flask 5,139 vs php 1,894); FastAPI narrowly wins 4k (5,562 vs capsid 5,479). PHP is the consistent laggard at ~1.6-1.9k QPS with p95 ≈35-42 ms.
-- **Static medium payloads: FastAPI (uvloop + httptools + precomputed bodies) leads** on json16k/32k and all bytes cells. Capsid remains ahead of Flask on every JSON cell and on bytes 1k/4k, while Flask leads capsid on bytes 16k/32k.
-- **Streaming: FastAPI's response path is the outlier.** Its `StreamingResponse` reaches 2,246 QPS at 1k versus 6,205 for static bytes and trails capsid by 2.16× at stream 1k and 1.84× at stream 16k. Flask's plain generator + WSGI holds up better and wins stream 4k/32k. Capsid streams at 89-98% of its corresponding static-bytes throughput.
-- **Payload scaling varies by stack and response path**: from 1k to 32k, capsid JSON loses 41%, FastAPI JSON 24%, and PHP JSON 14%; capsid bytes and stream both lose about one third. Baseline and response construction therefore matter alongside payload size.
-- **Density**: capsid's full host + 2-worker serving path is ≈18.7 MB PSS; one gunicorn worker is 23.7 MB PSS and one uvicorn worker is 42.0 MB PSS. Container-owned php-fpm PSS is unavailable, so its 14.6 MB child RSS is reported without treating it as directly comparable to PSS.
+- **Raw throughput: workerd leads every cell** (2.0-4.7× capsid) — but it is an untuned-V8 upper bound, not a tuned production limit.
+- **workerd memory is the outlier**: ≈581 MB PSS under the 64-connection load versus a ≈44 MB trickle — V8 heap + JIT growth that is never returned. It is 12× past the second-largest stack and dominates the memory axis.
+- **FastAPI is the Python leader once framework-optimal**: precomputed bodies, async endpoints, and async stream generators (plus `--no-access-log`, matching gunicorn's default) put it ahead of Flask on JSON (12.9k / 12.6k vs 3.6k / 2.9k); its streaming path still trails its own static-bytes throughput. Earlier checkpoints that showed FastAPI at ~3.2k were fixture artifacts (per-request `json.dumps`, sync-def threadpool hops, and an access log redirected onto a drvfs mount), not framework behavior.
+- **capsid holds the density point**: ≈12.2 MB PSS for the whole serving path (host 5.3 + worker 6.9) with mid-pack QPS — about 1/4 of FastAPI's memory and 1/48 of workerd's under the same load.
+- **PHP Slim is the consistent laggard** at ~2.0-2.1k QPS (p95 ≈32-38 ms) even with JIT tracing and FastCGI keep-alive enabled.
 
-Across all 12 cells, geometric-mean QPS moved from the retired 2026-08-18 AMD checkpoint to this run by +1.40% for capsid, +3.98% for PHP, +1.22% for Flask, and +0.06% for FastAPI. Because every stack and the clean-run setup moved together, this supports **no observed capsid throughput regression**; it is not evidence that a specific capsid change caused an improvement.
+## 4. Cold-Start Comparison (2026-10-10, median ms, 5 rounds)
 
-## 4. Cold-Start Comparison (2026-08-20, median ms, 5 rounds)
+Measurement class 4: **process start → first validated response**. The shell-measured stacks (Node/Deno/workerd) previously read ~400 ms regardless of fixture size because `total_ms` was captured after a 50-request curl warm loop and the PSS walk; the endpoint now sits at the first exact-body-verified response, matching capsid's in-process runner. Fixture is real-shaped JS source (three template rotations), at 10k/100k/1M sizes; each side loads the same function body byte-aligned, differing only in entry point. capsid uses C ABI spawn→load (source/trusted bytecode)→READY→first response; Node/Deno use process start→stdout READY→curl first request; workerd uses first TCP connect→curl first request (its isolate initializes lazily on the first request, so ready→first-response carries that cost). Each cell drops 1 warmup round and takes the median of 5 rounds. Raw data: `bench/results/cold-start-v022-20261010/` (cells + manifests; the Deno pass ran separately and is stored alongside as `cells.deno.txt`).
 
-Measurement class 4 (process creation, handshake, validation, loading, READY, and first response). Fixture is real-shaped JS source (three template rotations: loop + object-literal function, class, arrow/map/filter/sort chain), at 10k/100k/1M sizes; each side loads the same function body byte-aligned, differing only in entry point. capsid uses C ABI spawn→load (source/trusted bytecode)→READY→first response (bodyless IPC request); Node/Deno use process start→stdout READY→curl first request. Each cell drops 1 warmup round and takes the median of 5 rounds. Capsid was rebuilt from `v0.2.0-rc.07` / `17206e4`; raw data and 20 manifest checksum entries are in `bench/results/cold-start-rc07-clean-20260820T173500/`.
+| Size | capsid source | capsid trusted bytecode | Node 24.14 | Deno 2.9.7 | workerd |
+|---:|---:|---:|---:|---:|---:|
+| 10k | 18.4 | **17.4** | 57 | 20 | 20 |
+| 100k | 22.8 | **18.3** | 57 | 31 | 22 |
+| 1M | 76.1 | **28.3** | 81 | 55 | 38 |
 
-| Size | capsid source | capsid trusted bytecode | Node 24.18 source | Deno 2.9.3 source |
-|---:|---:|---:|---:|---:|
-| 10k | **8.34** | **7.29** | 108 | 39 |
-| 100k | **18.24** | **9.68** | 108 | 39 |
-| 1M | **134.09** | **35.89** | 135 | 52 |
+Cold PSS (MB, same samples): capsid source 0.8/1.2/4.6, bytecode 0.9/1.7/10.2, Node 59.6/60.2/76.3, Deno 34.9/36.4/41.4, workerd 49.8/51.7/64.4.
 
-READY times (same samples): capsid source 8.00/17.85/133.71, bytecode 6.91/9.27/35.55, Node 96/97/123, Deno 31/31/44.
-
-- **Startup baseline dominates small sizes**: capsid 10k source at 8.34 ms is about 13× faster than Node (108 ms) and 4.7× faster than Deno (39 ms), and it remains fastest at 100k (18.24 vs 108/39 ms).
-- **Trusted bytecode pays off as compile cost grows**: at 1M, bytecode at 35.89 ms is 3.74× faster than capsid source, 3.76× faster than Node, and 31% faster than Deno. Node's ~108 ms small-bundle floor is process + V8 bootstrap; Deno's ~39 ms floor is smaller, but capsid bytecode beats it at every measured size.
-- **At 1M source capsid and Node are effectively tied in these medians** (134.09 vs 135 ms), while Deno remains faster at 52 ms. Trusted bytecode erases that source-compilation gap.
-- Semantic note: capsid first response goes through in-process IPC, while Node/Deno use local HTTP curl; "first request completes after ready" is aligned, but the request path implementation differs, so this is not an isomorphic comparison.
+- **capsid trusted bytecode is flat across sizes**: 17.4 → 18.3 → 28.3 ms, because deserialization replaces parsing; at 1M it is 2.7× faster than capsid source, 2.9× faster than Node, and ~1.9× faster than Deno.
+- **Deno and workerd have the strongest small-bundle floors** (~20 ms); Node's ~57 ms floor is process + V8 bootstrap. Source-mode parsing shows up at 1M for every source-loading engine (capsid source 76.1, Node 81, Deno 55).
+- **Cold memory stays small for capsid** (≤10.2 MB even at 1M bytecode) versus 35-76 MB for the comparison engines.
 
 ## 5. Retired Checkpoints
 
-The previous 2026-08-18 AMD Ryzen 3 3300X checkpoint (`c943e35`, `four-qps-final-20260818T131300`, `four-qps-profile-20260818T132600`, and `cold-start-20260818T134435`) was superseded by the clean rc.07 run above. The 2026-08-18 Intel i5-12400F 6C/12T conclusion-adjacent tables (commit `b39acee`/`build-win`) and the 2026-08-14 4C tables are also retired. They remain available in git history and in the raw artifacts under `bench/results/` referenced by the older revisions of this document.
+The 2026-08-20 `v0.2.0-rc.07` checkpoint (`four-qps-rc07-clean-20260820T170500`, `four-qps-rc07-clean-profile-20260820T173200`, `cold-start-rc07-clean-20260820T173500`) is superseded by the five-stack v0.2.2 point above: it measured a two-worker serving model, a 12-workload matrix, and a cold-start `total_ms` whose shell-measured side was inflated by the warm loop. The 2026-08-18 AMD Ryzen checkpoints, the 2026-08-18 Intel i5-12400F 6C/12T conclusion-adjacent tables (`b39acee`/`build-win`), and the 2026-08-14 4C tables were retired earlier. They remain available in git history and in the raw artifacts under `bench/results/` referenced by the older revisions of this document.

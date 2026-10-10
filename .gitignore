@@ -78,4 +78,8 @@
 !/bench/results/dual-ab-r2-*/**
 !/bench/results/m1p-gate0-*/
 !/bench/results/m1p-gate0-*/**
+!/bench/results/five-qps-v022-20261010/
+!/bench/results/five-qps-v022-20261010/**
+!/bench/results/cold-start-v022-20261010/
+!/bench/results/cold-start-v022-20261010/**
 /0

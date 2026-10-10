@@ -1,0 +1,84 @@
+rounds: 5 warm: 50 sut_cpuset: 0-3
+generated_at: 2026-10-10T22:35:42+08:00
+commit: 50d0e4287784de6370a287f0396ea2b828e6e047
+tag: 
+runner_sha256: 00178a2118fb0a2c2985d43278f72a860c9e90fca3a79d361f0fdefbe7538cda
+runner_diff_sha256: d9d0beaf711cb4ffca3e779fb1ac77c411a73ef170ec307fbd613fa60c364f02
+command: OUT=/tmp/opencode/cold-vmfix BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh
+uname: Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+cpu: 12th Gen Intel(R) Core(TM) i5-12400F
+nproc: 12
+mem_total: 12168676 kB
+a627bbc16389d9a69b77f952d5571a2f2cac8c49afae6005e8e06fe96d1c196d  build-release/capsid-worker
+46f7d351c46ca36812b008514f8524da053a4c437f9c417e498f61273f87685e  bench/bin/cold-start
+e75c6284eaef9b82317ba6adc20bd6f6729b064d23952fb651fc51a4f2c5ad33  build-release/capsid-bytecode-compile
+e237a2839d0cbdc9a9a2adda1a184afc0f5b20306ffbe923af5686550472d8a8  /home/eroszhao/.nvm/versions/node/v24.14.0/bin/node
+node: v24.14.0
+deno: absent
+50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd  /tmp/opencode/workerd-bin/workerd-linux-64
+workerd_version: workerd 2026-10-10
+de3c1776778e44d72e7f3254babc7c049894861563937818d95c77c233dcc6e5  /tmp/cold-start-apps/app-capsid-100k.attest.json
+a86eefdc3db36da61b8de9ff366a4a63d3ae38338bdba5df4de7a48ed8341608  /tmp/cold-start-apps/app-capsid-100k.mjs
+bb4738f4909bd78fc5d13c8613277aaa01d8bd7e3db9d81a9c6a9a6a076ecae5  /tmp/cold-start-apps/app-capsid-100k.msg.bin
+42cdec3e9b1f8d70cb8e84a7a76d636f1ba9f8f56a1607bd135d44f666b0487f  /tmp/cold-start-apps/app-capsid-100k.qjsb
+6757479aa3a3079e6021e00f38237728ecb24eae04c327244331ece65d015134  /tmp/cold-start-apps/app-capsid-10k.attest.json
+34358cfda3715f251b7d5490e9258dacb28ca23c20808bdf23016fe4cbe558a5  /tmp/cold-start-apps/app-capsid-10k.mjs
+267d5ec59cd80e462faa362f8e109d3ac0e8e5fe7a305d87874ea5602ba595f7  /tmp/cold-start-apps/app-capsid-10k.msg.bin
+64d23483747a9a34d412b0a15f551c51d172470959db243428bcb44d37371444  /tmp/cold-start-apps/app-capsid-10k.qjsb
+81c6bc98b1f5437ceda50677046ca9606a6dbd2b5cedc35b6b84a2111a4431f5  /tmp/cold-start-apps/app-capsid-1m.attest.json
+caf0e4923b882f745d94d67613f301e29cdb40769c0b91ee2db5118329f890b3  /tmp/cold-start-apps/app-capsid-1m.mjs
+543050de56465da2b79041e60034eb2228eb0787f08337c679b016c70c63ec3d  /tmp/cold-start-apps/app-capsid-1m.msg.bin
+eec8a5e4b04fdbfc7708c788b51df8c085f17da19317890b1cdb20dfcac3ad45  /tmp/cold-start-apps/app-capsid-1m.qjsb
+52d9b1c85887235643a2920a2a9d943bed4f45fb373cf2bfbd1aa7f01f8cbf33  /tmp/cold-start-apps/app-deno-100k.mjs
+52cd682eecbb36dbd74d59224a316050c187f7fa74e5c414dedb66423bbd43a8  /tmp/cold-start-apps/app-deno-10k.mjs
+2955540e42b827204128225353ac863dfe3fae24a976887c7107cffae1aa1cab  /tmp/cold-start-apps/app-deno-1m.mjs
+d464794944270f3b9cb2a3db4171dd9f570819d738022229fac7aefad5cf37c1  /tmp/cold-start-apps/app-node-100k.mjs
+ec8f38da6a1d0a680838aa7f19f249ee62ab1c93f8cc4c3423a76a84295508f7  /tmp/cold-start-apps/app-node-10k.mjs
+c28cbf9daac40872c52659d3c88fb00ab2483a8b36abc165029b7bdc52a280c5  /tmp/cold-start-apps/app-node-1m.mjs
+ad79fa371a5d0bd724c6d474c07ed591d496f419250e789e1cc8d882f0dd7b2f  /tmp/cold-start-apps/app-workerd-100k.mjs
+9110fd530d4ac9872b6216f01304d84522e56b3f4e4549fa2ce01f8986d5a8ef  /tmp/cold-start-apps/app-workerd-10k.mjs
+f984db70d17f33281a036d6cd660658f3afcd511dbd195f11cf7cb1836c5f8ea  /tmp/cold-start-apps/app-workerd-1m.mjs
+509f1533102db421923add12e2aa589b78324276ff17e446e019aa0b373f1ffc  /tmp/cold-start-apps/workerd-100k.capnp
+1b567bd014c97836f4eea09acd3505eae3806ca67de73241643558ca11335c9d  /tmp/cold-start-apps/workerd-10k.capnp
+fcda1bf731633e027c29cf0ac97a0b067d2d9da83aee35d8ab4069c6b6570b35  /tmp/cold-start-apps/workerd-1m.capnp
+worker: build-release/capsid-worker
+build_info_begin
+capsid-build-info-v1
+version=0.2.2
+commit=aef602081134d6e87fd141a5693bbbb7c9ad7f2e
+commitDate=2026-09-01T12:44:38+08:00
+treeClean=true
+provenanceDirty=0
+buildId=sha256:f67ec545bff828d2eb1ec92dd4cdf27e389a4aee1619c98d0aa258ae870ecb0f
+compatibilityId=sha256:2d1fbf82ed9c1b4b338cfbeedcfd76f8a32bf75ed50cbad427db3b9344668b84
+compilerId=GNU
+compilerVersion=13.3.0
+targetTriple=x86_64-unknown-Linux
+cmakeBuildType=Release
+featureFlags=lto=ON asan=OFF ubsan=OFF tsan=OFF mimalloc=OFF host=ON worker=ON
+--- bytecode compatibility record (v2) ---
+schema=capsid-bytecode-compatibility-v2
+quickjsCommit=bf8988fc401e737f9946cd10a3463b48aab0fd7e
+txikiOverlayManifest=e38d9845db864ea031e95b0885982b24077b15117f2b5066fc6dd6ead7b49539
+bytecodeCompileFlags=build_type=Release lto=ON asan=OFF ubsan=OFF mimalloc=OFF
+targetArchitecture=x86_64
+endianness=little
+pointerWidthBits=64
+bytecodeFormatIdentity=quickjs-ng-bytecode-v1
+--- build provenance record (v1) ---
+schema=capsid-build-provenance-v1
+capsidCommit=aef602081134d6e87fd141a5693bbbb7c9ad7f2e
+capsidTreeClean=true
+runtimeVersion=0.2.2
+abiVersion=7
+fetchRpcVersion=3
+compatibilityId=sha256:2d1fbf82ed9c1b4b338cfbeedcfd76f8a32bf75ed50cbad427db3b9344668b84
+capabilityManifestSha256=da742bffc35c8bd77e8aacab103fb9a5eff403bac4c3806869bafb6b63ac9f66
+compilerId=GNU
+compilerVersion=13.3.0
+targetTriple=x86_64-unknown-Linux
+cmakeBuildType=Release
+featureFlags=lto=ON asan=OFF ubsan=OFF tsan=OFF mimalloc=OFF host=ON worker=ON
+dependencyOverlayKey=d852a1213a54176bbfdee04ea504e315df9e20bf9c67af903e917ca15e0f692f
+buildId=sha256:f67ec545bff828d2eb1ec92dd4cdf27e389a4aee1619c98d0aa258ae870ecb0f
+build_info_end

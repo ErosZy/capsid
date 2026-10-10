@@ -1,0 +1,35 @@
+capsid                  lowqps_pss_mb=9.5
+capsid                  lowqps_pss_detail=host=4.3;worker=5.2
+capsid matrix-json-1k   qps_med= 9263.6 p50_ms=6.863984 p95_ms=10.527157
+capsid matrix-json-16k  qps_med= 4341.1 p50_ms=14.714594 p95_ms=16.765039
+capsid stream           qps_med= 7020.3 p50_ms=8.938718 p95_ms=9.92568
+capsid                  serving_pss_mb=12.2
+capsid                  serving_pss_detail=host=5.3;worker=6.9
+workerd                  lowqps_pss_mb=44.2
+workerd                  lowqps_pss_detail=process=44.2
+workerd matrix-json-1k   qps_med=26623.8 p50_ms=1.692211 p95_ms=3.854632
+workerd matrix-json-16k  qps_med=20188.5 p50_ms=2.372748 p95_ms=5.477707
+workerd stream           qps_med=14192.0 p50_ms=3.554071 p95_ms=9.300764
+workerd                  serving_pss_mb=581.0
+workerd                  serving_pss_detail=process=581.0
+fastapi                  lowqps_pss_mb=42.2
+fastapi                  lowqps_pss_detail=master=0.4;worker=41.8
+fastapi matrix-json-1k   qps_med=12948.4 p50_ms=4.949516 p95_ms=7.578722
+fastapi matrix-json-16k  qps_med=12598.6 p50_ms=4.917227 p95_ms=9.133518
+fastapi stream           qps_med= 6671.4 p50_ms=9.342757 p95_ms=12.690356
+fastapi                  serving_pss_mb=46.1
+fastapi                  serving_pss_detail=master=0.4;worker=45.7
+flask                  lowqps_pss_mb=16.3
+flask                  lowqps_pss_detail=master=0.4;worker=15.8
+flask matrix-json-1k   qps_med= 3567.6 p50_ms=18.5868 p95_ms=20.579217
+flask matrix-json-16k  qps_med= 2878.2 p50_ms=22.196544 p95_ms=24.064835
+flask stream           qps_med= 3986.6 p50_ms=16.065413 p95_ms=17.136447
+flask                  serving_pss_mb=17.0
+flask                  serving_pss_detail=master=0.4;worker=16.5
+php                  lowqps_pss_mb=27.5
+php                  lowqps_pss_detail=nginx=0.7;nginx-worker=3.0;fpm-master=14.0;fpm-worker=9.8
+php matrix-json-1k   qps_med= 2095.2 p50_ms=30.254412 p95_ms=36.274963
+php matrix-json-16k  qps_med= 2007.9 p50_ms=32.675354 p95_ms=38.161319
+php stream           qps_med= 2032.2 p50_ms=31.496045 p95_ms=32.45147
+php                  serving_pss_mb=28.1
+php                  serving_pss_detail=nginx=0.7;nginx-worker=3.6;fpm-master=14.0;fpm-worker=9.8
