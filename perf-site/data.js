@@ -160,8 +160,8 @@ window.CAPSID_PERF_DATA = {
     "coldrun-final/raw.workerd.1m.jsonl": "1cf23b363fc0e5d5cc8f527fa586090f59aba32f28ff416432e1df6977ccc461"
    },
    "git": {
-    "commit": "aef602081134d6e87fd141a5693bbbb7c9ad7f2e",
-    "tag": "v0.2.2"
+    "commit": "1a96853776408d56cbbb6d58fc045babeebed202",
+    "tag": ""
    },
    "machine": {
     "command": "OUT=/tmp/opencode/coldrun-final BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh",
@@ -169,18 +169,13 @@ window.CAPSID_PERF_DATA = {
     "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
     "deno": "deno 2.9.7 (stable, release, x86_64-unknown-linux-gnu)",
     "generated_at": "2026-10-10T13:59:19+08:00",
-    "nginx": "nginx version: nginx/1.24.0 (Ubuntu)",
     "node": "v24.14.0",
     "nproc": "12",
-    "php_fpm": "PHP 8.3.6 (fpm-fcgi) (built: Sep  2 2026 12:56:02)",
-    "php_pool": "static max_children=1, opcache on, validate_timestamps=0",
-    "python": "Python 3.13.11",
-    "python_pkgs": "fastapi==0.143.0 Flask==3.1.3 gunicorn==26.2.0 starlette==1.7.0 uvicorn==0.54.0",
     "rounds": "5 warm: 50 sut_cpuset: 0-3",
     "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
     "workerd_version": "workerd 2026-10-10"
    },
-   "notes": "Quiet single-worker session, 5-round medians; FastAPI fixture corrected to framework-optimal (precomputed matrix bodies, async endpoints on uvloop+httptools) - FastAPI no longer pays per-request json serialization.",
+   "notes": "Quiet single-worker session (uvicorn access-log off + async generators; gunicorn -w 1; php-fpm max_children=1), 5-round medians.",
    "qps": {
     "cells": [
      {
@@ -287,6 +282,27 @@ window.CAPSID_PERF_DATA = {
       "qps": 1712.9,
       "stack": "php",
       "workload": "stream"
+     },
+     {
+      "p50Ms": 5.159695,
+      "p95Ms": 8.059293,
+      "qps": 12501.9,
+      "stack": "fastapi",
+      "workload": "matrix-json-1k"
+     },
+     {
+      "p50Ms": 5.0358,
+      "p95Ms": 9.460601,
+      "qps": 12170.0,
+      "stack": "fastapi",
+      "workload": "matrix-json-16k"
+     },
+     {
+      "p50Ms": 9.788021,
+      "p95Ms": 13.183169,
+      "qps": 6156.9,
+      "stack": "fastapi",
+      "workload": "stream"
      }
     ],
     "lowLoadPss": {
@@ -306,7 +322,7 @@ window.CAPSID_PERF_DATA = {
        "role": "master"
       },
       {
-       "mb": 17.4,
+       "mb": 47.7,
        "role": "worker"
       }
      ],
@@ -347,7 +363,7 @@ window.CAPSID_PERF_DATA = {
     },
     "lowLoadPssMb": {
      "capsid": 9.3,
-     "fastapi": 17.8,
+     "fastapi": 48.1,
      "flask": 14.9,
      "php": 27.5,
      "workerd": 44.2
@@ -369,7 +385,7 @@ window.CAPSID_PERF_DATA = {
        "role": "master"
       },
       {
-       "mb": 17.4,
+       "mb": 51.6,
        "role": "worker"
       }
      ],
@@ -410,7 +426,7 @@ window.CAPSID_PERF_DATA = {
     },
     "servingPssMb": {
      "capsid": 12.0,
-     "fastapi": 17.8,
+     "fastapi": 52.0,
      "flask": 15.6,
      "php": 28.1,
      "workerd": 541.8

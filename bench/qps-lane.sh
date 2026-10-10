@@ -246,12 +246,15 @@ if stack_enabled workerd; then
     wait_port "$WORKERD_PID" 18994 400 || { echo "workerd did not become ready" >&2; exit 1; }
 fi
 
-# --- fastapi (uvicorn, 2 workers) ---
+# --- fastapi (uvicorn, one async worker - parity with flask's -w 1) ---
+# --no-access-log: gunicorn logs no per-request lines either; without this
+# uvicorn's default INFO access log (hundreds of MB when redirected onto a
+# drvfs mount) drags the event loop down several-fold.
 if stack_enabled fastapi; then
     (cd "$BENCH_APPS" && taskset -c "$SUT_CPUSET" \
         "$(dirname "$VENV_PYTHON")/uvicorn" fastapi_app:app \
-        --workers 2 --host 127.0.0.1 --port 18997 \
-        >"$OLDPWD/err.fastapi" 2>&1 & echo $! >"$OUT/.uvicorn.pid")
+        --workers 1 --no-access-log --host 127.0.0.1 --port 18997 \
+        >"$OUT/err.fastapi" 2>&1 & echo $! >"$OUT/.uvicorn.pid")
     FASTAPI_PID=$(cat "$OUT/.uvicorn.pid")
     PIDS+=("$FASTAPI_PID")
     wait_port "$FASTAPI_PID" 18997 400 || { echo "fastapi did not become ready" >&2; exit 1; }
@@ -261,13 +264,13 @@ fi
 if stack_enabled flask; then
     (cd "$BENCH_APPS" && taskset -c "$SUT_CPUSET" \
         "$(dirname "$VENV_PYTHON")/gunicorn" -w 1 -b 127.0.0.1:18998 \
-        flask_app:app >"$OLDPWD/err.flask" 2>&1 & echo $! >"$OUT/.gunicorn.pid")
+        flask_app:app >"$OUT/err.flask" 2>&1 & echo $! >"$OUT/.gunicorn.pid")
     FLASK_PID=$(cat "$OUT/.gunicorn.pid")
     PIDS+=("$FLASK_PID")
     wait_port "$FLASK_PID" 18998 400 || { echo "flask did not become ready" >&2; exit 1; }
 fi
 
-# --- php-slim (php-fpm static x2 behind unprivileged nginx) ---
+# --- php-slim (one php-fpm static child behind unprivileged nginx) ---
 # The app tree is copied to a native-FS scratch dir first: on WSL/drvfs
 # mounts opcache revalidation stats every vendor file per request and
 # collapses throughput. opcache.validate_timestamps=0 keeps the pool hot.

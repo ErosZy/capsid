@@ -92,7 +92,7 @@ def _stream(size: int) -> StreamingResponse:
     # verify cases pin these byte positions across all stacks.
     third = size // 3
 
-    def generate():
+    async def generate():
         yield b"b" * third
         yield b"c" * third
         yield b"d" * (size - 2 * third)
@@ -140,7 +140,7 @@ def _matrix_stream(label: str) -> StreamingResponse:
         return Response("not found", status_code=404)
     chunk = b"s" * 4096
 
-    def chunks():
+    async def chunks():
         remaining = size
         while remaining:
             take = min(remaining, len(chunk))
