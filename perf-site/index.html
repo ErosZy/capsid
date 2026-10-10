@@ -743,7 +743,7 @@ function memStackedChart(sp, chartId, legendId) {
       out += '<line x1="' + (bx - 5) + '" y1="' + by2 + '" x2="' + (bx + 5) + '" y2="' + by1 + '" stroke="' + INKBG + '" stroke-width="3"></line>';
       out += '<line x1="' + (bx + 4) + '" y1="' + by2 + '" x2="' + (bx + 14) + '" y2="' + by1 + '" stroke="' + INKBG + '" stroke-width="3"></line>';
       out += '<text class="v" x="' + (left + bw + 9) + '" y="' + (y0 + rowH / 2 - 3) + '">' + fmt(myTot, 1) + " MB</text>";
-      out += '<text class="vw2" x="' + (bx - 12) + '" y="' + (y0 + rowH / 2 + 13) + '" text-anchor="end">clipped \u00b7 ' + fmt(myTot / mx, 0) + "\u00d7 over axis</text>";
+      out += '<text class="vw2" x="' + (left + bw + 9) + '" y="' + (y0 + rowH / 2 + 13) + '">clipped \u00b7 ' + fmt(myTot / mx, 0) + "\u00d7 axis</text>";
       return;
     }
     sp[s2].forEach(function (p) {
