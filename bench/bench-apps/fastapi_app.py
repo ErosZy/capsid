@@ -24,6 +24,10 @@ FIXED = "x" * 1024  # loadgen fixed-1k expects 0x78
 MATRIX_SIZES = {"1k": 1024, "4k": 4096, "8k": 8192, "16k": 16384, "32k": 32768, "64k": 65536}
 MATRIX_PADS = {label: "x" * (size - 11) for label, size in MATRIX_SIZES.items()}
 MATRIX_BYTES = {label: b"b" * size for label, size in MATRIX_SIZES.items()}
+# Precomputed compact JSON bodies — identical bytes across all stacks; no
+# per-request serialization.
+MATRIX_JSON = {label: json.dumps({"data": pad}, separators=(",", ":")).encode()
+               for label, pad in MATRIX_PADS.items()}
 
 _JSON_HEADERS = {"Content-Type": "application/json"}
 _OCTET_HEADERS = {"Content-Type": "application/octet-stream"}
@@ -34,52 +38,52 @@ def _resp(body: str, headers: dict) -> Response:
 
 
 @app.get("/@capsid/orders/bench/json")
-def bench_json():
+async def bench_json():
     return _resp(J1K, _JSON_HEADERS)
 
 
 @app.get("/@capsid/orders/bench/json8k")
-def bench_json8k():
+async def bench_json8k():
     return _resp(J8K, _JSON_HEADERS)
 
 
 @app.get("/@capsid/orders/bench/json16k")
-def bench_json16k():
+async def bench_json16k():
     return _resp(J16K, _JSON_HEADERS)
 
 
 @app.get("/@capsid/orders/bench/json32k")
-def bench_json32k():
+async def bench_json32k():
     return _resp(J32K, _JSON_HEADERS)
 
 
 @app.get("/@capsid/orders/bench/json64k")
-def bench_json64k():
+async def bench_json64k():
     return _resp(J64, _JSON_HEADERS)
 
 
 @app.get("/@capsid/orders/bench/bytes")
-def bench_bytes():
+async def bench_bytes():
     return _resp(B1K, _OCTET_HEADERS)
 
 
 @app.get("/@capsid/orders/bench/bytes8k")
-def bench_bytes8k():
+async def bench_bytes8k():
     return _resp(B8K, _OCTET_HEADERS)
 
 
 @app.get("/@capsid/orders/bench/bytes16k")
-def bench_bytes16k():
+async def bench_bytes16k():
     return _resp(B16K, _OCTET_HEADERS)
 
 
 @app.get("/@capsid/orders/bench/bytes32k")
-def bench_bytes32k():
+async def bench_bytes32k():
     return _resp(B32K, _OCTET_HEADERS)
 
 
 @app.get("/@capsid/orders/fixed")
-def fixed():
+async def fixed():
     return _resp(FIXED, _OCTET_HEADERS)
 
 
@@ -97,22 +101,22 @@ def _stream(size: int) -> StreamingResponse:
 
 
 @app.get("/@capsid/orders/bench/stream")
-def bench_stream():
+async def bench_stream():
     return _stream(1024)
 
 
 @app.get("/@capsid/orders/bench/stream8k")
-def bench_stream8k():
+async def bench_stream8k():
     return _stream(8192)
 
 
 @app.get("/@capsid/orders/bench/stream16k")
-def bench_stream16k():
+async def bench_stream16k():
     return _stream(16384)
 
 
 @app.get("/@capsid/orders/bench/stream32k")
-def bench_stream32k():
+async def bench_stream32k():
     return _stream(32768)
 
 
@@ -120,9 +124,7 @@ def _matrix_json(label: str) -> Response:
     size = MATRIX_SIZES.get(label)
     if size is None:
         return Response("not found", status_code=404)
-    # Compact JSON identical to the other stacks' matrix-json payload.
-    body = json.dumps({"data": MATRIX_PADS[label]}, separators=(",", ":"))
-    return Response(content=body.encode(), headers={**_JSON_HEADERS, "Content-Length": str(size)})
+    return Response(content=MATRIX_JSON[label], headers={**_JSON_HEADERS, "Content-Length": str(size)})
 
 
 def _matrix_bytes(label: str) -> Response:
@@ -148,10 +150,19 @@ def _matrix_stream(label: str) -> StreamingResponse:
     return StreamingResponse(chunks(), media_type="application/octet-stream")
 
 
+def _handler(builder, label):
+    # Must be a genuine coroutine function: FastAPI detects async via
+    # inspect.iscoroutinefunction, and a sync lambda returning a coroutine
+    # would be run without awaiting (jsonable_encoder chokes on it).
+    async def endpoint() -> Response:
+        return builder(label)
+    return endpoint
+
+
 for _label in MATRIX_SIZES:
     app.add_api_route(f"/@capsid/orders/bench/matrix-json-{_label}",
-                      (lambda label: lambda: _matrix_json(label))(_label), methods=["GET"])
+                      _handler(_matrix_json, _label), methods=["GET"])
     app.add_api_route(f"/@capsid/orders/bench/matrix-bytes-{_label}",
-                      (lambda label: lambda: _matrix_bytes(label))(_label), methods=["GET"])
+                      _handler(_matrix_bytes, _label), methods=["GET"])
     app.add_api_route(f"/@capsid/orders/bench/matrix-stream-{_label}",
-                      (lambda label: lambda: _matrix_stream(label))(_label), methods=["GET"])
+                      _handler(_matrix_stream, _label), methods=["GET"])

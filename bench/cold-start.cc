@@ -3,26 +3,40 @@
 //
 //   cold-start --worker <capsid-worker> --mode source|bytecode \
 //              --input <bundle.mjs|bundle.qjsb> --source-name <file://...> \
-//              [--iterations N]
+//              [--iterations N] [--warm N]
 //
 // Emits one JSON line per iteration (phases in ms from process start):
 //   {"mode":..., "size":..., "spawn_ms":..., "load_ms":..., "ready_ms":...,
-//    "first_ms":..., "total_ms":...}
+//    "first_ms":..., "total_ms":..., "warm_ms":..., "warm_n":...,
+//    "worker_pss_kb":..., "worker_rss_kb":...}
 //
 // Source and trusted-bytecode paths exercise the same spawn/handshake/flush
 // machinery; only the load call differs (load_bundle_named vs
 // load_trusted_bytecode_named). READY and first-response are observed from
 // the event stream, so the numbers include worker-side parse/compile for
 // source mode and bytecode deserialization for bytecode mode.
+//
+// --warm N additionally issues N sequential bodyless requests after the
+// first response on the same worker and reports the median per-request
+// latency as warm_ms. After the warm phase the worker child's PSS/RSS is
+// sampled from /proc via the unix-socket peer pid (Linux only).
 #include <poll.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
+
+#ifdef __linux__
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 
 #include "capsid/runtime.h"
 
@@ -36,6 +50,7 @@ struct Args {
     std::string input;
     std::string source_name;
     int iterations = 1;
+    int warm = 0;
 };
 
 Args parse_args(int argc, char** argv) {
@@ -54,6 +69,7 @@ Args parse_args(int argc, char** argv) {
         else if (key == "--input") out.input = value("--input");
         else if (key == "--source-name") out.source_name = value("--source-name");
         else if (key == "--iterations") out.iterations = std::stoi(value("--iterations"));
+        else if (key == "--warm") out.warm = std::stoi(value("--warm"));
         else {
             std::fprintf(stderr, "unknown argument: %s\n", key.c_str());
             std::exit(2);
@@ -140,6 +156,54 @@ double ms_since(Clock::time_point start) {
         .count();
 }
 
+// One bodyless GET on an already-READY worker; returns the per-request
+// latency in ms, or -1 on failure. Uses request ids > 1 so the first
+// request (id 1, reported as first_ms) stays distinguishable.
+double issue_bodyless_request(capsid_worker* worker, int fd, uint64_t id,
+                              const char* path) {
+    const auto t = Clock::now();
+    if (capsid_worker_begin_bodyless_request(worker, id, "GET", path,
+                                             nullptr, 0) != CAPSID_OK ||
+        !drain_flush(worker, fd)) {
+        return -1.0;
+    }
+    if (!wait_for_event(worker, fd, CAPSID_EVENT_RESPONSE_END)) {
+        return -1.0;
+    }
+    return ms_since(t);
+}
+
+#ifdef __linux__
+// The worker event source is a unix socket on POSIX; SO_PEERCRED gives the
+// worker child pid without any parent-side bookkeeping.
+pid_t worker_peer_pid(int fd) {
+    struct ucred cred {};
+    socklen_t len = sizeof(cred);
+    if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) != 0) {
+        return -1;
+    }
+    return cred.pid;
+}
+
+bool read_smaps_kb(pid_t pid, const char* field, long long* out_kb) {
+    char path[64];
+    std::snprintf(path, sizeof(path), "/proc/%d/smaps_rollup", static_cast<int>(pid));
+    std::ifstream in(path);
+    if (!in) return false;
+    const std::string want(field);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.rfind(want, 0) == 0) {
+            const size_t digits = line.find_first_of("0123456789", want.size());
+            if (digits == std::string::npos) return false;
+            *out_kb = std::atoll(line.c_str() + digits);
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -186,26 +250,60 @@ int main(int argc, char** argv) {
         const double ready_ms = ms_since(t0);
 
         const char* kPath = "/@capsid/cold-start";
-        if (capsid_worker_begin_bodyless_request(worker, 1, "GET", kPath,
-                                                 nullptr, 0) != CAPSID_OK ||
-            !drain_flush(worker, fd)) {
-            std::fprintf(stderr, "begin request failed\n");
-            capsid_worker_destroy(worker);
-            return 1;
-        }
-        if (!wait_for_event(worker, fd, CAPSID_EVENT_RESPONSE_END)) {
+        const double first_request_ms =
+            issue_bodyless_request(worker, fd, 1, kPath);
+        if (first_request_ms < 0) {
+            std::fprintf(stderr, "first request failed\n");
             capsid_worker_destroy(worker);
             return 1;
         }
         const double first_ms = ms_since(t0);
 
+        double warm_ms = -1.0;
+        int warm_ok = 0;
+        if (args.warm > 0) {
+            std::vector<double> latencies;
+            latencies.reserve(static_cast<size_t>(args.warm));
+            for (int i = 0; i < args.warm; ++i) {
+                const double latency = issue_bodyless_request(
+                    worker, fd, static_cast<uint64_t>(2 + i), kPath);
+                if (latency >= 0) {
+                    latencies.push_back(latency);
+                }
+            }
+            warm_ok = static_cast<int>(latencies.size());
+            if (!latencies.empty()) {
+                std::sort(latencies.begin(), latencies.end());
+                warm_ms = latencies[latencies.size() / 2];
+            }
+            if (warm_ok != args.warm) {
+                std::fprintf(stderr, "warm requests: %d/%d completed\n",
+                             warm_ok, args.warm);
+            }
+        }
+
+#ifdef __linux__
+        long long pss_kb = -1;
+        long long rss_kb = -1;
+        const pid_t wpid = worker_peer_pid(fd);
+        if (wpid > 0) {
+            read_smaps_kb(wpid, "Pss:", &pss_kb);
+            read_smaps_kb(wpid, "Rss:", &rss_kb);
+        }
+#else
+        const long long pss_kb = -1;
+        const long long rss_kb = -1;
+#endif
+
         capsid_worker_destroy(worker);
 
         std::printf(
             "{\"mode\":\"%s\",\"size\":%zu,\"spawn_ms\":%.2f,\"load_ms\":%.2f,"
-            "\"ready_ms\":%.2f,\"first_ms\":%.2f,\"total_ms\":%.2f}\n",
+            "\"ready_ms\":%.2f,\"first_ms\":%.2f,\"total_ms\":%.2f,"
+            "\"warm_ms\":%.2f,\"warm_n\":%d,\"worker_pss_kb\":%lld,"
+            "\"worker_rss_kb\":%lld}\n",
             args.mode.c_str(), input.size(), spawn_ms, load_ms, ready_ms,
-            first_ms, first_ms);
+            first_ms, first_ms, warm_ms, warm_ok, pss_kb, rss_kb);
     }
     return 0;
 }

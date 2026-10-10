@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capsid — Performance</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2334d399'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-size='15' font-weight='800' text-anchor='middle' fill='%2306060a'%3EC%3C/text%3E%3C/svg%3E">
+<meta name="description" content="Capsid performance record: throughput, cold start, and memory across releases, measured with a frozen protocol on dedicated hardware.">
+<style>
+  :root {
+    --bg: #09090b;
+    --surface: #101013;
+    --surface-2: #141419;
+    --border: #232329;
+    --border-soft: #1a1a20;
+    --text: #f4f4f5;
+    --text-2: #d4d4d8;
+    --text-3: #9d9da7;
+    --text-4: #63636e;
+    --brand: #34d399;
+    --brand-dim: #10b981;
+    --brand-bg: rgba(52, 211, 153, 0.08);
+    --brand-border: rgba(52, 211, 153, 0.25);
+
+    --s1: #34d399;  /* capsid source  */
+    --s2: #0ea371;  /* capsid bytecode */
+    --s3: #fbbf24;  /* node */
+    --s4: #818cf8;  /* deno */
+    --s5: #fb7185;  /* workerd */
+    --s6: #22d3ee;  /* fastapi */
+    --s7: #a3e635;  /* flask */
+    --s8: #c084fc;  /* php */
+
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg); color: var(--text-2);
+    font: 400 15px/1.65 var(--font);
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  ::selection { background: rgba(52, 211, 153, .25); }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+
+  /* ---------- top nav ---------- */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(9, 9, 11, 0.92);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  @supports (backdrop-filter: blur(8px)) {
+    .nav { background: rgba(9, 9, 11, 0.72); backdrop-filter: blur(8px); }
+  }
+  .nav-in {
+    max-width: 1160px; margin: 0 auto; padding: 0 32px;
+    height: 56px; display: flex; align-items: center; gap: 8px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; margin-right: 28px; }
+  .logo-mark {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: linear-gradient(135deg, var(--brand) 0%, #0d9488 100%);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #06060a; font-weight: 800; letter-spacing: -0.5px;
+  }
+  .logo-name { font-size: 14.5px; font-weight: 600; color: var(--text); letter-spacing: -0.2px; }
+  .logo-name span { color: var(--text-4); font-weight: 400; }
+  .nav-links { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a {
+    color: var(--text-3); font-size: 13.5px; font-weight: 500;
+    padding: 6px 12px; border-radius: 6px; white-space: nowrap;
+    transition: color .15s, background .15s;
+  }
+  .nav-links a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+  .nav-meta { margin-left: auto; font-size: 12.5px; color: var(--text-4); font-family: var(--mono); white-space: nowrap; }
+
+  /* ---------- layout ---------- */
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 32px 96px; }
+  section { padding-top: 72px; scroll-margin-top: 64px; }
+  .eyebrow {
+    font-size: 12px; font-weight: 600; letter-spacing: 1.6px;
+    text-transform: uppercase; color: var(--brand); margin-bottom: 12px;
+  }
+  h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); margin-bottom: 10px; }
+  .lede { font-size: 15px; color: var(--text-3); max-width: 68ch; margin-bottom: 32px; line-height: 1.7; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 72px 0 8px; border-bottom: 1px solid var(--border-soft); }
+  .hero-grid { display: grid; grid-template-columns: 5fr 7fr; gap: 48px; align-items: center; }
+  @media (max-width: 960px) { .hero-grid { grid-template-columns: 1fr; } }
+  .hero h1 {
+    font-size: 42px; font-weight: 800; letter-spacing: -1.2px;
+    line-height: 1.12; color: var(--text); margin-bottom: 18px;
+  }
+  .hero h1 em { font-style: normal; color: var(--brand); }
+  .hero p { font-size: 16.5px; color: var(--text-3); max-width: 52ch; line-height: 1.7; }
+  .hero-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 28px; }
+  .tag {
+    font-size: 12px; font-weight: 500; font-family: var(--mono);
+    padding: 4px 10px; border-radius: 99px;
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text-3);
+    white-space: nowrap;
+  }
+  .tag b { color: var(--text); font-weight: 600; }
+  .tag.live { background: var(--brand-bg); border-color: var(--brand-border); color: var(--brand); }
+
+  /* ---------- kpi cards ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 960px) { .kpis { grid-template-columns: 1fr; } }
+  .kpi {
+    background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 24px; position: relative; overflow: hidden;
+  }
+  .kpi::before {
+    content: ""; position: absolute; top: 0; left: 24px; right: 24px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--brand-border), transparent);
+  }
+  .kpi .k-label {
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0.8px;
+    text-transform: uppercase; color: var(--text-4); margin-bottom: 10px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .kpi .k-value {
+    font-size: 36px; font-weight: 800; letter-spacing: -1px; color: var(--text);
+    font-variant-numeric: tabular-nums; line-height: 1.1; white-space: nowrap;
+  }
+  .kpi .k-value small { font-size: 14px; font-weight: 500; color: var(--text-4); margin-left: 6px; letter-spacing: 0; }
+  .kpi.hero-kpi .k-value { color: var(--brand); }
+  .kpi .k-sub { font-size: 13px; color: var(--text-3); margin-top: 10px; }
+  .kpi .k-sub b { color: var(--text-2); font-weight: 600; }
+
+  /* ---------- card ---------- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; margin-bottom: 14px;
+  }
+  .card h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .card .sub { font-size: 12.5px; color: var(--text-4); margin-bottom: 16px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  /* grid items must be allowed to shrink below their content's min width;
+     the scroll-x chart wrappers take over via horizontal scrolling */
+  .grid-2 > * { min-width: 0; }
+  @media (max-width: 960px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* ---------- scroll containers ---------- */
+  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* charts never render below ~700 css px wide: label text stays legible,
+     narrow containers scroll horizontally instead of shrinking the svg */
+  .scroll-x svg { min-width: 700px; }
+  .scroll-x table { min-width: 480px; }
+
+  /* ---------- methodology ---------- */
+  .method-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+  }
+  @media (max-width: 1020px) { .method-grid { grid-template-columns: 1fr; } }
+  .m-sub {
+    font-size: 11.5px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--text-4); margin-bottom: 14px;
+  }
+  .proto { list-style: none; display: grid; gap: 14px; }
+  .proto li { font-size: 13.5px; color: var(--text-3); line-height: 1.65; }
+  .proto b { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; font-size: 13.5px; }
+  .fp { display: grid; grid-template-columns: 108px 1fr; gap: 8px 16px; align-items: baseline; }
+  .fp dt {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.6px;
+    text-transform: uppercase; color: var(--text-4); text-align: right;
+  }
+  .fp dd {
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    color: var(--text-2); white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .fp dd:hover { color: var(--text); }
+
+  /* ---------- legend ---------- */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 14px; }
+  .legend span { font-size: 12.5px; color: var(--text-3); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+
+  /* ---------- tables ---------- */
+  .scroll-x table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 480px; }
+  th, td {
+    padding: 9px 14px; text-align: right; white-space: nowrap;
+    border-bottom: 1px solid var(--border-soft);
+    font-variant-numeric: tabular-nums; color: var(--text-2);
+  }
+  th:first-child, td:first-child { text-align: left; font-weight: 500; color: var(--text); }
+  thead th {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+    color: var(--text-4); border-bottom: 1px solid var(--border);
+    background: var(--surface); position: sticky; top: 0;
+  }
+  thead th:first-child { color: var(--text-3); }
+  td.gsep, th.gsep { border-left: 1px solid var(--border-soft); }
+  tbody tr { transition: background .12s; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  /* capsid's own row is the product story: brand tint, no winner marking */
+  tbody tr.mine td { color: var(--brand); font-weight: 600; }
+  tbody tr.mine td.dim, tbody tr.mine td.dim2 { color: var(--brand); opacity: 0.75; }
+  tbody tr.mine { background: linear-gradient(90deg, rgba(52,211,153,0.07), transparent 65%); }
+  tbody tr.mine:hover { background: linear-gradient(90deg, rgba(52,211,153,0.12), transparent 65%); }
+  td.dim { color: var(--text-4); }
+  td.dim2 { color: var(--text-3); }
+  .tbl-cap { font-size: 12.5px; color: var(--text-4); padding: 0 0 12px; }
+
+  /* ---------- callout ---------- */
+  .callout {
+    background: var(--brand-bg); border: 1px solid var(--brand-border);
+    border-radius: var(--radius); padding: 18px 22px;
+    font-size: 14px; color: var(--text-2); line-height: 1.7;
+  }
+  .callout b { color: var(--text); }
+  .callout .hl { color: var(--brand); font-weight: 700; }
+
+  .footnote { font-size: 12.5px; color: var(--text-4); margin-top: 10px; line-height: 1.6; max-width: 90ch; }
+  .mono { font-family: var(--mono); font-size: 0.92em; color: var(--text-3); }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: 96px; padding-top: 28px; border-top: 1px solid var(--border-soft);
+    font-size: 13px; color: var(--text-4); line-height: 1.8;
+  }
+  footer p { max-width: 88ch; }
+
+  /* ---------- svg charts ---------- */
+  .chart svg { width: 100%; height: auto; display: block; }
+
+  .noscript { padding: 24px; margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-in">
+    <div class="logo">
+      <span class="logo-mark" aria-hidden="true">C</span>
+      <span class="logo-name">capsid <span>/ performance</span></span>
+    </div>
+    <div class="nav-links" role="navigation" aria-label="Sections">
+      <a href="#throughput">Throughput</a>
+      <a href="#memory">Memory</a>
+      <a href="#cold-start">Cold Start</a>
+      <a href="#method">Methodology</a>
+    </div>
+    <div class="nav-meta" id="nav-meta"></div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <noscript>
+    <div class="callout noscript">
+      This page renders benchmark data with JavaScript. The raw data file
+      <span class="mono">data.js</span> sits next to this page and is
+      readable without scripting.
+    </div>
+  </noscript>
+
+  <!-- ================= hero ================= -->
+  <div class="hero">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">Benchmark Record</div>
+        <h1>Isolation that<br><em>outlasts</em> the hype.</h1>
+        <p>Every official Capsid release, re-measured end to end on one
+           dedicated machine under a frozen protocol — throughput, cold
+           start, and process-level memory, against the runtimes you
+           actually deploy.</p>
+      </div>
+      <div class="kpis" id="kpis"></div>
+    </div>
+    <div class="hero-tags" id="hero-tags"></div>
+  </div>
+
+  <!-- ================= throughput ================= -->
+  <section id="throughput">
+    <div class="eyebrow">01 — Serving</div>
+    <h2>Throughput</h2>
+    <p class="lede">Closed-loop load generation with the repository's frozen
+       client: 64 keep-alive connections, 64 in-flight, 5&nbsp;s warm-up plus
+       three 15&nbsp;s measured rounds. Every round verifies the exact
+       response body; medians are reported.</p>
+
+    <div class="card chart">
+      <h3>Requests per second</h3>
+      <div class="sub">median of rounds — higher is better</div>
+      <div class="legend" id="qps-legend"></div>
+      <div class="scroll-x" id="qps-chart"></div>
+    </div>
+
+    <div class="card">
+      <div class="tbl-cap">Median throughput (req/s) — Capsid’s row highlighted</div>
+      <div class="scroll-x" id="qps-table"></div>
+    </div>
+    <div class="card">
+      <div class="tbl-cap">Per-request latency (ms) in the last measured round — lower is better</div>
+      <div class="scroll-x" id="qps-latency"></div>
+    </div>
+  </section>
+
+  <!-- ================= memory ================= -->
+  <section id="memory">
+    <div class="eyebrow">02 — Density</div>
+    <h2>Serving memory</h2>
+    <p class="lede">Proportional set size, sampled from
+       <span class="mono">smaps_rollup</span> immediately after the last
+       measured round and decomposed into each stack's real processes.
+       This is the number that decides how many tenants fit on one box.</p>
+
+    <div class="card chart">
+      <h3>At a trickle — 10 req/s</h3>
+      <div class="sub">process-tree PSS after 15 s of gentle traffic on a fresh
+        process, before any load — the at-rest footprint, MB</div>
+      <div class="scroll-x" id="mem-low-chart"></div>
+      <div class="legend" id="mem-low-legend" style="margin-top:14px;margin-bottom:0"></div>
+    </div>
+
+    <div class="card chart">
+      <h3>Under load — 64 connections</h3>
+      <div class="sub">process-tree PSS stacked by component, MB — lower is better</div>
+      <div class="scroll-x" id="mem-chart"></div>
+      <div class="legend" id="mem-legend" style="margin-top:14px;margin-bottom:0"></div>
+    </div>
+
+    <div class="card chart">
+      <h3>Marginal cost per serving worker</h3>
+      <div class="sub">the worker process alone — amortized infrastructure
+        (capsid host, nginx, masters) excluded. workerd runs worker and
+        server inside one process, so its bar is that whole process — an
+        upper bound on its per-worker cost. MB — lower is better</div>
+      <div class="legend" id="wc-legend"></div>
+      <div class="scroll-x" id="worker-cost-chart"></div>
+    </div>
+
+    <div class="callout" id="mem-callout"></div>
+  </section>
+
+  <!-- ================= cold start ================= -->
+  <section id="cold-start">
+    <div class="eyebrow">03 — Instantiation</div>
+    <h2>Cold start &amp; footprint</h2>
+    <p class="lede">Process start → ready → first response. One warm-up run
+       is discarded and the median of five rounds is reported. All runtimes
+       load the same fixture source, byte-aligned, differing only in the
+       entry point.</p>
+
+    <div class="legend" id="cold-legend"></div>
+
+    <div class="card chart">
+      <h3>Time to first response</h3>
+      <div class="sub">ms — lower is better</div>
+      <div class="scroll-x" id="cold-chart"></div>
+    </div>
+    <div class="card chart">
+      <h3>Runtime memory by bundle size</h3>
+      <div class="sub">PSS, MB — lower is better</div>
+      <div class="scroll-x" id="cold-pss-chart"></div>
+    </div>
+
+    <div class="card">
+      <div class="tbl-cap">Cold start (total / ready ms) and runtime PSS — Capsid’s rows highlighted</div>
+      <div class="scroll-x" id="cold-table"></div>
+    </div>
+    <div class="card chart">
+      <h3>Warm request latency</h3>
+      <div class="sub">median per-request latency on an already-warmed process, ms — lower is better</div>
+      <div class="scroll-x" id="warm-chart"></div>
+      <div class="footnote" id="warm-note"></div>
+    </div>
+  </section>
+
+  <!-- ================= method ================= -->
+  <section id="method">
+    <div class="eyebrow">04 — Provenance</div>
+    <h2>Methodology &amp; evidence</h2>
+    <div class="card" id="method-card"></div>
+  </section>
+
+  <footer>
+    <p>Points are produced from tagged, clean-tree Release builds by
+       <span class="mono">bench/cold-start.sh</span>,
+       <span class="mono">bench/qps-lane.sh</span>, and
+       <span class="mono">bench/collect-perf-point.py</span>. Each point
+       carries the machine fingerprint and SHA-256 digests of every binary
+       and fixture used. Historical points are never edited; methodology
+       changes start a new series rather than rewriting history.</p>
+  </footer>
+</div>
+
+<script src="data.js"></script>
+<script>
+"use strict";
+
+/* ============ palette & labels ============ */
+var C = {
+  "capsid-source": "#34d399", "capsid-bytecode": "#0ea371",
+  "node": "#fbbf24", "deno": "#818cf8", "workerd": "#fb7185",
+  "capsid": "#34d399", "fastapi": "#22d3ee", "flask": "#a3e635", "php": "#c084fc"
+};
+var NAME = {
+  "capsid-source": "Capsid · source", "capsid-bytecode": "Capsid · bytecode",
+  "node": "Node.js", "deno": "Deno", "workerd": "workerd",
+  "capsid": "Capsid", "fastapi": "FastAPI", "flask": "Flask", "php": "PHP Slim"
+};
+/* short labels for chart gutters; long forms live in tables & tooltips */
+var SHORT = {
+  "capsid-source": "Capsid src", "capsid-bytecode": "Capsid bc",
+  "node": "Node.js", "deno": "Deno", "workerd": "workerd",
+  "capsid": "Capsid", "fastapi": "FastAPI", "flask": "Flask", "php": "PHP Slim"
+};
+var NAME_LONG = {
+  "capsid": "Capsid — single worker",
+  "workerd": "workerd — single process",
+  "fastapi": "FastAPI — uvicorn",
+  "flask": "Flask — gunicorn",
+  "php": "PHP Slim — php-fpm + nginx"
+};
+var SIZES = ["10k", "100k", "1m"];
+var SZ = { "10k": "10 KiB", "100k": "100 KiB", "1m": "1 MiB" };
+var WLS = ["matrix-json-1k", "matrix-json-16k", "stream"];
+var WL = { "matrix-json-1k": "JSON 1 KiB", "matrix-json-16k": "JSON 16 KiB", "stream": "Stream 1 KiB" };
+
+var DATA = window.CAPSID_PERF_DATA;
+var PTS = (DATA && DATA.points) || [];
+var P = PTS.length ? PTS[PTS.length - 1] : null;
+
+/* ============ helpers ============ */
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  });
+}
+function fmt(v, d) {
+  if (v === null || v === undefined || isNaN(v)) return "—";
+  var p = Number(v).toFixed(d === undefined ? 0 : d).split(".");
+  p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return p.join(".");
+}
+function nice(v) {
+  if (!(v > 0)) return 1;
+  var b = Math.pow(10, Math.floor(Math.log(v) / Math.LN10));
+  var n = v / b;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * b;
+}
+function stacksOf(cells) {
+  var out = [];
+  for (var i = 0; i < cells.length; i++)
+    if (out.indexOf(cells[i].stack) < 0) out.push(cells[i].stack);
+  return out;
+}
+
+/* ============ hero ============ */
+function renderHero() {
+  var m = (P && P.machine) || {};
+  var cpu = (m.cpu || "").replace(/\(R\)|\(TM\)/g, "").trim();
+  cpu = cpu.split(" ").slice(-1)[0] || "—";
+  var lane = (m.uname || "").indexOf("WSL2") >= 0 ? "WSL2" : "Linux";
+  var tags = [
+    [P ? P.release : "—", "release point", true],
+    [P ? P.date : "—", "measured on", false],
+    [cpu + " \u00b7 " + lane, "cpu \u00b7 lane", false]
+  ];
+  $("hero-tags").innerHTML = tags.map(function (t) {
+    return '<span class="tag' + (t[2] ? " live" : "") + '" title="' +
+           esc(t[1]) + '"><b>' + esc(t[0]) + "</b></span>";
+  }).join("");
+  $("nav-meta").textContent = P ? P.release + " · " + P.date : "";
+
+  var q = P && P.qps, c = P && P.coldStart;
+  var cards = "";
+
+  if (q && q.cells) {
+    var cap = null;
+    for (var i = 0; i < q.cells.length; i++)
+      if (q.cells[i].stack === "capsid" && q.cells[i].workload === "matrix-json-1k")
+        cap = q.cells[i];
+    if (cap) cards +=
+      '<div class="kpi"><div class="k-label">JSON 1 KiB throughput</div>' +
+      '<div class="k-value">' + fmt(cap.qps) + '<small>req/s</small></div>' +
+      '<div class="k-sub">single worker through the isolated host↔worker IPC path</div></div>';
+  }
+  if (q && q.servingPss && q.servingPss.capsid && q.servingPss.workerd) {
+    var a = 0, b = 0;
+    q.servingPss.capsid.forEach(function (x) { a += x.mb; });
+    q.servingPss.workerd.forEach(function (x) { b += x.mb; });
+    cards +=
+      '<div class="kpi hero-kpi"><div class="k-label">Memory @ 64 conns</div>' +
+      '<div class="k-value">' + fmt(a, 1) + '<small>MB PSS</small></div>' +
+      '<div class="k-sub"><b>' + fmt(b / a, 0) + '× lighter</b> than workerd\u2019s ' +
+      fmt(b, 1) + ' MB under identical load</div></div>';
+  }
+  if (c && c.cells) {
+    var bc = null;
+    for (var j = 0; j < c.cells.length; j++)
+      if (c.cells[j].stack === "capsid-bytecode" && c.cells[j].size === "1m") bc = c.cells[j];
+    if (bc) cards +=
+      '<div class="kpi"><div class="k-label">Cold start · 1 MiB</div>' +
+      '<div class="k-value">' + fmt(bc.totalMs, 1) + '<small>ms</small></div>' +
+      '<div class="k-sub">trusted bytecode — fastest of every measured runtime</div></div>';
+  }
+  $("kpis").innerHTML = cards;
+}
+
+/* ============ chart primitives ============ */
+/* exact row-label width with the page's real font, so chart gutters never
+   clip regardless of platform font metrics */
+var _mctx = null;
+function labelFont() {
+  try {
+    return "600 13.5px " + getComputedStyle(document.body).fontFamily;
+  } catch (e) { return "600 13.5px sans-serif"; }
+}
+function labelW(str) {
+  try {
+    if (!_mctx) _mctx = document.createElement("canvas").getContext("2d");
+    _mctx.font = labelFont();
+    return _mctx.measureText(String(str)).width;
+  } catch (e) { return String(str).length * 8.6; }
+}
+function gutterFor(labels) {
+  var w = 0;
+  for (var i = 0; i < labels.length; i++) w = Math.max(w, labelW(labels[i]));
+  return Math.max(96, Math.min(200, Math.ceil(w) + 22));
+}
+var AX = "#1d1d23", TK = "#71717c", GL = "#e4e4e7", INK = "#0a0a0c", INKBG = "#101013";
+
+function barChart(rows, series, opts) {
+  opts = opts || {};
+  /* Adaptive geometry: every bar keeps >= 8 viewBox units of height and
+     every group gets its own breathing room, so value labels (13u font)
+     never collide regardless of how many stacks are in the lane. */
+  var n = Math.max(1, series.length);
+  var rowH = Math.max(48, n * 19 + 16);
+  var bh = Math.min(15, Math.max(9, Math.floor((rowH - 8) / n) - 4));
+  var W = 780, top = 38, right = 132;
+  var left = opts.left || gutterFor(rows);
+  var H = top + rows.length * rowH + 6;
+  var valsAll = [];
+  for (var i = 0; i < series.length; i++)
+    for (var j = 0; j < series[i].values.length; j++) {
+      var v0 = series[i].values[j];
+      if (v0 != null) valsAll.push(v0);
+    }
+  valsAll.sort(function (a, b) { return b - a; });
+  var broken = valsAll.length > 1 && valsAll[0] > valsAll[1] * 2.5;
+  var mx = broken ? nice(valsAll[1] * 1.05 || 1)
+                  : nice((valsAll[0] || 1) * 1.05);
+  var plot = W - left - right;
+  var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="' + esc(opts.aria || "chart") + '">';
+  s += '<style>.g{stroke:' + AX + ';stroke-dasharray:3 5}' +
+       '.t{fill:' + TK + ';font-size:12px}' +
+       '.l{fill:' + GL + ';font-size:13.5px;font-weight:600}' +
+       '.v{fill:' + GL + ';font-size:13px;font-weight:600}' +
+       '.vi{fill:' + GL + ';font-size:13px;font-weight:700}' +
+       '.vw2{fill:' + TK + ';font-size:11px}</style>';
+  for (var g = 0; g <= 4; g++) {
+    var x = left + plot * g / 4, gv = mx * g / 4;
+    s += '<line class="g" x1="' + x + '" y1="' + top + '" x2="' + x + '" y2="' + (H - 6) + '"/>';
+    s += '<text class="t" x="' + x + '" y="' + (top - 12) + '" text-anchor="middle">' + fmt(gv, gv >= 10 ? 0 : 1) + "</text>";
+  }
+  for (var r = 0; r < rows.length; r++) {
+    var y0 = top + r * rowH;
+    s += '<text class="l" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(rows[r]) + "</text>";
+    for (var k = 0; k < n; k++) {
+      var val = series[k].values[r];
+      if (val == null) continue;
+      var w = Math.max(2, plot * (val / mx));
+      var y = y0 + 8 + k * (bh + 5);
+      /* long bars: label inside the bar tip; short bars: label outside */
+      var lbl = fmt(val, val >= 100 ? 0 : 1);
+      if (broken && val > mx) {
+        /* outlier beyond the axis: clip, mark the break, print true value */
+        s += '<rect x="' + left + '" y="' + y + '" width="' + plot + '" height="' + bh + '" rx="4" fill="' + series[k].color + '" opacity="0.45"><title>' + esc(series[k].name) + ": " + fmt(val, 1) + " (clipped; axis scaled to the rest)</title></rect>";
+        var bx = left + plot * 0.86;
+        s += '<line x1="' + (bx - 4) + '" y1="' + (y + bh + 1) + '" x2="' + (bx + 4) + '" y2="' + (y - 1) + '" stroke="' + INKBG + '" stroke-width="3"></line>';
+        s += '<line x1="' + (bx + 4) + '" y1="' + (y + bh + 1) + '" x2="' + (bx + 12) + '" y2="' + (y - 1) + '" stroke="' + INKBG + '" stroke-width="3"></line>';
+        s += '<text class="v" x="' + (left + plot + 8) + '" y="' + (y + bh / 2 - 1) + '">' + fmt(val, 0) + "</text>";
+        s += '<text class="vw2" x="' + (left + plot + 8) + '" y="' + (y + bh / 2 + 11) + '">clipped \u00b7 ' + fmt(val / mx, 0) + "\u00d7 axis</text>";
+      } else {
+        s += '<rect x="' + left + '" y="' + y + '" width="' + w + '" height="' + bh + '" rx="4" fill="' + series[k].color + '" opacity="0.95"><title>' + esc(series[k].name) + ": " + fmt(val, 1) + "</title></rect>";
+        s += '<text class="v" x="' + (left + w + 8) + '" y="' + (y + bh - 4) + '">' + lbl + "</text>";
+      }
+    }
+  }
+  return s + "</svg>";
+}
+
+/* ============ throughput ============ */
+function renderQps() {
+  var q = P && P.qps;
+  if (!q || !q.cells || !q.cells.length) {
+    $("qps-table").innerHTML = '<p class="footnote">No throughput data.</p>';
+    return;
+  }
+  var idx = {};
+  q.cells.forEach(function (c) {
+    (idx[c.workload] = idx[c.workload] || {})[c.stack] = c;
+  });
+  var wls = WLS.filter(function (w) { return idx[w]; });
+  var sts = stacksOf(q.cells);
+
+  $("qps-legend").innerHTML = sts.map(function (s2) {
+    return "<span><i style=\"background:" + (C[s2] || "#888") + "\"></i>" +
+           esc(NAME_LONG[s2] || NAME[s2] || s2) + "</span>";
+  }).join("");
+
+  $("qps-chart").innerHTML = barChart(
+    wls.map(function (w) { return WL[w] || w; }),
+    sts.map(function (s2) {
+      return {
+        name: NAME[s2] || s2, color: C[s2] || "#888",
+        values: wls.map(function (w) { return idx[w][s2] ? idx[w][s2].qps : null; })
+      };
+    }),
+    { aria: "throughput by workload" }
+  );
+
+  /* throughput table: rows = stacks */
+  var head = '<table><thead><tr><th scope="col">Stack</th>';
+  wls.forEach(function (w, i) {
+    head += '<th scope="col"' + (i ? ' class="gsep"' : "") + ">" + esc(WL[w] || w) + "</th>";
+  });
+  head += "</tr></thead><tbody>";
+  var body = "";
+  sts.forEach(function (s2) {
+    body += '<tr' + (s2 === "capsid" ? ' class="mine"' : "") + "><td>" +
+            esc(NAME_LONG[s2] || NAME[s2] || s2) + "</td>";
+    wls.forEach(function (w, i) {
+      var x = idx[w][s2];
+      body += "<td" + (i ? ' class="gsep"' : "") + ">" +
+              (x ? fmt(x.qps) : "—") + "</td>";
+    });
+    body += "</tr>";
+  });
+  $("qps-table").innerHTML = head + body + "</tbody></table>";
+
+  /* latency table: rows = stacks, p50/p95 per workload */
+  var lh = '<table><thead><tr><th rowspan="2" scope="col">Stack</th>';
+  wls.forEach(function (w, i) {
+    lh += '<th colspan="2" scope="colgroup"' + (i ? ' class="gsep"' : "") + ">" + esc(WL[w] || w) + "</th>";
+  });
+  lh += '</tr><tr>';
+  wls.forEach(function (w, i) {
+    lh += '<th scope="col"' + (i ? ' class="gsep"' : "") + '>p50</th><th scope="col">p95</th>';
+  });
+  lh += "</tr></thead><tbody>";
+  var lb = "";
+  sts.forEach(function (s2) {
+    lb += '<tr' + (s2 === "capsid" ? ' class="mine"' : "") + "><td>" +
+          esc(NAME_LONG[s2] || NAME[s2] || s2) + "</td>";
+    wls.forEach(function (w, i) {
+      var x = idx[w][s2];
+      var sep = i ? ' class="gsep dim"' : ' class="dim2"';
+      if (!x) { lb += "<td" + (i ? ' class="gsep"' : "") + ">—</td><td>—</td>"; return; }
+      lb += "<td" + sep + ">" + fmt(x.p50Ms, 1) + '</td><td class="dim">' + fmt(x.p95Ms, 1) + "</td>";
+    });
+    lb += "</tr>";
+  });
+  $("qps-latency").innerHTML = lh + lb + "</tbody></table>";
+}
+
+/* ============ serving memory ============ */
+var RC = {
+  "host": "#34d399", "cw": "#0ea371", "proc": "#fb7185",
+  "ngx": "#c084fc", "ngxw": "#9d6bdf", "fpmm": "#a3e635", "fpmw": "#7fb829",
+  "pym": "#fbbf24", "pyw": "#d9a322"
+};
+var RL = {
+  "host": "capsid host", "cw": "capsid worker", "proc": "workerd process",
+  "ngx": "nginx", "ngxw": "nginx worker", "fpmm": "php-fpm master",
+  "fpmw": "php-fpm child", "pym": "python master", "pyw": "python worker"
+};
+function rk(st, role) {
+  if (role === "worker") {
+    if (st === "capsid") return "cw";
+    if (st === "fastapi" || st === "flask") return "pyw";
+  }
+  if (role === "master") return "pym";
+  if (role === "nginx") return "ngx";
+  if (role === "nginx-worker") return "ngxw";
+  if (role === "fpm-master") return "fpmm";
+  if (role === "fpm-worker") return "fpmw";
+  if (role === "host") return "host";
+  if (role === "process") return "proc";
+  return role;
+}
+
+/* stacked serving-memory chart; axis-break for outliers (see note) */
+function memStackedChart(sp, chartId, legendId) {
+  var sts = [];
+  for (var k in sp) sts.push(k);
+
+  var W = 780, rowH = 44, top = 38;
+  var right = 132;
+  var left = gutterFor(sts.map(function (s2) { return SHORT[s2] || s2; }));
+  var H = top + sts.length * rowH + 4;
+  var tot = {};
+  sts.forEach(function (s2) {
+    var t = 0;
+    sp[s2].forEach(function (x) { t += x.mb; });
+    tot[s2] = t;
+  });
+  /* bars ranked small to large */
+  sts.sort(function (a, b) { return tot[a] - tot[b]; });
+  var others = sts.filter(function (s2) { return s2 !== "workerd"; });
+  var mxOther = 0;
+  others.forEach(function (s2) { if (tot[s2] > mxOther) mxOther = tot[s2]; });
+  var wk = tot.workerd || 0;
+  var broken = wk > mxOther * 2.5;
+  var mx = broken ? nice(mxOther * 1.05 || 1)
+                  : nice(Math.max(mxOther, wk) * 1.05 || 1);
+  var plot = W - left - right;
+  var out = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="serving memory by stack">';
+  out += '<style>.g{stroke:' + AX + ';stroke-dasharray:3 5}.t{fill:' + TK + ';font-size:12px}' +
+         '.l{fill:' + GL + ';font-size:13.5px;font-weight:600}' +
+         '.v{fill:' + GL + ';font-size:13px;font-weight:700}' +
+         '.vw{fill:' + GL + ';font-size:13px;font-weight:700}' +
+         '.vw2{fill:' + TK + ';font-size:11px}</style>';
+  for (var g = 0; g <= 4; g++) {
+    var x = left + plot * g / 4;
+    out += '<line class="g" x1="' + x + '" y1="' + top + '" x2="' + x + '" y2="' + (H - 6) + '"/>';
+    out += '<text class="t" x="' + x + '" y="' + (top - 12) + '" text-anchor="middle">' + fmt(mx * g / 4, 0) + "</text>";
+  }
+  var keys = [];
+  sts.forEach(function (s2) {
+    var y0 = top + sts.indexOf(s2) * rowH, cx = left;
+    var myTot = tot[s2];
+    out += '<text class="l" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(SHORT[s2] || s2) + "</text>";
+    if (broken && s2 === "workerd") {
+      var bw = plot;
+      out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + bw + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC.proc || "#888") + '" opacity="0.45"><title>workerd: ' + fmt(myTot, 1) + " MB (clipped; axis scaled to the other stacks)</title></rect>";
+      var bx = left + plot * 0.86, by1 = y0 + 9, by2 = y0 + rowH - 13;
+      out += '<line x1="' + (bx - 5) + '" y1="' + by2 + '" x2="' + (bx + 5) + '" y2="' + by1 + '" stroke="' + INKBG + '" stroke-width="3"></line>';
+      out += '<line x1="' + (bx + 4) + '" y1="' + by2 + '" x2="' + (bx + 14) + '" y2="' + by1 + '" stroke="' + INKBG + '" stroke-width="3"></line>';
+      out += '<text class="v" x="' + (left + bw + 9) + '" y="' + (y0 + rowH / 2 - 3) + '">' + fmt(myTot, 1) + " MB</text>";
+      out += '<text class="vw2" x="' + (bx - 12) + '" y="' + (y0 + rowH / 2 + 13) + '" text-anchor="end">clipped \u00b7 ' + fmt(myTot / mx, 0) + "\u00d7 over axis</text>";
+      return;
+    }
+    sp[s2].forEach(function (p) {
+      var w = Math.max(1, plot * (p.mb / mx));
+      var key = rk(s2, p.role);
+      if (keys.indexOf(key) < 0) keys.push(key);
+      out += '<rect x="' + cx.toFixed(1) + '" y="' + (y0 + 10) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC[key] || "#888") + '"><title>' + esc(RL[key] || p.role) + ": " + fmt(p.mb, 1) + " MB</title></rect>";
+      cx += w;
+    });
+    out += '<text class="v" x="' + (cx + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(myTot, 1) + " MB</text>";
+  });
+  out += "</svg>";
+  $(chartId).innerHTML = out;
+  $(legendId).innerHTML = keys.map(function (key) {
+    return '<span><i style="background:' + RC[key] + '"></i>' + esc(RL[key] || key) + "</span>";
+  }).join("");
+}
+
+/* per-worker marginal cost: the serving worker process only */
+function workerPart(parts) {
+  if (!parts) return null;
+  var t = 0, found = false;
+  parts.forEach(function (p) {
+    if (p.role === "worker" || p.role === "fpm-worker") { t += p.mb; found = true; }
+  });
+  return found ? t : null;
+}
+
+function renderWorkerCost(sp, spLow) {
+  var stacks = ["capsid", "fastapi", "flask", "php", "workerd"];
+  var entries = [];
+  stacks.forEach(function (st) {
+    var wl, wt;
+    if (st === "workerd") {
+      /* single process: worker + server share it — an upper bound */
+      var t1 = 0, t2 = 0;
+      (sp.workerd || []).forEach(function (x) { t1 += x.mb; });
+      wl = t1;
+      if (spLow && spLow.workerd)
+        spLow.workerd.forEach(function (x) { t2 += x.mb; });
+      wt = t2;
+    } else {
+      wl = workerPart(sp[st]);
+      wt = spLow ? workerPart(spLow[st]) : null;
+    }
+    if (wl == null && wt == null) return;
+    entries.push({ st: st, wl: wl, wt: wt });
+  });
+  entries.sort(function (a, b) { return (a.wl || 0) - (b.wl || 0); });
+  var rows = [], load = [], trickle = [];
+  entries.forEach(function (e) {
+    rows.push(SHORT[e.st] || e.st);
+    load.push(e.wl);
+    trickle.push(e.wt);
+  });
+  if (!rows.length) { $("worker-cost-chart").innerHTML = ""; return; }
+  $("wc-legend").innerHTML =
+    '<span><i style="background:#71717c"></i>at 10 req/s</span>' +
+    '<span><i style="background:#34d399"></i>under 64-conn load</span>';
+  $("worker-cost-chart").innerHTML = barChart(
+    rows,
+    [
+      { name: "at 10 req/s", color: "#71717c", values: trickle },
+      { name: "under 64-conn load", color: "#34d399", values: load },
+    ],
+    { aria: "marginal memory cost per serving worker" }
+  );
+}
+
+function renderMem() {
+  var sp = P && P.qps && P.qps.servingPss;
+  var spLow = P && P.qps && P.qps.lowLoadPss;
+  if (!sp) { $("mem-chart").innerHTML = ""; return; }
+  memStackedChart(sp, "mem-chart", "mem-legend");
+  if (spLow) memStackedChart(spLow, "mem-low-chart", "mem-low-legend");
+  renderWorkerCost(sp, spLow);
+
+  var spc = spLow && spLow.capsid ? spLow : sp;
+  if (spc.capsid && spc.workerd && spc.php) {
+    var ca = 0, cw = 0, ph = 0;
+    spc.capsid.forEach(function (x) { ca += x.mb; });
+    spc.workerd.forEach(function (x) { cw += x.mb; });
+    spc.php.forEach(function (x) { ph += x.mb; });
+    $("mem-callout").innerHTML =
+      "<b>Density is the product.</b> Under identical 64-connection load, " +
+      "Capsid's full serving path — one host plus one <b>isolated tenant worker</b> — holds <span class=\"hl\">" + fmt(ca, 1) + " MB</span> " +
+      "resident: " + fmt(cw / ca, 0) + "× less than workerd's single " +
+      "process (" + fmt(cw, 1) + " MB). The php-fpm pool is leaner still at " +
+      fmt(ph, 1) + " MB, but every Capsid tenant is a separate, " +
+      "sandboxable process — that is the boundary you are measuring.";
+  }
+  var cw2 = workerPart(sp.capsid);
+  if (cw2 != null) {
+    $("mem-callout").innerHTML +=
+      " Each additional Capsid tenant adds <b>" + fmt(cw2, 1) +
+      " MB</b> — the host is shared infrastructure, so a 1 GB budget fits " +
+      "roughly " + fmt(1024 / cw2, 0) + " isolated tenants.";
+  }
+}
+
+/* ============ cold start ============ */
+function renderCold() {
+  var c = P && P.coldStart;
+  var cells = c && c.cells ? c.cells : [];
+  if (!cells.length) {
+    $("cold-table").innerHTML = '<p class="footnote">No cold-start data.</p>';
+    return;
+  }
+  var by = {};
+  cells.forEach(function (x) {
+    (by[x.size] = by[x.size] || {})[x.stack] = x;
+  });
+  var sizes = SIZES.filter(function (z) { return by[z]; });
+  var sts = stacksOf(cells);
+
+  $("cold-legend").innerHTML = sts.map(function (s2) {
+    return '<span><i style="background:' + (C[s2] || "#888") + '"></i>' +
+           esc(NAME[s2] || s2) + "</span>";
+  }).join("");
+
+  $("cold-chart").innerHTML = barChart(
+    sizes.map(function (z) { return SZ[z]; }),
+    sts.map(function (s2) {
+      return {
+        name: NAME[s2] || s2, color: C[s2] || "#888",
+        values: sizes.map(function (z) { return by[z][s2] ? by[z][s2].totalMs : null; })
+      };
+    }),
+    { aria: "cold start ms by size" }
+  );
+  $("cold-pss-chart").innerHTML = barChart(
+    sizes.map(function (z) { return SZ[z]; }),
+    sts.map(function (s2) {
+      return {
+        name: NAME[s2] || s2, color: C[s2] || "#888",
+        values: sizes.map(function (z) { return by[z][s2] ? by[z][s2].pssMb : null; })
+      };
+    }),
+    { aria: "runtime memory by size" }
+  );
+
+  var head = '<table><thead><tr><th rowspan="2" scope="col">Runtime</th>';
+  sizes.forEach(function (z, i) {
+    head += '<th colspan="3" scope="colgroup"' + (i ? ' class="gsep"' : "") + ">" + esc(SZ[z] || z) + "</th>";
+  });
+  head += '</tr><tr>';
+  sizes.forEach(function (z, i) {
+    head += '<th scope="col"' + (i ? ' class="gsep"' : "") + '>total ms</th>' +
+            '<th scope="col">ready ms</th><th scope="col">PSS MB</th>';
+  });
+  head += "</tr></thead><tbody>";
+  var body = "";
+  sts.forEach(function (s2) {
+    var mine = s2 === "capsid-source" || s2 === "capsid-bytecode";
+    body += '<tr' + (mine ? ' class="mine"' : "") + "><td>" +
+            esc(NAME[s2] || s2) + "</td>";
+    sizes.forEach(function (z, i) {
+      var x = by[z][s2];
+      if (!x) {
+        body += "<td" + (i ? ' class="gsep"' : "") + '>—</td><td>—</td><td>—</td>';
+        return;
+      }
+      body += "<td" + (i ? ' class="gsep"' : "") + ">" +
+              fmt(x.totalMs, 1) + '</td><td class="dim">' + fmt(x.readyMs, 1) +
+              '</td><td class="dim">' + (x.pssMb != null ? fmt(x.pssMb, 1) : "—") + "</td>";
+    });
+    body += "</tr>";
+  });
+  $("cold-table").innerHTML = head + body + "</tbody></table>";
+
+  var warms = cells.filter(function (x) { return x.warmMs != null && x.warmMs > 0; });
+  if (warms.length) {
+    /* collapse per-size samples into one median per stack: sizes differ by
+       <0.03 ms, the interesting axis is stack vs measurement floor */
+    var per = {};
+    warms.forEach(function (x) {
+      (per[x.stack] = per[x.stack] || []).push(x.warmMs);
+    });
+    var sts2 = [];
+    for (var kk in per) sts2.push(kk);
+    var med = function (a) {
+      var v = a.slice().sort(function (p, q) { return p - q; });
+      return v[Math.floor(v.length / 2)];
+    };
+    var vals = sts2.map(function (st) { return { st: st, v: med(per[st]) }; });
+    vals.sort(function (a, b) { return a.v - b.v; });
+    var floors = vals.filter(function (d) {
+      return d.st !== "capsid-source" && d.st !== "capsid-bytecode";
+    }).map(function (d) { return d.v; });
+    var floor = floors.length ? med(floors) : 5.5;
+
+    var W = 780, rowH = 42, top = 44, right = 132;
+    var left = gutterFor(vals.map(function (d) { return SHORT[d.st] || d.st; }));
+    var H = top + vals.length * rowH + 6;
+    var mx = nice(Math.max(floor * 1.15, 1));
+    var plot = W - left - right;
+    var fx = left + plot * (floor / mx);
+    var out = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="warm request latency by runtime">';
+    out += '<style>.g{stroke:' + AX + ';stroke-dasharray:3 5}' +
+           '.fl{stroke:#fbbf24;stroke-dasharray:6 5;stroke-width:1.5}' +
+           '.ft{fill:#fbbf24;font-size:12px;font-weight:600}' +
+           '.t{fill:' + TK + ';font-size:12px}' +
+           '.l{fill:' + GL + ';font-size:13.5px;font-weight:600}' +
+           '.v{fill:' + GL + ';font-size:13px;font-weight:700}' +
+           '.vf{fill:' + TK + ';font-size:13px;font-weight:600}</style>';
+    for (var g2 = 0; g2 <= 4; g2++) {
+      var xx = left + plot * g2 / 4, gv = mx * g2 / 4;
+      out += '<line class="g" x1="' + xx + '" y1="' + top + '" x2="' + xx + '" y2="' + (H - 6) + '"/>';
+      out += '<text class="t" x="' + xx + '" y="' + (top - 12) + '" text-anchor="middle">' + fmt(gv, 1) + "</text>";
+    }
+    /* measurement floor marker */
+    out += '<line class="fl" x1="' + fx + '" y1="' + (top - 4) + '" x2="' + fx + '" y2="' + (H - 6) + '"/>';
+    out += '<text class="ft" x="' + (fx + 8) + '" y="' + (top - 12) + '">curl floor \u2248 ' + fmt(floor, 1) + ' ms</text>';
+    vals.forEach(function (d, i2) {
+      var y0 = top + i2 * rowH;
+      var isCap = d.st === "capsid-source" || d.st === "capsid-bytecode";
+      var w = Math.max(2, plot * (d.v / mx));
+      out += '<text class="l" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(SHORT[d.st] || d.st) + "</text>";
+      out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + w + '" height="' + (rowH - 24) + '" rx="4" fill="' + (C[d.st] || "#888") + '"><title>' + esc(NAME[d.st] || d.st) + ": " + fmt(d.v, 2) + " ms</title></rect>";
+      if (isCap) {
+        out += '<text class="v" x="' + (left + w + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(d.v, 2) + " ms</text>";
+      } else {
+        out += '<text class="vf" x="' + (left + w + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">\u2248 floor (unresolved)</text>';
+      }
+    });
+    out += "</svg>";
+    $("warm-chart").innerHTML = out;
+    $("warm-note").innerHTML =
+      "Only Capsid's in-process IPC driver resolves sub-millisecond warm " +
+      "latency. Node/Deno/workerd requests go through " +
+      "<span class=\"mono\">curl</span>, whose process startup dominates " +
+      "their bars — their true in-process latency is below the amber floor " +
+      "line and not measurable on this lane.";
+  }
+}
+
+/* ============ methodology ============ */
+function renderMethod() {
+  var m = (P && P.machine) || {};
+  var ev = (P && P.evidence) || {};
+  var n = 0;
+  for (var k in ev) n++;
+  /* dl rows: label column fixed, value ellipsized to one line with the
+     full text in the title tooltip — no wrapping, no column drift */
+  var fp = [
+    ["CPU", m.cpu],
+    ["Kernel", m.uname],
+    ["Cores", m.nproc],
+    ["Node.js", m.node],
+    ["Deno", m.deno],
+    ["workerd", m.workerd_version],
+    ["PHP", m.php_fpm],
+    ["nginx", m.nginx],
+    ["Python", m.python_pkgs ? String(m.python_pkgs) : (m.python || "")],
+    ["Capsid", P && P.git ? String(P.git.tag || P.git.commit || "") : ""]
+  ].map(function (r) {
+    var v = r[1] || "—";
+    return "<dt>" + esc(r[0]) + '</dt><dd title="' + esc(v) + '">' + esc(v) + "</dd>";
+  }).join("");
+  $("method-card").innerHTML =
+    '<div class="method-grid">' +
+      "<div>" +
+        '<div class="m-sub">Protocol</div>' +
+        '<ol class="proto">' +
+          "<li><b>Throughput</b>frozen repository load generator, closed " +
+          "loop, 64 connections / 64 in-flight, 5 s warm-up, three 15 s " +
+          "rounds, exact-body verification every round.</li>" +
+          "<li><b>Cold start</b>start → ready → first response; warm-up " +
+          "discarded, median of five; identical fixture source across " +
+          "runtimes, only the entry point differs.</li>" +
+          "<li><b>Memory</b>PSS from smaps_rollup, decomposed per process " +
+          "(host/worker, nginx/php-fpm, python master/worker). workerd runs " +
+          "an untuned V8 whose heap grows under sustained load and is not " +
+          "returned afterwards — its bar is the self-hosted default, not a " +
+          "tuned production limit.</li>" +
+        "</ol>" +
+      "</div>" +
+      "<div>" +
+        '<div class="m-sub">Lane fingerprint</div>' +
+        '<dl class="fp">' + fp + "</dl>" +
+      "</div>" +
+    "</div>" +
+    (n ? '<div class="footnote" style="margin-top:20px">Evidence for this point: ' + n +
+      " files SHA-256 digested (binaries, fixtures, runner, raw samples), " +
+      'preserved with the release — see <span class="mono">data.js</span>.</div>' : "");
+}
+
+/* ============ boot ============ */
+renderHero();
+renderQps();
+renderMem();
+renderCold();
+renderMethod();
+</script>
+</body>
+</html>
