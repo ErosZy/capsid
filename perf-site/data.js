@@ -160,7 +160,7 @@ window.CAPSID_PERF_DATA = {
     "coldrun-final/raw.workerd.1m.jsonl": "1cf23b363fc0e5d5cc8f527fa586090f59aba32f28ff416432e1df6977ccc461"
    },
    "git": {
-    "commit": "1a96853776408d56cbbb6d58fc045babeebed202",
+    "commit": "8911d022c890dd08b88010ae334bdca51b98cd91",
     "tag": ""
    },
    "machine": {
@@ -175,7 +175,7 @@ window.CAPSID_PERF_DATA = {
     "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
     "workerd_version": "workerd 2026-10-10"
    },
-   "notes": "Quiet single-worker session (uvicorn access-log off + async generators; gunicorn -w 1; php-fpm max_children=1), 5-round medians.",
+   "notes": "Quiet single-serving-process session (uvicorn x1 no-access-log, gunicorn sync x1, php-fpm x1 + JIT + fastcgi_keep_conn, workerd/capsid defaults), 5-round medians per stack.",
    "qps": {
     "cells": [
      {
@@ -303,6 +303,27 @@ window.CAPSID_PERF_DATA = {
       "qps": 6156.9,
       "stack": "fastapi",
       "workload": "stream"
+     },
+     {
+      "p50Ms": 29.987654,
+      "p95Ms": 30.942726,
+      "qps": 2040.9,
+      "stack": "php",
+      "workload": "matrix-json-1k"
+     },
+     {
+      "p50Ms": 32.313993,
+      "p95Ms": 33.570389,
+      "qps": 1931.0,
+      "stack": "php",
+      "workload": "matrix-json-16k"
+     },
+     {
+      "p50Ms": 32.203329,
+      "p95Ms": 33.438558,
+      "qps": 1984.8,
+      "stack": "php",
+      "workload": "stream"
      }
     ],
     "lowLoadPss": {
@@ -346,11 +367,11 @@ window.CAPSID_PERF_DATA = {
        "role": "nginx-worker"
       },
       {
-       "mb": 14.0,
+       "mb": 14.1,
        "role": "fpm-master"
       },
       {
-       "mb": 9.7,
+       "mb": 10.4,
        "role": "fpm-worker"
       }
      ],
@@ -365,7 +386,7 @@ window.CAPSID_PERF_DATA = {
      "capsid": 9.3,
      "fastapi": 48.1,
      "flask": 14.9,
-     "php": 27.5,
+     "php": 28.2,
      "workerd": 44.2
     },
     "servingPss": {
@@ -405,15 +426,15 @@ window.CAPSID_PERF_DATA = {
        "role": "nginx"
       },
       {
-       "mb": 3.7,
+       "mb": 3.6,
        "role": "nginx-worker"
       },
       {
-       "mb": 14.0,
+       "mb": 14.1,
        "role": "fpm-master"
       },
       {
-       "mb": 9.7,
+       "mb": 10.4,
        "role": "fpm-worker"
       }
      ],
@@ -428,7 +449,7 @@ window.CAPSID_PERF_DATA = {
      "capsid": 12.0,
      "fastapi": 52.0,
      "flask": 15.6,
-     "php": 28.1,
+     "php": 28.8,
      "workerd": 541.8
     }
    },

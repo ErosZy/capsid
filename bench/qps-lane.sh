@@ -260,7 +260,10 @@ if stack_enabled fastapi; then
     wait_port "$FASTAPI_PID" 18997 400 || { echo "fastapi did not become ready" >&2; exit 1; }
 fi
 
-# --- flask (gunicorn, 2 sync workers) ---
+# --- flask (gunicorn, one sync process) ---
+# sync is the single-process optimum: gthread measured slower (GIL
+# contention beats the keep-alive it would add; the sync worker closes
+# each connection after responding).
 if stack_enabled flask; then
     (cd "$BENCH_APPS" && taskset -c "$SUT_CPUSET" \
         "$(dirname "$VENV_PYTHON")/gunicorn" -w 1 -b 127.0.0.1:18998 \
@@ -294,6 +297,8 @@ access.log = $OUT/php-run/access.log
 php_admin_value[opcache.enable] = 1
 php_admin_value[opcache.enable_cli] = 1
 php_admin_value[opcache.validate_timestamps] = 0
+php_admin_value[opcache.jit] = tracing
+php_admin_value[opcache.jit_buffer_size] = 32M
 php_admin_value[error_log] = $OUT/php-run/php-error.log
 PHPFPM
     cat >"$OUT/nginx.conf" <<NGINX
@@ -312,6 +317,7 @@ http {
         listen 127.0.0.1:18996;
         root $PHP_APP/public;
         location / {
+            fastcgi_keep_conn on;
             fastcgi_pass 127.0.0.1:9102;
             fastcgi_param SCRIPT_FILENAME $PHP_APP/public/index.php;
             fastcgi_param SCRIPT_NAME /index.php;
