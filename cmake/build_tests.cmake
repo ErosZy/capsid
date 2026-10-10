@@ -1660,10 +1660,10 @@ if(BUILD_TESTING)
                 NAME benchmark_tool_boundaries
                 COMMAND "${CAPSID_HOST_TEST_NODE}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_tool_boundaries.mjs"
-                    --summarizer
-                        "${CMAKE_CURRENT_SOURCE_DIR}/bench/summarize-four-qps.py"
-                    --profiler
-                        "${CMAKE_CURRENT_SOURCE_DIR}/bench/profile-four-stacks.sh")
+                    --collector
+                        "${CMAKE_CURRENT_SOURCE_DIR}/bench/collect-perf-point.py"
+                    --qps-lane
+                        "${CMAKE_CURRENT_SOURCE_DIR}/bench/qps-lane.sh")
             set_tests_properties(
                 benchmark_tool_boundaries
                 PROPERTIES
