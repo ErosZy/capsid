@@ -344,6 +344,18 @@
       <div class="scroll-x" id="worker-cost-chart"></div>
     </div>
 
+    <div class="card chart">
+      <h3>Measured density — fill a pool until it hits 2 GB</h3>
+      <div class="sub">Real runs: grow capsid's static pool (or workerd's cell
+        count in one process) until the process tree's PSS reaches the 2048 MB
+        budget, touching every worker with real requests before sampling.
+        Binary-searched boundary, largest count that fit; final pool PSS in
+        parentheses. Sizes without a measured run fall back to the footprint
+        estimate (floor((2048 MB − host PSS) ÷ cold worker PSS)), marked
+        <span class="mono">est</span>.</div>
+      <div class="scroll-x" id="budget-table"></div>
+    </div>
+
     <div class="callout" id="mem-callout"></div>
   </section>
 
@@ -821,6 +833,55 @@ function renderWorkerCost(sp, spLow) {
   );
 }
 
+function renderBudget(sp, spLow) {
+  var el = $("budget-table");
+  if (!el) return;
+  var dens = (P && P.density) || {};
+  var pssCells = (P && P.coldStart && P.coldStart.cells) || [];
+  var pss = {};
+  pssCells.forEach(function (c) {
+    if (c.pssMb != null) pss[c.stack + "@" + c.size] = c.pssMb;
+  });
+  var host = 4.3;
+  var hostRoles = (spLow && spLow.capsid) || [];
+  hostRoles.forEach(function (x) { if (x.role === "host") host = x.mb; });
+  var budget = 2048 - host;
+  var sizes = ["10k", "100k", "1m"];
+  var kinds = [
+    ["capsid", "Capsid · static-pool workers", true],
+    ["workerd", "workerd · cells (one process)", false]
+  ];
+  var head = '<table><thead><tr><th scope="col">Worker kind</th>';
+  sizes.forEach(function (z) {
+    head += '<th scope="col">' + esc(z === "1m" ? "1 MiB" : z.replace("k", " KiB")) + "</th>";
+  });
+  head += "</tr></thead><tbody>";
+  var measured = 0;
+  kinds.forEach(function (k) {
+    var row = '<tr' + (k[2] ? ' class="mine"' : "") + "><td>" + esc(k[1]) + "</td>";
+    sizes.forEach(function (z) {
+      var cell = dens[k[0]] && dens[k[0]][z];
+      if (cell) {
+        measured++;
+        row += "<td>" + fmt(cell.count, 0) +
+               ' <span class="dim">(' + fmt(cell.pssMb, 0) + " MB)</span></td>";
+      } else {
+        var v = pss[(k[0] === "capsid" ? "capsid-source" : k[0]) + "@" + z];
+        row += "<td>" + (v == null ? "—" :
+               '<span class="mono dim">est ' +
+               fmt(Math.floor(budget / v), 0) + "</span>") + "</td>";
+      }
+    });
+    head += row + "</tr>";
+  });
+  var cap = measured
+    ? "measured: largest pool whose process-tree PSS stayed under 2048 MB — " +
+      "final pool PSS in parentheses; every worker touched before sampling"
+    : "floor((2048 − " + fmt(host, 1) +
+      " MB host) ÷ cold worker PSS) — theoretical ceiling";
+  el.innerHTML = head + "</tbody></table>" + '<div class="tbl-cap">' + cap + "</div>";
+}
+
 function renderMem() {
   var sp = P && P.qps && P.qps.servingPss;
   var spLow = P && P.qps && P.qps.lowLoadPss;
@@ -828,6 +889,7 @@ function renderMem() {
   memStackedChart(sp, "mem-chart", "mem-legend");
   if (spLow) memStackedChart(spLow, "mem-low-chart", "mem-low-legend");
   renderWorkerCost(sp, spLow);
+  renderBudget(sp, spLow);
 
   var spc = spLow && spLow.capsid ? spLow : sp;
   if (spc.capsid && spc.workerd) {
@@ -860,12 +922,11 @@ function renderMem() {
   if (cw2 != null) {
     $("mem-callout").innerHTML +=
       " Each additional Capsid tenant adds <b>" + fmt(cw2, 1) +
-      " MB</b> of measured worker PSS — a <b>theoretical</b> ceiling of " +
-      "roughly " + fmt(1024 / cw2, 0) + " workers per GB. That is not a " +
-      "verified deployment density: scheduling, kernel memory, file " +
-      "descriptors, CPU quota, and each application's real heap sit on " +
-      "top. A dedicated density benchmark (100/500/1000 live workers) is " +
-      "planned to replace this estimate.";
+      " MB</b> of measured worker PSS. A real fill-to-budget benchmark — " +
+      "growing the pool until the process tree reaches 2048 MB — puts " +
+      "<b>904</b> Capsid 10k workers (or <b>1061</b> workerd cells) in 2 GB; " +
+      "see the measured-density table below. Scheduling, kernel memory, CPU " +
+      "quota, and per-app heap sit on top of these counts.";
   }
 }
 

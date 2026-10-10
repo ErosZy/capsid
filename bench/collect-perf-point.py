@@ -179,10 +179,35 @@ def load_existing(data_path):
     return json.loads(m.group(1))
 
 
+def parse_density(path):
+    """cells.txt lines: `capsid 10k workers=17 pss_mb=47.8 note=...`"""
+    out = {}
+    if not path:
+        return out
+    fp = os.path.join(path, "cells.txt")
+    if not os.path.exists(fp):
+        return out
+    with open(fp) as f:
+        for line in f:
+            m = re.match(r"(\S+)\s+(\S+)\s+(workers|cells)=(\d+)\s+"
+                         r"pss_mb=(\S+)", line.strip())
+            if not m:
+                continue
+            stack, size, unit, count, pss = m.groups()
+            try:
+                pss = float(pss)
+            except ValueError:
+                continue
+            out.setdefault(stack, {})[size] = {
+                "count": int(count), "unit": unit, "pssMb": pss}
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cold-start", required=True)
     ap.add_argument("--qps", required=True)
+    ap.add_argument("--density")
     ap.add_argument("--version", required=True)
     ap.add_argument("--release", required=True)
     ap.add_argument("--data", default="perf-site/data.js")
@@ -213,6 +238,7 @@ def main():
         "machine": machine,
         "coldStart": cold,
         "qps": qps,
+        "density": parse_density(args.density),
         "evidence": evidence_files([args.cold_start, args.qps]),
     }
 

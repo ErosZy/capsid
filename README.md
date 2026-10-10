@@ -290,6 +290,7 @@ full charts lives at <https://eroszy.github.io/capsid/>.
 | JSON 16 KiB throughput | 4,341 QPS | workerd **20,189**<br>FastAPI 12,599<br>Flask 2,878<br>PHP Slim 2,008 |
 | Stream 1 KiB throughput | **7,020 QPS** | workerd 14,192<br>FastAPI 6,671<br>Flask 3,987<br>PHP Slim 2,032 |
 | Serving path memory | **12.2 MB PSS** (5.3 host + 6.9 worker) | Flask 17.0<br>PHP Slim 28.1<br>FastAPI 46.1<br>workerd 581.0 (untuned V8) |
+| Measured 2 GB density (10k / 100k / 1M) | **904 / 568 / 127** workers | workerd cells 1,061 / 917 / 244 (shared process) |
 | Small bundle cold start (10 KiB) | **17.4 ms** bytecode / 18.4 ms source | Deno 20<br>workerd 20<br>Node 57 |
 | 1 MB trusted bytecode cold start | **28.3 ms** | workerd 38<br>Deno 55<br>Node 81 |
 

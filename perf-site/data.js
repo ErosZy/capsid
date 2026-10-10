@@ -130,7 +130,43 @@ window.CAPSID_PERF_DATA = {
     "pssMb": [],
     "warm": []
    },
-   "date": "2026-10-10",
+   "date": "2026-10-11",
+   "density": {
+    "capsid": {
+     "100k": {
+      "count": 568,
+      "pssMb": 2045.5,
+      "unit": "workers"
+     },
+     "10k": {
+      "count": 904,
+      "pssMb": 2047.5,
+      "unit": "workers"
+     },
+     "1m": {
+      "count": 127,
+      "pssMb": 2033.5,
+      "unit": "workers"
+     }
+    },
+    "workerd": {
+     "100k": {
+      "count": 917,
+      "pssMb": 2047.0,
+      "unit": "cells"
+     },
+     "10k": {
+      "count": 1061,
+      "pssMb": 2047.5,
+      "unit": "cells"
+     },
+     "1m": {
+      "count": 244,
+      "pssMb": 2013.3,
+      "unit": "cells"
+     }
+    }
+   },
    "evidence": {
     "qps-rr/.gunicorn.pid": "2966b933417ac4866414612610897d93dcf2d1585fd58bf552638e69c45bf1d0",
     "qps-rr/.uvicorn.pid": "9d60b09ab7d03f9cc5115bddf643f718a5cd2db60bc3116c6aa24ce243e96733",
@@ -296,7 +332,7 @@ window.CAPSID_PERF_DATA = {
     "qps-rr/ready.capsid": "bb513d234320af60b750d0932c32c50908a41fd46bd71a46bb7ca7926b00eb00"
    },
    "git": {
-    "commit": "64715b07a25e0d4238d1505d78a82cb4e1d21b7c",
+    "commit": "392245360de7b8e5191f857a5c8709ed44f68164",
     "tag": ""
    },
    "machine": {

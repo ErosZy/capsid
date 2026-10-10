@@ -100,6 +100,18 @@ Serving-path memory (process-tree PSS after the last round; trickle = fresh proc
 - **capsid holds the density point**: ≈12.2 MB PSS for the whole serving path (host 5.3 + worker 6.9) with mid-pack QPS — about 1/4 of FastAPI's memory and 1/48 of workerd's under the same load.
 - **PHP Slim is the consistent laggard** at ~2.0-2.1k QPS (p95 ≈32-38 ms) even with JIT tracing and FastCGI keep-alive enabled.
 
+### Measured density: fill a pool to 2 GB (2026-10-10)
+
+Real capacity runs, not footprint arithmetic: grow capsid's `static-pool` (or workerd's cell count in one process) until the process-tree PSS reaches 2048 MB, touching every worker/cell with real requests before sampling, binary-searching the boundary, and requiring the recorded count to verify under budget (PSS jitter guard). Source bundles; per-run probes and manifests in `bench/results/density-v022-20261010/`.
+
+| fixture size | capsid workers | capsid final PSS | workerd cells | workerd final PSS |
+|---:|---:|---:|---:|---:|
+| 10 KiB | **904** | 2047.5 MB | 1,061 | 2047.5 MB |
+| 100 KiB | **568** | 2045.5 MB | 917 | 2047.0 MB |
+| 1 MiB | **127** | 2033.5 MB | 244 | 2013.3 MB |
+
+workerd packs more code-cells per 2 GB because its cells share one process (marginal cell cost ≈1.9-8.1 MB versus capsid's per-worker ≈2.3-16.0 MB); every capsid tenant is nonetheless a separate, sandboxable process. These are fill-to-budget counts — sustained-traffic density (every tenant serving under load) remains future work.
+
 ## 4. Cold-Start Comparison (2026-10-10, median ms, 5 rounds)
 
 Measurement class 4: **process start → first validated response**. The shell-measured stacks (Node/Deno/workerd) previously read ~400 ms regardless of fixture size because `total_ms` was captured after a 50-request curl warm loop and the PSS walk; the endpoint now sits at the first exact-body-verified response, matching capsid's in-process runner. Fixture is real-shaped JS source (three template rotations), at 10k/100k/1M sizes; each side loads the same function body byte-aligned, differing only in entry point. capsid uses C ABI spawn→load (source/trusted bytecode)→READY→first response; Node/Deno use process start→stdout READY→curl first request; workerd uses first TCP connect→curl first request (its isolate initializes lazily on the first request, so ready→first-response carries that cost). Each cell drops 1 warmup round and takes the median of 5 rounds. Raw data: `bench/results/cold-start-v022-20261010/` (cells + manifests; the Deno pass ran separately and is stored alongside as `cells.deno.txt`).
