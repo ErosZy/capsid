@@ -287,7 +287,7 @@
     <h2>Throughput</h2>
     <p class="lede">Closed-loop load generation with the repository's frozen
        client: 64 keep-alive connections, 64 in-flight, 5&nbsp;s warm-up plus
-       three 15&nbsp;s measured rounds. Every round verifies the exact
+       five 15&nbsp;s measured rounds. Every round verifies the exact
        response body; medians are reported.</p>
 
     <div class="card chart">
@@ -1001,6 +1001,7 @@ function renderMethod() {
     ["Capsid", P && P.git ? String(P.git.tag || P.git.commit || "") : ""]
   ].map(function (r) {
     var v = r[1] || "—";
+    if (v === "absent" || v === "n/a") v = "not measured";
     return "<dt>" + esc(r[0]) + '</dt><dd title="' + esc(v) + '">' + esc(v) + "</dd>";
   }).join("");
   $("method-card").innerHTML =
@@ -1009,7 +1010,7 @@ function renderMethod() {
         '<div class="m-sub">Protocol</div>' +
         '<ol class="proto">' +
           "<li><b>Throughput</b>frozen repository load generator, closed " +
-          "loop, 64 connections / 64 in-flight, 5 s warm-up, three 15 s " +
+          "loop, 64 connections / 64 in-flight, 5 s warm-up, five 15 s " +
           "rounds, exact-body verification every round.</li>" +
           "<li><b>Cold start</b>start → ready → first response; warm-up " +
           "discarded, median of five; identical fixture source across " +

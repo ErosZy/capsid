@@ -1,10 +1,11 @@
 rounds: 5 warm: 50 sut_cpuset: 0-3
+note: cells.txt carries the node/workerd pass plus the capsid rows from the same session; the deno pass ran separately (deno was missing from PATH) and is stored as cells.deno.txt
 generated_at: 2026-10-10T22:35:42+08:00
 commit: 50d0e4287784de6370a287f0396ea2b828e6e047
 tag: 
 runner_sha256: 00178a2118fb0a2c2985d43278f72a860c9e90fca3a79d361f0fdefbe7538cda
 runner_diff_sha256: d9d0beaf711cb4ffca3e779fb1ac77c411a73ef170ec307fbd613fa60c364f02
-command: OUT=/tmp/opencode/cold-vmfix BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh
+command: OUT=/tmp/opencode/cold-vmfix BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh  # node/workerd pass; deno ran as a separate pass: OUT=/tmp/opencode/cold-deno PATH=/tmp/opencode/deno/bin:$PATH STACKS="deno" (cells.deno.txt)
 uname: Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
 cpu: 12th Gen Intel(R) Core(TM) i5-12400F
 nproc: 12
@@ -14,7 +15,7 @@ a627bbc16389d9a69b77f952d5571a2f2cac8c49afae6005e8e06fe96d1c196d  build-release/
 e75c6284eaef9b82317ba6adc20bd6f6729b064d23952fb651fc51a4f2c5ad33  build-release/capsid-bytecode-compile
 e237a2839d0cbdc9a9a2adda1a184afc0f5b20306ffbe923af5686550472d8a8  /home/eroszhao/.nvm/versions/node/v24.14.0/bin/node
 node: v24.14.0
-deno: absent
+deno: deno 2.9.7 (stable, release, x86_64-unknown-linux-gnu)
 50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd  /tmp/opencode/workerd-bin/workerd-linux-64
 workerd_version: workerd 2026-10-10
 de3c1776778e44d72e7f3254babc7c049894861563937818d95c77c233dcc6e5  /tmp/cold-start-apps/app-capsid-100k.attest.json

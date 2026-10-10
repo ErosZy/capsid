@@ -344,14 +344,14 @@ window.CAPSID_PERF_DATA = {
     "qps-rr/ready.capsid": "bb513d234320af60b750d0932c32c50908a41fd46bd71a46bb7ca7926b00eb00"
    },
    "git": {
-    "commit": "50d0e4287784de6370a287f0396ea2b828e6e047",
+    "commit": "1aafc5a2fdcaee14643d89678c9ffba48af2b62c",
     "tag": ""
    },
    "machine": {
-    "command": "OUT=/tmp/opencode/cold-vmfix BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh",
+    "command": "OUT=/tmp/opencode/cold-vmfix BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh  # node/workerd pass; deno ran as a separate pass: OUT=/tmp/opencode/cold-deno PATH=/tmp/opencode/deno/bin:$PATH STACKS=\"deno\" (cells.deno.txt)",
     "commit": "50d0e4287784de6370a287f0396ea2b828e6e047",
     "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
-    "deno": "absent",
+    "deno": "deno 2.9.7 (stable, release, x86_64-unknown-linux-gnu)",
     "generated_at": "2026-10-10T22:35:42+08:00",
     "nginx": "nginx version: nginx/1.24.0 (Ubuntu)",
     "node": "v24.14.0",
@@ -364,7 +364,7 @@ window.CAPSID_PERF_DATA = {
     "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
     "workerd_version": "workerd 2026-10-10"
    },
-   "notes": "Single quiet session, 5-round medians; symmetric single-serving-process serving configs; cold-start total_ms redefined to spawn->first validated response for shell stacks (warm loop and PSS walk no longer leak into the cold metric).",
+   "notes": "Single quiet session, 5-round medians; symmetric single-serving-process serving configs; cold-start total_ms = spawn to first validated response (deno pass ran separately, deno 2.9.7).",
    "qps": {
     "cells": [
      {
