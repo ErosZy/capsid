@@ -157,10 +157,172 @@ window.CAPSID_PERF_DATA = {
     "coldrun-final/raw.node.1m.jsonl": "fbc292a7746d3103c2611864c2d8a59b77daec8725c4bda827f4369d994ec758",
     "coldrun-final/raw.workerd.100k.jsonl": "4bf33f8a733a2d0d86f423a6f585e58029eaa5d46a6ba951693240405bfc468f",
     "coldrun-final/raw.workerd.10k.jsonl": "3526d063dddc11eb1f1771b66f832fb8db55856e64bb5bd9556c0123d5dd155b",
-    "coldrun-final/raw.workerd.1m.jsonl": "1cf23b363fc0e5d5cc8f527fa586090f59aba32f28ff416432e1df6977ccc461"
+    "coldrun-final/raw.workerd.1m.jsonl": "1cf23b363fc0e5d5cc8f527fa586090f59aba32f28ff416432e1df6977ccc461",
+    "qps-rr/.gunicorn.pid": "2966b933417ac4866414612610897d93dcf2d1585fd58bf552638e69c45bf1d0",
+    "qps-rr/.uvicorn.pid": "9d60b09ab7d03f9cc5115bddf643f718a5cd2db60bc3116c6aa24ce243e96733",
+    "qps-rr/cells.txt": "7a11d36786e80c4d6765c6f6f6e4c4704ef4ae4edee8d5dd30dbb448466b97b5",
+    "qps-rr/correctness.capsid.matrix-json-16k.r1.json": "714bcc05bdcf95811402baa26615070e4bc1317b7df7bf402b2698947a3908dc",
+    "qps-rr/correctness.capsid.matrix-json-16k.r2.json": "9ecac86a46400e5bf634b951a61c8c4c2a14522d57b3462d2d19c898e152e4fb",
+    "qps-rr/correctness.capsid.matrix-json-16k.r3.json": "b2d43cd5ab864ad9f0be48c3dfa456010099912921981dfae33f7a47e3014503",
+    "qps-rr/correctness.capsid.matrix-json-16k.r4.json": "8e7409a6fb1fdf2341141e2cc02cfdf7354e30cb7f23d8d030be984f4d50cfc5",
+    "qps-rr/correctness.capsid.matrix-json-16k.r5.json": "59c6632f20cd987dd5d63d473f91fb5bf6c23f313a9956a16ee82355cf64aad6",
+    "qps-rr/correctness.capsid.matrix-json-1k.r1.json": "7010e08b65e9eb153de240d6eee7c65fb2af220e149e51ce4cb2cc40f99f29f6",
+    "qps-rr/correctness.capsid.matrix-json-1k.r2.json": "63abb00206154522ad3ad790af5ed9eb954de4e278bd8198e0d79604412b4362",
+    "qps-rr/correctness.capsid.matrix-json-1k.r3.json": "0dcf5d60da6790d005bf1de626fef4df3f250df48796f2b5506b59047ab0897b",
+    "qps-rr/correctness.capsid.matrix-json-1k.r4.json": "d70a4a7e05e33521dab45fdb1d50aa6493cf898a75a3f703e658a7bec39483bb",
+    "qps-rr/correctness.capsid.matrix-json-1k.r5.json": "03d03856373a425e207aeb15b5e07fe12d7700e661a08caab6ba7c76511d1205",
+    "qps-rr/correctness.capsid.stream.r1.json": "5e06b9363abd84f12a85620c6b74a78d6f24e12ab28a6f472012c7c390b4a58c",
+    "qps-rr/correctness.capsid.stream.r2.json": "3511d017cc7b1c3a606fe4f2cdaaf9608131ae6e63daef606e31bd4de76bb64d",
+    "qps-rr/correctness.capsid.stream.r3.json": "ac3270b7b4a1da16b04aef1a7f036adb2b77295e460fd47c0f7770d3e8f5e1cd",
+    "qps-rr/correctness.capsid.stream.r4.json": "881ea42ee9e3bf22c7d122e6f01d9f338044ca3d40015eb91f0b3d27980c7a6a",
+    "qps-rr/correctness.capsid.stream.r5.json": "d8c85383b26a82204b047265a8144ca8686b7c80e350e5393568cdd0f6b53584",
+    "qps-rr/correctness.fastapi.matrix-json-16k.r1.json": "b8af2d205146e8d3058e465ffc448e55d40b4cc9940796ac66ba4c0ab97b59dd",
+    "qps-rr/correctness.fastapi.matrix-json-16k.r2.json": "495b9a1c07b4e74f4d9c52e28fb7b111cc2e5d0c5cb90cf75dd375892398f100",
+    "qps-rr/correctness.fastapi.matrix-json-16k.r3.json": "241a039d36cfc49d2c6bce9fcc28e5a9efee2e350a7ce658e240ef6db2d8ce3b",
+    "qps-rr/correctness.fastapi.matrix-json-16k.r4.json": "99d071001662c22dae480a8eb08fbf88d9399f541aa9f7ea0bce223be7fe612e",
+    "qps-rr/correctness.fastapi.matrix-json-16k.r5.json": "f7c18cb42aff894263a7b7a542c59e134c5e1caaf81692e7da7e5088a80b9ba2",
+    "qps-rr/correctness.fastapi.matrix-json-1k.r1.json": "00be3bcc5ec215f3f03cd7c56cacdf1f34994b9f3379a51a271865f63092e60e",
+    "qps-rr/correctness.fastapi.matrix-json-1k.r2.json": "d68c7f08c25619502a75811f62819549557a4ff1e81c6b099b363c7a8c0a9478",
+    "qps-rr/correctness.fastapi.matrix-json-1k.r3.json": "33f2cd830d40653bfa97e06afe173288f1e52d7374b3be6fe43b5099edad9793",
+    "qps-rr/correctness.fastapi.matrix-json-1k.r4.json": "7d366001289f74292e5112d3d7fcf94edf8c8dd6c512641d3411cbdbdb4837d3",
+    "qps-rr/correctness.fastapi.matrix-json-1k.r5.json": "7f90c812b476f4b40cc0f38cb9765200e9d7ac2b3f92f02f64ab998455f0610f",
+    "qps-rr/correctness.fastapi.stream.r1.json": "6d7f33cd2dee76ac111b2733be9596f41e7c93d2f79801acb57b26eb67974a19",
+    "qps-rr/correctness.fastapi.stream.r2.json": "cc3cd35ded698a4906485588521838af086e3ac03dfc6454291f6e99f9003247",
+    "qps-rr/correctness.fastapi.stream.r3.json": "c1942379dcf3bd8a0e080dea70a0367a192e6466ce66faa7006d766890af0e7a",
+    "qps-rr/correctness.fastapi.stream.r4.json": "f76b022340729d7773ab08259a561b84d31f33fe691548df7f4d269a60968428",
+    "qps-rr/correctness.fastapi.stream.r5.json": "8b48d1eb36acbdc1786684012acc82f710c82f29b2e6e5e3e2ff5bccb3e1f8cf",
+    "qps-rr/correctness.flask.matrix-json-16k.r1.json": "84a0755caaa0620ac2a7a71e50858d1eb4b7130833bbb83d1d4fea44cb3d26d1",
+    "qps-rr/correctness.flask.matrix-json-16k.r2.json": "bb14049eb7207c33b572b6320e014be6a2455b8e73f1feb85e66c0834d258037",
+    "qps-rr/correctness.flask.matrix-json-16k.r3.json": "d66be7a84804daea99c3a057084961027f5f645e6eea9442b2a9c9d8147c036e",
+    "qps-rr/correctness.flask.matrix-json-16k.r4.json": "ece80c1385e8a3fd8db803e9ecbf2c70c6264820fb738738df99f5f8d391eb60",
+    "qps-rr/correctness.flask.matrix-json-16k.r5.json": "330cb9689e0490a8bba80c138b1bdb139bda598aaa49a0e3809844c5ad2896e2",
+    "qps-rr/correctness.flask.matrix-json-1k.r1.json": "569440dc9e14c69d24a07ff7d0e5e1ef93e10a17c1a2a757ee49f6ae76ec8770",
+    "qps-rr/correctness.flask.matrix-json-1k.r2.json": "b511cb88e38e91e82b691d0fc914693e0b631691819e6045bed60ddfa0934b40",
+    "qps-rr/correctness.flask.matrix-json-1k.r3.json": "1f13ffac379a903d0ce2ae5467d745696f90376d5e6bce3a779ad7e3ab22e5d2",
+    "qps-rr/correctness.flask.matrix-json-1k.r4.json": "21b99146c0242d751b2a35095824c8b6d9a9618d56238a4c7452bfe1c0a2945b",
+    "qps-rr/correctness.flask.matrix-json-1k.r5.json": "5cebccd61475b1951b24718c72f84f978bb5879bc653de900d29a9dfdeea83b9",
+    "qps-rr/correctness.flask.stream.r1.json": "dbac57632b4e74f3b9c4a3a605b54fd4c096a73dc8d5365173af3513b65e41c1",
+    "qps-rr/correctness.flask.stream.r2.json": "e5495901165c4ba0060a9dc8d408aa24e4105445b7a1afb90d0b614485dc9e40",
+    "qps-rr/correctness.flask.stream.r3.json": "e00edc22bd5efb29668340a3f4d821711d22b8971d7ab78b20713ca3fbca74b6",
+    "qps-rr/correctness.flask.stream.r4.json": "2ca36a7886bfc5fb59f9646bcf4bd6f4aeda3fd304a1e61216c08a1f8ea41a9d",
+    "qps-rr/correctness.flask.stream.r5.json": "79d5736571fe110d8f7f0b38d210129581575d43aaceb701e0bfa997e70a2446",
+    "qps-rr/correctness.php.matrix-json-16k.r1.json": "d212a7658a76b9f65570219631af0d5fc3dec6e0af317eee9e074fd3b2bd92db",
+    "qps-rr/correctness.php.matrix-json-16k.r2.json": "af266b3a5cd79cfdc30f4ffa4234d826b0af66c3cdebba389eb0cb38741d6bb6",
+    "qps-rr/correctness.php.matrix-json-16k.r3.json": "432efc4c79dcd7a6c2495f5fe038ab4b4adf6a915ff77ab5c37ebc4f5ec1abeb",
+    "qps-rr/correctness.php.matrix-json-16k.r4.json": "b5767e4688a85f0b050648b5ac5fd0b44174b47a6b7f2735968df894f840908b",
+    "qps-rr/correctness.php.matrix-json-16k.r5.json": "6410eb8be73f5399a6a2a5f94f95279fa95a933f0eac7cb0efb142398d0f2df9",
+    "qps-rr/correctness.php.matrix-json-1k.r1.json": "e6a14a042e3df0f5b5b7b8df08cbed9a28149517d3e28f2d09da973d7e4dd30d",
+    "qps-rr/correctness.php.matrix-json-1k.r2.json": "b4d3d83d00df48e18bef0bed32745f6590b1dc05c5602cfacd00e9ceef0bfbcd",
+    "qps-rr/correctness.php.matrix-json-1k.r3.json": "ca6e5709514e2937f6d5c17b0759c0ed3254c34b55d1a937851896fe7256bdb9",
+    "qps-rr/correctness.php.matrix-json-1k.r4.json": "f3e5af966a1cc807bbe3107ec654e6e23318e997b636230ed05e8f25ecceaa5c",
+    "qps-rr/correctness.php.matrix-json-1k.r5.json": "3f572e78dd686cc04b8c082e7330c68eb214e3312705802a7d2d8a7a6201fd7b",
+    "qps-rr/correctness.php.stream.r1.json": "ace70c8c65a4b6c9ce571046028fd69c68df49dd3ee8ea92e6142c97197c94b0",
+    "qps-rr/correctness.php.stream.r2.json": "ea4c56b2ecc234046a4cf2e1a25b0733bf2c411fa88208de693e78de5f13eb9c",
+    "qps-rr/correctness.php.stream.r3.json": "9acec09079c9452825f40eef9f85bb1417dd97b97875ea51e3381d07a29b6179",
+    "qps-rr/correctness.php.stream.r4.json": "adc918407b6d9d1e88870f8c450b4316132faca26799d63ea30a0a054fa40f17",
+    "qps-rr/correctness.php.stream.r5.json": "8d0e9859c7c8915bb8dc33015ce69b90ef0f3aa34eb400d6084e48b4583e32b2",
+    "qps-rr/correctness.workerd.matrix-json-16k.r1.json": "116856a32d35f96bf6cca0b9cb8bdb5c2a62aa2eb314132dbefdbfa11aff2ea4",
+    "qps-rr/correctness.workerd.matrix-json-16k.r2.json": "44d4596d38cf01e0665105a7dd1618fd33cca4ea97c047881ee37794326fd11b",
+    "qps-rr/correctness.workerd.matrix-json-16k.r3.json": "92e7469b92fc72626cedbcc846562be890c37cacc385fe11a5563833547476d3",
+    "qps-rr/correctness.workerd.matrix-json-16k.r4.json": "6a2892f3f88f2fa957582b61b02ebd8fae1344f1588324a153bc3d0078f7334e",
+    "qps-rr/correctness.workerd.matrix-json-16k.r5.json": "6642f6bf6f9a8089d866607c20d13d7e60ceae7a3554e70524e389623336c239",
+    "qps-rr/correctness.workerd.matrix-json-1k.r1.json": "4a02f82c470f78d282bd3bde25ccffa76d96736ea6f4b8319683bdd7f1373df6",
+    "qps-rr/correctness.workerd.matrix-json-1k.r2.json": "3c22ee77c5ac9b208f877b3b3ede581d4404233a6e6cf48246cd4ed6bea7dc31",
+    "qps-rr/correctness.workerd.matrix-json-1k.r3.json": "b12f9ecb1d9c22a3bcb362b4a1097c9e9cbc20be3da535d06cf7d53296935c5e",
+    "qps-rr/correctness.workerd.matrix-json-1k.r4.json": "c6386b3e11ee2dd5ee64e3b49fb1bbccb9ed1881006a2aa025523b0bed1461b3",
+    "qps-rr/correctness.workerd.matrix-json-1k.r5.json": "de235a9be99c34f6ecd2eb28283a6a00f3bfb5cfe37c9734515643cb1440147d",
+    "qps-rr/correctness.workerd.stream.r1.json": "771def2a7c446aad45533926225a65b6eb98a07a81660d1a7740bda0816e877a",
+    "qps-rr/correctness.workerd.stream.r2.json": "82a01f93178b44b9ff6bd5b239fd077716342aa5a975300e011fd9b07aca3a31",
+    "qps-rr/correctness.workerd.stream.r3.json": "33bdb0395a9ab758d30db95fed6d5e84fce015101e8fc573209946109d6bea92",
+    "qps-rr/correctness.workerd.stream.r4.json": "a5b6adfe174521b2372c0ec295cf2459db079a903b917c4b00d3e63328d98c7e",
+    "qps-rr/correctness.workerd.stream.r5.json": "50ff5dd67158f1a90bf0e8b7477ba6b1719c02d608dabf44c28eb72f7b29f875",
+    "qps-rr/err.capsid": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qps-rr/err.fastapi": "1ac0649fd059444dd929825e3d9f714c4e961076381ec5c94cf30d4a651204da",
+    "qps-rr/err.flask": "8cdb2729f5abfe62390886ecf343ca26590fb8bc8d049a52e0b9e3f43df46281",
+    "qps-rr/err.php": "90ceef2f597bf2a2e8f22b60b8e9d28a51100412a00010c05305155c302827af",
+    "qps-rr/err.workerd": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qps-rr/manifest.txt": "31553d2036e65cb51d6c9c66b035524d1901f043d232255c682a39e32eee7e27",
+    "qps-rr/nginx.conf": "eec2b1746f1474bf3348ac2249219a420cf70876ee77c9e01ff5eb03cf9003dc",
+    "qps-rr/php-fpm.conf": "189367768ec23186361a4600d803dcf5f07296c0497168daade255134a9981dd",
+    "qps-rr/raw.capsid.matrix-json-16k.r1.jsonl": "6443fefb44c4d3b9cf16aaff532635bb8199a189d01fc7b17c1792df5f2dfd88",
+    "qps-rr/raw.capsid.matrix-json-16k.r2.jsonl": "c1a9b6967ba6062d767fc09c380e9bae471d8043a4d36e7b0868a9489a6661bd",
+    "qps-rr/raw.capsid.matrix-json-16k.r3.jsonl": "68901253f5a390c3015786aaa153900b0d6d0bf428063af0e34aaf8a04c69dbc",
+    "qps-rr/raw.capsid.matrix-json-16k.r4.jsonl": "39c3fc06fa86a6b6368f78eabc53afe281be41f04a4f5ca90da20ed1a550af00",
+    "qps-rr/raw.capsid.matrix-json-16k.r5.jsonl": "09afc319948f6877d72f65c30fe07adcbeb1f930330ba8d0bcf1bfe4130271fd",
+    "qps-rr/raw.capsid.matrix-json-1k.r1.jsonl": "7994b2b7a5987e6c2d7dc7ac5fe4d458c7d2d543a8377f83e1e8dbc6461912ae",
+    "qps-rr/raw.capsid.matrix-json-1k.r2.jsonl": "66df8969d69379b97773f612ae5b92da726a3513afa382803ea596144dea87bd",
+    "qps-rr/raw.capsid.matrix-json-1k.r3.jsonl": "8586c73943a62d5332ba626cb312003aa6e20e2a502c81357c7cfb61f0dc7c81",
+    "qps-rr/raw.capsid.matrix-json-1k.r4.jsonl": "f0965b6dd9cab481e50046c90df47cab3bf4eeae883e3a6f8f73db9093ae312f",
+    "qps-rr/raw.capsid.matrix-json-1k.r5.jsonl": "b30f328f0afee40b46ddbeed0c5295dfd38f844c408ce5952d6c794c4869b03e",
+    "qps-rr/raw.capsid.stream.r1.jsonl": "e4ac109ca6817d7e47ae8959bd3c980b9038a760d69e714940c176ff4fe66db3",
+    "qps-rr/raw.capsid.stream.r2.jsonl": "e64d669576b3ae6895949ca5e07c0cfbbdabf321e274e43cc64237b0d07f1364",
+    "qps-rr/raw.capsid.stream.r3.jsonl": "86f327cbef86841a684e00b25d675be10f1e8ec939cc3a528fe7c3d16fce441d",
+    "qps-rr/raw.capsid.stream.r4.jsonl": "f51d01dd19b9a2661b47eadda875bb3f0185a69e8e79e369f38d927eb345a76b",
+    "qps-rr/raw.capsid.stream.r5.jsonl": "cf9f2f3079ac8506d402e5b7ae15c8b5b7779f26432da773deb70e0eeb11b9ee",
+    "qps-rr/raw.fastapi.matrix-json-16k.r1.jsonl": "59d97d19529584b1ddc51555f990491753b312bb59470b1780eac2105495b712",
+    "qps-rr/raw.fastapi.matrix-json-16k.r2.jsonl": "b3fc651a82df057c29d025dbdf204b5b874e4c10bb84e235b8ed810c93009d69",
+    "qps-rr/raw.fastapi.matrix-json-16k.r3.jsonl": "fc5c620e6f2334d0c85760c711f6cd45c030451dbb561e60a4f2a2122814218b",
+    "qps-rr/raw.fastapi.matrix-json-16k.r4.jsonl": "87d250eabe58ecfd22e14902d383ff8e670f583e64c56ff00d5803d20e782bd3",
+    "qps-rr/raw.fastapi.matrix-json-16k.r5.jsonl": "698ad7853f7b037f0a54831339f39d95ef28a2327c764e9c3dd9f8b73125cff0",
+    "qps-rr/raw.fastapi.matrix-json-1k.r1.jsonl": "429279218bfbfa3a13b3445d04a54eba5e8ff7a030d590aa4abe8f2629c191b4",
+    "qps-rr/raw.fastapi.matrix-json-1k.r2.jsonl": "0d877abb680876a3c617345a06097cf514186112f58901062c36de23581f8cb2",
+    "qps-rr/raw.fastapi.matrix-json-1k.r3.jsonl": "78139911b9eeef12129ae158f01ecc405e63d82e384590001fff92ae6aabdcc6",
+    "qps-rr/raw.fastapi.matrix-json-1k.r4.jsonl": "294f496e570f8422cec69ccf46d8fb055c784fbb5b367f2da9e6f4cb639785c2",
+    "qps-rr/raw.fastapi.matrix-json-1k.r5.jsonl": "493ec1f9faa5a9f912d9f2e9deabdb24fbc4cb84b7645b2532da3599959f2177",
+    "qps-rr/raw.fastapi.stream.r1.jsonl": "f1ea6beb11dd6be663d9b4a68bba4f02f3e655f60b06484a85cb5973f46efd8c",
+    "qps-rr/raw.fastapi.stream.r2.jsonl": "668f1353a73cc0b5e7b99ba15b0907728f9e5f87478c6b47b916741e171834d5",
+    "qps-rr/raw.fastapi.stream.r3.jsonl": "005e6798da736e368206c338d1696dae7f648b10542843d9dc6b5765758ae916",
+    "qps-rr/raw.fastapi.stream.r4.jsonl": "b7754aa938aa4154060210e14a4a64f0e6d9bcd7004afa24f148fb3cbb4f8974",
+    "qps-rr/raw.fastapi.stream.r5.jsonl": "719940ba2c460809334f63a48f1e93b09ca7f6f1ed7c6ef5d9fc4ffe9a24796f",
+    "qps-rr/raw.flask.matrix-json-16k.r1.jsonl": "b7f0b5c3aa5aa50a96a7aeb71fe1191cf612847065a9de735250a4533a0d308d",
+    "qps-rr/raw.flask.matrix-json-16k.r2.jsonl": "b44ffba53d00adb368870ed624e8baab4e1fdb9f9c01e42bf1bec8924a310da6",
+    "qps-rr/raw.flask.matrix-json-16k.r3.jsonl": "b78f4d11271475e3137ea2be7ebb0b8693f08ddd82b8e9f5c60b321677b958f7",
+    "qps-rr/raw.flask.matrix-json-16k.r4.jsonl": "1ac9fe1847e8e6924590a0a1bbf448295c454e3e4545efa3af73c09f44afd0a1",
+    "qps-rr/raw.flask.matrix-json-16k.r5.jsonl": "4e25e2457a74f441c512b4c10a985d69915e2c48facd6c84c00c3dc1b58c55f5",
+    "qps-rr/raw.flask.matrix-json-1k.r1.jsonl": "b7391bda43607eced76a7914d5f274522fa222c36acfd2b92e787a96c77d7b80",
+    "qps-rr/raw.flask.matrix-json-1k.r2.jsonl": "5a94bf8dfe5ce153a425435836095902413de4295c18d632b65151b25f05630e",
+    "qps-rr/raw.flask.matrix-json-1k.r3.jsonl": "5c6c868556b09f82dd500248c427dff37c734eaa0629ed7e92ce6f42cc8f1252",
+    "qps-rr/raw.flask.matrix-json-1k.r4.jsonl": "461ba5255494bd49d4225c804270dab13f1e85c71d0655b6429b01c3ed9cd0d9",
+    "qps-rr/raw.flask.matrix-json-1k.r5.jsonl": "5054bcf52c5a7ba6cbb0360a66e47bf7ffc2566c74f2d2d8735008361d787caa",
+    "qps-rr/raw.flask.stream.r1.jsonl": "227c66df201e9146b8b698fe9026409ca9f0650a6a872bb5daaeb33edfb072e5",
+    "qps-rr/raw.flask.stream.r2.jsonl": "01d8d4ad3faadf0970d8d9dbf170233bacc7994b786363fe639e5d99c97f7f79",
+    "qps-rr/raw.flask.stream.r3.jsonl": "f87459fc53d469650d8e6e62fab50109800de25f24d8a878557226a38bce64e5",
+    "qps-rr/raw.flask.stream.r4.jsonl": "3571a997b62806ef19843966f4651be25e0a5e20d7bd12e9ead8230d44a3a59f",
+    "qps-rr/raw.flask.stream.r5.jsonl": "5666f9b6feebdb2fe29eecfe40700978b5c60c5774c284ef632f92a82af21cdf",
+    "qps-rr/raw.php.matrix-json-16k.r1.jsonl": "59c234b0a1c78826080fd3a22b956a3c75d799dd946e75853c087387174b1fef",
+    "qps-rr/raw.php.matrix-json-16k.r2.jsonl": "805ed55cddcc8b9c9c8004c2231e4a910dd73e366c30ffb0c163d1dcbaf7025b",
+    "qps-rr/raw.php.matrix-json-16k.r3.jsonl": "158b816cef3c2edef285431e3bd8cd324f53ae52139d4d977ca3ebd2fc3e1dc9",
+    "qps-rr/raw.php.matrix-json-16k.r4.jsonl": "511bcf48bbaf811915f5528ede621ba5491303622424bd3cb6bb5856899558e7",
+    "qps-rr/raw.php.matrix-json-16k.r5.jsonl": "cbe2ed9fc81ec1f9393ef048b0ea2336a4ea54b17122c7af3eaab057fb0d3f38",
+    "qps-rr/raw.php.matrix-json-1k.r1.jsonl": "3fef0a71afa8b75f2eacf127835df533d974b003251e8a646a179f0a195e702a",
+    "qps-rr/raw.php.matrix-json-1k.r2.jsonl": "d4a707ef1b39f2cac786d7285966932b87b2ed2db367e49a9a8a39d5b1dca561",
+    "qps-rr/raw.php.matrix-json-1k.r3.jsonl": "d816330a300fac7c1879dbd1abe2aa7e85f6760b9aba04b3dd56d337d44319ff",
+    "qps-rr/raw.php.matrix-json-1k.r4.jsonl": "044e841d9ba9362e5a282cf0cdcc4c3f33caa70c0546ccce5a4ebe2970a8cf43",
+    "qps-rr/raw.php.matrix-json-1k.r5.jsonl": "43d2ff7ec58838e3628affa15e832a9529719e4a97e1ef860dd1fadaf0706ae6",
+    "qps-rr/raw.php.stream.r1.jsonl": "ed1de4234560e5e88ad04f1d9fb45b8c9e246d0d88e4b977748553ab32e4f835",
+    "qps-rr/raw.php.stream.r2.jsonl": "1cbdf26a1cc6d5545fcf82fee5f8a817e60c82ab3c5b107eb1ae5d614681c35f",
+    "qps-rr/raw.php.stream.r3.jsonl": "4182d054902514abe144ff5e8fabee7887fe3b93f27c66d8781c25b0c8826f9a",
+    "qps-rr/raw.php.stream.r4.jsonl": "9cc6b34d8a54ca7ed164e2e28ba4bde73f0f790dce71160e388acabff0792d8e",
+    "qps-rr/raw.php.stream.r5.jsonl": "e44e9af8419b7cc14fdfc39e2efd9d84081eb62627c148b857c89897e1f1d705",
+    "qps-rr/raw.workerd.matrix-json-16k.r1.jsonl": "3c5d0a02c064c046d8d7a31bed551a0ba27ecd951b3f8078b17d012e4521af70",
+    "qps-rr/raw.workerd.matrix-json-16k.r2.jsonl": "a2285e733c82b961691135e55c1b7c8e89eee86325c424e34cd894e700d582f1",
+    "qps-rr/raw.workerd.matrix-json-16k.r3.jsonl": "6fa0b1505a6b800e7e827d8ac87bf4f72737d830e0ffbc32b5cc463ea5685155",
+    "qps-rr/raw.workerd.matrix-json-16k.r4.jsonl": "95ea0718ac12b9c3c7b2d12387fca290a2f9ef050118e9262b547f5db52b6ac5",
+    "qps-rr/raw.workerd.matrix-json-16k.r5.jsonl": "39a6a154a2fb5308ecccdfffbfcae1781713303b47d0705be2178ddbd9c56609",
+    "qps-rr/raw.workerd.matrix-json-1k.r1.jsonl": "017978fcab25ad56d25976685cdd1e10030b7fbc53d1e2d6249d0c31530f432d",
+    "qps-rr/raw.workerd.matrix-json-1k.r2.jsonl": "308649a3bb8b67e8dbb873346d000be25d3902e9c05dfe82ab9f3fe9dd4ddf81",
+    "qps-rr/raw.workerd.matrix-json-1k.r3.jsonl": "4fac0c29e10cac3546cb060bf0f15421836113b32e74ebfaaf956003341910d1",
+    "qps-rr/raw.workerd.matrix-json-1k.r4.jsonl": "29c64cb20da952034e1d0c31ddbb4e7289b1827bfb0aa8e4febfd5da409001e5",
+    "qps-rr/raw.workerd.matrix-json-1k.r5.jsonl": "047bbb7e8db193b24e77a90ae476513033fc807e9c8fe48d74db81a92bb30267",
+    "qps-rr/raw.workerd.stream.r1.jsonl": "f6908bb07c907b204a5fea973f3af45869b4d0d32afd231b292a9313256001f7",
+    "qps-rr/raw.workerd.stream.r2.jsonl": "7f0a388a834d3ad69041dd86a108fe5bcd251bc4c070c75eb3d68ef5908b00fe",
+    "qps-rr/raw.workerd.stream.r3.jsonl": "867f2730b56cb9d2ac62e32e39977468eafe7575f80feea07b75fa923caa02ef",
+    "qps-rr/raw.workerd.stream.r4.jsonl": "620ef60e800508bf03fd698639de5ea71539be7c9349c9399d3fdb59e4e1d432",
+    "qps-rr/raw.workerd.stream.r5.jsonl": "80769a68f6e06db00706eef2f5c41529f4a1cf6aef7261c96cc52d9eb6cd1277",
+    "qps-rr/ready.capsid": "bb513d234320af60b750d0932c32c50908a41fd46bd71a46bb7ca7926b00eb00"
    },
    "git": {
-    "commit": "8911d022c890dd08b88010ae334bdca51b98cd91",
+    "commit": "bbc3885ab88e23ca8f6fca4b2c0d556b72809abc",
     "tag": ""
    },
    "machine": {
@@ -169,159 +331,122 @@ window.CAPSID_PERF_DATA = {
     "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
     "deno": "deno 2.9.7 (stable, release, x86_64-unknown-linux-gnu)",
     "generated_at": "2026-10-10T13:59:19+08:00",
+    "nginx": "nginx version: nginx/1.24.0 (Ubuntu)",
     "node": "v24.14.0",
     "nproc": "12",
+    "php_fpm": "PHP 8.3.6 (fpm-fcgi) (built: Sep  2 2026 12:56:02)",
+    "php_pool": "static max_children=1, opcache on, validate_timestamps=0",
+    "python": "Python 3.13.11",
+    "python_pkgs": "fastapi==0.143.0 Flask==3.1.3 gunicorn==26.2.0 starlette==1.7.0 uvicorn==0.54.0",
     "rounds": "5 warm: 50 sut_cpuset: 0-3",
     "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
     "workerd_version": "workerd 2026-10-10"
    },
-   "notes": "Quiet single-serving-process session (uvicorn x1 no-access-log, gunicorn sync x1, php-fpm x1 + JIT + fastcgi_keep_conn, workerd/capsid defaults), 5-round medians per stack.",
+   "notes": "Single quiet session, all five stacks back-to-back, 5-round medians; symmetric single-serving-process configs (uvicorn x1 no-access-log + async generators, gunicorn sync x1, php-fpm x1 with JIT + fastcgi keep-alive).",
    "qps": {
     "cells": [
      {
-      "p50Ms": 7.084474,
-      "p95Ms": 9.18796,
-      "qps": 8879.5,
+      "p50Ms": 6.863984,
+      "p95Ms": 10.527157,
+      "qps": 9263.6,
       "stack": "capsid",
       "workload": "matrix-json-1k"
      },
      {
-      "p50Ms": 17.682805,
-      "p95Ms": 20.562332,
-      "qps": 3705.1,
+      "p50Ms": 14.714594,
+      "p95Ms": 16.765039,
+      "qps": 4341.1,
       "stack": "capsid",
       "workload": "matrix-json-16k"
      },
      {
-      "p50Ms": 10.61248,
-      "p95Ms": 14.142244,
-      "qps": 5943.1,
+      "p50Ms": 8.938718,
+      "p95Ms": 9.92568,
+      "qps": 7020.3,
       "stack": "capsid",
       "workload": "stream"
      },
      {
-      "p50Ms": 1.903401,
-      "p95Ms": 5.244582,
-      "qps": 20251.7,
+      "p50Ms": 1.692211,
+      "p95Ms": 3.854632,
+      "qps": 26623.8,
       "stack": "workerd",
       "workload": "matrix-json-1k"
      },
      {
-      "p50Ms": 3.185394,
-      "p95Ms": 8.979455,
-      "qps": 14179.0,
+      "p50Ms": 2.372748,
+      "p95Ms": 5.477707,
+      "qps": 20188.5,
       "stack": "workerd",
       "workload": "matrix-json-16k"
      },
      {
-      "p50Ms": 4.228693,
-      "p95Ms": 12.605388,
-      "qps": 10497.0,
+      "p50Ms": 3.554071,
+      "p95Ms": 9.300764,
+      "qps": 14192.0,
       "stack": "workerd",
       "workload": "stream"
      },
      {
-      "p50Ms": 19.107554,
-      "p95Ms": 24.663762,
-      "qps": 3189.5,
+      "p50Ms": 4.949516,
+      "p95Ms": 7.578722,
+      "qps": 12948.4,
       "stack": "fastapi",
       "workload": "matrix-json-1k"
      },
      {
-      "p50Ms": 11.793184,
-      "p95Ms": 39.944347,
-      "qps": 3109.9,
+      "p50Ms": 4.917227,
+      "p95Ms": 9.133518,
+      "qps": 12598.6,
       "stack": "fastapi",
       "workload": "matrix-json-16k"
      },
      {
-      "p50Ms": 33.110689,
-      "p95Ms": 39.262957,
-      "qps": 1920.1,
+      "p50Ms": 9.342757,
+      "p95Ms": 12.690356,
+      "qps": 6671.4,
       "stack": "fastapi",
       "workload": "stream"
      },
      {
-      "p50Ms": 20.504874,
-      "p95Ms": 22.848816,
-      "qps": 3124.5,
+      "p50Ms": 18.5868,
+      "p95Ms": 20.579217,
+      "qps": 3567.6,
       "stack": "flask",
       "workload": "matrix-json-1k"
      },
      {
-      "p50Ms": 25.350709,
-      "p95Ms": 27.629131,
-      "qps": 2542.1,
+      "p50Ms": 22.196544,
+      "p95Ms": 24.064835,
+      "qps": 2878.2,
       "stack": "flask",
       "workload": "matrix-json-16k"
      },
      {
-      "p50Ms": 19.025756,
-      "p95Ms": 23.256612,
-      "qps": 3365.1,
+      "p50Ms": 16.065413,
+      "p95Ms": 17.136447,
+      "qps": 3986.6,
       "stack": "flask",
       "workload": "stream"
      },
      {
-      "p50Ms": 35.528721,
-      "p95Ms": 38.690482,
-      "qps": 1808.2,
+      "p50Ms": 30.254412,
+      "p95Ms": 36.274963,
+      "qps": 2095.2,
       "stack": "php",
       "workload": "matrix-json-1k"
      },
      {
-      "p50Ms": 39.412743,
-      "p95Ms": 42.931346,
-      "qps": 1636.2,
+      "p50Ms": 32.675354,
+      "p95Ms": 38.161319,
+      "qps": 2007.9,
       "stack": "php",
       "workload": "matrix-json-16k"
      },
      {
-      "p50Ms": 37.427057,
-      "p95Ms": 41.112129,
-      "qps": 1712.9,
-      "stack": "php",
-      "workload": "stream"
-     },
-     {
-      "p50Ms": 5.159695,
-      "p95Ms": 8.059293,
-      "qps": 12501.9,
-      "stack": "fastapi",
-      "workload": "matrix-json-1k"
-     },
-     {
-      "p50Ms": 5.0358,
-      "p95Ms": 9.460601,
-      "qps": 12170.0,
-      "stack": "fastapi",
-      "workload": "matrix-json-16k"
-     },
-     {
-      "p50Ms": 9.788021,
-      "p95Ms": 13.183169,
-      "qps": 6156.9,
-      "stack": "fastapi",
-      "workload": "stream"
-     },
-     {
-      "p50Ms": 29.987654,
-      "p95Ms": 30.942726,
-      "qps": 2040.9,
-      "stack": "php",
-      "workload": "matrix-json-1k"
-     },
-     {
-      "p50Ms": 32.313993,
-      "p95Ms": 33.570389,
-      "qps": 1931.0,
-      "stack": "php",
-      "workload": "matrix-json-16k"
-     },
-     {
-      "p50Ms": 32.203329,
-      "p95Ms": 33.438558,
-      "qps": 1984.8,
+      "p50Ms": 31.496045,
+      "p95Ms": 32.45147,
+      "qps": 2032.2,
       "stack": "php",
       "workload": "stream"
      }
@@ -329,11 +454,11 @@ window.CAPSID_PERF_DATA = {
     "lowLoadPss": {
      "capsid": [
       {
-       "mb": 4.0,
+       "mb": 4.3,
        "role": "host"
       },
       {
-       "mb": 5.3,
+       "mb": 5.2,
        "role": "worker"
       }
      ],
@@ -343,7 +468,7 @@ window.CAPSID_PERF_DATA = {
        "role": "master"
       },
       {
-       "mb": 47.7,
+       "mb": 41.8,
        "role": "worker"
       }
      ],
@@ -353,7 +478,7 @@ window.CAPSID_PERF_DATA = {
        "role": "master"
       },
       {
-       "mb": 14.4,
+       "mb": 15.8,
        "role": "worker"
       }
      ],
@@ -363,15 +488,15 @@ window.CAPSID_PERF_DATA = {
        "role": "nginx"
       },
       {
-       "mb": 3.1,
+       "mb": 3.0,
        "role": "nginx-worker"
       },
       {
-       "mb": 14.1,
+       "mb": 14.0,
        "role": "fpm-master"
       },
       {
-       "mb": 10.4,
+       "mb": 9.8,
        "role": "fpm-worker"
       }
      ],
@@ -383,20 +508,20 @@ window.CAPSID_PERF_DATA = {
      ]
     },
     "lowLoadPssMb": {
-     "capsid": 9.3,
-     "fastapi": 48.1,
-     "flask": 14.9,
-     "php": 28.2,
+     "capsid": 9.5,
+     "fastapi": 42.2,
+     "flask": 16.3,
+     "php": 27.5,
      "workerd": 44.2
     },
     "servingPss": {
      "capsid": [
       {
-       "mb": 5.2,
+       "mb": 5.3,
        "role": "host"
       },
       {
-       "mb": 6.8,
+       "mb": 6.9,
        "role": "worker"
       }
      ],
@@ -406,7 +531,7 @@ window.CAPSID_PERF_DATA = {
        "role": "master"
       },
       {
-       "mb": 51.6,
+       "mb": 45.7,
        "role": "worker"
       }
      ],
@@ -416,7 +541,7 @@ window.CAPSID_PERF_DATA = {
        "role": "master"
       },
       {
-       "mb": 15.1,
+       "mb": 16.5,
        "role": "worker"
       }
      ],
@@ -430,27 +555,27 @@ window.CAPSID_PERF_DATA = {
        "role": "nginx-worker"
       },
       {
-       "mb": 14.1,
+       "mb": 14.0,
        "role": "fpm-master"
       },
       {
-       "mb": 10.4,
+       "mb": 9.8,
        "role": "fpm-worker"
       }
      ],
      "workerd": [
       {
-       "mb": 541.8,
+       "mb": 581.0,
        "role": "process"
       }
      ]
     },
     "servingPssMb": {
-     "capsid": 12.0,
-     "fastapi": 52.0,
-     "flask": 15.6,
-     "php": 28.8,
-     "workerd": 541.8
+     "capsid": 12.2,
+     "fastapi": 46.1,
+     "flask": 17.0,
+     "php": 28.1,
+     "workerd": 581.0
     }
    },
    "release": "v0.2.2",
