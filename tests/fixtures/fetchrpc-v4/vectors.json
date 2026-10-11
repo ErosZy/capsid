@@ -1,0 +1,100 @@
+{
+ "$schema": "fetchrpc-v4 golden vectors v1 (hex bytes, expected outcome per docs/fetchrpc-v4.md; frozen with the contract)",
+ "frames": [
+  {
+   "name": "hello-v4-no-caps",
+   "hex": "57525443040001000000000000000000000000005700000047000000000000007368613235363a303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030300000000000000000",
+   "expect": "v3-parser-reject; v4-parser-ok"
+  },
+  {
+   "name": "hello-v4-unknown-cap-bit",
+   "hex": "57525443040001000000000000000000000000005700000047000000000000007368613235363a303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030300000100000000000",
+   "expect": "v3-parser-reject; v4-parser-error:invalid hello capabilities"
+  },
+  {
+   "name": "hello-v4-reserved-nonzero",
+   "hex": "57525443040001000000000000000000000000005700000047000000000000007368613235363a303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030300000000009000000",
+   "expect": "v3-parser-reject; v4-parser-error:invalid hello capabilities"
+  },
+  {
+   "name": "channel-open-inbound",
+   "hex": "5752544304000f000000000000000000000000000d00000007000000010000100000000000",
+   "expect": "v3-parser-reject; v4-parser-ok"
+  },
+  {
+   "name": "channel-data-start-text",
+   "hex": "57525443040012000900000000000000000000000500000068656c6c6f",
+   "expect": "v3-parser-reject; v4-parser-ok(flag text)"
+  },
+  {
+   "name": "channel-close-code-reason",
+   "hex": "57525443040015000000000000000000000000000a00000007000000e803646f6e65",
+   "expect": "v3-parser-reject; v4-parser-ok"
+  },
+  {
+   "name": "channel-credit",
+   "hex": "57525443040013000000000000000000000000000c000000070000000000010000000000",
+   "expect": "v3-parser-reject; v4-parser-ok"
+  },
+  {
+   "name": "channel-halfclose",
+   "hex": "57525443040014000000000000000000000000000400000007000000",
+   "expect": "v3-parser-reject; v4-parser-ok"
+  }
+ ],
+ "sequences": [
+  {
+   "name": "upgrade-accept",
+   "steps": [
+    "hello(cap=UPGRADE|DUPLEX)",
+    "requesthead(upgrade flag)",
+    "responsehead(101,upgrade,channel 7)",
+    "channel-open-inbound",
+    "channel-data-start-text",
+    "channel-close-code-reason"
+   ]
+  },
+  {
+   "name": "upgrade-reject",
+   "steps": [
+    "hello",
+    "requesthead(upgrade flag)",
+    "responsehead(404)"
+   ],
+   "note": "no channel frames follow"
+  },
+  {
+   "name": "credit-exhaustion",
+   "steps": [
+    "open(1MiB)",
+    "credit(65536)",
+    "data(65536) ok",
+    "data(1) violation:channel credit underflow"
+   ]
+  },
+  {
+   "name": "unknown-channel",
+   "steps": [
+    "data(channel 99)",
+    "violation:unknown channel"
+   ]
+  },
+  {
+   "name": "duplicate-close",
+   "steps": [
+    "close(7)",
+    "close(7)",
+    "violation:channel sequence"
+   ]
+  },
+  {
+   "name": "fragmentation-mid-fragment",
+   "steps": [
+    "data(start)",
+    "data(no start)",
+    "data(end)",
+    "violation:fragmentation"
+   ]
+  }
+ ]
+}

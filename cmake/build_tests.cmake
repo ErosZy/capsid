@@ -1669,6 +1669,17 @@ if(BUILD_TESTING)
                 PROPERTIES
                     LABELS "host;benchmark"
                     TIMEOUT 30)
+
+            add_test(
+                NAME workerd_ws_fixtures
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_ws_fixtures.mjs")
+            set_tests_properties(
+                workerd_ws_fixtures
+                PROPERTIES
+                    LABELS "host"
+                    TIMEOUT 30
+                    SKIP_RETURN_CODE 77)
         endif()
 
         add_executable(test-build-identity tests/test_build_identity.cc)
@@ -1769,6 +1780,18 @@ if(BUILD_TESTING)
     target_include_directories(test-protocol PRIVATE src)
     target_link_libraries(test-protocol PRIVATE capsid_sanitizers)
     add_test(NAME protocol COMMAND test-protocol)
+
+    add_executable(
+        test-fetchrpc-v4
+        tests/test_fetchrpc_v4.cc
+        src/protocol.cc
+    )
+    target_include_directories(test-fetchrpc-v4 PRIVATE src)
+    target_link_libraries(test-fetchrpc-v4 PRIVATE capsid_sanitizers)
+    add_test(
+        NAME fetchrpc_v4_boundary
+        COMMAND test-fetchrpc-v4
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fetchrpc-v4/vectors.json")
 
     add_executable(
         test-outbound-buffer
