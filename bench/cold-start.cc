@@ -51,6 +51,7 @@ struct Args {
     std::string source_name;
     int iterations = 1;
     int warm = 0;
+    bool strict = false;
 };
 
 Args parse_args(int argc, char** argv) {
@@ -70,6 +71,7 @@ Args parse_args(int argc, char** argv) {
         else if (key == "--source-name") out.source_name = value("--source-name");
         else if (key == "--iterations") out.iterations = std::stoi(value("--iterations"));
         else if (key == "--warm") out.warm = std::stoi(value("--warm"));
+        else if (key == "--strict") out.strict = true;
         else {
             std::fprintf(stderr, "unknown argument: %s\n", key.c_str());
             std::exit(2);
@@ -216,6 +218,7 @@ int main(int argc, char** argv) {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
         config.worker_path = args.worker.c_str();
+        config.strict_sandbox = args.strict ? 1 : 0;
 
         capsid_worker* worker = nullptr;
         if (capsid_worker_spawn(&config, &worker) != CAPSID_OK || worker == nullptr) {

@@ -84,4 +84,8 @@
 !/bench/results/cold-start-v022-20261010/**
 !/bench/results/density-v022-20261010/
 !/bench/results/density-v022-20261010/**
+!/bench/results/five-qps-v022-managed-20261011/
+!/bench/results/five-qps-v022-managed-20261011/**
+!/bench/results/cold-start-v022-strict-20261011/
+!/bench/results/cold-start-v022-strict-20261011/**
 /0

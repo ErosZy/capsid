@@ -98,12 +98,17 @@ probe_capsid() { # $1 size  $2 workers  -> pss_mb or "fail"
     local port=$(next_port)
     local ready="$OUT/ready.$size.$n"
     : >"$ready"
+    # CAPSID_STRICT=1 fills the pool with the full Linux strict sandbox
+    # (namespaces, Landlock, seccomp) - the same isolation stack the
+    # managed coordinator installs for production workers.
+    local sandbox=off
+    [ "${CAPSID_STRICT:-0}" = "1" ] && sandbox=on
     taskset -c "$SUT_CPUSET" "$HOST_BIN" --mode static-pool --workers "$n" \
         --worker "$WORKER" --source-bundle "$APPS/app-capsid-$size.mjs" \
         --source-name "file://$APPS/app-capsid-$size.mjs" \
         --application orders --listen 127.0.0.1:$port --routing path \
         --public-scheme http --public-authority bench.invalid \
-        --request-timeout-ms 10000 --strict-sandbox off --ready-fd 3 \
+        --request-timeout-ms 10000 --strict-sandbox "$sandbox" --ready-fd 3 \
         3>>"$ready" >"$OUT/err.capsid.$size.$n" 2>&1 &
     local hpid=$!
     PIDS+=("$hpid")

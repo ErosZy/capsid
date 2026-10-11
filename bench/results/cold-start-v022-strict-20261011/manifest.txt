@@ -1,0 +1,167 @@
+rounds: 5 warm: 50 sut_cpuset: 0-3
+generated_at: 2026-10-11T13:20:34+08:00
+commit: ab2e365408823e6c2150ce3cab4b3faf69599b82
+tag: 
+runner_sha256: 2732384277c6baf06856f47dae6b836f1ac9b3643b80caa94dea25e246092972
+runner_diff_sha256: 09d72f23d2a13421be36ea9db5b5e5723e6a9de2854c2d31cf493f7ecef3b1bf
+command: OUT=/tmp/opencode/cold-strict BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh
+uname: Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+cpu: 12th Gen Intel(R) Core(TM) i5-12400F
+nproc: 12
+mem_total: 12168676 kB
+934a7fb9388e5822d5bb5c39dbae455439e33e2124b64616843bb3992382857f  build-release/capsid-worker
+7f9aadac100fc8f9a8cab5bc134da0bf81766017046b90d5f54c8a64e2a9d767  bench/bin/cold-start
+e75c6284eaef9b82317ba6adc20bd6f6729b064d23952fb651fc51a4f2c5ad33  build-release/capsid-bytecode-compile
+e237a2839d0cbdc9a9a2adda1a184afc0f5b20306ffbe923af5686550472d8a8  /home/eroszhao/.nvm/versions/node/v24.14.0/bin/node
+node: v24.14.0
+deno: absent
+50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd  /tmp/opencode/workerd-bin/workerd-linux-64
+workerd_version: workerd 2026-10-10
+de3c1776778e44d72e7f3254babc7c049894861563937818d95c77c233dcc6e5  /tmp/cold-start-apps/app-capsid-100k.attest.json
+a86eefdc3db36da61b8de9ff366a4a63d3ae38338bdba5df4de7a48ed8341608  /tmp/cold-start-apps/app-capsid-100k.mjs
+bb4738f4909bd78fc5d13c8613277aaa01d8bd7e3db9d81a9c6a9a6a076ecae5  /tmp/cold-start-apps/app-capsid-100k.msg.bin
+42cdec3e9b1f8d70cb8e84a7a76d636f1ba9f8f56a1607bd135d44f666b0487f  /tmp/cold-start-apps/app-capsid-100k.qjsb
+6757479aa3a3079e6021e00f38237728ecb24eae04c327244331ece65d015134  /tmp/cold-start-apps/app-capsid-10k.attest.json
+34358cfda3715f251b7d5490e9258dacb28ca23c20808bdf23016fe4cbe558a5  /tmp/cold-start-apps/app-capsid-10k.mjs
+267d5ec59cd80e462faa362f8e109d3ac0e8e5fe7a305d87874ea5602ba595f7  /tmp/cold-start-apps/app-capsid-10k.msg.bin
+64d23483747a9a34d412b0a15f551c51d172470959db243428bcb44d37371444  /tmp/cold-start-apps/app-capsid-10k.qjsb
+81c6bc98b1f5437ceda50677046ca9606a6dbd2b5cedc35b6b84a2111a4431f5  /tmp/cold-start-apps/app-capsid-1m.attest.json
+caf0e4923b882f745d94d67613f301e29cdb40769c0b91ee2db5118329f890b3  /tmp/cold-start-apps/app-capsid-1m.mjs
+543050de56465da2b79041e60034eb2228eb0787f08337c679b016c70c63ec3d  /tmp/cold-start-apps/app-capsid-1m.msg.bin
+eec8a5e4b04fdbfc7708c788b51df8c085f17da19317890b1cdb20dfcac3ad45  /tmp/cold-start-apps/app-capsid-1m.qjsb
+52d9b1c85887235643a2920a2a9d943bed4f45fb373cf2bfbd1aa7f01f8cbf33  /tmp/cold-start-apps/app-deno-100k.mjs
+52cd682eecbb36dbd74d59224a316050c187f7fa74e5c414dedb66423bbd43a8  /tmp/cold-start-apps/app-deno-10k.mjs
+2955540e42b827204128225353ac863dfe3fae24a976887c7107cffae1aa1cab  /tmp/cold-start-apps/app-deno-1m.mjs
+d464794944270f3b9cb2a3db4171dd9f570819d738022229fac7aefad5cf37c1  /tmp/cold-start-apps/app-node-100k.mjs
+ec8f38da6a1d0a680838aa7f19f249ee62ab1c93f8cc4c3423a76a84295508f7  /tmp/cold-start-apps/app-node-10k.mjs
+c28cbf9daac40872c52659d3c88fb00ab2483a8b36abc165029b7bdc52a280c5  /tmp/cold-start-apps/app-node-1m.mjs
+ad79fa371a5d0bd724c6d474c07ed591d496f419250e789e1cc8d882f0dd7b2f  /tmp/cold-start-apps/app-workerd-100k.mjs
+9110fd530d4ac9872b6216f01304d84522e56b3f4e4549fa2ce01f8986d5a8ef  /tmp/cold-start-apps/app-workerd-10k.mjs
+f984db70d17f33281a036d6cd660658f3afcd511dbd195f11cf7cb1836c5f8ea  /tmp/cold-start-apps/app-workerd-1m.mjs
+65b65fae9870adc8881e07c98ebe4dc7d1689aead08f07b380329cb98d256d1f  /tmp/cold-start-apps/density-100k-1.capnp
+9af776594ea9ec00e7ea0fdd45c606adf6e45c2e0f761946b1c24b978f3840be  /tmp/cold-start-apps/density-100k-1024.capnp
+848eb137e74b6920b6f34a8fb91b2367c30d9734cb5c97cd0522cf3cbff04fc5  /tmp/cold-start-apps/density-100k-128.capnp
+7fd221d21793a8367824481946684a5a7cc96dfd383a82f3451e5c58b9ff47ff  /tmp/cold-start-apps/density-100k-16.capnp
+8ba3d2a5194983578bef11be80c6f76b1c403a95260a65907c156b95094126d8  /tmp/cold-start-apps/density-100k-2.capnp
+427642170db0896e7f79b6aaa1ca42fdc7c13e24ea29b712bc128faa2c7e1cbd  /tmp/cold-start-apps/density-100k-256.capnp
+99a4231004dcc3ded406b2dada50ccfa3027a80958b28ab7f33edfe9bca9a5c4  /tmp/cold-start-apps/density-100k-32.capnp
+0617366720011c786479ff8ed6a05577ed4443fdf3c874458f3b33f413894d0f  /tmp/cold-start-apps/density-100k-4.capnp
+ca9a395bc98c56b50bb306c7f488e5cbd21c8ba8829c61f5eae6c8eb3c90ea7b  /tmp/cold-start-apps/density-100k-512.capnp
+f8760f764ecfbfe2e81450646498ef745362ef1cbfc27cd4c0cd1e0096c57d9b  /tmp/cold-start-apps/density-100k-576.capnp
+b30503e37e5c6f707b62e878466f687e0c1c6979ea3fd83feb6f00d9f2a36ce5  /tmp/cold-start-apps/density-100k-580.capnp
+ce36ea1b479b78f2d2d11764abeec2a037aec69c3720a666fa616576798727dd  /tmp/cold-start-apps/density-100k-581.capnp
+16bd8bd46cbfb660d0f6be43f58c1186ea7b0df2c010323a073f3f917b2eda44  /tmp/cold-start-apps/density-100k-582.capnp
+a6591c5a57dd89f5b12191d1a00d03fad1aa50e1014a3beb7595e4ff7d2af92b  /tmp/cold-start-apps/density-100k-584.capnp
+4fd4055845e815dd88fff2d1470576d4a917dfeff5e1aac225f67bd5abd64ea7  /tmp/cold-start-apps/density-100k-592.capnp
+6b28c5f41dffa7b024b1a24dbcb3c8691370bbfe79e379e26b60cdc74bd99bd2  /tmp/cold-start-apps/density-100k-608.capnp
+9f6aeaa1d095d84e3fbc9ed0e5a0a81292a7a497a7d1404069a5ef65d4db20d2  /tmp/cold-start-apps/density-100k-64.capnp
+f60653af1a1f0f80016183476bf000577222c19fa7fcb7394f6ebceb2fd8dac4  /tmp/cold-start-apps/density-100k-640.capnp
+f235b2c270dbe801cd75c8bc50165adb33958f6d12d9f23d25b1734777eb0e2b  /tmp/cold-start-apps/density-100k-768.capnp
+209792bce1d12d0481cdac9ad28086db2242ac3b671ba4f3527e069893ad1ab6  /tmp/cold-start-apps/density-100k-8.capnp
+02328a9a1890c4ae508527d07ceb7782e9937911536c3cae28b80f2cc6525184  /tmp/cold-start-apps/density-100k-896.capnp
+6938750beddefd4790b8fe32e56ce75a5f22dc60dfb85f92dc19c1c146f8b686  /tmp/cold-start-apps/density-100k-912.capnp
+0fa6204b43797a680c410d2951f25e115f7d2b8be9aaa5ba0cf87b366b08d467  /tmp/cold-start-apps/density-100k-916.capnp
+3e29b704b04fc5a6a1b8ba0b57feadf823f7cb00c6aa864fe892f37a9e440c05  /tmp/cold-start-apps/density-100k-917.capnp
+52311bde6a4ad5df4896df3f47dcf14d611ade2466c037124ad9c3b8cbd1379a  /tmp/cold-start-apps/density-100k-918.capnp
+4b4a94c0e0a75a64743cb8e096f25d704a8cad4d65475423e170369ec3dc3f1c  /tmp/cold-start-apps/density-100k-920.capnp
+3ae3e39e47efd5e735fdc98a998d34623a1eae870bc789dcac0fcf4d5e178e2a  /tmp/cold-start-apps/density-100k-928.capnp
+6cc8972a388cef8a8898046b9f1202fbd9767a559b8503af0404fe3f01c7ec3a  /tmp/cold-start-apps/density-100k-960.capnp
+4a71a8dec02942b662e7daaa03b55e0a5f308dbf11f855c448dd0aadb962e957  /tmp/cold-start-apps/density-10k-1.capnp
+2a207420f65a330a0ae07587ad8182fcbd4907064ed4f5f58f515dd1755acc30  /tmp/cold-start-apps/density-10k-1024.capnp
+ba30d8404b7201a479d221394c08afc369fbef36ee42e5789f9f902d950cf481  /tmp/cold-start-apps/density-10k-1056.capnp
+79022c257b7118834c36cb18d5b3caae9e0a53d07b893a8d6a2f634a3e3ee6d1  /tmp/cold-start-apps/density-10k-1060.capnp
+682b58a7c7de743dc980bb3bc13454d8183e2e43759dc508a6f1eeec398db9c6  /tmp/cold-start-apps/density-10k-1061.capnp
+cce8ff68ae371fec489862989054deebffbd743f75cbd8f5b5e14e2135056820  /tmp/cold-start-apps/density-10k-1062.capnp
+ec646aa040a5e2d630a99e091aa7b2a1ace20dc510e7921b6ca22c39693a5fba  /tmp/cold-start-apps/density-10k-1064.capnp
+68a7c8772e5d2a4b1cfaa142af7b83bf328deaf7147dcef26d3bf1419bfdc34c  /tmp/cold-start-apps/density-10k-1072.capnp
+d7a24637d2d28f9653cd1ae4a6079a2e8cae7bebf6e07fcf2c61cda17217bcb9  /tmp/cold-start-apps/density-10k-1088.capnp
+72c3b0127d673212e3608be4cc39632fad90e6f54ec7203dbc909261165f848f  /tmp/cold-start-apps/density-10k-1152.capnp
+b497ebde83b7a441580b29206f0684ee3b27fdd3bd19a80840a3c28c5683d343  /tmp/cold-start-apps/density-10k-128.capnp
+6b206bb6f4f6680862222233ea3d356c6d9d2d5f3940c74bb763a246f3373bec  /tmp/cold-start-apps/density-10k-1280.capnp
+f7dcc5f1f7a30608e6f7fe4239a4a383878bfc916d44a0da3dc837500e75fab1  /tmp/cold-start-apps/density-10k-1536.capnp
+d1b139ab1bfd11e2133083ce13b69c98312c16ccc76fe14a76b7749cebc8b002  /tmp/cold-start-apps/density-10k-16.capnp
+9f996dfb12e9534428f7bb018564ab5807b7a29bc48f50a66871bf22dd1c28ee  /tmp/cold-start-apps/density-10k-2.capnp
+82a42df07455c6f9bd30b0a0bad9e2fff915c658d6d114e28556a971043af0f6  /tmp/cold-start-apps/density-10k-2048.capnp
+d43381d63cfc1f5d10de435cf3190110a01e47d97116f2730b8bdbdedadd62ed  /tmp/cold-start-apps/density-10k-256.capnp
+ced6061f165a5344a495dbda65960f986d77670d83c2deb8001c12307a5994de  /tmp/cold-start-apps/density-10k-32.capnp
+3a1f15bf0c18af244a2ceb8cbe76bd623e856039ca2fba4f9374d35ddaed6fc8  /tmp/cold-start-apps/density-10k-4.capnp
+5397153a18b15d9b0c08f8bb87b9b8b1aa4f56286502a8b8ce54cc5e37684528  /tmp/cold-start-apps/density-10k-512.capnp
+b3a2773b5e75e5146498469d9af5508cc5b56120ce2efc8f0272db393981bb2d  /tmp/cold-start-apps/density-10k-576.capnp
+ebcda31d75f882f7f39c83465068076271b8e779434b7db269ce84c9e58efb1a  /tmp/cold-start-apps/density-10k-608.capnp
+f7e1169a15a15c62027633d3f90f9a41ecd2c7e8e5efa2f94b02a1e596f0f637  /tmp/cold-start-apps/density-10k-624.capnp
+c55cb8b5f1cb804c531f59c998acab35c7d6e3a31ca685ee71763548417da032  /tmp/cold-start-apps/density-10k-632.capnp
+bd3b9d1be9d37c6d869263202f4334e814347201ccd809f9d78e05f305dd1638  /tmp/cold-start-apps/density-10k-636.capnp
+f55a12b94e045277d9190a7610d25b0c1354a871ee3f25557bfa88f71f97705e  /tmp/cold-start-apps/density-10k-638.capnp
+51e76281fbd7f46cfbbb45e67ac832c49a794e337ef641f4c23c9f04a93c51bb  /tmp/cold-start-apps/density-10k-639.capnp
+a18cfa7655ab6ca5bcae80a1317787b3ba95fe7c457120f51d51794afcbaa69f  /tmp/cold-start-apps/density-10k-64.capnp
+d14bc012284f194b54fd3ef669c275420b6070583301f186ca1d9ad9adbaca28  /tmp/cold-start-apps/density-10k-640.capnp
+6fe20b26c7405d7e19d5b5871a51e26a48b652290635131d1d914f0c26e00c0b  /tmp/cold-start-apps/density-10k-768.capnp
+304659995bf1527899b0a3f17321fc57ff807200891669e3fca7de77dcc1b119  /tmp/cold-start-apps/density-10k-8.capnp
+fc54e949b1b56b0153b712ce89112ec356fde327e73da95d39bd95636fc3a3e8  /tmp/cold-start-apps/density-1m-1.capnp
+d559dab51f9af023b3ecddab9cfad19a4e9e7b55de6a0b612b514a60a061ad4b  /tmp/cold-start-apps/density-1m-128.capnp
+a3d4970af3b0992fa2afb3419521ed64c94071f344abf6ef8a7d98022ce09b33  /tmp/cold-start-apps/density-1m-16.capnp
+a72f31ccfe927447302a58f39d013ada5b1c971213be84e6201c675b4ba126c1  /tmp/cold-start-apps/density-1m-192.capnp
+d3e1a2b2cb7bfd1f2988b28441ae5e70e2fd7f49bb49eac0b4cfe7816cdcd6f1  /tmp/cold-start-apps/density-1m-2.capnp
+2974f6c3966565e7ac94e9c45526bbb6c04a277f9f46b62929812bdaf69d97c9  /tmp/cold-start-apps/density-1m-208.capnp
+79b16b30df630c6b2809e9b1a451d88d421cf2c0a656e6228b00e73c27c1c8e1  /tmp/cold-start-apps/density-1m-216.capnp
+be0a56faaa16ae48488e91c695e93425537fbe65482ee84a43514ab43a78f28e  /tmp/cold-start-apps/density-1m-220.capnp
+87100e888b38f2bbae469725419c5f12bdbf4f9daba093073bf8abd7ad67fbaf  /tmp/cold-start-apps/density-1m-222.capnp
+268350c1138232d9804d99494df48a9b503834a523a116edf1b2d9da159b891b  /tmp/cold-start-apps/density-1m-223.capnp
+5ebf5e76d8d916bee614d58d2a3b808d86a9e95245b23f5c4a257dcc29a77deb  /tmp/cold-start-apps/density-1m-224.capnp
+b202f504e9f1734ff48e39215aa4ebea55e23b2e9095779b96dba48d425e4c7d  /tmp/cold-start-apps/density-1m-240.capnp
+c3c54d1194f31b03c1a58afc4c60b9700a09cc5b4086a52edec3ce269a7b434b  /tmp/cold-start-apps/density-1m-242.capnp
+071732dda831911ffc334e5d016df634331aacb4686ea62b9856af8cb5c86b44  /tmp/cold-start-apps/density-1m-243.capnp
+987a54543058547beece019a5764560bdc06fb441994ba49b5edf064c5b4f8a5  /tmp/cold-start-apps/density-1m-244.capnp
+d009be68905e9aa1722a123066a03f6797138fb2217617b7160c28f5e467bb67  /tmp/cold-start-apps/density-1m-245.capnp
+436c5df012dda58d2b3d94fc0dddca74d6f5a51d838ca274c1548d64d10448ab  /tmp/cold-start-apps/density-1m-246.capnp
+3385fe415b0a8f752407f79dbf96b4819d24005bff4448b76dc11206fa9b00be  /tmp/cold-start-apps/density-1m-247.capnp
+ae3b8bb64e7289e1e3bcf9d937f86ae59130813f792f55c617d1f882051dcf3b  /tmp/cold-start-apps/density-1m-248.capnp
+f75508cf42e34fcd115d960b5df853dfb7917584776b2bb0edcb6f06bed6313e  /tmp/cold-start-apps/density-1m-256.capnp
+773a09dd09a8410d3890d52e97bbdc999b7df83e0f79c9a4d726d2be402c496a  /tmp/cold-start-apps/density-1m-32.capnp
+b47c725bb6df7645b9cb7309f53193bc0bbf6026f85a1d42aabb94cf1cf64a1a  /tmp/cold-start-apps/density-1m-4.capnp
+8d57c18adafdbc30a930b0cfdf2fc539a9055f1c9198cbd17dca51f9a4c88480  /tmp/cold-start-apps/density-1m-64.capnp
+299af714072488a9f92b8bc2072649013e6e1e46619c0e9f8a63fd49c1a383a8  /tmp/cold-start-apps/density-1m-8.capnp
+509f1533102db421923add12e2aa589b78324276ff17e446e019aa0b373f1ffc  /tmp/cold-start-apps/workerd-100k.capnp
+1b567bd014c97836f4eea09acd3505eae3806ca67de73241643558ca11335c9d  /tmp/cold-start-apps/workerd-10k.capnp
+fcda1bf731633e027c29cf0ac97a0b067d2d9da83aee35d8ab4069c6b6570b35  /tmp/cold-start-apps/workerd-1m.capnp
+worker: build-release/capsid-worker
+build_info_begin
+capsid-build-info-v1
+version=0.2.2
+commit=8df68f85abdd2b919e313cce5853c0b5b85b56c8
+commitDate=2026-10-11T10:05:49+08:00
+treeClean=true
+provenanceDirty=0
+buildId=sha256:9edd76b90108553d451d796723ad1f4ceff47e65d0c79d99fcd4db1d603140cf
+compatibilityId=sha256:2d1fbf82ed9c1b4b338cfbeedcfd76f8a32bf75ed50cbad427db3b9344668b84
+compilerId=GNU
+compilerVersion=13.3.0
+targetTriple=x86_64-unknown-Linux
+cmakeBuildType=Release
+featureFlags=lto=ON asan=OFF ubsan=OFF tsan=OFF mimalloc=OFF host=ON worker=ON
+--- bytecode compatibility record (v2) ---
+schema=capsid-bytecode-compatibility-v2
+quickjsCommit=bf8988fc401e737f9946cd10a3463b48aab0fd7e
+txikiOverlayManifest=e38d9845db864ea031e95b0885982b24077b15117f2b5066fc6dd6ead7b49539
+bytecodeCompileFlags=build_type=Release lto=ON asan=OFF ubsan=OFF mimalloc=OFF
+targetArchitecture=x86_64
+endianness=little
+pointerWidthBits=64
+bytecodeFormatIdentity=quickjs-ng-bytecode-v1
+--- build provenance record (v1) ---
+schema=capsid-build-provenance-v1
+capsidCommit=8df68f85abdd2b919e313cce5853c0b5b85b56c8
+capsidTreeClean=true
+runtimeVersion=0.2.2
+abiVersion=7
+fetchRpcVersion=3
+compatibilityId=sha256:2d1fbf82ed9c1b4b338cfbeedcfd76f8a32bf75ed50cbad427db3b9344668b84
+capabilityManifestSha256=da742bffc35c8bd77e8aacab103fb9a5eff403bac4c3806869bafb6b63ac9f66
+compilerId=GNU
+compilerVersion=13.3.0
+targetTriple=x86_64-unknown-Linux
+cmakeBuildType=Release
+featureFlags=lto=ON asan=OFF ubsan=OFF tsan=OFF mimalloc=OFF host=ON worker=ON
+dependencyOverlayKey=d852a1213a54176bbfdee04ea504e315df9e20bf9c67af903e917ca15e0f692f
+buildId=sha256:9edd76b90108553d451d796723ad1f4ceff47e65d0c79d99fcd4db1d603140cf
+build_info_end

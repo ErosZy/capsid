@@ -220,21 +220,67 @@ stack_enabled() {
     case " $STACKS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
 
-# --- capsid: static-pool, 2 workers ---
+# --- capsid ---
+# CAPSID_MANAGED=1 serves through the production path: a managed
+# coordinator (Linux strict sandbox mandatory) with a one-worker fixed
+# pool, deployed over the Admin API. Otherwise the benchmark
+# single-worker mode runs with the sandbox off.
 if stack_enabled capsid; then
-    : >"$OUT/ready.capsid"
-    taskset -c "$SUT_CPUSET" "$HOST_BIN" --mode single-worker \
-        --worker "$WORKER" --source-bundle "$QPS_FIXDIR/app-capsid.mjs" \
-        --source-name "file://$QPS_FIXDIR/app-capsid.mjs" \
-        --application orders --listen 127.0.0.1:18993 --routing path \
-        --public-scheme http --public-authority bench.invalid \
-        --request-timeout-ms "${REQUEST_TIMEOUT_MS:-10000}" \
-        --initial-stream-window "${STREAM_WINDOW:-1024}" \
-        --strict-sandbox off --ready-fd 3 \
-        3>>"$OUT/ready.capsid" >"$OUT/err.capsid" 2>&1 &
-    CAPSID_PID=$!
-    PIDS+=("$CAPSID_PID")
-    wait_port "$CAPSID_PID" 18993 400 || { echo "capsid did not become ready" >&2; exit 1; }
+    if [ "${CAPSID_MANAGED:-0}" = "1" ]; then
+        MG="$OUT/managed"
+        rm -rf "$MG"
+        mkdir -p "$MG/apps/orders/v1" "$MG/state" "$MG/secrets/orders" "$MG/run"
+        cp "$QPS_FIXDIR/app-capsid.mjs" "$MG/apps/orders/v1/bundle.mjs"
+        printf '{\n  "apiVersion": "capsid/app-v1",\n  "entry": "bundle.mjs",\n  "pool": { "minReady": 1, "maxWorkers": 1 }\n}\n' \
+            >"$MG/apps/orders/v1/capsid.json"
+        printf '{\n  "apiVersion": "capsid/host-v1",\n  "applicationsRoot": "%s/apps",\n  "stateRoot": "%s/state",\n  "secretRootTemplate": "%s/secrets/{application}",\n  "admin": { "unix": "%s/run/admin.sock" },\n  "listeners": [ { "name": "bench", "tcp": "127.0.0.1:18993", "publicScheme": "http", "publicAuthority": "bench.invalid", "trusted": false, "routing": { "mode": "path", "suffix": "" } } ]\n}\n' \
+            "$MG" "$MG" "$MG" "$MG" >"$MG/host.json"
+        # verified roots: euid-owned, no group/other bits
+        chmod 700 "$MG/apps" "$MG/apps/orders" "$MG/apps/orders/v1" \
+            "$MG/state" "$MG/secrets" "$MG/secrets/orders" "$MG/run"
+        chmod 600 "$MG/apps/orders/v1/capsid.json" \
+            "$MG/apps/orders/v1/bundle.mjs" "$MG/host.json"
+        taskset -c "$SUT_CPUSET" "$HOST_BIN" --mode managed \
+            --host-config "$MG/host.json" --worker "$WORKER" \
+            >"$OUT/err.capsid" 2>&1 &
+        CAPSID_PID=$!
+        PIDS+=("$CAPSID_PID")
+        for _ in $(seq 1 100); do
+            [ -S "$MG/run/admin.sock" ] && break
+            kill -0 "$CAPSID_PID" 2>/dev/null || break
+            sleep 0.05
+        done
+        curl -s --max-time 5 --unix-socket "$MG/run/admin.sock" \
+            -X POST http://localhost/v1/deploy \
+            -H 'Content-Type: application/json' \
+            -d '{"app":"orders","version":"v1"}' >/dev/null
+        local_active=0
+        for _ in $(seq 1 200); do
+            if curl -s --max-time 2 --unix-socket "$MG/run/admin.sock" \
+                    http://localhost/v1/apps/orders | grep -q '"active":true'; then
+                local_active=1
+                break
+            fi
+            kill -0 "$CAPSID_PID" 2>/dev/null || break
+            sleep 0.1
+        done
+        [ "$local_active" = 1 ] || { echo "capsid managed deploy did not activate" >&2; exit 1; }
+        wait_port "$CAPSID_PID" 18993 400 || { echo "capsid managed did not serve" >&2; exit 1; }
+    else
+        : >"$OUT/ready.capsid"
+        taskset -c "$SUT_CPUSET" "$HOST_BIN" --mode single-worker \
+            --worker "$WORKER" --source-bundle "$QPS_FIXDIR/app-capsid.mjs" \
+            --source-name "file://$QPS_FIXDIR/app-capsid.mjs" \
+            --application orders --listen 127.0.0.1:18993 --routing path \
+            --public-scheme http --public-authority bench.invalid \
+            --request-timeout-ms "${REQUEST_TIMEOUT_MS:-10000}" \
+            --initial-stream-window "${STREAM_WINDOW:-1024}" \
+            --strict-sandbox off --ready-fd 3 \
+            3>>"$OUT/ready.capsid" >"$OUT/err.capsid" 2>&1 &
+        CAPSID_PID=$!
+        PIDS+=("$CAPSID_PID")
+        wait_port "$CAPSID_PID" 18993 400 || { echo "capsid did not become ready" >&2; exit 1; }
+    fi
 fi
 
 # --- workerd ---

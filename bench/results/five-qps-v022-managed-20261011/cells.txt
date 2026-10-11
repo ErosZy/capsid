@@ -1,0 +1,7 @@
+capsid                  lowqps_pss_mb=12.5
+capsid                  lowqps_pss_detail=host=7.1;worker=5.4
+capsid matrix-json-1k   qps_med= 9489.7 p50_ms=6.58045 p95_ms=8.18657
+capsid matrix-json-16k  qps_med= 7109.1 p50_ms=10.665892 p95_ms=16.701688
+capsid stream           qps_med= 6523.2 p50_ms=9.494911 p95_ms=11.050268
+capsid                  serving_pss_mb=16.4
+capsid                  serving_pss_detail=host=8.5;worker=7.8

@@ -126,13 +126,18 @@ for mode in source bytecode; do
     for label in $SIZES; do
         input="$APPS/app-capsid-$label.$([ "$mode" = source ] && echo mjs || echo qjsb)"
         source_name="file://$APPS/app-capsid-$label.mjs"
-        # warmup run discarded, then ROUNDS measured runs
+        # warmup run discarded, then ROUNDS measured runs. CAPSID_STRICT=1
+        # installs the full Linux strict sandbox (namespaces, Landlock,
+        # seccomp) in the spawned worker - the production isolation
+        # posture - instead of the unsandboxed embedded default.
+        strict_flag=""
+        [ "${CAPSID_STRICT:-0}" = "1" ] && strict_flag="--strict"
         taskset -c "$SUT_CPUSET" "$COLD" --worker "$WORKER" --mode "$mode" \
             --input "$input" --source-name "$source_name" \
-            --iterations 1 --warm "$WARM" >/dev/null 2>"$OUT/err.$mode.$label"
+            --iterations 1 --warm "$WARM" $strict_flag >/dev/null 2>"$OUT/err.$mode.$label"
         taskset -c "$SUT_CPUSET" "$COLD" --worker "$WORKER" --mode "$mode" \
             --input "$input" --source-name "$source_name" \
-            --iterations "$ROUNDS" --warm "$WARM" >"$OUT/raw.capsid-$mode.$label.jsonl"
+            --iterations "$ROUNDS" --warm "$WARM" $strict_flag >"$OUT/raw.capsid-$mode.$label.jsonl"
         total=$(grep -o '"total_ms":[0-9.]*' "$OUT/raw.capsid-$mode.$label.jsonl" |
                 cut -d: -f2 | median)
         ready=$(grep -o '"ready_ms":[0-9.]*' "$OUT/raw.capsid-$mode.$label.jsonl" |
