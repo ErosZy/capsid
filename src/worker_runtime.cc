@@ -1,5 +1,9 @@
 #include "worker_runtime.h"
 
+#if defined(__linux__) && defined(__GLIBC__)
+#include <malloc.h>
+#endif
+
 #include "binding_rpc.h"
 #include "build_identity.h"
 #include "capability_policy.h"
@@ -1044,6 +1048,15 @@ public:
             flush_blocking();
             return 1;
         }
+
+#if defined(__linux__) && defined(__GLIBC__)
+        // Compiling a large bundle spikes the malloc heap: parse and
+        // bytecode temporaries are freed after load, but glibc retains
+        // them inside the arena, so per-worker PSS would reflect compile
+        // high-water (13+ MB for a 1 MiB source) instead of live data.
+        // Hand the freed pages back to the OS before READY.
+        malloc_trim(0);
+#endif
 
         set_nonblocking();
         if (uv_poll_init(TJS_GetLoop(runtime_), &poll_, fd_) != 0) {
