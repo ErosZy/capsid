@@ -180,7 +180,8 @@ def load_existing(data_path):
 
 
 def parse_density(path):
-    """cells.txt lines: `capsid 10k workers=17 pss_mb=47.8 note=...`"""
+    """cells.txt lines:
+    `capsid 10k workers=17 pss_mb=47.8 [phase=cold|warm] note=...`"""
     out = {}
     if not path:
         return out
@@ -190,15 +191,15 @@ def parse_density(path):
     with open(fp) as f:
         for line in f:
             m = re.match(r"(\S+)\s+(\S+)\s+(workers|cells)=(\d+)\s+"
-                         r"pss_mb=(\S+)", line.strip())
+                         r"pss_mb=(\S+)(?:\s+phase=(cold|warm))?", line.strip())
             if not m:
                 continue
-            stack, size, unit, count, pss = m.groups()
+            stack, size, unit, count, pss, phase = m.groups()
             try:
                 pss = float(pss)
             except ValueError:
                 continue
-            out.setdefault(stack, {})[size] = {
+            out.setdefault(stack, {})[(phase or "warm") + "@" + size] = {
                 "count": int(count), "unit": unit, "pssMb": pss}
     return out
 

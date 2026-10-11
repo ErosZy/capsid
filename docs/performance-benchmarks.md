@@ -102,15 +102,15 @@ Serving-path memory (process-tree PSS after the last round; trickle = fresh proc
 
 ### Measured density: fill a pool to 2 GB (2026-10-10)
 
-Real capacity runs, not footprint arithmetic: grow capsid's `static-pool` (or workerd's cell count in one process) until the process-tree PSS reaches 2048 MB. After the initial touch, every worker/cell is warmed with 100 real requests — workerd's V8 grows sharply under traffic (a single-touch cold read understated its per-cell cost by ~1.7×, flipping its 10k capacity from 1061 to 638) — and the sample is taken after a settle with a stability check. The boundary is binary-searched, and the recorded count must verify under budget. Source bundles; probes and manifest in `bench/results/density-v022-20261010/`.
+Real capacity runs, not footprint arithmetic: grow capsid's `static-pool` (or workerd's cell count in one process) until the process-tree PSS reaches 2048 MB, binary-searching the boundary (the recorded count must verify under budget, with a jitter guard). Each cell is reported twice: **initialized** (one real request per worker/cell) and **warmed** (100 requests through each, settling before a stability-checked sample). Source bundles; probes and manifests in `bench/results/density-v022-20261010/`.
 
-| fixture size | capsid workers | capsid final PSS | workerd cells | workerd final PSS |
-|---:|---:|---:|---:|---:|
-| 10 KiB | **896** | 2047.0 MB | 638 | 2045.6 MB |
-| 100 KiB | **575** | 2047.3 MB | 580 | 2045.9 MB |
-| 1 MiB | **132** | 2035.4 MB | 222 | 1990.5 MB |
+| fixture size | capsid workers · init → warmed | workerd cells · init → warmed |
+|---:|---:|---:|
+| 10 KiB | **904 → 896** (−0.9%) | 1,061 → 638 (**−40%**) |
+| 100 KiB | **576 → 575** (−0.2%) | 917 → 580 (**−37%**) |
+| 1 MiB | **133 → 132** (−0.8%) | 244 → 222 (−9%) |
 
-workerd still packs more 1 MiB code-cells per 2 GB because its cells share one process; warming narrows the gap at 10k/100k to near parity (638 vs 894, 580 vs 567). Every capsid tenant remains a separate, sandboxable process. These are warmed fill-to-budget counts — sustained per-tenant traffic density remains future work.
+Reading the cold/warm gap: initialization alone understates a JIT runtime. workerd's V8 compiles hot paths and grows its heap as soon as cells serve real traffic, and neither is returned — 40% of its 10k/100k capacity disappears between the first request and the hundredth (and the throughput lane shows a single isolate growing 44 → 581 MB under sustained 64-connection load, so these warmed counts are still an optimistic middle for workerd). capsid's interpreter has no tier-up: cold and warmed read the same, which is why its numbers move less than 1%. workerd still packs more 1 MiB cells per 2 GB (compile-structure economics: V8 compiles lazily while QuickJS compiles every function eagerly); every capsid tenant remains a separate, sandboxable process, so one tenant's growth cannot shrink a neighbour's budget. Sustained per-tenant traffic density remains future work.
 
 ## 4. Cold-Start Comparison (2026-10-10, median ms, 5 rounds)
 

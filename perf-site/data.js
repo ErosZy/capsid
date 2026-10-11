@@ -133,34 +133,64 @@ window.CAPSID_PERF_DATA = {
    "date": "2026-10-11",
    "density": {
     "capsid": {
-     "100k": {
+     "cold@100k": {
+      "count": 576,
+      "pssMb": 2044.6,
+      "unit": "workers"
+     },
+     "cold@10k": {
+      "count": 904,
+      "pssMb": 2047.7,
+      "unit": "workers"
+     },
+     "cold@1m": {
+      "count": 133,
+      "pssMb": 2047.6,
+      "unit": "workers"
+     },
+     "warm@100k": {
       "count": 575,
       "pssMb": 2047.3,
       "unit": "workers"
      },
-     "10k": {
+     "warm@10k": {
       "count": 896,
       "pssMb": 2047.0,
       "unit": "workers"
      },
-     "1m": {
+     "warm@1m": {
       "count": 132,
       "pssMb": 2035.4,
       "unit": "workers"
      }
     },
     "workerd": {
-     "100k": {
+     "cold@100k": {
+      "count": 917,
+      "pssMb": 2047.0,
+      "unit": "cells"
+     },
+     "cold@10k": {
+      "count": 1061,
+      "pssMb": 2047.5,
+      "unit": "cells"
+     },
+     "cold@1m": {
+      "count": 244,
+      "pssMb": 2013.3,
+      "unit": "cells"
+     },
+     "warm@100k": {
       "count": 580,
       "pssMb": 2045.9,
       "unit": "cells"
      },
-     "10k": {
+     "warm@10k": {
       "count": 638,
       "pssMb": 2045.6,
       "unit": "cells"
      },
-     "1m": {
+     "warm@1m": {
       "count": 222,
       "pssMb": 1990.5,
       "unit": "cells"
@@ -332,7 +362,7 @@ window.CAPSID_PERF_DATA = {
     "qps-rr/ready.capsid": "bb513d234320af60b750d0932c32c50908a41fd46bd71a46bb7ca7926b00eb00"
    },
    "git": {
-    "commit": "aa60b9287e6f22ba7d171b1a230ea68c06808c34",
+    "commit": "14be859422d05f92453120ac62a0bb514fcd0438",
     "tag": ""
    },
    "machine": {
