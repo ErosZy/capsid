@@ -40,6 +40,21 @@ struct PublicRequestHeaderView {
     std::string_view value;
 };
 
+// RFC 6455 §4.2.1 / docs/fetchrpc-v4.md §2: the host owns the WebSocket
+// handshake gates. A request presents itself as a WebSocket upgrade when
+// its Connection field carries the `upgrade` token and its Upgrade field
+// is `websocket` (both case-insensitive). Only then are the key/version
+// rules enforced; every other request (including other upgrade protocols)
+// reports kNone and flows through the normal path.
+enum class WebSocketUpgradeCheck {
+    kNone,                // not a websocket upgrade request
+    kValid,               // handshake headers validate
+    kBadKey,              // key missing, malformed, or duplicated -> 400
+    kUnsupportedVersion,  // version != 13 (or duplicated)      -> 426
+};
+WebSocketUpgradeCheck check_websocket_upgrade(
+    const std::vector<PublicRequestHeaderView>& views);
+
 struct NormalizedPublicRequestHeader {
     std::string name;
     std::string value;

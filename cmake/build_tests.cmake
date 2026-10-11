@@ -1547,6 +1547,16 @@ if(BUILD_TESTING)
 
             find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
             add_test(
+                NAME host_ws_upgrade_gates
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_ws_upgrade.mjs"
+                    --host "$<TARGET_FILE:capsid-host>"
+                    --worker "$<TARGET_FILE:capsid-worker>")
+            set_tests_properties(
+                host_ws_upgrade_gates PROPERTIES
+                LABELS "host;integration"
+                TIMEOUT 30)
+            add_test(
                 NAME host_single_worker_integration
                 COMMAND "${CAPSID_HOST_TEST_NODE}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_single_worker.mjs"

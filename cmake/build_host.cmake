@@ -46,6 +46,7 @@ if(CAPSID_BUILD_HOST)
         src/host/structured_log.cc
         src/host/static_pool_server.cc
         src/host/trusted_key_store.cc
+        src/host/ws_codec.cc
         src/host/worker_capacity_ledger.cc
         src/host/worker_event_source.cc
         src/host/worker_executor.cc

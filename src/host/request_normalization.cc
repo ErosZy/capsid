@@ -15,6 +15,8 @@
 
 #include "host/request_normalization.h"
 
+#include "host/ws_codec.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -369,6 +371,119 @@ bool is_valid_routing_policy(const RequestRoutingPolicy &policy,
         error = &local;
     }
     return validate_policy(policy, *error);
+}
+
+namespace {
+
+bool name_iequals(std::string_view name, std::string_view lower) {
+    if (name.size() != lower.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < name.size(); ++i) {
+        if (ascii_lower_char(name[i]) != lower[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool header_value_has_token(std::string_view value, std::string_view token) {
+    // RFC 9110 token list semantics: comma-separated, OWS-tolerant.
+    size_t pos = 0;
+    while (pos <= value.size()) {
+        const size_t comma = value.find(',', pos);
+        const std::string_view item = value.substr(
+            pos, comma == std::string_view::npos
+                     ? std::string_view::npos
+                     : comma - pos);
+        size_t b = 0;
+        size_t e = item.size();
+        while (b < e && (item[b] == ' ' || item[b] == '\t')) {
+            ++b;
+        }
+        while (e > b && (item[e - 1] == ' ' || item[e - 1] == '\t')) {
+            --e;
+        }
+        if (e - b == token.size()) {
+            bool equal = true;
+            for (size_t i = 0; i < token.size(); ++i) {
+                if (ascii_lower_char(item[b + i]) !=
+                    ascii_lower_char(token[i])) {
+                    equal = false;
+                    break;
+                }
+            }
+            if (equal) {
+                return true;
+            }
+        }
+        if (comma == std::string_view::npos) {
+            break;
+        }
+        pos = comma + 1;
+    }
+    return false;
+}
+
+bool header_equals_token(std::string_view value, std::string_view token) {
+    if (value.size() != token.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < value.size(); ++i) {
+        if (ascii_lower_char(value[i]) != ascii_lower_char(token[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+WebSocketUpgradeCheck check_websocket_upgrade(
+    const std::vector<PublicRequestHeaderView>& views) {
+    const PublicRequestHeaderView* connection = nullptr;
+    const PublicRequestHeaderView* upgrade = nullptr;
+    const PublicRequestHeaderView* key = nullptr;
+    const PublicRequestHeaderView* version = nullptr;
+    for (const PublicRequestHeaderView& view : views) {
+        if (name_iequals(view.name, "connection")) {
+            if (connection != nullptr) {
+                return WebSocketUpgradeCheck::kNone;  // malformed upstream
+            }
+            connection = &view;
+        } else if (name_iequals(view.name, "upgrade")) {
+            if (upgrade != nullptr) {
+                return WebSocketUpgradeCheck::kNone;
+            }
+            upgrade = &view;
+        } else if (name_iequals(view.name, "sec-websocket-key")) {
+            if (key != nullptr) {
+                return WebSocketUpgradeCheck::kBadKey;  // duplicated
+            }
+            key = &view;
+        } else if (name_iequals(view.name, "sec-websocket-version")) {
+            if (version != nullptr) {
+                return WebSocketUpgradeCheck::kUnsupportedVersion;
+            }
+            version = &view;
+        }
+    }
+    if (connection == nullptr || upgrade == nullptr) {
+        return WebSocketUpgradeCheck::kNone;
+    }
+    if (!header_value_has_token(connection->value, "upgrade") ||
+        !header_equals_token(upgrade->value, "websocket")) {
+        return WebSocketUpgradeCheck::kNone;
+    }
+    if (version == nullptr ||
+        !header_equals_token(version->value, "13")) {
+        return WebSocketUpgradeCheck::kUnsupportedVersion;
+    }
+    if (key == nullptr ||
+        !capsid::host::ws::validate_client_key(std::string(key->value))) {
+        return WebSocketUpgradeCheck::kBadKey;
+    }
+    return WebSocketUpgradeCheck::kValid;
 }
 
 RequestNormalizationResult normalize_public_request(

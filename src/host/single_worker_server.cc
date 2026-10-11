@@ -978,6 +978,50 @@ void Session::handle_request(http::request<http::string_body> request) {
         return;
     }
 
+    // FetchRPC v4 WS-C3 (RFC 6455 §4.2.1, docs/fetchrpc-v4.md §2): the
+    // host owns the WebSocket handshake gates. A request that presents
+    // itself as a websocket upgrade is validated before admission; a
+    // malformed key is 400 and an unsupported version is 426 naming the
+    // supported one. A valid handshake still flows to the worker as a
+    // normal request until the v4 surface lands — the worker's non-101
+    // answer is the reject path.
+    switch (check_websocket_upgrade(views)) {
+    case WebSocketUpgradeCheck::kBadKey:
+        send_simple(http::status::bad_request, "invalid Sec-WebSocket-Key",
+                    false, request.version());
+        return;
+    case WebSocketUpgradeCheck::kUnsupportedVersion: {
+        auto response =
+            std::make_shared<http::response<http::string_body>>();
+        response->result(http::status::upgrade_required);
+        response->version(request.version());
+        response->keep_alive(false);
+        response->set(http::field::sec_websocket_version, "13");
+        response->set(http::field::content_type, "text/plain");
+        if (cors_) {
+            cors_->stamp(*response);
+        }
+        response->body() = "unsupported Sec-WebSocket-Version";
+        response->prepare_payload();
+        http::async_write(
+            stream_,
+            *response,
+            [self = shared_from_this(), response](
+                beast::error_code ec, std::size_t) {
+                (void)response;
+                if (!ec && !self->closed_) {
+                    self->close();
+                } else {
+                    self->close();
+                }
+            });
+        return;
+    }
+    case WebSocketUpgradeCheck::kValid:
+    case WebSocketUpgradeCheck::kNone:
+        break;
+    }
+
     // ② Host-global inflight/queue gate is merged with ③ (the App
     // queue gate) in the v1 single-App pool: admission is enforced per
     // shard, and the pool's Host budget is the shard budget times the
