@@ -158,6 +158,10 @@ the hosted evidence index.
 
 ### v0.3.0: FetchRPC v4 and WebSocket Foundation
 
+Milestone plan: [docs/v0.3.0-fetchrpc-v4-plan.md](docs/v0.3.0-fetchrpc-v4-plan.md) ·
+contract draft: [docs/fetchrpc-v4.md](docs/fetchrpc-v4.md) · workerd semantics
+dossier: [docs/workerd-websocket-semantics.md](docs/workerd-websocket-semantics.md).
+
 Define the FetchRPC v4 contract before implementing the public WebSocket API.
 The contract must specify:
 
