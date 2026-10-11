@@ -1786,6 +1786,11 @@ if(BUILD_TESTING)
         tests/test_fetchrpc_v4.cc
         src/protocol.cc
     )
+    # RFC 6455 host codec (FetchRPC v4 WS-C3)
+    add_executable(test-ws-codec tests/test_ws_codec.cc src/host/ws_codec.cc)
+    target_include_directories(test-ws-codec PRIVATE src src/host)
+    target_link_libraries(test-ws-codec PRIVATE capsid_sanitizers)
+    add_test(NAME ws_codec COMMAND test-ws-codec)
     target_include_directories(test-fetchrpc-v4 PRIVATE src)
     target_compile_definitions(test-fetchrpc-v4 PRIVATE FETCHRPC_V4_SURFACE)
     target_link_libraries(test-fetchrpc-v4 PRIVATE capsid_sanitizers)
