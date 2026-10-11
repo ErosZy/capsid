@@ -1,6 +1,8 @@
 # Performance: Evidence Rules and Current State
 
-This document is the single maintained document for performance topics; it keeps the evidence rules and the current (2026-10-10) conclusion-level samples, which the `v0.2.2` release adopts as its published performance point (commit `aef6020`, clean `v0.2.2` release build). Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, the 2026-08-18 runs, and the superseded 2026-08-20 `v0.2.0-rc.07` checkpoint) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
+This document keeps the current conclusion-level samples. The measurement
+protocol itself — lanes, data pipeline, evidence rules, site conventions — is
+specified in [bench/SPEC.md](../bench/SPEC.md). It keeps the evidence rules and the current (2026-10-10) conclusion-level samples, which the `v0.2.2` release adopts as its published performance point (commit `aef6020`, clean `v0.2.2` release build). Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, the 2026-08-18 runs, and the superseded 2026-08-20 `v0.2.0-rc.07` checkpoint) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
 
 ## 1. Evidence Rules
 
