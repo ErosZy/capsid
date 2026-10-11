@@ -81,6 +81,15 @@ two disagree, this file wins and the docs are stale.
   per worker/cell; initialization, not static loading) and **warmed**
   (100 requests through each, then settle). A pool that dies under the
   warm-up is a failed probe, never a small reading.
+- **Warm-phase gating:** request failures are counted and fatal (a warm
+  pass that cannot reach its targets understates a pool that is quietly
+  shedding); the post-settle sample requires two consecutive **equal**
+  PSS readings and a positive value; the recorded count is only ever one
+  whose own final probe verified under budget — a failed verification is
+  retried twice, then the count steps down. A cell is never recorded with
+  a failed reading. For capsid's shared-acceptor pool the warm request
+  count is doubled because per-worker distribution is connection-hash
+  approximate.
 - **Stacks:** capsid static-pool with the same strict sandbox
   (`CAPSID_STRICT=1`); workerd N cells in one process (minimal capnp,
   cells touched through per-cell sockets).

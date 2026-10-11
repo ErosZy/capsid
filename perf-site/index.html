@@ -883,8 +883,9 @@ function renderBudget(sp, spLow) {
     (measured ? '<div class="footnote" style="margin-top:12px">' +
       "Why two rows: initialization alone understates a JIT runtime. " +
       "workerd loses ~40% of its 10k/100k capacity once each cell has served " +
-      "100 requests (V8 compiles hot paths, the heap grows, and neither is " +
-      "returned); capsid's interpreter stays flat, so cold and warmed read " +
+      "100 requests (V8 compiles hot paths and the heap grows — no return " +
+      "was observed within any sampling window here); capsid's interpreter " +
+      "stays flat, so cold and warmed read " +
       "the same. Under sustained heavy traffic the gap widens further — in " +
       "the throughput lane a single workerd isolate grew from 44 to 581 MB " +
       "under 64 connections." : "");
@@ -1111,8 +1112,9 @@ function renderMethod() {
           "runtimes, only the entry point differs.</li>" +
           "<li><b>Memory</b>PSS from smaps_rollup, decomposed per process " +
           "(host/worker, nginx/php-fpm, python master/worker). workerd runs " +
-          "an untuned V8 whose heap grows under sustained load and is not " +
-          "returned afterwards — its bar is the self-hosted default, not a " +
+          "an untuned V8 whose heap grows under sustained load with no " +
+          "return observed within the sampling windows — its bar is the " +
+          "self-hosted default, not a " +
           "tuned production limit.</li>" +
         "</ol>" +
       "</div>" +

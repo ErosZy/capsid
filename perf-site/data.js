@@ -191,15 +191,20 @@ window.CAPSID_PERF_DATA = {
       "unit": "cells"
      },
      "warm@1m": {
-      "count": 222,
-      "pssMb": 1990.5,
+      "count": 214,
+      "pssMb": 1917.5,
       "unit": "cells"
      }
     }
    },
-   "evidence": {},
+   "evidence": {
+    "cold-final-strict/cells.txt": "290ce2e7a9eb0391b975a3135940694609cbd5d7ae2bc87a88e483e366858d3f",
+    "cold-final-strict/manifest.txt": "3e6d3823f181e2623f185d16121c9a24da63f59758086e8b1676d06d7cbc07bd",
+    "qps-final-strict/cells.txt": "ce2e3c7bbf321173f2680f211290aa4f2e5288c010af2e1784e5adbd6b44e5e5",
+    "qps-final-strict/manifest.txt": "407854efb6f5b5a9249c6ecfcf9b87e3fc8808127bfe0139e1520adc4d21484d"
+   },
    "git": {
-    "commit": "ab2e365408823e6c2150ce3cab4b3faf69599b82",
+    "commit": "b35e266cea1948b69268200ea9bd1eeed398b108",
     "tag": ""
    },
    "machine": {
@@ -219,7 +224,7 @@ window.CAPSID_PERF_DATA = {
     "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
     "workerd_version": "workerd 2026-10-10"
    },
-   "notes": "capsid measured in its production posture: managed coordinator with the mandatory Linux strict sandbox (namespaces, Landlock, seccomp), one-worker pool, production stream-window defaults; density pools run static-pool with the same strict sandbox. Sandbox cost: throughput within noise, cold start +0.3-5.4 ms, warm 10k density -1.6%.",
+   "notes": "capsid measured in its production posture: managed coordinator with the mandatory Linux strict sandbox, one-worker pool, production stream-window defaults; density pools run static-pool with the same strict sandbox (CAPSID_STRICT=1, recorded in the density manifest). workerd 1m warm density re-verified under strict touch/stability gates.",
    "qps": {
     "cells": [
      {

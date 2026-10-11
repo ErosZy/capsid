@@ -104,15 +104,15 @@ Serving-path memory (process-tree PSS after the last round; trickle = fresh proc
 
 ### Measured density: fill a pool to 2 GB (2026-10-10)
 
-Real capacity runs, not footprint arithmetic: grow capsid's `static-pool` (or workerd's cell count in one process) until the process-tree PSS reaches 2048 MB, binary-searching the boundary (the recorded count must verify under budget, with a jitter guard). Each cell is reported twice: **initialized** (one real request per worker/cell) and **warmed** (100 requests through each, settling before a stability-checked sample). Source bundles; probes and manifests in `bench/results/density-v022-20261010/`.
+Real capacity runs, not footprint arithmetic: grow capsid's `static-pool` (or workerd's cell count in one process) until the process-tree PSS reaches 2048 MB, binary-searching the boundary (the recorded count must verify under budget, with a jitter guard). Each cell is reported twice: **initialized** (one real request per worker/cell) and **warmed** (100 requests through each, settling before a stability-checked sample). Source bundles; probes and the merged manifest (recording `CAPSID_STRICT=1` for the capsid passes and both warm/cold phases) in `bench/results/density-v022-20261010/`.
 
 | fixture size | capsid workers (strict) · init → warmed | workerd cells · init → warmed |
 |---:|---:|---:|
 | 10 KiB | **891 → 882** (−1.0%) | 1,061 → 638 (**−40%**) |
 | 100 KiB | **569 → 568** (−0.2%) | 917 → 580 (**−37%**) |
-| 1 MiB | **132 → 132** (±0) | 244 → 222 (−9%) |
+| 1 MiB | **132 → 132** (±0) | 244 → 214 (−12%, re-verified under strict gates) |
 
-Reading the cold/warm gap: initialization alone understates a JIT runtime. workerd's V8 compiles hot paths and grows its heap as soon as cells serve real traffic, and neither is returned — 40% of its 10k/100k capacity disappears between the first request and the hundredth (and the throughput lane shows a single isolate growing 44 → 581 MB under sustained 64-connection load, so these warmed counts are still an optimistic middle for workerd). capsid's interpreter has no tier-up: cold and warmed read the same, which is why its numbers move less than 1%. workerd still packs more 1 MiB cells per 2 GB (compile-structure economics: V8 compiles lazily while QuickJS compiles every function eagerly); every capsid tenant remains a separate, sandboxable process, so one tenant's growth cannot shrink a neighbour's budget. Sustained per-tenant traffic density remains future work.
+Reading the cold/warm gap: initialization alone understates a JIT runtime. workerd's V8 compiles hot paths and grows its heap as soon as cells serve real traffic, and no return was observed within any sampling window of these runs — 40% of its 10k/100k capacity disappears between the first request and the hundredth (the throughput lane shows a single isolate at 44 → 581 MB under sustained 64-connection load, with workerd also serving ~2.8× capsid's request rate in that window, so loaded figures compare configurations, not equal work; these warmed counts remain an optimistic middle for workerd). capsid's interpreter has no tier-up: cold and warmed read the same, which is why its numbers move less than 1%. workerd still packs more 1 MiB cells per 2 GB (compile-structure economics: V8 compiles lazily while QuickJS compiles every function eagerly); every capsid tenant remains a separate, sandboxable process, so one tenant's growth cannot shrink a neighbour's budget. Sustained per-tenant traffic density remains future work.
 
 ## 4. Cold-Start Comparison (2026-10-10, median ms, 5 rounds)
 
@@ -126,7 +126,7 @@ Measurement class 4: **process start → first validated response**. The shell-m
 
 Cold PSS (MB, same samples): capsid source 0.8/1.2/4.6, bytecode 0.9/1.7/10.2 (the sandbox installs no large mappings), Node 59.6/60.2/76.3, Deno 34.9/36.4/41.4, workerd 49.8/51.7/64.4.
 
-- **capsid trusted bytecode is flat across sizes**: 17.4 → 18.3 → 28.3 ms, because deserialization replaces parsing; at 1M it is 2.7× faster than capsid source, 2.9× faster than Node, and ~1.9× faster than Deno.
+- **capsid trusted bytecode is flat across sizes**: 17.7 → 19.1 → 31.1 ms under the full sandbox, because deserialization replaces parsing; at 1M it is 2.6× faster than capsid source, 2.6× faster than Node, and 1.8× faster than Deno.
 - **Deno and workerd have the strongest small-bundle floors** (~20 ms); Node's ~57 ms floor is process + V8 bootstrap. Source-mode parsing shows up at 1M for every source-loading engine (capsid source 76.1, Node 81, Deno 55).
 - **Cold memory stays small for capsid** (≤10.2 MB even at 1M bytecode) versus 35-76 MB for the comparison engines.
 

@@ -293,12 +293,13 @@ with full charts lives at <https://eroszy.github.io/capsid/>.
 | JSON 16 KiB throughput | 7,109 QPS | workerd **20,189**<br>FastAPI 12,599<br>Flask 2,878<br>PHP Slim 2,008 |
 | Stream 1 KiB throughput | 6,523 QPS | workerd 14,192<br>FastAPI 6,671<br>Flask 3,987<br>PHP Slim 2,032 |
 | Serving path memory | **16.4 MB PSS** (8.5 coordinator + 7.8 sandboxed worker) | Flask 17.0<br>PHP Slim 28.1<br>FastAPI 46.1<br>workerd 581.0 (untuned V8) |
-| Measured 2 GB density, strict sandbox, init → warmed (10k / 100k / 1M) | **891→882 / 569→568 / 132→132** workers (±1%) | workerd cells 1,061→638 / 917→580 / 244→222 (V8 grows −40%..−9%) |
+| Measured 2 GB density, strict sandbox, init → warmed (10k / 100k / 1M) | **891→882 / 569→568 / 132→132** workers (±1%) | workerd cells 1,061→638 / 917→580 / 244→214 (V8 grows −40%..−12%) |
 | Small bundle cold start (10 KiB, full sandbox) | **17.7 ms** bytecode / 19.7 ms source | Deno 20<br>workerd 20<br>Node 57 |
 | 1 MB trusted bytecode cold start | **31.1 ms** | workerd 38<br>Deno 55<br>Node 81 |
 
 workerd leads raw throughput on every cell but its process grows to ≈581 MB
-PSS under the 64-connection load and never returns it; capsid holds the
+PSS under the 64-connection load (no return observed within the sampling
+windows, and workerd serves ~2.8× the requests there); capsid holds the
 whole sandboxed serving path at ≈16 MB. Isolation itself is cheap: the
 strict sandbox moves cold start by under 5 ms, 10k density by 1.6%, and
 JSON throughput not at all. Full methodology, the

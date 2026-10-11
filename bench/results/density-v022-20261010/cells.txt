@@ -1,3 +1,12 @@
-capsid 10k    workers=882 pss_mb=2046.3 note=largest pool under 2048 MB budget
-capsid 100k   workers=568 pss_mb=2047.2 note=largest pool under 2048 MB budget
-capsid 1m     workers=132 pss_mb=2041.8 note=largest pool under 2048 MB budget
+capsid 10k    workers=891 pss_mb=2045.7 phase=cold note=strict sandbox, initialized only
+capsid 100k   workers=569 pss_mb=2044.7 phase=cold note=strict sandbox, initialized only
+capsid 1m     workers=132 pss_mb=2038.8 phase=cold note=strict sandbox, initialized only
+capsid 10k    workers=882 pss_mb=2046.3 phase=warm note=strict sandbox, 100 requests per worker
+capsid 100k   workers=568 pss_mb=2047.2 phase=warm note=strict sandbox, 100 requests per worker
+capsid 1m     workers=132 pss_mb=2041.8 phase=warm note=strict sandbox, 100 requests per worker
+workerd 10k   cells=1061 pss_mb=2047.5 phase=cold note=initialized only
+workerd 100k  cells=917 pss_mb=2047.0 phase=cold note=initialized only
+workerd 1m    cells=244 pss_mb=2013.3 phase=cold note=initialized only
+workerd 10k   cells=638 pss_mb=2045.6 phase=warm note=100 requests per cell
+workerd 100k  cells=580 pss_mb=2045.9 phase=warm note=100 requests per cell
+workerd 1m    cells=214 pss_mb=1917.5 phase=warm note=100 requests per cell, re-verified under strict touch/stability gates

@@ -1,12 +1,8 @@
 rounds: density fill-to-budget budget_mb=2048 warm_reqs=100 sut_cpuset: 0-3
-generated_at: 2026-10-11T10:33:02+08:00
-commit: aa60b9287e6f22ba7d171b1a230ea68c06808c34
-tag: 
-command: OUT=/tmp/opencode/dens-trim BUDGET_MB=2048 SIZES='10k 100k 1m' STACKS='capsid' bash bench/density-lane.sh
+generated_at: 2026-10-11T21:05:00+08:00
+commit: b35e266
+command: OUT=... BUDGET_MB=2048 WARM_REQS=100|0 CAPSID_STRICT=1 bash bench/density-lane.sh (capsid) ; STACKS=workerd bash bench/density-lane.sh (workerd)
+note: capsid rows measured with CAPSID_STRICT=1 (full Linux strict sandbox: namespaces, Landlock, seccomp) in static-pool mode, warm and cold passes; workerd cells in one process per probe. workerd 1m warm re-measured under the strict touch-fatal + stability gates.
 cpu: 12th Gen Intel(R) Core(TM) i5-12400F
-uname: 6.18.40.1-microsoft-standard-WSL2
+uname: Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2
 nproc: 12
-host_sha256: e0c7c417754258a468926c9e2c75316d2b9cf17aa195f93095906b36ae738409
-worker_sha256: 934a7fb9388e5822d5bb5c39dbae455439e33e2124b64616843bb3992382857f
-workerd_version: workerd 2026-10-10
-workerd_sha256: 50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd

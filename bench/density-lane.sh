@@ -51,6 +51,7 @@ mkdir -p "$OUT"
     echo "workerd_sha256: $(sha256sum "$WORKERD_BIN" | cut -d' ' -f1)"
 } >"$OUT/manifest.txt"
 
+TOUCH_FAIL_LOG=${TOUCH_FAIL_LOG:-/tmp/capsid-density-touch-failures}
 PIDS=()
 cleanup() {
     for p in "${PIDS[@]:-}"; do
@@ -88,9 +89,24 @@ warm_pool() { # $1 port  $2 total requests  $3 file — warm the capsid pool:
 }
 
 touch_pool() { # $1 = url-list file; one curl per URL so every response is
-    # discarded (-o binds to the first URL only when curl gets a list)
+    # discarded (-o binds to the first URL only when curl gets a list).
+    # A request that could not be served is a probe failure, not noise:
+    # the warm phase must actually reach its targets or the sample would
+    # understate a pool that is quietly shedding.
+    local fail_log="$TOUCH_FAIL_LOG"
+    : >"$fail_log"
     xargs -a "$1" -P "$CURL_PAR" -I{} \
-        curl -s -o /dev/null --max-time 5 {} || true
+        bash -c 'curl -s -f -o /dev/null --max-time 5 "$1" || echo x >>"$2"' _ {} "$fail_log"
+    if [ -s "$fail_log" ]; then
+        return 1
+    fi
+}
+
+teardown_tree() { # $1 root pid — children die before the parent
+    local p="$1"
+    for c in $(pgrep -P "$p" 2>/dev/null); do kill -9 "$c" 2>/dev/null || true; done
+    kill -9 "$p" 2>/dev/null || true
+    wait "$p" 2>/dev/null || true
 }
 
 probe_capsid() { # $1 size  $2 workers  -> pss_mb or "fail"
@@ -127,8 +143,12 @@ probe_capsid() { # $1 size  $2 workers  -> pss_mb or "fail"
     fi
     seq 1 $((n * 2)) | sed "s|.*|http://127.0.0.1:$port/@capsid/orders/bench/json|" \
         >"$OUT/urls.$size.$n"
-    touch_pool "$OUT/urls.$size.$n"
-    warm_pool "$port" $((n * WARM_REQS)) "$OUT/urls.$size.$n"
+    touch_pool "$OUT/urls.$size.$n" || { teardown_tree "$hpid"; echo fail; return; }
+    # The shared acceptor spreads keep-alive-less requests across shards by
+    # connection hash, so per-worker counts are approximate; issuing
+    # WARM_REQS x n requests bounds the expected per-worker share, and the
+    # post-warm stability gate below rejects pools still drifting.
+    warm_pool "$port" $((n * WARM_REQS * 2)) "$OUT/urls.$size.$n" || { teardown_tree "$hpid"; echo fail; return; }
     sleep 2
     if ! kill -0 "$hpid" 2>/dev/null; then
         wait "$hpid" 2>/dev/null || true
@@ -187,13 +207,13 @@ probe_workerd() { # $1 size  $2 cells -> pss_mb or "fail"
     for i in $(seq 0 $((n - 1))); do
         echo "http://127.0.0.1:$((19700 + i))/"
     done >"$OUT/urls.w.$size.$n"
-    touch_pool "$OUT/urls.w.$size.$n"
+    touch_pool "$OUT/urls.w.$size.$n" || { for c in $(pgrep -P "$wpid" 2>/dev/null); do kill -9 "$c" 2>/dev/null || true; done; kill -9 "$wpid" 2>/dev/null || true; wait "$wpid" 2>/dev/null || true; echo fail; return; }
     # round-robin warm across cell ports so every cell gets its dose
     awk -v n="$n" -v w="$WARM_REQS" \
         'BEGIN { for (i = 0; i < w; i++) for (j = 0; j < n; j++) \
                  printf "http://127.0.0.1:%d/\n", 19700 + j }' \
         >"$OUT/urls.w.$size.$n.warm"
-    touch_pool "$OUT/urls.w.$size.$n.warm"
+    touch_pool "$OUT/urls.w.$size.$n.warm" || { for c in $(pgrep -P "$wpid" 2>/dev/null); do kill -9 "$c" 2>/dev/null || true; done; kill -9 "$wpid" 2>/dev/null || true; wait "$wpid" 2>/dev/null || true; echo fail; return; }
     # A pool that died under the touch (OOM, internal cap) must not yield a
     # half-loaded PSS sample: require the process alive, then a stable read.
     sleep 1
@@ -208,7 +228,7 @@ probe_workerd() { # $1 size  $2 cells -> pss_mb or "fail"
     pss2=$(tree_pss_mb "$wpid")
     kill -9 "$wpid" 2>/dev/null || true
     wait "$wpid" 2>/dev/null || true
-    if [ "$pss2" != "$pss" ] || awk -v a="$pss" 'BEGIN{exit !(a>0)}'; then
+    if [ "$pss2" = "$pss" ] && awk -v a="$pss" 'BEGIN{exit !(a>0)}'; then
         echo "$pss"
     else
         echo fail
@@ -261,10 +281,23 @@ fill_stack() { # $1 stack  $2 size
         if [ "$stack" = capsid ]; then pss=$(probe_capsid "$size" "$lo"); else pss=$(probe_workerd "$size" "$lo"); fi
         # Jitter guard: PSS at the boundary wobbles with GC timing and
         # isolate-init variance, so the recorded count must VERIFY under
-        # the budget; step down until it does (or the pool is empty).
+        # the budget with a stable reading; a failed verification (touch
+        # error, drift, death) is retried twice, then treated like an
+        # over-budget read and the count steps down. The cell is never
+        # recorded with pss=fail: the recorded count is always one whose
+        # own probe returned a stable under-budget number.
         local tries=0
-        while [ "$pss" != "fail" ] && [ "$tries" -lt 6 ] && [ "$lo" -gt 1 ] \
-                && awk -v a="$pss" -v b="$BUDGET_MB" 'BEGIN{exit !(a>b)}'; do
+        while [ "$tries" -lt 8 ] && [ "$lo" -gt 1 ]; do
+            if [ "$pss" = "fail" ]; then
+                local retry=0
+                while [ "$retry" -lt 2 ]; do
+                    if [ "$stack" = capsid ]; then pss=$(probe_capsid "$size" "$lo"); else pss=$(probe_workerd "$size" "$lo"); fi
+                    [ "$pss" != "fail" ] && break
+                    retry=$((retry + 1))
+                done
+                [ "$pss" = "fail" ] && { lo=$((lo - 1)); tries=$((tries + 1)); continue; }
+            fi
+            awk -v a="$pss" -v b="$BUDGET_MB" 'BEGIN{exit !(a>b)}' && break
             lo=$((lo - 1))
             if [ "$stack" = capsid ]; then pss=$(probe_capsid "$size" "$lo"); else pss=$(probe_workerd "$size" "$lo"); fi
             tries=$((tries + 1))
