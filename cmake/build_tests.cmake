@@ -1787,6 +1787,7 @@ if(BUILD_TESTING)
         src/protocol.cc
     )
     target_include_directories(test-fetchrpc-v4 PRIVATE src)
+    target_compile_definitions(test-fetchrpc-v4 PRIVATE FETCHRPC_V4_SURFACE)
     target_link_libraries(test-fetchrpc-v4 PRIVATE capsid_sanitizers)
     add_test(
         NAME fetchrpc_v4_boundary

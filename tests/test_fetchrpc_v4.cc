@@ -14,6 +14,7 @@
 // and sequence assertions; the boundary checks stay forever.
 #include "protocol.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -154,6 +155,72 @@ int main(int argc, char **argv) {
         find_all_string_fields(text, "steps");
     require(seq_steps.size() >= 6,
             "contract sequences are present in the data");
+
+#ifdef FETCHRPC_V4_SURFACE
+    // v4 round-trip: every vector decodes under a v4 parser with the
+    // expected type and re-encodes byte-identically.
+    for (size_t i = 0; i < hexes.size(); ++i) {
+        // expected-error vectors have dedicated assertions below
+        if (expects[i].find("v4-parser-error") != std::string::npos) {
+            continue;
+        }
+        const std::vector<uint8_t> wire = unhex(hexes[i]);
+        capsid::protocol::Parser v4(4);
+        capsid::protocol::Frame frame;
+        require(v4.append(wire.data(), wire.size()), "v4 buffers: " + names[i]);
+        require(v4.next(&frame) == capsid::protocol::kParseFrame,
+                "v4 parses: " + names[i]);
+        std::vector<uint8_t> re;
+        require(capsid::protocol::encode_versioned(4, frame, &re),
+                "v4 encodes: " + names[i]);
+        require(re == wire, "v4 round trip is byte-identical: " + names[i]);
+    }
+
+    // negotiation: a v4 parser rejects a v3-versioned frame.
+    {
+        capsid::protocol::Frame f;
+        f.type = capsid::protocol::kHello;
+        f.flags = 0;
+        f.request_id = 0;
+        std::vector<uint8_t> wire;
+        require(capsid::protocol::encode(f, &wire), "v3 hello encodes");
+        capsid::protocol::Parser v4(4);
+        capsid::protocol::Frame out;
+        require(v4.append(wire.data(), wire.size()), "v4 buffers v3 bytes");
+        require(v4.next(&out) == capsid::protocol::kParseError,
+                "v4 rejects v3 frame");
+        require(v4.error() == "unsupported protocol version",
+                "v4 rejection names the version (got: " + v4.error() + ")");
+    }
+
+    // hello v4 capability validation: unknown bit and nonzero reserved.
+    for (const char *case_name : {"hello-v4-unknown-cap-bit",
+                                  "hello-v4-reserved-nonzero"}) {
+        const std::vector<std::string>::const_iterator it =
+            std::find(names.begin(), names.end(), case_name);
+        require(it != names.end(), std::string("vector present: ") + case_name);
+        const std::vector<uint8_t> wire = unhex(hexes[it - names.begin()]);
+        capsid::protocol::Parser v4(4);
+        capsid::protocol::Frame frame;
+        require(v4.append(wire.data(), wire.size()), "v4 buffers");
+        require(v4.next(&frame) == capsid::protocol::kParseError,
+                std::string("v4 rejects bad hello: ") + case_name);
+        require(v4.error() == "invalid hello capabilities",
+                std::string("hello rejection names capabilities (got: ") +
+                    v4.error() + ")");
+    }
+
+    // v3 parser must reject v4-only types even at version 3.
+    {
+        capsid::protocol::Frame f;
+        f.type = capsid::protocol::kChannelClose;
+        f.flags = 0;
+        f.request_id = 0;
+        std::vector<uint8_t> wire;
+        require(!capsid::protocol::encode(f, &wire),
+                "v3 encode rejects kChannelClose");
+    }
+#endif
 
     if (failures > 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);

@@ -32,6 +32,30 @@ bool valid_type(uint16_t type) {
     return type >= kHello && type <= kLoadBinding;
 }
 
+bool valid_type_versioned(uint16_t type, uint16_t version) {
+    if (version == kVersionV4) {
+        return type >= kHello && type <= kChannelCancel;
+    }
+    return valid_type(type);
+}
+
+// Hello v4 payload validation (docs/fetchrpc-v4.md §1.2): fixed size,
+// known capability bits only, reserved word zero.
+bool valid_hello_v4_payload(const std::vector<uint8_t> &payload) {
+    if (payload.size() != kHelloV4FixedPayloadSize) {
+        return false;
+    }
+    const uint8_t *cursor = payload.data() + 79;
+    const uint8_t *end = payload.data() + payload.size();
+    uint32_t capabilities = 0;
+    uint32_t reserved = 0;
+    if (!read_u32(&cursor, end, &capabilities) ||
+        !read_u32(&cursor, end, &reserved)) {
+        return false;
+    }
+    return (capabilities & ~kCapabilitiesKnownMask) == 0 && reserved == 0;
+}
+
 bool valid_flags(uint16_t type, uint32_t flags) {
     if (type == kLoadBundle) {
         return (flags & ~(kFlagStart |
@@ -66,9 +90,31 @@ bool valid_flags(uint16_t type, uint32_t flags) {
     return flags == 0;
 }
 
+// v4 flag rules (docs/fetchrpc-v4.md §2-3): Upgrade flags ride the
+// existing head frames, channel frames carry their own namespace.
+bool valid_flags_versioned(uint16_t type, uint32_t flags, uint16_t version) {
+    if (version != kVersionV4) {
+        return valid_flags(type, flags);
+    }
+    switch (type) {
+        case kRequestHead:
+            return (flags & ~(kFlagRequestEnd | kFlagRequestUpgrade)) == 0;
+        case kResponseHead:
+            return (flags &
+                    ~(kFlagResponseFixedBody | kFlagResponseUpgrade)) == 0;
+        case kChannelOpen:
+            return (flags & ~kFlagChanOutbound) == 0;
+        case kChannelData:
+            return (flags & ~(kFlagStart | kFlagEnd | kFlagChanText)) == 0;
+        default:
+            return valid_flags(type, flags);
+    }
+}
+
 }  // namespace
 
-Parser::Parser() : offset_(0) {}
+Parser::Parser(uint16_t expected_version)
+    : offset_(0), expected_version_(expected_version) {}
 
 bool Parser::append(const uint8_t *data, size_t size) {
     if (!error_.empty()) {
@@ -116,18 +162,18 @@ ParseResult Parser::next(Frame *frame, std::vector<uint8_t> *payload) {
         error_ = "invalid frame magic";
         return kParseError;
     }
-    if (load_u16(header + 4) != kVersion) {
+    if (load_u16(header + 4) != expected_version_) {
         error_ = "unsupported protocol version";
         return kParseError;
     }
 
     const uint16_t type = load_u16(header + 6);
-    if (!valid_type(type)) {
+    if (!valid_type_versioned(type, expected_version_)) {
         error_ = "invalid frame type";
         return kParseError;
     }
     const uint32_t flags = load_u32(header + 8);
-    if (!valid_flags(type, flags)) {
+    if (!valid_flags_versioned(type, flags, expected_version_)) {
         error_ = "invalid frame flags";
         return kParseError;
     }
@@ -150,6 +196,11 @@ ParseResult Parser::next(Frame *frame, std::vector<uint8_t> *payload) {
         buffer_.begin() + static_cast<ptrdiff_t>(offset_ + frame_size));
     if (payload != &frame->payload) {
         frame->payload.clear();
+    }
+    if (expected_version_ == kVersionV4 && type == kHello &&
+        !valid_hello_v4_payload(*payload)) {
+        error_ = "invalid hello capabilities";
+        return kParseError;
     }
     offset_ += frame_size;
     if (offset_ == buffer_.size()) {
@@ -174,6 +225,36 @@ bool encode(const Frame &frame, std::vector<uint8_t> *output) {
         frame.payload.empty() ? NULL : &frame.payload[0],
         frame.payload.size(),
         output);
+}
+
+bool encode_versioned(uint16_t version,
+                      const Frame &frame,
+                      std::vector<uint8_t> *output) {
+    if (!output || version != kVersionV4) {
+        return false;
+    }
+    if (!valid_type_versioned(frame.type, version) ||
+        !valid_flags_versioned(frame.type, frame.flags, version)) {
+        return false;
+    }
+    if (frame.payload.size() > kMaxPayloadSize ||
+        (frame.payload.size() != 0 && frame.payload.empty())) {
+        return false;
+    }
+    output->clear();
+    output->reserve(kHeaderSize + frame.payload.size());
+    append_u32(output, kMagic);
+    append_u16(output, version);
+    append_u16(output, frame.type);
+    append_u32(output, frame.flags);
+    append_u64(output, frame.request_id);
+    append_u32(output, static_cast<uint32_t>(frame.payload.size()));
+    if (!frame.payload.empty()) {
+        output->insert(output->end(),
+                       frame.payload.begin(),
+                       frame.payload.end());
+    }
+    return true;
 }
 
 bool append_encoded(uint16_t type,

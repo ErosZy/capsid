@@ -1,6 +1,10 @@
-# FetchRPC v4 contract (draft for review — freezes before implementation)
+# FetchRPC v4 contract
 
-Status: **DRAFT**. This contract, its golden vectors
+Status: **FROZEN** (2026-10-11). Design decisions D1–D6 from the
+milestone plan are settled below; the frame table is renumbered after
+the audit that types 15–18 are already allocated (`kAudit`,
+`kMemoryMetricsRequest/Response`, `kLoadBinding`). Amendments need a
+versioned change. This contract, its golden vectors
 (`tests/fixtures/fetchrpc-v4/vectors.json`), and the conformance
 harness (`tests/test_fetchrpc_v4.cc`) freeze together before any v4
 implementation starts, as
@@ -109,14 +113,21 @@ non-ResponseHead) is a protocol violation (`invalid upgrade response`).
 
 | type | name | flags | payload | direction |
 | --- | --- | --- | --- | --- |
-| 15 | `kChannelOpen` | `kFlagChanOutbound` (worker→host dial), else inbound | u32 id (0 = request an id), u8 ownership, u64 max_message_bytes | both |
-| 16 | `kChannelAccept` | — | u32 id | both |
-| 17 | `kChannelReject` | — | u32 id, u32 reason_code | both |
-| 18 | `kChannelData` | `kFlagStart`, `kFlagEnd`, `kFlagChanText` | message bytes (fragmented by start/end like v3 bodies) | both |
-| 19 | `kChannelCredit` | — | u32 id, u64 credit | both |
-| 20 | `kChannelHalfClose` | — | u32 id | both (requires `CAP_HALF_CLOSE`) |
-| 21 | `kChannelClose` | — | u32 id, u16 code, reason bytes (≤123) | both |
-| 22 | `kChannelCancel` | — | u32 id | both |
+| 19 | `kChannelOpen` | `kFlagChanOutbound` (bit 0; worker→host dial), else inbound | u32 id (0 = request an id), u8 ownership, u64 max_message_bytes | both |
+| 20 | `kChannelAccept` | — | u32 id | both |
+| 21 | `kChannelReject` | — | u32 id, u32 reason_code | both |
+| 22 | `kChannelData` | `kFlagStart`(1), `kFlagEnd`(2), `kFlagChanText`(4) | message bytes (fragmented by start/end like v3 bodies) | both |
+| 23 | `kChannelCredit` | — | u32 id, u64 credit | both |
+| 24 | `kChannelHalfClose` | — | u32 id | both (requires `CAP_HALF_CLOSE`) |
+| 25 | `kChannelClose` | — | u32 id, u16 code, reason bytes (≤123) | both |
+| 26 | `kChannelCancel` | — | u32 id | both |
+
+Types 15–18 are allocated to `kAudit`, `kMemoryMetricsRequest`,
+`kMemoryMetricsResponse`, and `kLoadBinding` (v3); v4 does not
+renumber them. The Upgrade flags ride the existing head frames:
+`kFlagRequestUpgrade` = bit 5 (value 32) on `kRequestHead`,
+`kFlagResponseUpgrade` = bit 5 (value 32) on `kResponseHead`. Flag
+namespaces are per frame type, as in v3.
 
 `kChannelClose` maps 1:1 to a WebSocket Close frame; codes and reason
 limits follow the workerd dossier (`docs/workerd-websocket-semantics.md`
@@ -183,7 +194,18 @@ exhaustion and replenish, half-close, simultaneous close, unknown
 channel, duplicate close, out-of-order data, and the four ownership
 cleanup rows.
 
-## 6. ABI surface (informational; decided at review)
+## 6. Settled design decisions (plan D1–D6)
+
+| # | decision | outcome |
+| - | --- | --- |
+| D1 | WebSocket framing lives in the **host** (minimal RFC 6455 codec, property-tested). The worker never frames; txiki's `ws.c` stays unexposed (it would bypass egress mediation). |
+| D2 | `channel_id` is **host-assigned**, u32, monotonic from 1; the worker only requests ids (0). |
+| D3 | Half-close is a **dedicated frame** (`kChannelHalfClose`); the v0.3.0 JS API does not expose it. |
+| D4 | Ping/pong is **transport-internal** on both planes; no FetchRPC frame, no JS surface. |
+| D5 | ABI stays **v7, additive** (`capsid_worker_upgrade_*`, `CAPSID_EVENT_CHANNEL_*` on the event pump). Escalate to v8 only with a recorded embedder-blocking reason. |
+| D6 | `WebSocketPair`/`WebSocket` ship in **`CAPSID-MIN`** with the workerd method surface; v0.5 adds `env`/`ctx` around it, not a different WebSocket. |
+
+## 7. ABI surface (informational)
 
 Additive v7 entries expected: `capsid_worker_upgrade_respond(...)` and
 channel event pump entries on the existing event stream
