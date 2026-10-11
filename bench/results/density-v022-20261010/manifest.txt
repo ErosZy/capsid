@@ -1,12 +1,12 @@
 rounds: density fill-to-budget budget_mb=2048 warm_reqs=100 sut_cpuset: 0-3
-generated_at: 2026-10-11T00:12:57+08:00
-commit: c505d77a37fb5268376dda6e0be27c240f3bf195
+generated_at: 2026-10-11T10:33:02+08:00
+commit: aa60b9287e6f22ba7d171b1a230ea68c06808c34
 tag: 
-command: OUT=/tmp/opencode/dens-full BUDGET_MB=2048 SIZES='10k 100k 1m' STACKS='capsid workerd' bash bench/density-lane.sh
+command: OUT=/tmp/opencode/dens-trim BUDGET_MB=2048 SIZES='10k 100k 1m' STACKS='capsid' bash bench/density-lane.sh
 cpu: 12th Gen Intel(R) Core(TM) i5-12400F
 uname: 6.18.40.1-microsoft-standard-WSL2
 nproc: 12
-host_sha256: 2136f37cb41060af254046dd1ecb1fce79f6b7a674e7fbe36ef0884d7f32bf0a
-worker_sha256: a627bbc16389d9a69b77f952d5571a2f2cac8c49afae6005e8e06fe96d1c196d
+host_sha256: e0c7c417754258a468926c9e2c75316d2b9cf17aa195f93095906b36ae738409
+worker_sha256: 934a7fb9388e5822d5bb5c39dbae455439e33e2124b64616843bb3992382857f
 workerd_version: workerd 2026-10-10
 workerd_sha256: 50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd

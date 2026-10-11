@@ -1,6 +1,6 @@
-capsid 10k    workers=894 pss_mb=2045.8 note=largest pool under 2048 MB budget
-capsid 100k   workers=567 pss_mb=2047.4 note=largest pool under 2048 MB budget
-capsid 1m     workers=127 pss_mb=2036.2 note=largest pool under 2048 MB budget
+capsid 10k    workers=896 pss_mb=2047.0 note=largest pool under 2048 MB budget
+capsid 100k   workers=575 pss_mb=2047.3 note=largest pool under 2048 MB budget
+capsid 1m     workers=132 pss_mb=2035.4 note=largest pool under 2048 MB budget
 workerd 10k    cells=638 pss_mb=2045.6 note=largest pool under 2048 MB budget
 workerd 100k   cells=580 pss_mb=2045.9 note=largest pool under 2048 MB budget
 workerd 1m     cells=222 pss_mb=1990.5 note=largest pool under 2048 MB budget

@@ -106,9 +106,9 @@ Real capacity runs, not footprint arithmetic: grow capsid's `static-pool` (or wo
 
 | fixture size | capsid workers | capsid final PSS | workerd cells | workerd final PSS |
 |---:|---:|---:|---:|---:|
-| 10 KiB | **894** | 2045.8 MB | 638 | 2045.6 MB |
-| 100 KiB | **567** | 2047.4 MB | 580 | 2045.9 MB |
-| 1 MiB | **127** | 2036.2 MB | 222 | 1990.5 MB |
+| 10 KiB | **896** | 2047.0 MB | 638 | 2045.6 MB |
+| 100 KiB | **575** | 2047.3 MB | 580 | 2045.9 MB |
+| 1 MiB | **132** | 2035.4 MB | 222 | 1990.5 MB |
 
 workerd still packs more 1 MiB code-cells per 2 GB because its cells share one process; warming narrows the gap at 10k/100k to near parity (638 vs 894, 580 vs 567). Every capsid tenant remains a separate, sandboxable process. These are warmed fill-to-budget counts — sustained per-tenant traffic density remains future work.
 

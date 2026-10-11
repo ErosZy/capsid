@@ -134,18 +134,18 @@ window.CAPSID_PERF_DATA = {
    "density": {
     "capsid": {
      "100k": {
-      "count": 567,
-      "pssMb": 2047.4,
+      "count": 575,
+      "pssMb": 2047.3,
       "unit": "workers"
      },
      "10k": {
-      "count": 894,
-      "pssMb": 2045.8,
+      "count": 896,
+      "pssMb": 2047.0,
       "unit": "workers"
      },
      "1m": {
-      "count": 127,
-      "pssMb": 2036.2,
+      "count": 132,
+      "pssMb": 2035.4,
       "unit": "workers"
      }
     },
@@ -332,7 +332,7 @@ window.CAPSID_PERF_DATA = {
     "qps-rr/ready.capsid": "bb513d234320af60b750d0932c32c50908a41fd46bd71a46bb7ca7926b00eb00"
    },
    "git": {
-    "commit": "c505d77a37fb5268376dda6e0be27c240f3bf195",
+    "commit": "aa60b9287e6f22ba7d171b1a230ea68c06808c34",
     "tag": ""
    },
    "machine": {
