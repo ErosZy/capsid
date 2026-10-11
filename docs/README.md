@@ -32,6 +32,15 @@ Capsid documentation is organized around selection → integration → configura
 - Test gate: [testing.md](testing.md)
 - Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
 
+**v0.3.0 (FetchRPC v4 / WebSocket foundation)**
+
+- Milestone plan:
+  [v0.3.0-fetchrpc-v4-plan.md](v0.3.0-fetchrpc-v4-plan.md)
+- FetchRPC v4 contract (draft for review):
+  [fetchrpc-v4.md](fetchrpc-v4.md)
+- workerd WebSocket semantics dossier:
+  [workerd-websocket-semantics.md](workerd-websocket-semantics.md)
+
 ## Maintenance Rules
 
 - Maintain only the contracts and reproducible conclusions of the current commit; do not preserve review processes, status snapshots, or generated reports.
