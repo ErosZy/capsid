@@ -1,6 +1,6 @@
 #include "worker_runtime.h"
 
-#if defined(__linux__) && defined(__GLIBC__)
+#if defined(__linux__)
 #include <malloc.h>
 #endif
 
