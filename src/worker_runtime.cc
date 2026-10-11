@@ -1050,11 +1050,11 @@ public:
         }
 
 #if defined(__linux__) && defined(__GLIBC__)
-        // Compiling a large bundle spikes the malloc heap: parse and
-        // bytecode temporaries are freed after load, but glibc retains
-        // them inside the arena, so per-worker PSS would reflect compile
-        // high-water (13+ MB for a 1 MiB source) instead of live data.
-        // Hand the freed pages back to the OS before READY.
+        // Hand allocator residue from bundle compilation back to the OS
+        // before READY. Measured on a 1 MiB source: most of the post-load
+        // heap is live QuickJS data (eager per-function metadata, roughly
+        // 1.4 KB per function), so trim recovers only ~0.7 MB — but that
+        // is real per-worker PSS at density scale.
         malloc_trim(0);
 #endif
 
