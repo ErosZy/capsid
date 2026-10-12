@@ -13,6 +13,7 @@ namespace {
 capsid::protocol::Frame valid_hello() {
     capsid::protocol::Frame frame;
     frame.type = capsid::protocol::kHello;
+    frame.version = capsid::protocol::kVersion;
     frame.flags = 0;
     frame.request_id = 0;
     capsid::protocol::append_u32(&frame.payload, CAPSID_ABI_VERSION);

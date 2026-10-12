@@ -57,7 +57,15 @@ typedef struct capsid_worker_config {
     const capsid_capability_policy *capability_policy;
     int32_t sandbox_network_namespace_fd;
     uint32_t egress_reserved;
+    uint16_t protocol_version;
+    uint16_t protocol_reserved;
+    uint32_t protocol_capabilities;
 } capsid_worker_config;
+
+/* FetchRPC v4 capability bits (docs/fetchrpc-v4.md §1.2). */
+#define CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL (1u << 0)
+#define CAPSID_PROTOCOL_CAP_UPGRADE (1u << 1)
+#define CAPSID_PROTOCOL_CAP_HALF_CLOSE (1u << 2)
 
 void capsid_worker_config_init(capsid_worker_config *config);
 const char *capsid_result_string(capsid_result result);

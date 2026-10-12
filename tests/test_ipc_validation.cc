@@ -49,6 +49,7 @@ capsid::protocol::Frame hello_frame(
         CAPSID_CAPABILITY_POLICY_VERSION) {
     capsid::protocol::Frame hello;
     hello.type = capsid::protocol::kHello;
+    hello.version = capsid::protocol::kVersion;
     hello.flags = 0;
     hello.request_id = 0;
     capsid::protocol::append_u32(&hello.payload, CAPSID_ABI_VERSION);
