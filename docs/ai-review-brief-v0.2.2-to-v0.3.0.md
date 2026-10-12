@@ -115,7 +115,7 @@
 
 ### 2.5 建议审校路径（按依赖序）
 
-1. `bench/SPEC.md` ↔ 三条车道脚本 ↔ `bench/README.md` 的一致性
+1. `bench/SPEC.md` ↔ 三条车道脚本 ↔ 车道目录 README 的一致性
 2. `docs/fetchrpc-v4.md`（含修正案标记）↔ `src/protocol.{h,cc}` ↔
    `tests/test_fetchrpc_v4.cc` + `vectors.json` 三方一致
 3. `include/capsid/runtime.h` 尾部字段 ↔ `tests/compat/runtime_v7.h`
