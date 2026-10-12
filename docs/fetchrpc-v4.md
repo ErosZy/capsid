@@ -30,18 +30,25 @@ offset  size  field
 24      …     payload
 ```
 
-### 1.2 Hello v4
+### 1.2 Hello v4 (amended after the payload audit)
 
-The first frame from each side is `kHello` with `version = 4` and a
-fixed payload:
+The host's `kHello` carries the worker startup configuration in v3; v4
+appends a capability tail to that payload instead of replacing it (the
+draft's fixed-87-byte shape ignored the config fields — amended
+2026-10-12, recorded here):
 
 ```text
-offset  size  field
-0       8     compatibility_id_len (u64)   == 71 (sha256: + 64 hex)
-8       71    compatibility id
-79      4     capabilities (u32 LE bitset)
-83      4     reserved (u32, must be 0)
+[ v3 Hello payload: startup config, variable length, >= 108-byte fixed prefix ]
+-8      4     capabilities (u32 LE bitset, tail)
+-4      4     reserved (u32, must be 0)
 ```
+
+The worker answers its capabilities on `kReady`: in v4 the READY
+payload appends `u32 worker_capabilities, u32 reserved(0)` after the
+existing compatibility-id + sandbox-proof bytes. **Effective
+capabilities are the conjunction** of both sides' bitsets; a side that
+did not announce a feature must not emit its frames. Validation reads
+the tail (last 8 bytes).
 
 Capability bits (bit index → meaning):
 
@@ -77,12 +84,14 @@ Peers never downgrade and never mix versions on one connection.
 
 An inbound HTTP request carrying `Upgrade: websocket` (after host
 validation, including `Sec-WebSocket-Key`/`-Version` per RFC 6455) is
-forwarded to the worker as a normal v3 `RequestHead` **plus** the
-frame flag `kFlagRequestUpgrade` (v4 RequestHead-only flag). The
-worker answers exactly one of:
+forwarded to the worker as a normal v3-shaped `RequestHead` **plus**
+the frame flag `kFlagRequestUpgrade` and a `u32 channel_id` appended
+to its payload — the id is pre-assigned by the host at admission (id
+authority stays with the host; amended 2026-10-12: no worker-minted
+ids, no open round trip). The worker answers exactly one of:
 
 - `kResponseHead` with status 101 **and** `kFlagResponseUpgrade`, whose
-  payload carries `channel_id` (u32, host-assigned, see §3.1) — accept;
+  payload appends the same `channel_id` — accept;
   the HTTP response headers the host writes are the RFC 6455 accept
   handshake (`Sec-WebSocket-Accept`), produced by the host;
 - a normal non-101 response — reject; the host answers the upgrade

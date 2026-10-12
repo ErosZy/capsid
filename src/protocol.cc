@@ -39,13 +39,16 @@ bool valid_type_versioned(uint16_t type, uint16_t version) {
     return valid_type(type);
 }
 
-// Hello v4 payload validation (docs/fetchrpc-v4.md §1.2): fixed size,
-// known capability bits only, reserved word zero.
+// Hello v4 payload validation (docs/fetchrpc-v4.md §1.2, amended): the
+// v3 startup-config payload (variable length) plus an 8-byte
+// capability tail; only the tail is validated here - known capability
+// bits only, reserved word zero.
 bool valid_hello_v4_payload(const std::vector<uint8_t> &payload) {
-    if (payload.size() != kHelloV4FixedPayloadSize) {
+    if (payload.size() < kHelloFixedPayloadSize + kHelloV4TailSize) {
         return false;
     }
-    const uint8_t *cursor = payload.data() + 79;
+    const uint8_t *cursor =
+        payload.data() + payload.size() - kHelloV4TailSize;
     const uint8_t *end = payload.data() + payload.size();
     uint32_t capabilities = 0;
     uint32_t reserved = 0;
@@ -162,7 +165,16 @@ ParseResult Parser::next(Frame *frame, std::vector<uint8_t> *payload) {
         error_ = "invalid frame magic";
         return kParseError;
     }
-    if (load_u16(header + 4) != expected_version_) {
+    const uint16_t wire_version = load_u16(header + 4);
+    if (expected_version_ == kVersionNegotiate) {
+        // Bootstrap (amended §1.2): the first frame locks the
+        // connection's version; later frames must match.
+        if (wire_version != kVersion && wire_version != kVersionV4) {
+            error_ = "unsupported protocol version";
+            return kParseError;
+        }
+        expected_version_ = wire_version;
+    } else if (wire_version != expected_version_) {
         error_ = "unsupported protocol version";
         return kParseError;
     }
@@ -191,6 +203,7 @@ ParseResult Parser::next(Frame *frame, std::vector<uint8_t> *payload) {
     frame->type = type;
     frame->flags = flags;
     frame->request_id = load_u64(header + 12);
+    frame->version = expected_version_;
     payload->assign(
         buffer_.begin() + static_cast<ptrdiff_t>(offset_ + kHeaderSize),
         buffer_.begin() + static_cast<ptrdiff_t>(offset_ + frame_size));
@@ -230,7 +243,7 @@ bool encode(const Frame &frame, std::vector<uint8_t> *output) {
 bool encode_versioned(uint16_t version,
                       const Frame &frame,
                       std::vector<uint8_t> *output) {
-    if (!output || version != kVersionV4) {
+    if (!output || (version != kVersion && version != kVersionV4)) {
         return false;
     }
     if (!valid_type_versioned(frame.type, version) ||
@@ -281,6 +294,37 @@ bool append_encoded(uint16_t type,
     append_u32(output, static_cast<uint32_t>(payload_size));
     if (payload_size != 0) {
         output->insert(output->end(), payload, payload + payload_size);
+    }
+    return true;
+}
+
+bool append_encoded_versioned(uint16_t version,
+                              uint16_t type,
+                              uint32_t flags,
+                              uint64_t request_id,
+                              const uint8_t *payload,
+                              size_t payload_size,
+                              std::vector<uint8_t> *output) {
+    if (!output ||
+        (version != kVersion && version != kVersionV4) ||
+        !valid_type_versioned(type, version) ||
+        !valid_flags_versioned(type, flags, version) ||
+        payload_size > kMaxPayloadSize ||
+        (payload_size != 0 && !payload) ||
+        output->size() >
+            std::numeric_limits<size_t>::max() -
+                kHeaderSize - payload_size) {
+        return false;
+    }
+    append_u32(output, kMagic);
+    append_u16(output, version);
+    append_u16(output, type);
+    append_u32(output, flags);
+    append_u64(output, request_id);
+    append_u32(output, static_cast<uint32_t>(payload_size));
+    if (payload_size != 0) {
+        output->insert(
+            output->end(), payload, payload + payload_size);
     }
     return true;
 }

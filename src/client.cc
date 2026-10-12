@@ -76,6 +76,11 @@ struct capsid_worker {
     uint32_t max_queued_bytes;
     size_t write_offset;
     std::vector<uint8_t> write_buffer;
+    // Pinned from the spawn config; v4 pins the parser and the Hello
+    // capability tail. worker_capabilities lands from the READY tail.
+    uint16_t protocol_version = capsid::protocol::kVersion;
+    uint32_t protocol_capabilities = 0;
+    uint32_t worker_capabilities = 0;
     capsid::protocol::Parser parser;
     std::vector<uint8_t> event_payload;
     std::map<uint64_t, RequestState> requests;
@@ -214,7 +219,8 @@ capsid_result queue_wire(capsid_worker *worker, const std::vector<uint8_t> &wire
 
 capsid_result queue_frame(capsid_worker *worker, const capsid::protocol::Frame &frame) {
     std::vector<uint8_t> wire;
-    if (!capsid::protocol::encode(frame, &wire)) {
+    if (!capsid::protocol::encode_versioned(
+            worker->protocol_version, frame, &wire)) {
         return CAPSID_INVALID_ARGUMENT;
     }
     const capsid_result result = queue_wire(worker, wire);
@@ -283,7 +289,8 @@ capsid_result queue_chunked(capsid_worker *worker,
             frame.payload.assign(data + offset, data + offset + chunk_size);
         }
         std::vector<uint8_t> wire;
-        if (!capsid::protocol::encode(frame, &wire)) {
+        if (!capsid::protocol::encode_versioned(
+                worker->protocol_version, frame, &wire)) {
             return CAPSID_INVALID_ARGUMENT;
         }
         batch.insert(batch.end(), wire.begin(), wire.end());
@@ -325,6 +332,28 @@ bool append_string32(std::vector<uint8_t> *output,
         output->insert(output->end(), data, data + size);
     }
     return true;
+}
+
+// struct_size-guarded readers for the additive negotiation tail: an
+// embedder built against an older header passes a smaller struct and
+// keeps v3 defaults.
+uint16_t config_protocol_version(const capsid_worker_config &config) {
+    if (config.struct_size >=
+        offsetof(capsid_worker_config, protocol_reserved) +
+            sizeof(config.protocol_reserved)) {
+        return config.protocol_version == 0 ? capsid::protocol::kVersion
+                                            : config.protocol_version;
+    }
+    return capsid::protocol::kVersion;
+}
+
+uint32_t config_protocol_capabilities(const capsid_worker_config &config) {
+    if (config.struct_size >=
+        offsetof(capsid_worker_config, protocol_capabilities) +
+            sizeof(config.protocol_capabilities)) {
+        return config.protocol_capabilities;
+    }
+    return 0;
 }
 
 capsid_result send_hello(capsid_worker *worker,
@@ -512,6 +541,13 @@ capsid_result send_hello(capsid_worker *worker,
                 it->second.size())) {
             return CAPSID_INVALID_ARGUMENT;
         }
+    }
+    if (worker->protocol_version == capsid::protocol::kVersionV4) {
+        // Amended §1.2: the v4 Hello is the full v3 startup-config
+        // payload plus an 8-byte capability tail.
+        capsid::protocol::append_u32(
+            &frame.payload, worker->protocol_capabilities);
+        capsid::protocol::append_u32(&frame.payload, 0);
     }
     return queue_frame(worker, frame);
 }
@@ -775,6 +811,31 @@ capsid_result map_frame_to_event(capsid_worker *worker,
     switch (frame.type) {
         case capsid::protocol::kReady:
             event->type = CAPSID_EVENT_READY;
+            if (worker->protocol_version ==
+                capsid::protocol::kVersionV4) {
+                // Amended §1.2: v4 READY appends the worker's
+                // capability bitset; unknown bits are a protocol error.
+                if (event->payload.size <
+                    capsid::protocol::kHelloV4TailSize) {
+                    return CAPSID_PROTOCOL_ERROR;
+                }
+                const uint8_t *cursor =
+                    event->payload.data +
+                    event->payload.size -
+                    capsid::protocol::kHelloV4TailSize;
+                const uint8_t *end =
+                    event->payload.data + event->payload.size;
+                uint32_t caps = 0;
+                uint32_t reserved = 0;
+                if (!capsid::protocol::read_u32(&cursor, end, &caps) ||
+                    !capsid::protocol::read_u32(&cursor, end, &reserved) ||
+                    reserved != 0 ||
+                    (caps & ~capsid::protocol::kCapabilitiesKnownMask) !=
+                        0) {
+                    return CAPSID_PROTOCOL_ERROR;
+                }
+                worker->worker_capabilities = caps;
+            }
             break;
         case capsid::protocol::kWindowUpdate: {
             if (event->payload.size != sizeof(uint32_t)) {
@@ -1170,6 +1231,11 @@ void capsid_worker_config_init(capsid_worker_config *config) {
     config->capability_policy = NULL;
     config->sandbox_network_namespace_fd = -1;
     config->egress_reserved = 0;
+    // Additive v4 negotiation tail (struct_size-guarded): embedders
+    // that never touch these fields get the shipped v3 wire unchanged.
+    config->protocol_version = capsid::protocol::kVersion;
+    config->protocol_reserved = 0;
+    config->protocol_capabilities = 0;
 }
 
 const char *capsid_result_string(capsid_result result) {
@@ -1887,6 +1953,25 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         return CAPSID_OUT_OF_MEMORY;
     }
     worker->fd = sockets[0];
+    // FetchRPC negotiation tail (struct_size-guarded, additive): pin the
+    // wire version, validate capability bits locally (fail fast at
+    // spawn rather than on the wire), and pin the parser.
+    worker->protocol_version = config_protocol_version(config);
+    worker->protocol_capabilities = config_protocol_capabilities(config);
+    if (worker->protocol_version != capsid::protocol::kVersion &&
+        worker->protocol_version != capsid::protocol::kVersionV4) {
+        capsid_worker_destroy(worker);
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if ((worker->protocol_capabilities &
+         ~capsid::protocol::kCapabilitiesKnownMask) != 0) {
+        capsid_worker_destroy(worker);
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (worker->protocol_version == capsid::protocol::kVersionV4) {
+        worker->parser = capsid::protocol::Parser(
+            capsid::protocol::kVersionV4);
+    }
 #if defined(_WIN32)
     worker->process = pid;
 #else

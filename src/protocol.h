@@ -17,6 +17,10 @@ static const uint16_t kVersion = 3;
 // one version; the parser pins its expectation at construction and
 // rejects every other version deterministically.
 static const uint16_t kVersionV4 = 4;
+// Bootstrap mode for the worker side (amended §1.2): the first frame
+// may be version 3 or 4 and locks the connection to that version;
+// every later frame must match. Steady-state peers never mix.
+static const uint16_t kVersionNegotiate = 0;
 static const size_t kHeaderSize = 24;
 static const size_t kHelloLegacyFixedPayloadSize = 106;
 static const size_t kHelloFixedPayloadSize = 108;
@@ -51,9 +55,10 @@ static const uint32_t kFlagChanText = 4u;
 static const uint32_t kFlagRequestUpgrade = 32u;
 // kResponseHead (v4): status 101 accept; payload carries channel_id.
 static const uint32_t kFlagResponseUpgrade = 32u;
-// Hello v4 fixed payload: u64 compat-id length (71), 71 id bytes,
-// u32 capability bitset, u32 reserved (must be 0).
-static const size_t kHelloV4FixedPayloadSize = 87;
+// Hello v4 appends a capability tail to the (variable-length) v3
+// startup-config payload: u32 capabilities + u32 reserved. Validation
+// reads the last 8 bytes.
+static const size_t kHelloV4TailSize = 8;
 static const uint32_t kCapDuplexChannel = 1u;
 static const uint32_t kCapUpgrade = 2u;
 static const uint32_t kCapHalfClose = 4u;
@@ -98,6 +103,9 @@ struct Frame {
     uint16_t type;
     uint32_t flags;
     uint64_t request_id;
+    // Wire version this frame arrived with (filled by Parser::next;
+    // zero from encode-only callers).
+    uint16_t version = 0;
     std::vector<uint8_t> payload;
 };
 
@@ -137,6 +145,15 @@ bool append_encoded(uint16_t type,
                     const uint8_t *payload,
                     size_t payload_size,
                     std::vector<uint8_t> *output);
+// Append-semantics twin with an explicit wire version (v4 channel
+// frames); preserves any prefix already in output.
+bool append_encoded_versioned(uint16_t version,
+                              uint16_t type,
+                              uint32_t flags,
+                              uint64_t request_id,
+                              const uint8_t *payload,
+                              size_t payload_size,
+                              std::vector<uint8_t> *output);
 
 void append_u16(std::vector<uint8_t> *output, uint16_t value);
 void append_u32(std::vector<uint8_t> *output, uint32_t value);

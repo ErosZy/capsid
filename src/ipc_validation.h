@@ -14,6 +14,11 @@ namespace capsid {
 struct WorkerStartupConfig {
     WorkerStartupConfig();
 
+    // FetchRPC negotiation (v4): the wire version of the HELLO frame and
+    // the host's capability bitset (tail). v3 Hellos keep version 3 and
+    // zero capabilities.
+    uint16_t protocol_version = 3;
+    uint32_t host_capabilities = 0;
     uint32_t js_stack_size;
     uint32_t max_inflight;
     uint32_t initial_window;

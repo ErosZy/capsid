@@ -47,13 +47,15 @@ public:
                 uint32_t flags,
                 uint64_t request_id,
                 const uint8_t *payload,
-                size_t payload_size) {
+                size_t payload_size,
+                uint16_t version = capsid::protocol::kVersion) {
         if (payload_size > capsid::protocol::kMaxPayloadSize) {
             return false;
         }
         compact_if_needed();
-        return capsid::protocol::append_encoded(
-            type, flags, request_id, payload, payload_size, &storage_);
+        return capsid::protocol::append_encoded_versioned(
+            version, type, flags, request_id, payload, payload_size,
+            &storage_);
     }
 
     // Sends whole frames, one frame at a time; stops on a stall, a

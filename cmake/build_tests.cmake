@@ -1546,6 +1546,22 @@ if(BUILD_TESTING)
             endif()
 
             find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
+            add_executable(
+                test-worker-v4-negotiation
+                tests/test_worker_v4_negotiation.cc)
+            target_include_directories(
+                test-worker-v4-negotiation PRIVATE include src
+                "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-worker-v4-negotiation PRIVATE capsid_runtime)
+            add_test(
+                NAME worker_v4_negotiation
+                COMMAND test-worker-v4-negotiation
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                worker_v4_negotiation PROPERTIES
+                LABELS "worker;protocol"
+                TIMEOUT 30)
             add_test(
                 NAME host_ws_upgrade_gates
                 COMMAND "${CAPSID_HOST_TEST_NODE}"

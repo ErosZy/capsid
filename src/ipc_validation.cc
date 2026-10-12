@@ -663,6 +663,8 @@ bool decode_hello(const capsid::protocol::Frame &frame,
                   capsid::WorkerStartupConfig *output,
                   std::string *error) {
     if (!output || frame.type != capsid::protocol::kHello ||
+        (frame.version != capsid::protocol::kVersion &&
+         frame.version != capsid::protocol::kVersionV4) ||
         frame.flags != 0 || frame.request_id != 0 ||
         frame.payload.size() <
             capsid::protocol::kHelloLegacyFixedPayloadSize ||
@@ -755,6 +757,20 @@ bool decode_hello(const capsid::protocol::Frame &frame,
     }
     decoded.legacy_egress_configured =
         legacy_egress_configured != 0;
+    if (frame.version == capsid::protocol::kVersionV4) {
+        // Amended §1.2: the v4 Hello carries the v3 startup payload
+        // plus an 8-byte capability tail.
+        uint32_t capabilities = 0;
+        uint32_t reserved = 0;
+        if (!capsid::protocol::read_u32(&cursor, end, &capabilities) ||
+            !capsid::protocol::read_u32(&cursor, end, &reserved) ||
+            reserved != 0 ||
+            (capabilities & ~capsid::protocol::kCapabilitiesKnownMask) != 0) {
+            return reject(error, "invalid HELLO capabilities");
+        }
+        decoded.protocol_version = capsid::protocol::kVersionV4;
+        decoded.host_capabilities = capabilities;
+    }
     if (cursor != end) {
         return reject(error, "trailing HELLO payload");
     }

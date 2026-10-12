@@ -352,7 +352,28 @@ typedef struct capsid_worker_config {
      */
     int32_t sandbox_network_namespace_fd;
     uint32_t egress_reserved;
+    /*
+     * FetchRPC wire negotiation (additive, guarded by struct_size).
+     * protocol_version defaults to 3 via capsid_worker_config_init;
+     * 4 selects the v4 Hello (startup config + capability tail) and a
+     * v4-pinned frame stream. protocol_capabilities is the host-side
+     * capability bitset (CAPSID_PROTOCOL_CAP_*); unknown bits are
+     * rejected locally at spawn. Reserved fields must be zero. Callers
+     * built against older headers pass a smaller struct_size and get
+     * v3 unchanged.
+     */
+    uint16_t protocol_version;
+    uint16_t protocol_reserved;
+    uint32_t protocol_capabilities;
 } capsid_worker_config;
+
+/*
+ * FetchRPC v4 capability bits (docs/fetchrpc-v4.md §1.2). Effective
+ * capabilities are the conjunction with the worker's READY reply.
+ */
+#define CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL (1u << 0)
+#define CAPSID_PROTOCOL_CAP_UPGRADE (1u << 1)
+#define CAPSID_PROTOCOL_CAP_HALF_CLOSE (1u << 2)
 
 typedef struct capsid_bytes {
     const uint8_t *data;

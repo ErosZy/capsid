@@ -853,6 +853,10 @@ public:
     }
 
     int run() {
+        // FetchRPC bootstrap (amended §1.2): the first frame on the wire
+        // - the host HELLO - locks this connection's protocol version.
+        parser_ = capsid::protocol::Parser(
+            capsid::protocol::kVersionNegotiate);
         if (!read_startup(false)) {
             return 1;
         }
@@ -1098,6 +1102,15 @@ public:
             sandbox_landlock_abi,
             sandbox_namespace_identity,
             capsid::compute_binding_profile_digest(bindings_));
+        if (config_.protocol_version ==
+            capsid::protocol::kVersionV4) {
+            // Amended §1.2: v4 READY answers the worker's capability
+            // bitset. The vertical slice ships negotiation first, so the
+            // worker announces carriage only (zero feature bits); the
+            // channel and upgrade bits land with their implementations.
+            capsid::protocol::append_u32(&ready_payload, 0);
+            capsid::protocol::append_u32(&ready_payload, 0);
+        }
         send_payload(capsid::protocol::kReady, 0, sandbox_features,
                      ready_payload.data(), ready_payload.size());
         flush_output();
@@ -7410,7 +7423,8 @@ private:
                     0,
                     id,
                     &pending.data[pending.offset],
-                    chunk_size)) {
+                    chunk_size,
+                    config_.protocol_version)) {
                 return false;
             }
             pending.offset += chunk_size;
@@ -7694,7 +7708,9 @@ private:
             frame.flags,
             frame.request_id,
             frame.payload.empty() ? NULL : &frame.payload[0],
-            frame.payload.size());
+            frame.payload.size(),
+            frame.version != 0 ? frame.version
+                               : config_.protocol_version);
     }
 
     // Fast path: writes as many bytes as credit and wire capacity allow,
@@ -7733,7 +7749,8 @@ private:
                     0,
                     request_id,
                     payload + sent,
-                    chunk_size)) {
+                    chunk_size,
+                    config_.protocol_version)) {
                 return EnqueueResult::kFatal;
             }
             sent += chunk_size;
@@ -7771,7 +7788,9 @@ private:
                             uint32_t flags,
                             uint64_t request_id,
                             const uint8_t *payload,
-                            size_t payload_size) {
+                            size_t payload_size,
+                            uint16_t version =
+                                capsid::protocol::kVersion) {
         if (payload_size > capsid::protocol::kMaxPayloadSize) {
             return false;
         }
@@ -7780,7 +7799,8 @@ private:
         if (!has_output_capacity(wire_size)) {
             return false;
         }
-        if (!outbound_.append(type, flags, request_id, payload, payload_size)) {
+        if (!outbound_.append(
+                type, flags, request_id, payload, payload_size, version)) {
             return false;
         }
         update_poll();
