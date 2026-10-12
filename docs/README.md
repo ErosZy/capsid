@@ -32,6 +32,11 @@ Capsid documentation is organized around selection → integration → configura
 - Test gate: [testing.md](testing.md)
 - Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
 
+**审校**
+
+- AI 审计简报（v0.2.2 后两阶段总结）:
+  [ai-review-brief-v0.2.2-to-v0.3.0.md](ai-review-brief-v0.2.2-to-v0.3.0.md)
+
 **v0.3.0 (FetchRPC v4 / WebSocket foundation)**
 
 - Milestone plan:
