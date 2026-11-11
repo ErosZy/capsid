@@ -75,6 +75,9 @@ export const mutationHandlerCase = name => {
 // Only isolated generated programs receive the scope transformation. The
 // ordinary runner has no environment/CLI switch that can omit its inventory.
 export function prepareMutationRunner(source, name = 'baseline') {
+    // Windows Git checkouts may use CRLF. Normalize only the isolated
+    // generated program; fixture/source identities still hash original bytes.
+    source = source.replace(/\r\n/g, '\n');
     const selected = mutationHandlerCase(name);
     if (typeof selected === 'string') {
         const imported = 'import { observeHandlerErrors }';

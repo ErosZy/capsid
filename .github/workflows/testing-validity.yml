@@ -54,9 +54,9 @@ jobs:
       - name: Install build dependencies
         run: |
           set -euo pipefail
-          # Use the official archive directly when the runner's first mirror
-          # cannot resolve. Preserve suites, components and Signed-By settings.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          # Hosted probes verified this Ubuntu mirror while the ubuntu.com
+          # domains failed DNS. Preserve suites, components and Signed-By.
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
           sudo apt-get "${apt_network[@]}" update --error-on=any
           sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv
@@ -367,7 +367,7 @@ jobs:
         run: |
           set -euo pipefail
           # Match the Release dependency transport and reject stale indexes.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
           sudo apt-get "${apt_network[@]}" update --error-on=any
           # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
@@ -611,7 +611,7 @@ jobs:
 
       - name: Install Clang and Ninja
         run: |
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
           sudo apt-get "${apt_network[@]}" update --error-on=any
           sudo apt-get "${apt_network[@]}" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev

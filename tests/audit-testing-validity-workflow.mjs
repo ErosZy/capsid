@@ -233,11 +233,11 @@ for (const [jobName, installName] of [
 ]) {
   const job = workflow.split(`  ${jobName}:`)[1]?.split(/\n  [a-z][a-z-]+:\r?\n/)[0];
   const install = nativeProviderStep(job, installName);
-  const source = "sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources";
+  const source = "sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources";
   const network = 'apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)';
   const update = 'sudo apt-get "${apt_network[@]}" update --error-on=any';
   const packages = 'sudo apt-get "${apt_network[@]}" install -y ';
-  assert.ok(install.includes(source), `${jobName} uses the official Ubuntu archive without changing verification settings`);
+  assert.ok(install.includes(source), `${jobName} uses the observed reachable Ubuntu mirror without changing verification settings`);
   assert.ok(install.includes(network), `${jobName} bounds dependency network retries and timeouts`);
   assert.ok(install.includes(update), `${jobName} rejects incomplete apt indexes`);
   assert.ok(install.includes(packages), `${jobName} applies network bounds to package downloads`);

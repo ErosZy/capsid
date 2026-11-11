@@ -10,7 +10,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {validateInteropReport,compareInteropReports} from '../tools/workerd-interop-contract.mjs';
-import {prepareMutationRunner} from '../tools/workerd-mutation-contract.mjs';
+import {prepareMutationRunner, requiredMutationCases} from '../tools/workerd-mutation-contract.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const sample=()=>JSON.parse(fs.readFileSync(path.join(root,'tests/fixtures/websocket-interop-report.json'),'utf8')).report;
@@ -18,6 +18,25 @@ const expected=r=>({runId:r.runId,lock:structuredClone(r.referenceLock),clientLo
     inputs:structuredClone(r.inputs),host:'a'.repeat(64),worker:'b'.repeat(64)});
 const execute=promisify(execFile);
 const python=process.env.CAPSID_WS_INTEROP_PYTHON??'python3';
+
+test('mutation source line endings preserve every independent fault scope',()=>{
+    const source=fs.readFileSync(path.join(root,'tests/test_workerd_ws_fixtures.mjs'),'utf8').replace(/\r\n/g,'\n');
+    const crlf=source.replace(/\n/g,'\r\n');
+    assert.notEqual(source,crlf,'the CRLF control must change actual input bytes');
+    for(const {name} of requiredMutationCases)
+        assert.equal(prepareMutationRunner(crlf,name),prepareMutationRunner(source,name),name+' has the same generated program');
+});
+
+test('mutation handler block validation remains strict for both line endings',()=>{
+    const source=fs.readFileSync(path.join(root,'tests/test_workerd_ws_fixtures.mjs'),'utf8').replace(/\r\n/g,'\n');
+    const block='observation.handlerErrors = await observeHandlerErrors(port, routePrefix, assert);\n        assertHandlerErrorDiagnostics(observation.handlerErrors, server.stderr(), assert);';
+    assert.equal(source.split(block).length,2);
+    for(const eol of ['\n','\r\n']) {
+        const serialize=value=>value.replace(/\n/g,eol);
+        assert.throws(()=>prepareMutationRunner(serialize(source.replace(block,'')),'wire-code'),/single complete handler block/);
+        assert.throws(()=>prepareMutationRunner(serialize(source.replace(block,block+'\n'+block)),'wire-code'),/single complete handler block/);
+    }
+});
 
 test('required gate executes the independent-client matrix on all four backends',()=>{
     assert.deepEqual(requiredTests.filter(name=>name.startsWith('websocket_interop_')).sort(),[

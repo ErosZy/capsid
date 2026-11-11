@@ -227,7 +227,7 @@ for (const job of ['release-wpt-and-delegated-sandbox', 'sanitizers']) {
 }
 for (const job of ['release-wpt-and-delegated-sandbox', 'sanitizers', 'fuzz']) {
     for (const [name, before, after, diagnostic] of [
-        ['official archive', 'https://archive.ubuntu.com/ubuntu/', 'http://azure.archive.ubuntu.com/ubuntu/', 'uses the official Ubuntu archive without changing verification settings'],
+        ['observed reachable mirror', 'https://mirrors.edge.kernel.org/ubuntu/', 'http://azure.archive.ubuntu.com/ubuntu/', 'uses the observed reachable Ubuntu mirror without changing verification settings'],
         ['bounded retries', 'Acquire::Retries=3', 'Acquire::Retries=300', 'bounds dependency network retries and timeouts'],
         ['index failure propagation', 'update --error-on=any', 'update', 'rejects incomplete apt indexes'],
         ['package network bounds', 'sudo apt-get "${apt_network[@]}" install -y ', 'sudo apt-get install -y ', 'applies network bounds to package downloads'],

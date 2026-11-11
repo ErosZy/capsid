@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <type_traits>
 #include <vector>
 
 namespace {
@@ -11,6 +12,27 @@ void require(bool condition, const char *message) {
         std::cerr << "FAIL: " << message << std::endl;
         std::exit(1);
     }
+}
+
+void test_default_frame_is_empty() {
+    // Debug STL may allocate bookkeeping. Construction must allow that
+    // failure to propagate to the existing C ABI exception guards.
+    static_assert(!std::is_nothrow_default_constructible<capsid::protocol::Frame>::value,
+                  "frame construction must preserve throwable allocation");
+    capsid::protocol::Frame frame;
+    capsid::protocol::Frame value_initialized{};
+    require(frame.payload.empty() && value_initialized.payload.empty(),
+            "both default construction forms produce an empty payload");
+    require(frame.type == 0 && frame.flags == 0 && frame.request_id == 0 && frame.version == 0,
+            "default metadata starts at zero");
+    frame.type = capsid::protocol::kShutdown;
+    std::vector<uint8_t> wire;
+    require(capsid::protocol::encode(frame, &wire), "empty frame encodes");
+    require(wire.size() == capsid::protocol::kHeaderSize, "empty frame adds no payload byte");
+    capsid::protocol::Parser parser;
+    require(parser.append(wire.data(), wire.size()), "empty frame buffers");
+    require(parser.next(&value_initialized) == capsid::protocol::kParseFrame &&
+            value_initialized.payload.empty(), "empty frame parses without a phantom byte");
 }
 
 void test_round_trip_one_byte_at_a_time() {
@@ -393,6 +415,7 @@ void test_connection_lifetime_wire() {
 }  // namespace
 
 int main() {
+    test_default_frame_is_empty();
     test_round_trip_one_byte_at_a_time();
     test_rejects_bad_magic();
     test_rejects_oversized_payload_before_allocation();
