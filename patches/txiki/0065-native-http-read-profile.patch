@@ -10,3 +10,55 @@ diff --git a/src/lws-utils.c b/src/lws-utils.c
      info.max_http_header_data2 = 16384;
  
      /* Use the existing libuv event loop via our own event lib. */
+
+diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/deps/libwebsockets/lib/roles/http/client/client-http.c
+--- a/deps/libwebsockets/lib/roles/http/client/client-http.c
++++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
+@@ -41,6 +41,7 @@ lws_http_client_socket_service(struct lws *wsi, struct lws_pollfd *pollfd)
+ 	struct lws_context *context = wsi->a.context;
+ 	struct lws_context_per_thread *pt = &context->pt[(int)wsi->tsi];
+ 	char *p = (char *)&pt->serv_buf[0], *end = p + wsi->a.context->pt_serv_buf_size;
++	char *handshake_buffer = NULL;
+ #if defined(LWS_WITH_TLS)
+ 	char ebuf[128];
+ #endif
+@@ -268,8 +269,22 @@ hs2:
+ #endif
+ 
++		/* The native receive policy uses a 4KiB service buffer. Request
++		 * headers have their own configured budget: serializing a valid
++		 * long URI must not truncate it to the receive opportunity size. */
++		if (context->max_http_header_data > context->pt_serv_buf_size) {
++			size_t capacity = context->max_http_header_data;
++			handshake_buffer = lws_malloc(capacity, "client request headers");
++			if (!handshake_buffer) {
++				lws_close_free_wsi(wsi, LWS_CLOSE_STATUS_NOSTATUS, "chsalloc");
++				return LWS_HPI_RET_WSI_ALREADY_DIED;
++			}
++			p = sb = handshake_buffer;
++			end = p + capacity;
++		}
+ 		p = lws_generate_client_handshake(wsi, p,
+ 						  lws_ptr_diff_size_t(end, p));
+ 		if (p == NULL) {
++			lws_free(handshake_buffer);
+ 			if (wsi->role_ops == &role_ops_raw_skt
+ #if defined(LWS_ROLE_RAW_FILE)
+ 				|| wsi->role_ops == &role_ops_raw_file
+@@ -293,6 +315,7 @@ hs2:
+ 			  (unsigned long)wsi->wsistate, wsi->desc.sockfd);
+ 
+ 		n = lws_ssl_capable_write(wsi, (unsigned char *)sb, lws_ptr_diff_size_t(p, sb));
++		lws_free(handshake_buffer);
+ 		switch (n) {
+ 		case LWS_SSL_CAPABLE_ERROR:
+ 			lwsl_debug("ERROR writing to client socket\n");
+@@ -2141,7 +2164,7 @@ lws_generate_client_handshake(struct lws *wsi, char *pkt, size_t pkt_len)
+ 	if (wsi->a.protocol->callback(wsi,
+ 			LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER,
+ 			wsi->user_space, &p,
+-			(unsigned int)((pkt + wsi->a.context->pt_serv_buf_size) - p - 12)))
++			(unsigned int)((pkt + pkt_len) - p - 12)))
+ 		return NULL;
+ 
+ 	if (wsi->flags & LCCSCF_HTTP_X_WWW_FORM_URLENCODED) {

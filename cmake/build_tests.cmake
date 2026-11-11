@@ -1947,6 +1947,13 @@ if(BUILD_TESTING)
             # Workerd supplies the unrestricted native state; Capsid's decoded
             # quota extension has an independent policy and byte/backing model.
             add_executable(test-native-fetch-response-limits tests/test_native_fetch_response_limits.cc)
+            add_test(NAME native_fetch_request_targets
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_request_targets.mjs"
+                    --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                    --worker $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(native_fetch_request_targets PROPERTIES
+                TIMEOUT 120 LABELS "worker;fetch;compatibility;uri")
             target_include_directories(test-native-fetch-response-limits PRIVATE include src)
             target_link_libraries(test-native-fetch-response-limits PRIVATE capsid_runtime)
             add_dependencies(test-native-fetch-response-limits capsid-worker)

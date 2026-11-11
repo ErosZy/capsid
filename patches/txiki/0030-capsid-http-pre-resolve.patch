@@ -329,19 +329,30 @@ index 9c566c6..44a1ff0 100644
      JSContext *ctx = h->ctx;
  
      lws_parse_uri_t *uri = lws_parse_uri_create(h->url_str);
-@@ -850,50 +1131,32 @@ static int tjs_httpclient_connect(TJSHttpClient *h) {
+@@ -850,50 +1131,41 @@ static int tjs_httpclient_connect(TJSHttpClient *h) {
      }
  #endif
  
 +    /* The parse result is transient; copy what the resolution phase and
 +     * the connection still need (the path keeps its leading '/'). */
-     char full_path[TJS_PATH_MAX];
-     snprintf(full_path, sizeof(full_path), "/%s", uri->path);
+-    char full_path[TJS_PATH_MAX];
+-    snprintf(full_path, sizeof(full_path), "/%s", uri->path);
 -
 -    struct lws_context *lws_ctx = tjs__lws_get_context(ctx);
 -    if (!lws_ctx) {
 +    h->connect_host = js_strdup(ctx, uri->host);
-+    h->connect_path = js_strdup(ctx, full_path);
++    /* HTTP request targets are not filesystem paths. Copy the complete
++     * parsed path and query instead of silently clipping at PATH_MAX. */
++    const size_t path_length = strlen(uri->path);
++    if (path_length > SIZE_MAX - 2) {
++        lws_parse_uri_destroy(&uri);
++        return -1;
++    }
++    h->connect_path = js_malloc(ctx, path_length + 2);
++    if (h->connect_path) {
++        h->connect_path[0] = '/';
++        memcpy(h->connect_path + 1, uri->path, path_length + 1);
++    }
 +    h->connect_port = uri->port;
 +    h->connect_ssl = use_ssl;
 +    if (!h->connect_host || !h->connect_path) {
