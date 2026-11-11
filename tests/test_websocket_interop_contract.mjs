@@ -11,6 +11,8 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {validateInteropReport,compareInteropReports} from '../tools/workerd-interop-contract.mjs';
 import {prepareMutationRunner, requiredMutationCases} from '../tools/workerd-mutation-contract.mjs';
+import {referencePlatform, referenceArchitecture, referenceBackendModes, referenceLockName} from '../tools/workerd-platform.mjs';
+import {readLock, verifyBinary} from '../tools/workerd-reference.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const sample=()=>JSON.parse(fs.readFileSync(path.join(root,'tests/fixtures/websocket-interop-report.json'),'utf8')).report;
@@ -18,6 +20,40 @@ const expected=r=>({runId:r.runId,lock:structuredClone(r.referenceLock),clientLo
     inputs:structuredClone(r.inputs),host:'a'.repeat(64),worker:'b'.repeat(64)});
 const execute=promisify(execFile);
 const python=process.env.CAPSID_WS_INTEROP_PYTHON??'python3';
+
+for (const [platform,arch,asset,filename,binaryHash,assetHash] of [
+    ['linux','x64','workerd-linux-64.gz','reference-lock.json',
+        '50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd','a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530'],
+    ['win32','x64','workerd-windows-64.gz','reference-lock-windows.json',
+        'c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a','8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82'],
+    ['darwin','x64','workerd-darwin-64.gz','reference-lock-darwin-x64.json',
+        '9be36f0b9e867ffe081415beebf075f8fd2d5c27bc0a9e239ded1375bd09f27f','77df22f80e26e34e4159b8869317001cdd6ea3ec2516476ba50d7b34eef74b6a'],
+    ['darwin','arm64','workerd-darwin-arm64.gz','reference-lock-darwin-arm64.json',
+        '2995714d79e9af6a0810eb7705a1f994b8ed977a266cb8976662027107761401','5b2b304b2d59b1f870b2115a1ffbfdd4d1729f8e671704ed8732166a21c7583b'],
+]) test(`${platform}/${arch} binds the fixed source profile and native asset`,()=>{
+    assert.equal(referenceLockName(platform,arch),filename);
+    const lock=readLock(path.join(root,'tests/fixtures/workerd-ws',filename));
+    const linux=readLock(path.join(root,'tests/fixtures/workerd-ws/reference-lock.json'));
+    assert.equal(lock.release_asset,asset);
+    assert.equal(lock.binary_sha256,binaryHash,'reviewed official executable bytes');
+    assert.equal(lock.release_asset_sha256,assetHash,'reviewed official compressed asset');
+    assert.equal(referencePlatform(lock),platform);
+    assert.equal(referenceArchitecture(lock),arch);
+    assert.deepEqual(referenceBackendModes(lock),platform==='linux'?['single-worker','static-pool','managed']:['single-worker','static-pool']);
+    for(const field of ['source_commit','release_tag','binary_version_string','compatibility_date','compatibility_flags','client'])
+        assert.deepEqual(lock[field],linux[field],'same fixed source profile '+field);
+    if(platform!==process.platform)
+        assert.throws(()=>verifyBinary('must-not-be-opened',lock),/locked workerd executable platform/);
+    else if(arch!==process.arch)
+        assert.throws(()=>verifyBinary('must-not-be-opened',lock),/locked workerd executable architecture/);
+});
+
+test('unsupported reference assets cannot borrow a supported platform or architecture',()=>{
+    for(const asset of ['workerd-darwin-ppc.gz','workerd-linux-arm64.gz','workerd-darwin-64.gz.extra']) {
+        assert.throws(()=>referencePlatform({release_asset:asset}),/unsupported locked workerd platform asset/);
+        assert.throws(()=>referenceArchitecture({release_asset:asset}),/unsupported locked workerd platform asset/);
+    }
+});
 
 test('mutation source line endings preserve every independent fault scope',()=>{
     const source=fs.readFileSync(path.join(root,'tests/test_workerd_ws_fixtures.mjs'),'utf8').replace(/\r\n/g,'\n');

@@ -1,0 +1,20 @@
+{
+  "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+  "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+  "release_tag": "v1.20261010.1",
+  "binary": "workerd-darwin-arm64",
+  "binary_sha256": "2995714d79e9af6a0810eb7705a1f994b8ed977a266cb8976662027107761401",
+  "binary_version_string": "workerd 2026-10-10",
+  "compatibility_date": "2026-08-20",
+  "compatibility_flags": [],
+  "client": {
+    "runtime": "node",
+    "websocket": "native (undici) - no external dependency",
+    "node_version": "v24.14.0",
+    "undici_version": "7.21.0"
+  },
+  "notes": "Official Darwin arm64 executable from the same pinned source release and compatibility profile. Compressed bytes match official release metadata; decompressed SHA256 and Mach-O CPU type are independently verified. Native execution is required by the macOS qualification job.",
+  "release_asset": "workerd-darwin-arm64.gz",
+  "release_asset_sha256": "5b2b304b2d59b1f870b2115a1ffbfdd4d1729f8e671704ed8732166a21c7583b",
+  "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+}

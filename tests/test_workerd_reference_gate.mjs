@@ -7,7 +7,7 @@ import { gzipSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { compareReports, deviations, readLock, installReference, verifyBinary, root, fixtureIdentities } from '../tools/workerd-reference.mjs';
 import { validateGateRun, requiredTestsFor } from '../tools/run-workerd-ws-gate.mjs';
-import {referencePlatform, referenceBackendModes} from '../tools/workerd-platform.mjs';
+import {referencePlatform, referenceBackendModes, referenceLockName} from '../tools/workerd-platform.mjs';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { serialize, deserialize } from 'node:v8';
@@ -339,7 +339,8 @@ test('deleting a fixture file cannot shrink the required manifest', () => {
 });
 
 test('installer rejects wrong compressed digest and never installs it',
-    { skip: !['linux', 'win32'].includes(process.platform) || process.arch !== 'x64' }, async () => {
+    { skip: !['linux', 'win32', 'darwin'].includes(process.platform) ||
+        !['x64', ...(process.platform === 'darwin' ? ['arm64'] : [])].includes(process.arch) }, async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-workerd-lock-'));
     try {
         const asset = path.join(dir, 'asset.gz'), output = path.join(dir, 'workerd');
@@ -824,7 +825,8 @@ test('native asset locks bind the same source profile and distinct official exec
     assert.deepEqual(referenceBackendModes(windows), ['single-worker', 'static-pool']);
     assert.equal(windows.binary_sha256, 'c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a');
     assert.equal(windows.release_asset_sha256, '8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82');
-    assert.equal(readLock().release_asset, process.platform === 'win32' ? 'workerd-windows-64.gz' : 'workerd-linux-64.gz');
+    const selected = readLock(new URL('./fixtures/workerd-ws/' + referenceLockName(process.platform, process.arch), import.meta.url));
+    assert.equal(readLock().release_asset, selected.release_asset);
 });
 
 test('foreign platform binaries are rejected before execution', () => {

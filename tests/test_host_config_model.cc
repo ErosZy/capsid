@@ -720,7 +720,8 @@ void test_ipv6_fetch_authorities_reach_the_host_policy() {
                 "IPv6 Host fetch authority gained or lost ports");
     }
     for (const auto& authority : std::vector<std::string>{
-            "[::1]:", "[::1]:443,", "[::1]:65536", "[::1]extra:443", "[fe80::1%1]:443", "::1"}) {
+            "[::1]:", "[::1]:443,", "[::1]:65536", "[::1]extra:443", "[fe80::1%1]:443",
+            "[fe80::1%lo0]:443", "[fe80::1%25lo0]:443", "[::ffff:127.0.0.1%1]:443", "[::1%1]", "::1"}) {
         ParsedHostConfig config;
         std::string error;
         require(!parse_host_config(document(authority), &config, &error),

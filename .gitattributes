@@ -8,5 +8,10 @@
 # so Unix shells can consume it directly.
 /install.sh text eol=lf
 
+# Reference captures bind the exact generated Worker module bytes. Keep
+# these fixtures identical on Windows and POSIX without rewriting hashes.
+/tests/fixtures/*.mjs text eol=lf
+/tests/fixtures/workerd-ws/*.mjs text eol=lf
+
 # Retained benchmark CSV files use the csv module's RFC-style CRLF records.
 /bench/results/**/*.csv -whitespace

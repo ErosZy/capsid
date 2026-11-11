@@ -281,9 +281,18 @@ jobs:
             -e CAPSID_DELEGATED_SANDBOX_CONTAINER=1 \
             -v "${GITHUB_WORKSPACE}:/repo:ro" \
             -v "${GITHUB_WORKSPACE}/build-validity:/build:ro" \
-            --entrypoint /repo/scripts/run-delegated-sandbox-tests.sh \
+            --entrypoint /bin/bash \
             ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 \
-            /build
+            /repo/scripts/run-delegated-sandbox-tests.sh /build
+
+      - name: Archive workerd execution evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -d build-validity/workerd-ws-evidence ]; then
+            tar -czf build-validity/workerd-ws-evidence.tar.gz -C build-validity workerd-ws-evidence
+            sha256sum build-validity/workerd-ws-evidence.tar.gz > build-validity/workerd-ws-evidence.tar.gz.sha256
+          fi
 
       - name: Save hosted Release evidence
         if: always()
@@ -296,7 +305,8 @@ jobs:
             build-validity/ordinary-host-registration.json
             build-validity/ordinary-host-exit-code.txt
             build-validity/workerd-wpt-profile-evidence/
-            build-validity/workerd-ws-evidence/
+            build-validity/workerd-ws-evidence.tar.gz
+            build-validity/workerd-ws-evidence.tar.gz.sha256
             build-validity/bench/build-metadata.json
             build-validity/txiki-upgrade-report.json
             build-validity/txiki-upgrade-report.md
@@ -648,7 +658,7 @@ jobs:
 
   posix-host-library:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 180
 
     steps:
       - name: Check out recursively pinned sources
@@ -665,6 +675,30 @@ jobs:
       # compilation (and miss Linux-only APIs in otherwise POSIX sources).
       - name: Install macOS Host dependencies
         run: brew install boost c-ares openssl@3.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.14.0
+
+      - name: Set up the locked Python WebSocket runtime
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (node24)
+        with:
+          python-version: '3.12.3'
+
+      - name: Install locked independent WebSocket clients
+        run: |
+          set -euo pipefail
+          python3 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
+          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
+          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
+
+      - name: Install and verify locked workerd reference
+        run: |
+          set -euo pipefail
+          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
+          node tools/workerd-reference.mjs install "${reference}"
+          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
 
       # The worker bootstrap bundles via esbuild from the locked txiki.js
       # node_modules; without this the macOS configure fails with
@@ -693,12 +727,16 @@ jobs:
       # (the Release job runs it on Linux).
       - name: Configure macOS host library and worker contracts
         run: |
+          set -euo pipefail
+          node_binary=$(node -p 'process.execPath')
           cmake -S . -B build-macos \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3.5);$(brew --prefix boost)" \
             -DCAPSID_BUILD_HOST=ON \
             -DCAPSID_BUILD_WORKER=ON \
-            -DCAPSID_ENABLE_LTO=ON
+            -DCAPSID_ENABLE_LTO=ON \
+            -DCAPSID_HOST_TEST_NODE="${node_binary}" \
+            -DCAPSID_NODE_EXECUTABLE="${node_binary}"
 
       - name: Build macOS Host, Admin transport, and unit gates
         run: |
@@ -725,7 +763,10 @@ jobs:
         with:
           name: macos-host-library-evidence
           if-no-files-found: error
-          path: build-macos/macos-junit.xml
+          path: |
+            build-macos/macos-junit.xml
+            build-macos/Testing/Temporary/LastTest.log
+            build-macos/CMakeCache.txt
 
   windows-host-library:
     runs-on: windows-latest

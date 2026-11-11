@@ -103,7 +103,7 @@ for (const fragment of requiredFragments) {
     `testing-validity workflow lost required gate: ${fragment}`,
   );
 }
-for(const jobName of ['release-wpt-and-delegated-sandbox','sanitizers']) {
+for(const jobName of ['release-wpt-and-delegated-sandbox','sanitizers','posix-host-library']) {
   const job=workflow.split(`  ${jobName}:`)[1]?.split(/\n  [a-z][a-z-]+:\r?\n/)[0];
   assert.ok(job,`required job ${jobName}`);
   for(const fragment of ['tools/setup-ws-interop-python.py','CAPSID_WS_INTEROP_PYTHON',
@@ -220,12 +220,52 @@ for (const [job, configureName, installName] of [
   assert.ok(install.includes(' openssl ') && install.includes('/usr/bin/openssl version'),
     'native certificate fixture CLI is installed and probed');
 }
-for (const jobName of ['sanitizers', 'windows-host-library']) {
+for (const jobName of ['sanitizers', 'windows-host-library', 'posix-host-library']) {
   const job = workflow.split(`  ${jobName}:`)[1]?.split(/\n  [a-z][a-z-]+:\r?\n/)[0];
   const budgets = [...job.matchAll(/^    timeout-minutes: (\d+)\r?$/gm)].map(match => Number(match[1]));
   assert.ok(budgets.length === 1 && budgets[0] >= 180 && budgets[0] <= 360,
     `${jobName} has a bounded job budget sufficient for the measured complete matrix and builds`);
 }
+const posixJob = workflow.split('  posix-host-library:')[1]?.split(/\n  [a-z][a-z-]+:\r?\n/)[0];
+function posixStep(name) {
+  const step = posixJob?.split(`      - name: ${name}`)[1]?.split(/\r?\n      - name:/)[0];
+  assert.ok(step, `macOS requires step: ${name}`);
+  assert.doesNotMatch(step, /^        (?:if:|continue-on-error:)|\|\|\s*(?:true|:|exit\s+0)|set\s+\+e/m,
+    `macOS cannot skip or ignore ${name}`);
+  return step.split(/\r?\n/).filter(line => !/^\s*#/.test(line)).map(line => line.trim()).join('\n');
+}
+const macNode=posixStep('Set up Node.js'),macPython=posixStep('Set up the locked Python WebSocket runtime');
+assert.ok(macNode.includes('uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020') &&
+  [...macNode.matchAll(/^node-version: (.+)$/gm)].map(x=>x[1]).join(',')==='24.14.0',
+  'macOS uses the locked Node runtime');
+assert.ok(macPython.includes('uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c') &&
+  [...macPython.matchAll(/^python-version: (.+)$/gm)].map(x=>x[1]).join(',')==="'3.12.3'",
+  'macOS uses the locked independent Python runtime');
+for(const name of ['Set up Node.js','Set up the locked Python WebSocket runtime'])
+  assert.ok(posixJob.indexOf('      - name: '+name)>posixJob.indexOf('      - name: Install macOS Host dependencies'),
+    'macOS runtime setup follows Homebrew dependency changes');
+const macClients=posixStep('Install locked independent WebSocket clients');
+assert.ok(macClients.includes('python3 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"') &&
+  macClients.includes('"${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"') &&
+  macClients.includes('"${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"'),
+  'macOS installs and exports the locked independent clients');
+const macReference=posixStep('Install and verify locked workerd reference');
+assert.ok(macReference.includes('node tools/workerd-reference.mjs install "${reference}"') &&
+  macReference.includes('"${reference}" >> "${GITHUB_ENV}"'), 'macOS installs and exports the verified native reference');
+const macConfigure=posixStep('Configure macOS host library and worker contracts');
+assert.ok(macConfigure.includes("node_binary=$(node -p 'process.execPath')") &&
+  macConfigure.includes('-DCAPSID_HOST_TEST_NODE="${node_binary}"') &&
+  macConfigure.includes('-DCAPSID_NODE_EXECUTABLE="${node_binary}"'),
+  'macOS CTest commands bind the canonical locked Node executable');
+assert.ok(posixJob.indexOf('      - name: Install locked independent WebSocket clients')>
+  posixJob.indexOf('      - name: Set up the locked Python WebSocket runtime') &&
+  posixJob.indexOf('      - name: Install locked independent WebSocket clients')>
+  posixJob.indexOf('      - name: Set up Node.js'), 'macOS installs clients after both locked runtimes');
+const macUpload=posixJob?.split('      - name: Save macOS evidence')[1];
+assert.match(macUpload, /^        if: always\(\)\s*$/m, 'macOS evidence uploads after failure');
+assert.match(macUpload, /^          if-no-files-found: error\s*$/m, 'macOS missing evidence fails the upload');
+for(const path of ['macos-junit.xml','Testing/Temporary/LastTest.log','CMakeCache.txt'])
+  assert.ok(macUpload.includes('            build-macos/'+path), 'macOS evidence upload requires: build-macos/'+path);
 for (const [jobName, installName] of [
   ['release-wpt-and-delegated-sandbox', 'Install build dependencies'],
   ['sanitizers', 'Install build and locked JavaScript dependencies'],
@@ -367,6 +407,23 @@ for (const name of postOrdinarySteps) {
   assert.doesNotMatch(step, /^        continue-on-error:|\|\|\s*(?:true|:|exit\s+0)|set\s+\+e/m,
     `${name} cannot ignore failures`);
 }
+const delegatedStep=releaseJob.split('      - name: Require delegated cgroup v2 and network namespace passes')[1]?.split(/\r?\n      - name:/)[0];
+assert.ok(delegatedStep.includes('--entrypoint /bin/bash \\') &&
+  delegatedStep.includes('/repo/scripts/run-delegated-sandbox-tests.sh /build'),
+  'delegated container invokes the reviewed script through its shell');
+const archiveStep=releaseJob.split('      - name: Archive workerd execution evidence')[1]?.split(/\r?\n      - name:/)[0];
+assert.ok(archiveStep && /^        if: always\(\)\r?$/m.test(archiveStep), 'workerd evidence archive runs after failures');
+assert.doesNotMatch(archiveStep,/^        continue-on-error:/m,'workerd evidence archive cannot ignore failure');
+const archiveBody=archiveStep.split(/run: \|\r?\n/)[1]?.split(/\r?\n/).map(line=>line.trim()).filter(line=>line&&!line.startsWith('#')).join('\n');
+assert.equal(archiveBody, 'set -euo pipefail\nif [ -d build-validity/workerd-ws-evidence ]; then\n'+
+  'tar -czf build-validity/workerd-ws-evidence.tar.gz -C build-validity workerd-ws-evidence\n'+
+  'sha256sum build-validity/workerd-ws-evidence.tar.gz > build-validity/workerd-ws-evidence.tar.gz.sha256\nfi',
+  'workerd evidence archive preserves the complete original directory and digest');
+const releaseUpload=releaseJob.split('      - name: Save hosted Release evidence')[1];
+assert.ok(/^            build-validity\/workerd-ws-evidence\.tar\.gz\r?$/m.test(releaseUpload) &&
+  /^            build-validity\/workerd-ws-evidence\.tar\.gz\.sha256\r?$/m.test(releaseUpload) &&
+  !/^            build-validity\/workerd-ws-evidence\/\r?$/m.test(releaseUpload),
+  'workerd evidence upload uses the lossless archive and digest');
 assert.equal([...releaseJob.matchAll(/^        continue-on-error:/gm)].length,1,
   'no other Release gate can ignore its failure');
 

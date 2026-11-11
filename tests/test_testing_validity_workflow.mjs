@@ -189,7 +189,8 @@ for (const [name, replacement, diagnostic] of [
     windows(source => source.replace(exclusion, () => replacement)), diagnostic);
 
 function nativeJob(name, change) {
-    const next = {'release-wpt-and-delegated-sandbox': 'sanitizers', sanitizers: 'fuzz', fuzz: 'posix-host-library'}[name];
+    const next = {'release-wpt-and-delegated-sandbox': 'sanitizers', sanitizers: 'fuzz', fuzz: 'posix-host-library',
+        'posix-host-library': 'windows-host-library'}[name];
     const start = workflow.indexOf(`  ${name}:\n`), end = workflow.indexOf(`\n  ${next}:\n`, start);
     assert.ok(start > 0 && end > start);
     const before = workflow.slice(start, end), after = change(before);
@@ -234,13 +235,61 @@ for (const job of ['release-wpt-and-delegated-sandbox', 'sanitizers', 'fuzz']) {
     ]) fault(`${job} requires ${name}`, nativeJob(job, source => source.replace(before, after)), `${job} ${diagnostic}`);
 }
 const rawMemoryHeading='      - name: Record original ASan RSS results\n';
-for (const job of ['sanitizers', 'windows-host-library']) {
+for (const job of ['sanitizers', 'windows-host-library', 'posix-host-library']) {
     const change = source => job === 'windows-host-library' ? windows(source) : nativeJob(job, source);
     for (const [name, minutes] of [['shorter than the measured matrix', 60], ['unbounded', 0], ['excessive', 720]]) {
         fault(`${job} rejects a job budget ${name}`, change(source => source.replace('timeout-minutes: 180', `timeout-minutes: ${minutes}`)),
             `${job} has a bounded job budget sufficient for the measured complete matrix and builds`);
     }
 }
+for(const [name,before,after,diagnostic] of [
+    ['locked Node version','node-version: 24.14.0','node-version: 22.x','macOS uses the locked Node runtime'],
+    ['locked Python version',"python-version: '3.12.3'","python-version: '3.12'",'macOS uses the locked independent Python runtime'],
+    ['client environment','"${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"','"${RUNNER_TEMP}/other" >> "${GITHUB_ENV}"','macOS installs and exports the locked independent clients'],
+    ['client installer','python3 tools/setup-ws-interop-python.py','python3 tools/removed.py','posix-host-library must prepare independent clients/reference: tools/setup-ws-interop-python.py'],
+    ['reference command','node tools/workerd-reference.mjs install','node tools/missing-reference.mjs install','posix-host-library must prepare independent clients/reference'],
+    ['reference environment','"${reference}" >> "${GITHUB_ENV}"','"${reference}" >> /dev/null','macOS installs and exports the verified native reference'],
+    ['canonical Node path',"node_binary=$(node -p 'process.execPath')",'node_binary=$(which node)','macOS CTest commands bind the canonical locked Node executable'],
+    ['Host Node command','-DCAPSID_HOST_TEST_NODE="${node_binary}"','-DCAPSID_HOST_TEST_NODE=node','macOS CTest commands bind the canonical locked Node executable'],
+    ['Worker Node command','-DCAPSID_NODE_EXECUTABLE="${node_binary}"','-DCAPSID_NODE_EXECUTABLE=node','macOS CTest commands bind the canonical locked Node executable'],
+]) fault('macOS requires '+name,nativeJob('posix-host-library',source=>source.replace(before,after)),diagnostic);
+for(const name of ['Set up Node.js','Set up the locked Python WebSocket runtime','Install locked independent WebSocket clients',
+    'Install and verify locked workerd reference','Configure macOS host library and worker contracts']) {
+    const heading='      - name: '+name+'\n';
+    for(const [kind,guard] of [['skip','        if: false\n'],['ignore','        continue-on-error: true\n']])
+        fault('macOS '+name+' cannot '+kind,nativeJob('posix-host-library',source=>source.replace(heading,heading+guard)),
+            'macOS cannot skip or ignore '+name);
+}
+for(const name of ['Set up Node.js','Set up the locked Python WebSocket runtime']) {
+    const changed=nativeJob('posix-host-library',source=>{
+        const start=source.indexOf('      - name: '+name+'\n');
+        const end=source.indexOf('      - name:',start+1);
+        assert.ok(start>0&&end>start);
+        const step=source.slice(start,end);
+        return source.replace(step,'').replace('      - name: Install macOS Host dependencies\n',
+            step+'      - name: Install macOS Host dependencies\n');
+    });
+    fault('macOS '+name+' cannot precede Homebrew dependency changes',changed,
+        'macOS runtime setup follows Homebrew dependency changes');
+}
+for(const path of ['macos-junit.xml','Testing/Temporary/LastTest.log','CMakeCache.txt'])
+    fault('macOS retains actual evidence '+path,nativeJob('posix-host-library',source=>
+        source.replace('            build-macos/'+path,'            build-macos/missing-evidence')),
+        'macOS evidence upload requires: build-macos/'+path);
+for(const [name,before,after,diagnostic] of [
+    ['upload after failure','name: Save macOS evidence\n        if: always()','name: Save macOS evidence\n        if: success()','macOS evidence uploads after failure'],
+    ['missing evidence failure','if-no-files-found: error','if-no-files-found: ignore','macOS missing evidence fails the upload'],
+]) fault('macOS requires '+name,nativeJob('posix-host-library',source=>source.replace(before,after)),diagnostic);
+for(const [name,before,after,diagnostic] of [
+    ['container script shell','--entrypoint /bin/bash','--entrypoint /repo/scripts/run-delegated-sandbox-tests.sh','delegated container invokes the reviewed script through its shell'],
+    ['container script argument','/repo/scripts/run-delegated-sandbox-tests.sh /build','/repo/other.sh /build','testing-validity workflow lost required gate: scripts/run-delegated-sandbox-tests.sh'],
+    ['archive presence','      - name: Archive workerd execution evidence','      - name: Removed archive','workerd evidence archive runs after failures'],
+    ['archive outcome','if: always()\n        run: |\n          set -euo pipefail\n          if [ -d build-validity/workerd-ws-evidence ]; then','if: success()\n        run: |\n          set -euo pipefail\n          if [ -d build-validity/workerd-ws-evidence ]; then','workerd evidence archive runs after failures'],
+    ['archive directory','-C build-validity workerd-ws-evidence','-C build-validity another-directory','workerd evidence archive preserves the complete original directory and digest'],
+    ['archive digest','sha256sum build-validity/workerd-ws-evidence.tar.gz >','echo stale-digest >','workerd evidence archive preserves the complete original directory and digest'],
+    ['archive upload','            build-validity/workerd-ws-evidence.tar.gz\n','            build-validity/workerd-ws-evidence/\n','workerd evidence upload uses the lossless archive and digest'],
+    ['digest upload','            build-validity/workerd-ws-evidence.tar.gz.sha256\n','','workerd evidence upload uses the lossless archive and digest'],
+]) fault('Release requires '+name,nativeJob('release-wpt-and-delegated-sandbox',source=>source.replace(before,after)),diagnostic);
 const memoryHeading='      - name: Require separate ASan memory acceptance\n';
 const selectedMatrixHeading='      - name: Run ${{ matrix.name }} matrix\n';
 for (const [name,before,after,diagnostic] of [

@@ -738,7 +738,8 @@ void test_ipv6_fetch_authorities_reach_the_app_policy() {
     for (const auto& authority : std::vector<std::string>{
             "", "::1", "[::1", "[localhost]:443", "[::1]extra:443", "[::1]:", "[::1]:0", "[::1]:65536",
             "[::1]:443,", "[::1]:443,,8443", "[::1]: 443", "[::1]:+443", "[::1]:-1",
-            "[fe80::1%1]:443", "[::1/128]:443", "api.example:443,",
+            "[fe80::1%1]:443", "[fe80::1%lo0]:443", "[fe80::1%25lo0]:443",
+            "[::ffff:127.0.0.1%1]:443", "[::1%1]", "[::1/128]:443", "api.example:443,",
             std::string("[::1") + '\0' + "ignored]:443", std::string("api.example") + '\0' + ":443"}) {
         FetchTarget retained{"unchanged.example", {123}};
         require(!parse_fetch_target_text(authority, &retained) && retained.host == "unchanged.example" &&

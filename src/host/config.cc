@@ -827,6 +827,17 @@ bool valid_numeric_host(std::string_view host) {
     return slash == std::string_view::npos || prefix <= 32;
 }
 
+bool parse_ipv6_literal(std::string_view address, in6_addr* parsed) {
+    // Some native parsers accept an interface zone and omit it from the
+    // resulting address. The Host grammar permits only the literal address;
+    // check its alphabet before native validation/canonicalization.
+    if (address.empty() || !std::all_of(address.begin(), address.end(), [](char c) {
+            return c == ':' || c == '.' || (c >= '0' && c <= '9') ||
+                (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        })) return false;
+    return inet_pton(AF_INET6, std::string(address).c_str(), parsed) == 1;
+}
+
 bool valid_bracketed_ipv6(std::string_view host) {
     const std::size_t slash = host.find('/');
     const std::string_view address = host.substr(0, slash);
@@ -843,7 +854,7 @@ bool valid_bracketed_ipv6(std::string_view host) {
         }
     }
     struct in6_addr parsed;
-    return inet_pton(AF_INET6, std::string(address).c_str(), &parsed) == 1;
+    return parse_ipv6_literal(address, &parsed);
 }
 
 bool valid_host_spec(std::string_view host) {
@@ -1592,7 +1603,7 @@ bool parse_fetch_target_text(std::string_view text, FetchTarget* out) {
         const std::string literal(text.substr(1, close - 1));
         in6_addr address;
         char canonical[INET6_ADDRSTRLEN];
-        if (inet_pton(AF_INET6, literal.c_str(), &address) != 1 ||
+        if (!parse_ipv6_literal(literal, &address) ||
             !inet_ntop(AF_INET6, &address, canonical, sizeof(canonical))) return false;
         parsed.host = canonical;
         if (close + 1 < text.size()) {

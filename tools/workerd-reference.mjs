@@ -9,14 +9,14 @@ import { assertResponseObservation } from './workerd-response-contract.mjs';
 import { assertFanoutFixtureObservation } from './workerd-fanout-contract.mjs';
 import { assertHandlerThrowObservation } from './workerd-throw-contract.mjs';
 import { assertHandlerErrorObservations } from './workerd-handler-error-contract.mjs';
-import { referencePlatform, referenceBackendModes } from './workerd-platform.mjs';
+import { referencePlatform, referenceBackendModes, referenceArchitecture, referenceLockName } from './workerd-platform.mjs';
 export { assertHandlerThrowCase } from './workerd-throw-contract.mjs';
 export { assertResponseConstructors, assertResponseObservation } from './workerd-response-contract.mjs';
 export { compareOutboundReports, assertOutboundSuccess } from './workerd-outbound-contract.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const lockPath = path.join(root, 'tests/fixtures/workerd-ws',
-    process.platform === 'win32' ? 'reference-lock-windows.json' : 'reference-lock.json');
+    referenceLockName(process.platform, process.arch));
 export const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 export const fileDigest = file => digest(fs.readFileSync(file));
 
@@ -53,7 +53,7 @@ export function verifyClient(lock) {
 
 export function verifyBinary(binary, lock) {
     assert.equal(process.platform, referencePlatform(lock), 'locked workerd executable platform');
-    assert.equal(process.arch, 'x64', 'locked workerd executable architecture');
+    assert.equal(process.arch, referenceArchitecture(lock), 'locked workerd executable architecture');
     assert.equal(fileDigest(binary), lock.binary_sha256, 'locked workerd executable digest');
     assert.equal(execFileSync(binary, ['--version'], { encoding: 'utf8', timeout: 10000 }).trim(),
         lock.binary_version_string, 'locked workerd version');
@@ -62,7 +62,7 @@ export function verifyBinary(binary, lock) {
 export async function installReference(output, lock, assetFile) {
     verifyClient(lock);
     assert.equal(process.platform, referencePlatform(lock), 'locked workerd platform');
-    assert.equal(process.arch, 'x64', 'locked workerd architecture');
+    assert.equal(process.arch, referenceArchitecture(lock), 'locked workerd architecture');
     if (fs.existsSync(output)) {
         verifyBinary(output, lock);
         return;
