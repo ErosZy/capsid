@@ -384,6 +384,31 @@ for (const fragment of ['cp build-validity/Testing/Temporary/LastTest.log',
   '--acceptance-output "${evidence}/compatibility-acceptance.json"'])
   assert.ok(profileStep.includes(fragment), `profile audit preserves and binds actual evidence: ${fragment}`);
 assert.ok(workflow.includes('            build-validity/workerd-wpt-profile-evidence/'), 'profile evidence is uploaded');
+const upgradeReportStep=releaseJob.split('      - name: Generate txiki.js upgrade gate report')[1]?.split(/\r?\n      - name:/)[0];
+const upgradeReportBody=upgradeReportStep?.split(/        run: \|\r?\n/)[1]?.split(/\r?\n/)
+  .filter(line=>line.trim()&&!/^\s*#/.test(line)).map(line=>line.trim()).join('\n');
+const expectedUpgradeReportBody=[
+  'set -euo pipefail',
+  'evidence=build-validity/workerd-wpt-profile-evidence',
+  'cmp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"',
+  'python3 tools/generate-txiki-upgrade-report.py \\',
+  '--source-root . \\', '--build-dir build-validity \\',
+  '--junit "${evidence}/ordinary-junit.xml" \\',
+  '--baseline docs/txiki-upgrade-baseline.json \\',
+  '--node-executable "$(node -p \'process.execPath\')" \\',
+  '--workerd-python "${CAPSID_WS_INTEROP_PYTHON}" \\',
+  '--workerd-acceptance "${evidence}/compatibility-acceptance.json" \\',
+  '--workerd-last-test "${evidence}/ordinary-LastTest.log" \\',
+  '--workerd-registration build-validity/ordinary-host-registration.json \\',
+  '--workerd-gate build-validity/workerd-ws-evidence \\',
+  '--workerd-context "${evidence}/context/context.json" \\',
+  '--workerd-wpt-root "${RUNNER_TEMP}/wpt" \\',
+  '--workerd-ctest-exit-code "${evidence}/ordinary-exit-code.txt" \\',
+  '--output-json build-validity/txiki-upgrade-report.json \\',
+  '--output-md build-validity/txiki-upgrade-report.md',
+].join('\n');
+assert.equal(upgradeReportBody,expectedUpgradeReportBody,
+  'upgrade report replays complete compatibility evidence and retains the identical raw JUnit');
 
 // The ordinary WPT step keeps its raw failure. All independent downstream
 // checks must still execute after that failure, and must stop on cancellation

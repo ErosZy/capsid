@@ -57,6 +57,11 @@ class ProducerTests(unittest.TestCase):
         self.perf_run = perf_run
         self.temp = tempfile.TemporaryDirectory(prefix="capsid-density-producer-")
         self.repo = Path(self.temp.name)
+        # Only the synthetic fixture's lock path is private. Its existing
+        # overlap test still exercises the real nonblocking file lock.
+        lock_directory = patch.object(perf_run, 'temp_directory', return_value=str(self.repo))
+        lock_directory.start()
+        self.addCleanup(lock_directory.stop)
         self.source = self.repo / "source"
         self.source.mkdir()
         (self.source / "CMakeLists.txt").write_text("project(capsid_runtime VERSION test LANGUAGES C)\n")

@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {root,readLock,fileDigest,fixtureIdentities} from './workerd-reference.mjs';
-import {referencePlatform,referenceBackendModes} from './workerd-platform.mjs';
+import {referencePlatform,referenceArchitecture,referenceBackendModes} from './workerd-platform.mjs';
 import {validateGateRun} from './run-workerd-ws-gate.mjs';
 import {checkWitness,readFullStandardEvidence,assertAuditOutput} from './workerd-wpt-profile.mjs';
 import {messagePortInputPaths,assertMessagePortObservation} from './message-port-order-contract.mjs';
@@ -49,8 +49,11 @@ export function auditV2Metadata(profile,manifest,lock) {
     fields(profile,['schema','id','references','wpt','scheduling','standardsConformanceClaimed','conflicts'],'profile fields');
     assert.equal(profile.schema,'capsid-workerd-wpt-profile-v2');
     assert.equal(profile.id,`CAPSID-WORKERD-${lock.release_tag}-default-v2`);
-    fields(profile.references,['linux','win32'],'both native reference locks');
-    assert.deepEqual(profile.references[referencePlatform(lock)],Object.fromEntries(referenceFields.map(key=>[key,lock[key]])));
+    fields(profile.references,['linux','win32','darwin-x64','darwin-arm64'],'all supported native reference identities');
+    const platform=referencePlatform(lock);
+    const referenceKey=platform==='darwin' ? platform+'-'+referenceArchitecture(lock) : platform;
+    assert.deepEqual(profile.references[referenceKey],Object.fromEntries(referenceFields.map(key=>[key,lock[key]])),
+        'the selected OS and architecture must match its exact locked executable');
     assert.deepEqual(profile.wpt,{profile:manifest.profile,commit:manifest.commit,
         diagnosticMatch:'first-line-exact-with-one-explicit-engine-message-pair',standardFailuresRetained:true});
     assert.equal(profile.scheduling,'locked-workerd-promise-microtasks');

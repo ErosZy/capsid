@@ -18,6 +18,15 @@ SPEC = importlib.util.spec_from_file_location("txiki_upgrade_report", SOURCE)
 report = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(report)
 
+# Independently reviewed names from the versioned five-file reference profile.
+COMPAT_NAMES = [
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+    "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js",
+    "worker_wpt_fetch_api_headers_headers_basic_any_js",
+    "worker_wpt_fetch_api_headers_headers_errors_any_js",
+]
+
 
 class VendorContract(unittest.TestCase):
     def setUp(self):
@@ -199,6 +208,68 @@ class CTestContract(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "required audit"):
             self.evidence()
 
+    def compatible_fixture(self):
+        # This dictionary exercises only report policy. CLI acceptance must
+        # independently replay real captured evidence through the Node tool.
+        wpt = [case for case in self.xml if case.get("name").startswith("worker_wpt_")][:5]
+        for case, name in zip(wpt, COMPAT_NAMES):
+            old = case.get("name")
+            next(t for t in self.catalog["tests"] if t["name"] == old)["name"] = name
+            case.set("name", name);case.set("status", "fail")
+            ET.SubElement(case, "failure", message="synthetic retained standard failure")
+        self.summary();ET.ElementTree(self.xml).write(self.junit, encoding="utf-8", xml_declaration=True)
+        return {"schema": "capsid-workerd-release-replay-v1", "complete": True,
+                "compatibilityQualified": True, "standardsConformanceClaimed": False,
+                "ordinarySuitePassed": False, "privilegedSandboxAndOtherHostedJobsStillMandatory": True,
+                "profile": "CAPSID-WORKERD-v1.20261010.1-default-v2", "registration": copy.deepcopy(self.catalog),
+                "build": str(self.build.resolve()), "junit": str(self.junit.resolve()), "junitSHA256": report.sha256(self.junit),
+                "ordinary": {"selected": len(self.catalog["tests"]), "failed": sorted(COMPAT_NAMES), "skipped": []}}
+
+    def test_explicit_compatible_report_preserves_five_failed_cases(self):
+        compatible = self.compatible_fixture()
+        with patch.object(report, "run", return_value=json.dumps(self.catalog)):
+            value = report.ctest_evidence(self.build, self.junit, compatible)
+        self.assertEqual(sorted(COMPAT_NAMES), value["failed"])
+        self.assertFalse(value["ordinary_suite_passed"])
+        self.assertEqual(len(self.catalog["tests"]) - 5, value["passed"])
+        self.assertNotIn("registration", value["compatibility_evidence"])
+        self.assertEqual(self.catalog, compatible["registration"], "input evidence is read-only")
+
+    def test_compatible_report_rejects_missing_stale_and_false_claims(self):
+        original = self.compatible_fixture()
+        changes = [
+            ("complete", False), ("complete", 1), ("compatibilityQualified", False),
+            ("standardsConformanceClaimed", True), ("ordinarySuitePassed", True),
+            ("privilegedSandboxAndOtherHostedJobsStillMandatory", False), ("schema", "other"),
+            ("profile", "different-version"), ("registration", {"tests": []}),
+            ("junitSHA256", "0" * 64), ("junit", str(self.build / "other.xml")),
+            ("build", str(self.build / "other-build")),
+            ("ordinary", {"selected": len(self.catalog["tests"]), "failed": [], "skipped": []}),
+        ]
+        for key, value in changes:
+            with self.subTest(key=key, value=value):
+                compatible = copy.deepcopy(original);compatible[key] = value
+                with patch.object(report, "run", return_value=json.dumps(self.catalog)):
+                    with self.assertRaises(RuntimeError):
+                        report.ctest_evidence(self.build, self.junit, compatible)
+
+    def test_compatible_report_cannot_add_native_failures_or_omit_standard_failures(self):
+        compatible = self.compatible_fixture();original = copy.deepcopy(self.xml)
+        for kind in ["additional-native", "missing-standard"]:
+            with self.subTest(kind=kind):
+                self.xml = copy.deepcopy(original)
+                if kind == "additional-native":
+                    case = next(c for c in self.xml if c.get("name") == "optional")
+                    case.set("status", "fail");ET.SubElement(case, "failure")
+                else:
+                    case = next(c for c in self.xml if c.get("name") == COMPAT_NAMES[0])
+                    case.remove(case.find("failure"));case.set("status", "run")
+                self.summary();ET.ElementTree(self.xml).write(self.junit, encoding="utf-8", xml_declaration=True)
+                changed = copy.deepcopy(compatible);changed["junitSHA256"] = report.sha256(self.junit)
+                with patch.object(report, "run", return_value=json.dumps(self.catalog)):
+                    with self.assertRaisesRegex(RuntimeError, "exactly the five"):
+                        report.ctest_evidence(self.build, self.junit, changed)
+
 
 class PublicationContract(unittest.TestCase):
     def setUp(self):
@@ -243,6 +314,36 @@ class PublicationContract(unittest.TestCase):
                 patch.object(report, "render_report", return_value="complete parser fixture report"):
             report.main()
         self.assertEqual(json.loads(self.args.output_json.read_text()), value)
+
+    def test_compatible_outputs_cannot_replace_evidence_or_write_inside_gate(self):
+        gate = self.args.source_root / "gate";gate.mkdir()
+        original = gate / "raw.json";original.write_text("preserved raw capture")
+        for kind in ["acceptance", "inside-gate"]:
+            with self.subTest(kind=kind):
+                args = copy.copy(self.args);args.workerd_gate = gate
+                if kind == "acceptance":
+                    args.workerd_acceptance = original;args.output_json = original
+                else:
+                    args.output_md = original
+                with patch.object(report, "parse_args", return_value=args):
+                    with self.assertRaisesRegex(RuntimeError, "distinct"):
+                        report.main()
+                self.assertEqual("preserved raw capture", original.read_text())
+
+    def test_partial_compatible_arguments_cannot_invoke_verifier(self):
+        for mode in ["missing-acceptance", "missing-originals"]:
+            with self.subTest(mode=mode):
+                args = copy.copy(self.args)
+                if mode == "missing-acceptance":
+                    args.workerd_last_test = self.args.source_root / "raw.log"
+                    message = "explicit --workerd-acceptance"
+                else:
+                    args.workerd_acceptance = self.args.source_root / "acceptance.json"
+                    message = "every original workerd evidence input"
+                with patch.object(report, "run") as execute:
+                    with self.assertRaisesRegex(RuntimeError, message):
+                        report.compatible_release_evidence(args, args.source_root, args.build_dir, {})
+                    execute.assert_not_called()
 
 
 if __name__ == "__main__":

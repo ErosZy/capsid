@@ -732,7 +732,10 @@ if(BUILD_TESTING)
                 endforeach()
                 set_tests_properties(
                     host_managed_executable_active_state_foreign_owner
-                    PROPERTIES SKIP_RETURN_CODE 77)
+                    # A normal user cannot chown the persisted fixture. The
+                    # mandatory root sandbox matrix must rerun this case;
+                    # ordinary prerequisite skips alone never prove it passed.
+                    PROPERTIES SKIP_RETURN_CODE 77 LABELS "host;managed;sandbox")
                 # The item-5a crash matrix drives repeated real worker
                 # replacements (SIGKILL + backoff + spawn/READY) and, in
                 # the boot test, a full restart; give the cycles headroom

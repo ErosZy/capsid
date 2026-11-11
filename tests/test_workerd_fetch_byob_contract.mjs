@@ -4,9 +4,28 @@ import {gzipSync,gunzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {readFetchBYOBSample} from './helpers/ws_fetch_byob_sample.mjs';
 import {fetchBYOBCases,fetchBYOBDeferredStandardCases,assertFetchBYOBCase,validateFetchBYOBReport,
-    compareFetchBYOBReports,compareFetchBYOBShardReports,fetchBYOBShardNames,fetchBYOBShardCases} from '../tools/workerd-fetch-byob-contract.mjs';
+    compareFetchBYOBReports,compareFetchBYOBShardReports,fetchBYOBShardNames,fetchBYOBShardCases,parseWorkerdListenPort} from '../tools/workerd-fetch-byob-contract.mjs';
 
 import {backingRangeFilled,patternErrors} from './fixtures/workerd-fetch-byob.mjs';
+test('reference readiness uses the actual bound socket event for LF and CRLF',()=>{
+    for(const end of ['\n','\r\n'])for(const port of [1,38337,64924,65535])
+        assert.equal(parseWorkerdListenPort(JSON.stringify({event:'listen',socket:'http',port})+end),port);
+});
+for(const [name,event] of [
+    ['wrong event',{event:'ready',socket:'http',port:12345}],
+    ['wrong socket',{event:'listen',socket:'other',port:12345}],
+    ['unbound zero',{event:'listen',socket:'http',port:0}],
+    ['negative port',{event:'listen',socket:'http',port:-1}],
+    ['overflow port',{event:'listen',socket:'http',port:65536}],
+    ['fractional port',{event:'listen',socket:'http',port:1.5}],
+    ['string port',{event:'listen',socket:'http',port:'12345'}],
+    ['missing port',{event:'listen',socket:'http'}],
+    ['unknown field',{event:'listen',socket:'http',port:12345,assumedReady:true}],
+    ['array control',[]],['null control',null],
+])test('reject reference listener '+name,()=>assert.throws(()=>parseWorkerdListenPort(JSON.stringify(event))));
+test('reject truncated or malformed reference listener control',()=>{
+    for(const input of ['','{','{"event":"listen"} trailing'])assert.throws(()=>parseWorkerdListenPort(input));
+});
 test('batched backing observer checks every byte including empty and unaligned ranges',t=>{
     let checks=0;
     for(const fill of [0,165])for(let length=0;length<=24;length++)for(let start=0;start<=length;start++)for(let end=start;end<=length;end++){

@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """Inject failure probes into the actual search/coverage controller."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import http.server
+import io
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import threading
+import time
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 ap = argparse.ArgumentParser(add_help=False)
 ap.add_argument("--module", type=Path, default=Path(__file__).resolve().parents[1] / "bench/density_control.py")
@@ -18,7 +23,7 @@ args, remaining = ap.parse_known_args()
 sys.argv[1:] = remaining
 sys.path.insert(0, str(args.module.resolve().parent))
 import density_control as control
-from density_probe import EXPECTED_BODY, instrument_fixture, validated_request
+from density_probe import EXPECTED_BODY, instrument_fixture, validated_request, DensityProbe
 from measurement_runtime import ProbeError
 
 
@@ -131,6 +136,70 @@ class SearchTests(unittest.TestCase):
 
 
 class CoverageTests(unittest.TestCase):
+    def test_clients_connect_before_the_synchronized_request_wave(self):
+        received=[]
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                received.append(self.headers['x-capsid-bench-nonce'])
+                self.send_response(200);self.send_header('Content-Length',str(len(EXPECTED_BODY)))
+                self.end_headers();self.wfile.write(EXPECTED_BODY)
+            def log_message(self,*_):pass
+        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
+        try:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                start=threading.Barrier(5)
+                futures=[executor.submit(validated_request,server.server_port,'wave',start=start) for _ in range(4)]
+                deadline=time.monotonic()+3
+                while start.n_waiting<4 and time.monotonic()<deadline:time.sleep(.001)
+                self.assertEqual(4,start.n_waiting,'all clients connected before release')
+                self.assertEqual([],received,'no HTTP request before the connected-client barrier')
+                start.wait(timeout=2)
+                self.assertTrue(all(future.result(timeout=3)['ok'] for future in futures))
+            self.assertEqual(['wave']*4,received)
+        finally:
+            server.shutdown();thread.join(timeout=2);server.server_close()
+            self.assertFalse(thread.is_alive())
+
+    def test_broken_connected_client_wave_is_a_failure(self):
+        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),http.server.BaseHTTPRequestHandler)
+        thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                start=threading.Barrier(2)
+                future=executor.submit(validated_request,server.server_port,'wave',start=start)
+                deadline=time.monotonic()+3
+                while start.n_waiting<1 and time.monotonic()<deadline:time.sleep(.001)
+                self.assertEqual(1,start.n_waiting);start.abort()
+                with self.assertRaises(ProbeError) as raised:future.result(timeout=3)
+                self.assertEqual('request-failed',raised.exception.code)
+        finally:
+            server.shutdown();thread.join(timeout=2);server.server_close()
+            self.assertFalse(thread.is_alive())
+
+    def test_starved_wave_expands_without_exceeding_configured_concurrency(self):
+        coverage=control.Coverage(8,'wave');pending=[];sequence={};waves=[];lock=threading.Lock()
+        def request(port,nonce,*,start):
+            start.wait(timeout=2)
+            with lock:
+                # A synthetic fast-service scheduler only exposes three
+                # identities at the small wave. The larger connected wave
+                # exposes all eight; no real benchmark is claimed here.
+                worker='w'+str(len(waves)%(3 if start.parties==8 else 8))
+                waves.append(start.parties);sequence[worker]=sequence.get(worker,0)+1
+                pending.append(dict(nonce=nonce,worker=worker,count=sequence[worker]))
+            return dict(port=port,status=200,ok=True,bodySHA256='a'*64)
+        def poll():
+            while pending:coverage.add(pending.pop(0))
+        with tempfile.TemporaryDirectory() as temporary:
+            probe=DensityProbe(host=args.node,worker=args.node,workerd=args.node,apps=temporary,out=temporary,
+                               cpuset='0',parallel=64,coverage_timeout=5)
+            with patch('density_probe.validated_request',side_effect=request):
+                result=probe.cover(SimpleNamespace(alive=lambda:True),SimpleNamespace(coverage=coverage,poll=poll),
+                                   'capsid',[12345],8,1,'wave',io.StringIO())
+        self.assertEqual(24,result['responses_checked']);coverage.verify(1,24)
+        self.assertEqual([8,16],sorted(set(waves)));self.assertLessEqual(max(waves),64)
+
     def test_real_http_wrong_body_and_status_cannot_pass_correctness(self):
         response = [200, EXPECTED_BODY]
         class Handler(http.server.BaseHTTPRequestHandler):

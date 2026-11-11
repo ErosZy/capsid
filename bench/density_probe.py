@@ -10,6 +10,7 @@ import re
 import shutil
 import socket
 import tempfile
+import threading
 import time
 import uuid
 
@@ -70,9 +71,12 @@ def admin_request(path, method, route, body=None, accepted=(200,)):
         connection.close()
 
 
-def validated_request(port, nonce):
+def validated_request(port, nonce, *, start=None):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     try:
+        if start is not None:
+            connection.connect()
+            start.wait(timeout=5)
         connection.request("GET", "/@capsid/orders/bench/json",
                            headers={"Connection": "close", "x-capsid-bench-nonce": nonce})
         response = connection.getresponse()
@@ -82,7 +86,9 @@ def validated_request(port, nonce):
                              status=response.status, actualSHA256=hashlib.sha256(body).hexdigest())
         return {"port": port, "status": response.status, "ok": True,
                 "bodySHA256": hashlib.sha256(body).hexdigest()}
-    except (OSError, http.client.HTTPException) as exc:
+    except (OSError, http.client.HTTPException, threading.BrokenBarrierError) as exc:
+        if start is not None:
+            start.abort()
         raise ProbeError("request-failed", f"density request failed: {exc}") from exc
     finally:
         connection.close()
@@ -160,20 +166,24 @@ class DensityProbe:
     def cover(self, tree, counter, stack, ports, count, target, nonce, output):
         deadline = time.monotonic() + self.coverage_timeout
         responses, maximum = 0, max(64, count * target * 8)
+        batch_limit = min(self.parallel, max(1, count))
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
             while not counter.coverage.complete(target):
+                previous_minimum = (min(counter.coverage.counts.values())
+                                    if len(counter.coverage.counts) == count else 0)
                 if not tree.alive():
                     raise ProbeError("process-exited", "density pool exited during request coverage")
                 if responses >= maximum or time.monotonic() >= deadline:
                     raise ProbeError("coverage-deadline", "per-worker request target was not reached",
                                      responses=responses, observed=counter.coverage.counts)
-                batch = min(self.parallel, max(1, count), maximum - responses)
+                batch = min(batch_limit, maximum - responses)
                 if stack == "workerd":
                     batch = min(batch, count * target - responses)
                     if batch <= 0:
                         raise ProbeError("coverage-incomplete", "workerd cells did not report their validated requests")
                 selected = [ports[(responses + i) % len(ports)] for i in range(batch)]
-                futures = [executor.submit(validated_request, port, nonce) for port in selected]
+                start = threading.Barrier(batch)
+                futures = [executor.submit(validated_request, port, nonce, start=start) for port in selected]
                 for future in futures:
                     response = future.result()
                     responses += 1
@@ -189,6 +199,14 @@ class DensityProbe:
                     if time.monotonic() >= log_deadline:
                         raise ProbeError("coverage-count", "missing per-worker counter records after validated responses")
                     time.sleep(.01)
+                minimum = (min(counter.coverage.counts.values())
+                           if len(counter.coverage.counts) == count else 0)
+                if stack == "capsid" and minimum <= previous_minimum and not counter.coverage.complete(target):
+                    # Equal-load ties favor the lowest slot. A fast response
+                    # can finish before later clients even connect; synchronize
+                    # the connected clients and widen a starved wave, retaining
+                    # the configured concurrency and original request budget.
+                    batch_limit = min(self.parallel, batch_limit * 2)
         counter.coverage.verify(target, responses)
         return {"ok": True, "errors_as_success": False, "responses_checked": responses,
                 "errors": 0, "timeouts": 0, "mismatches": 0}

@@ -47,6 +47,14 @@ export const fetchBYOBInputPaths=Object.freeze({runner:'tests/test_websocket_fet
     upstreamBase:'tests/helpers/ws_fetch_transition_peer.mjs',controlPeer:'tests/helpers/ws_response_client.mjs',
     hostBackend:'tests/helpers/ws_host_backend.mjs',contract:'tools/workerd-fetch-byob-contract.mjs',
     certificateContract:'tools/workerd-fetch-transition-contract.mjs',standardCloseContract:'tools/workerd-standard-close-contract.mjs'});
+export function parseWorkerdListenPort(line,socketName='http') {
+    const event=JSON.parse(line);
+    fields(event,['event','socket','port'],'workerd listener control event');
+    assert.equal(event.event,'listen','workerd listener control event type');
+    assert.equal(event.socket,socketName,'workerd listener control socket');
+    assert.ok(Number.isInteger(event.port)&&event.port>0&&event.port<=65535,'workerd listener bound port');
+    return event.port;
+}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 function fields(value,keys,label){assert.ok(value&&typeof value==='object'&&!Array.isArray(value),label);
     assert.deepEqual(Object.keys(value).sort(),[...keys].sort(),label);}

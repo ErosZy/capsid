@@ -65,6 +65,11 @@ class ProducerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix='capsid-cold-producer-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        # Preserve actual file-lock exclusion inside this synthetic fixture;
+        # other parallel producer suites and real sessions use other paths.
+        lock_directory = patch('perf_run.temp_directory', return_value=str(self.root))
+        lock_directory.start()
+        self.addCleanup(lock_directory.stop)
         self.source = self.root / 'source'
         self.source.mkdir()
         (self.source / 'CMakeLists.txt').write_text('project(capsid_runtime VERSION test LANGUAGES C)\n')

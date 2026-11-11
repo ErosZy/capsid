@@ -291,6 +291,31 @@ for(const [name,before,after,diagnostic] of [
     ['digest upload','            build-validity/workerd-ws-evidence.tar.gz.sha256\n','','workerd evidence upload uses the lossless archive and digest'],
 ]) fault('Release requires '+name,nativeJob('release-wpt-and-delegated-sandbox',source=>source.replace(before,after)),diagnostic);
 const memoryHeading='      - name: Require separate ASan memory acceptance\n';
+function upgradeReport(change) {
+    return nativeJob('release-wpt-and-delegated-sandbox',source=>{
+        const start=source.indexOf('      - name: Generate txiki.js upgrade gate report\n');
+        const end=source.indexOf('      - name:',start+1);
+        assert.ok(start>0&&end>start);
+        const before=source.slice(start,end),after=change(before);
+        assert.notEqual(before,after,'fault changes the actual upgrade report step');
+        return source.slice(0,start)+after+source.slice(end);
+    });
+}
+for(const [name,before,after] of [
+    ['raw-copy comparison','cmp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"','true'],
+    ['same raw JUnit','--junit "${evidence}/ordinary-junit.xml"','--junit build-validity/ordinary-host-junit.xml'],
+    ['accepted artifact','--workerd-acceptance "${evidence}/compatibility-acceptance.json"','--workerd-acceptance "${evidence}/other.json"'],
+    ['raw LastTest','--workerd-last-test "${evidence}/ordinary-LastTest.log"','--workerd-last-test missing.log'],
+    ['complete registration','--workerd-registration build-validity/ordinary-host-registration.json','--workerd-registration missing.json'],
+    ['complete gate','--workerd-gate build-validity/workerd-ws-evidence','--workerd-gate another-gate'],
+    ['complete context','--workerd-context "${evidence}/context/context.json"','--workerd-context missing.json'],
+    ['pinned WPT source','--workerd-wpt-root "${RUNNER_TEMP}/wpt"','--workerd-wpt-root /tmp/other-wpt'],
+    ['actual exit code','--workerd-ctest-exit-code "${evidence}/ordinary-exit-code.txt"','--workerd-ctest-exit-code fabricated.txt'],
+    ['independent Python','--workerd-python "${CAPSID_WS_INTEROP_PYTHON}"','--workerd-python python3'],
+    ['canonical Node','--node-executable "$(node -p \'process.execPath\')"','--node-executable node'],
+    ['explicit compatibility mode','--workerd-acceptance "${evidence}/compatibility-acceptance.json" \\\n',''],
+]) fault('upgrade report requires '+name,upgradeReport(source=>source.replace(before,after)),
+    'upgrade report replays complete compatibility evidence and retains the identical raw JUnit');
 const selectedMatrixHeading='      - name: Run ${{ matrix.name }} matrix\n';
 for (const [name,before,after,diagnostic] of [
  ['raw identity','id: asan_rss_raw','id: removed_raw','stable raw RSS step identity'],

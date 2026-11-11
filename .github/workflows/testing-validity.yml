@@ -264,11 +264,23 @@ jobs:
       - name: Generate txiki.js upgrade gate report
         if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
         run: |
+          set -euo pipefail
+          evidence=build-validity/workerd-wpt-profile-evidence
+          cmp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"
           python3 tools/generate-txiki-upgrade-report.py \
             --source-root . \
             --build-dir build-validity \
-            --junit build-validity/ordinary-host-junit.xml \
+            --junit "${evidence}/ordinary-junit.xml" \
             --baseline docs/txiki-upgrade-baseline.json \
+            --node-executable "$(node -p 'process.execPath')" \
+            --workerd-python "${CAPSID_WS_INTEROP_PYTHON}" \
+            --workerd-acceptance "${evidence}/compatibility-acceptance.json" \
+            --workerd-last-test "${evidence}/ordinary-LastTest.log" \
+            --workerd-registration build-validity/ordinary-host-registration.json \
+            --workerd-gate build-validity/workerd-ws-evidence \
+            --workerd-context "${evidence}/context/context.json" \
+            --workerd-wpt-root "${RUNNER_TEMP}/wpt" \
+            --workerd-ctest-exit-code "${evidence}/ordinary-exit-code.txt" \
             --output-json build-validity/txiki-upgrade-report.json \
             --output-md build-validity/txiki-upgrade-report.md
 

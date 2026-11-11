@@ -16,6 +16,17 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
+WORKERD_PROFILE = "CAPSID-WORKERD-v1.20261010.1-default-v2"
+# An independent, version-bound boundary. A summary cannot add native failures
+# or expand this set of retained standard results.
+WORKERD_STANDARD_FAILURES = {
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+    "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js",
+    "worker_wpt_fetch_api_headers_headers_basic_any_js",
+    "worker_wpt_fetch_api_headers_headers_errors_any_js",
+}
+WORKERD_ARGUMENTS = ("acceptance", "last_test", "registration", "gate", "context", "wpt_root", "ctest_exit_code")
 REQUIRED_AUDIT_TESTS = {
     "txiki_vendor_patch_integrity",
     "txiki_overlay_audit_negative_controls",
@@ -249,6 +260,7 @@ def source_configuration(
 def ctest_evidence(
     build: Path,
     junit_path: Path,
+    compatibility: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     catalog = json.loads(
         run(["ctest", "--test-dir", str(build), "--show-only=json-v1"])
@@ -311,10 +323,31 @@ def ctest_evidence(
         if xml_root.get(key) != str(count):
             raise RuntimeError(f"JUnit summary disagrees with executed cases: {key}")
     unexpected_skips = sorted(set(skipped) - allowed_skips)
-    if failed or unexpected_skips:
+    if unexpected_skips or failed and compatibility is None:
         raise RuntimeError(
             f"full matrix failed={failed}, unexpected_skips={unexpected_skips}"
         )
+    if compatibility is not None:
+        flags = {"complete": True, "compatibilityQualified": True,
+                 "standardsConformanceClaimed": False, "ordinarySuitePassed": False,
+                 "privilegedSandboxAndOtherHostedJobsStillMandatory": True}
+        if (compatibility.get("schema") != "capsid-workerd-release-replay-v1"
+                or compatibility.get("profile") != WORKERD_PROFILE
+                or any(compatibility.get(k) is not v for k, v in flags.items())):
+            raise RuntimeError("complete versioned workerd replay is required")
+        if set(failed) != WORKERD_STANDARD_FAILURES:
+            raise RuntimeError("compatible report retains exactly the five standard failures")
+        if compatibility.get("registration") != catalog:
+            raise RuntimeError("workerd replay and upgrade report must use the same complete catalog")
+        if (compatibility.get("junitSHA256") != sha256(junit_path)
+                or Path(compatibility.get("junit", "")).resolve() != junit_path.resolve()
+                or Path(compatibility.get("build", "")).resolve() != build.resolve()):
+            raise RuntimeError("workerd replay must bind the same actual build and raw JUnit")
+        ordinary = compatibility.get("ordinary", {})
+        if (ordinary.get("selected") != len(cases)
+                or ordinary.get("failed") != sorted(failed)
+                or sorted(ordinary.get("skipped", [])) != sorted(skipped)):
+            raise RuntimeError("workerd replay must retain every actual failed and skipped case")
     missing_audits = sorted(REQUIRED_AUDIT_TESTS - set(passed))
     if missing_audits:
         raise RuntimeError(
@@ -338,7 +371,10 @@ def ctest_evidence(
         "passed_tests": sorted(passed),
         "skipped": sorted(skipped),
         "allowed_environment_skips": sorted(allowed_skips),
-        "failed": [],
+        "failed": sorted(failed),
+        "ordinary_suite_passed": not failed,
+        **({"compatibility_evidence": {k: v for k, v in compatibility.items() if k != "registration"}}
+           if compatibility is not None else {}),
         "wpt_files": len(wpt),
         "required_audit_tests": sorted(REQUIRED_AUDIT_TESTS),
     }
@@ -454,13 +490,17 @@ def render_report(document: dict[str, Any]) -> str:
             "",
             "## 结论",
             "",
-            "门禁通过。vendor、patch、overlay、受限源码与符号、完整测试矩阵、"
-            "合规偏差差异和运行时表面清单已汇总到同一份 JSON 证据。",
+            ("workerd版本兼容验收通过，原始标准矩阵的五项失败仍保留。"
+             "完整参考/context证据已重新核验；privileged矩阵和其他Hosted任务仍须通过。"
+             if tests.get("compatibility_evidence") else
+             "门禁通过。vendor、patch、overlay、受限源码与符号、完整测试矩阵、"
+             "合规偏差差异和运行时表面清单已汇总到同一份 JSON 证据。"),
             "",
             "## 测试",
             "",
             f"- 注册：{tests['registered']}",
             f"- 通过：{tests['passed']}",
+            f"- 原始失败：{len(tests['failed'])}（{', '.join(tests['failed']) or '无'}）",
             f"- 环境型 skip：{len(tests['skipped'])} "
             f"（{', '.join(tests['skipped']) or '无'}）",
             f"- 固定 WPT 文件：{tests['wpt_files']}",
@@ -491,7 +531,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-md", type=Path, required=True)
+    for name in WORKERD_ARGUMENTS:
+        parser.add_argument("--workerd-" + name.replace("_", "-"), type=Path)
+    parser.add_argument("--node-executable", type=Path)
+    parser.add_argument("--workerd-python", type=Path)
     return parser.parse_args()
+
+
+def compatible_release_evidence(args: argparse.Namespace, root: Path,
+                                build: Path, cache: dict[str, str]) -> dict[str, Any] | None:
+    values = {name: getattr(args, "workerd_" + name, None) for name in WORKERD_ARGUMENTS}
+    if not values["acceptance"]:
+        if any(values.values()) or getattr(args, "workerd_python", None):
+            raise RuntimeError("workerd evidence inputs require explicit --workerd-acceptance")
+        return None
+    if any(value is None for value in values.values()):
+        raise RuntimeError("compatible reports require every original workerd evidence input")
+    node = getattr(args, "node_executable", None) or cache.get("CAPSID_HOST_TEST_NODE")
+    if not node or not Path(node).is_file():
+        raise RuntimeError("compatible reports require the configured Node executable")
+    helper = Path(__file__).with_name("replay-workerd-release-acceptance.mjs")
+    command = [str(node), str(helper), "--source-root", str(root), "--build", str(build),
+               "--junit", str(args.junit.resolve())]
+    for name, file in values.items():
+        command.extend(["--" + name.replace("_", "-"), str(file.resolve())])
+    python = getattr(args, "workerd_python", None)
+    if python:
+        command.extend(["--python", str(python)])
+    try:
+        result = json.loads(run(command))
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError("workerd acceptance replay failed: " + str(error.output)[-12000:]) from error
+    if result.get("sourceRoot") != str(root) or result.get("build") != str(build):
+        raise RuntimeError("workerd replay must bind the requested source and build")
+    return result
 
 
 def collect_report(args: argparse.Namespace) -> dict[str, Any]:
@@ -499,9 +572,10 @@ def collect_report(args: argparse.Namespace) -> dict[str, Any]:
     build = args.build_dir.resolve()
     cache = cache_values(build / "CMakeCache.txt")
     baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
+    compatibility = compatible_release_evidence(args, root, build, cache)
     vendor = vendor_evidence(root, build)
     document: dict[str, Any] = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": 2 if compatibility is not None else SCHEMA_VERSION,
         "state": "complete",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "baseline": {
@@ -511,7 +585,7 @@ def collect_report(args: argparse.Namespace) -> dict[str, Any]:
         "vendor": vendor,
         "restricted_source": source_configuration(root, build, cache),
         "audits": run_cmake_audits(root, build, cache, vendor["audit"]),
-        "tests": ctest_evidence(build, args.junit),
+        "tests": ctest_evidence(build, args.junit, compatibility),
         "conformance": {
             "deviations": deviations(root, baseline),
             "wpt_manifest": artifact(root / "tests/wpt/manifest.json", root),
@@ -556,7 +630,14 @@ def main() -> None:
     outputs = [args.output_json.resolve(), args.output_md.resolve()]
     inputs = {args.junit.resolve(), args.baseline.resolve(),
               (args.build_dir / "CMakeCache.txt").resolve(), Path(__file__).resolve()}
-    if outputs[0] == outputs[1] or any(path in inputs or path.is_dir() for path in outputs):
+    inputs.add(Path(__file__).with_name("replay-workerd-release-acceptance.mjs").resolve())
+    for name in WORKERD_ARGUMENTS:
+        value = getattr(args, "workerd_" + name, None)
+        if value is not None:
+            inputs.add(value.resolve())
+    protected_trees = [getattr(args, "workerd_" + name, None) for name in ("gate", "wpt_root")]
+    if (outputs[0] == outputs[1] or any(path in inputs or path.is_dir() for path in outputs)
+            or any(path.is_relative_to(tree.resolve()) for path in outputs for tree in protected_trees if tree is not None)):
         raise RuntimeError("report outputs must be distinct files and cannot replace report inputs")
     status = {"schema_version": SCHEMA_VERSION, "state": "incomplete",
               "generated_at": datetime.now(timezone.utc).isoformat()}

@@ -74,6 +74,11 @@ class ProducerTests(unittest.TestCase):
         self.affinity=set(available);self.addCleanup(lambda:self.assertEqual(self.affinity,os.sched_getaffinity(0)))
         self.temp=tempfile.TemporaryDirectory(prefix='capsid-qps-producer-');self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name);self.source=self.root/'source';self.source.mkdir()
+        # Synthetic archives have no measured processes. Keep the real flock
+        # implementation, with a private path so parallel contract suites do
+        # not contend with each other or with a real performance session.
+        lock_directory=patch('perf_run.temp_directory',return_value=str(self.root))
+        lock_directory.start();self.addCleanup(lock_directory.stop)
         (self.source/'CMakeLists.txt').write_text('project(capsid_runtime VERSION test LANGUAGES C)\n')
         env={k:v for k,v in os.environ.items() if not k.startswith('GIT_')};env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull)
         def git(*argv):
@@ -155,8 +160,18 @@ class ProducerTests(unittest.TestCase):
         def fail(value,adapter):
             if value['phase']=='serving':raise ProbeError('injected','synthetic serving failure')
         self.hook=fail
-        with self.assertRaises(ProbeError):self.run_main()
+        with self.assertRaises(ProbeError) as raised:self.run_main()
+        self.assertEqual('injected',raised.exception.code,'the serving phase must supply the failure')
+        self.assertEqual(['lowLoad','serving'],[phase for _,phase,_ in self.calls])
         self.assertTrue((self.out/'failed.json').is_file());self.assertFalse((self.out/'cells.txt').exists());self.assertFalse((self.out/'lane.json').exists())
+
+    def test_private_session_lock_still_rejects_overlap_and_is_released(self):
+        import perf_run
+        with perf_run.session_lock(True):
+            with self.assertRaises(ProbeError) as raised:
+                with perf_run.session_lock(True):self.fail('concurrent synthetic session accepted')
+            self.assertEqual('session-overlap',raised.exception.code)
+        with perf_run.session_lock(True) as state:self.assertTrue(state['held'])
 
     def test_corrupt_raw_result_cannot_be_replaced_by_a_success_summary(self):
         def fail(value,adapter):
