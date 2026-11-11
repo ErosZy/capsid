@@ -107,7 +107,8 @@ public:
     void log(LogLane lane, LogFields fields);
 
     // Drains both lanes, joins the writer thread. Idempotent; the
-    // destructor calls it as well.
+    // destructor calls it as well. Concurrent callers all wait for the
+    // writer to finish; observing a stop request alone is not a completed flush.
     void flush();
 
     // M2 item 7 metrics input: app-lane events dropped since construction.
@@ -123,6 +124,7 @@ private:
     std::size_t app_capacity_;
     std::size_t control_capacity_;
     std::thread writer_;
+    std::once_flag flush_once_;
     std::atomic<bool> stop_ = false;
     std::atomic<std::uint64_t> dropped_app_ = 0;
     std::atomic<std::uint64_t> accepted_ = 0;

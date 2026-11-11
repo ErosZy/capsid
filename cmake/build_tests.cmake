@@ -937,7 +937,10 @@ if(BUILD_TESTING)
                 structured_log_app_lane_drops_and_counts
                 structured_log_control_lane_never_drops
                 structured_log_control_precedes_app_backlog
-                structured_log_app_lane_is_fifo)
+                structured_log_app_lane_is_fifo
+                structured_log_flush_idle_writer
+                structured_log_flush_after_final_event
+                structured_log_concurrent_flush_joins_writer)
             add_test(
                 NAME "${CAPSID_STRUCTURED_LOG_TEST_ID}"
                 COMMAND test-host-structured-log

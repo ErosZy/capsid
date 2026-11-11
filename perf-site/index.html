@@ -60,7 +60,7 @@
     max-width: 1160px; margin: 0 auto; padding: 0 32px;
     height: 56px; display: flex; align-items: center; gap: 8px;
   }
-  .logo { display: flex; align-items: center; gap: 10px; margin-right: 28px; }
+  .logo { display: flex; align-items: center; gap: 10px; margin-right: 28px; flex-shrink: 0; white-space: nowrap; }
   .logo-mark {
     width: 22px; height: 22px; border-radius: 6px;
     background: linear-gradient(135deg, var(--brand) 0%, #0d9488 100%);
@@ -69,15 +69,22 @@
   }
   .logo-name { font-size: 14.5px; font-weight: 600; color: var(--text); letter-spacing: -0.2px; }
   .logo-name span { color: var(--text-4); font-weight: 400; }
-  .nav-links { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links { display: flex; flex-shrink: 0; gap: 2px; }
   .nav-links a {
     color: var(--text-3); font-size: 13.5px; font-weight: 500;
     padding: 6px 12px; border-radius: 6px; white-space: nowrap;
     transition: color .15s, background .15s;
   }
   .nav-links a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
-  .nav-meta { margin-left: auto; font-size: 12.5px; color: var(--text-4); font-family: var(--mono); white-space: nowrap; }
+  .nav-meta { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; color: var(--text-4); font-family: var(--mono); white-space: nowrap; }
+  @media (max-width: 1020px) { .nav-meta { display: none; } }
+  @media (max-width: 700px) {
+    .nav-in { height: auto; min-height: 56px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 8px; }
+    .logo { margin-right: 0; }
+    .nav-links { flex-basis: 100%; }
+    .nav-links a { padding-left: 10px; padding-right: 10px; }
+    .wrap section { scroll-margin-top: 104px; }
+  }
 
   /* ---------- layout ---------- */
   .wrap { max-width: 1160px; margin: 0 auto; padding: 0 32px 96px; }
@@ -124,7 +131,7 @@
   .kpi .k-label {
     font-size: 11.5px; font-weight: 600; letter-spacing: 0.8px;
     text-transform: uppercase; color: var(--text-4); margin-bottom: 10px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-height: 3em; line-height: 1.5; white-space: normal;
   }
   .kpi .k-value {
     font-size: 36px; font-weight: 800; letter-spacing: -1px; color: var(--text);

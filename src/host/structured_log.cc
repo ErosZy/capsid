@@ -60,10 +60,17 @@ StructuredLog::~StructuredLog() {
 }
 
 void StructuredLog::flush() {
-    if (!stop_.exchange(true)) {
+    std::call_once(flush_once_, [this] {
+        {
+            // Publish the wait predicate under the writer's mutex. An
+            // atomic flag alone permits notify to land between its false
+            // predicate check and the condition-variable wait.
+            std::lock_guard<std::mutex> lock(mutex_);
+            stop_.store(true, std::memory_order_relaxed);
+        }
         queue_ready_.notify_all();
         writer_.join();
-    }
+    });
 }
 
 void StructuredLog::writer_run() {

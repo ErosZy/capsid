@@ -16,6 +16,8 @@
 #endif
 
 #include <chrono>
+#include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -254,6 +256,96 @@ int mode_app_lane_is_fifo() {
     return 0;
 }
 
+int mode_flush_idle_writer() {
+    for (unsigned round = 0; round < 256; ++round) {
+        StructuredLog log([](const std::string&) {
+            fail("an idle logger must not fabricate an event");
+        });
+        std::this_thread::yield();
+        log.flush();
+        log.flush();
+        require(log.accepted_events() == 0, "empty flush changes accepted count");
+    }
+    std::cout << "PASS" << std::endl;
+    return 0;
+}
+
+int mode_flush_after_final_event() {
+    for (unsigned round = 0; round < 256; ++round) {
+        std::atomic<unsigned> delivered{0};
+        StructuredLog log([&](const std::string& line) {
+            require(contains(line, "\"event\":\"shutdown\"") && line.back() == '\n',
+                    "final shutdown record must be delivered intact");
+            delivered.fetch_add(1);
+        });
+        log.log(LogLane::kControl, {.event = "shutdown"});
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (delivered.load() == 0) {
+            require(std::chrono::steady_clock::now() < deadline,
+                    "final event must reach the real writer before flush");
+            std::this_thread::yield();
+        }
+        log.flush();
+        require(delivered.load() == 1 && log.accepted_events() == 1,
+                "flush must preserve the single final event");
+    }
+    std::cout << "PASS" << std::endl;
+    return 0;
+}
+
+int mode_concurrent_flush_joins_writer() {
+    std::mutex gate;
+    std::condition_variable ready;
+    bool sink_entered = false, release_sink = false;
+    unsigned flush_entered = 0, flush_returned = 0, delivered = 0;
+    StructuredLog log([&](const std::string&) {
+        std::unique_lock<std::mutex> lock(gate);
+        if (!sink_entered) {
+            sink_entered = true;
+            ready.notify_all();
+            ready.wait(lock, [&] { return release_sink; });
+        }
+        ++delivered;
+    });
+    log.log(LogLane::kControl, {.event = "startup"});
+    {
+        std::unique_lock<std::mutex> lock(gate);
+        require(ready.wait_for(lock, std::chrono::seconds(2), [&] { return sink_entered; }),
+                "real writer must enter the gated sink");
+    }
+    log.log(LogLane::kApp, {.event = "app_log"});
+    log.log(LogLane::kControl, {.event = "shutdown"});
+    const auto flush = [&] {
+        {
+            std::lock_guard<std::mutex> lock(gate);
+            ++flush_entered;
+            ready.notify_all();
+        }
+        log.flush();
+        {
+            std::lock_guard<std::mutex> lock(gate);
+            ++flush_returned;
+            ready.notify_all();
+        }
+    };
+    std::thread first(flush), second(flush);
+    {
+        std::unique_lock<std::mutex> lock(gate);
+        require(ready.wait_for(lock, std::chrono::seconds(2), [&] { return flush_entered == 2; }),
+                "both concurrent flush callers must start");
+        require(!ready.wait_for(lock, std::chrono::milliseconds(50), [&] { return flush_returned != 0; }),
+                "every flush must wait for the writer, including concurrent callers");
+        release_sink = true;
+        ready.notify_all();
+    }
+    first.join(); second.join();
+    require(flush_returned == 2 && delivered == 3 && log.accepted_events() == 3,
+            "both flush calls must join the writer after both lanes drain");
+    log.flush();
+    std::cout << "PASS" << std::endl;
+    return 0;
+}
+
 #endif  // CAPSID_HAS_STRUCTURED_LOG
 
 }  // namespace
@@ -280,12 +372,18 @@ int main(int argc, char** argv) {
     if (mode == "structured_log_app_lane_is_fifo") {
         return mode_app_lane_is_fifo();
     }
+    if (mode == "structured_log_flush_idle_writer") return mode_flush_idle_writer();
+    if (mode == "structured_log_flush_after_final_event") return mode_flush_after_final_event();
+    if (mode == "structured_log_concurrent_flush_joins_writer") return mode_concurrent_flush_joins_writer();
 #else
     if (mode == "structured_log_emits_single_line_json" ||
         mode == "structured_log_app_lane_drops_and_counts" ||
         mode == "structured_log_control_lane_never_drops" ||
         mode == "structured_log_control_precedes_app_backlog" ||
-        mode == "structured_log_app_lane_is_fifo") {
+        mode == "structured_log_app_lane_is_fifo" ||
+        mode == "structured_log_flush_idle_writer" ||
+        mode == "structured_log_flush_after_final_event" ||
+        mode == "structured_log_concurrent_flush_joins_writer") {
         fail("structured log component is not implemented");
     }
 #endif
