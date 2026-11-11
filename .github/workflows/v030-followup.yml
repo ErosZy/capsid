@@ -1,0 +1,122 @@
+name: v0.3.0 targeted followup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v030-followup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu-network-observation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Observe resolver and public archive connectivity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat /etc/resolv.conf
+          python3 - <<'PY'
+          import json, subprocess
+          hosts = ['github.com', 'packages.microsoft.com', 'archive.ubuntu.com', 'security.ubuntu.com', 'azure.archive.ubuntu.com', 'mirrors.edge.kernel.org']
+          failures = 0
+          for host in hosts:
+              try:
+                  result = subprocess.run(['getent', 'ahostsv4', host], capture_output=True, text=True, timeout=12)
+                  print(json.dumps(dict(host=host, exitCode=result.returncode, addresses=result.stdout.splitlines()[:6], error=result.stderr[:300])), flush=True)
+                  failures += int(result.returncode != 0)
+              except subprocess.TimeoutExpired:
+                  failures += 1
+                  print(json.dumps(dict(host=host, timeout=True)), flush=True)
+          for url in ['https://archive.ubuntu.com/ubuntu/dists/noble/InRelease', 'https://security.ubuntu.com/ubuntu/dists/noble-security/InRelease', 'https://mirrors.edge.kernel.org/ubuntu/dists/noble/InRelease']:
+              result = subprocess.run(['curl', '--head', '--fail', '--show-error', '--silent', '--connect-timeout', '5', '--max-time', '12', url], capture_output=True, text=True, timeout=15)
+              print(json.dumps(dict(url=url, exitCode=result.returncode, headers=result.stdout[:1000], error=result.stderr[:300])), flush=True)
+              failures += int(result.returncode != 0)
+          print(json.dumps(dict(observationComplete=True, failedProbes=failures)), flush=True)
+          raise SystemExit(int(failures != 0))
+          PY
+
+  posix-host-library:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out recursively pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          # The txiki vendor audit derives the pinned tag via git describe;
+          # submodule checkouts must carry the tag refs.
+          fetch-tags: true
+
+      # Keep the POSIX gate honest for the complete M1D Admin surface.  The
+      # transport and long-lived service are intentionally conditional on
+      # Boost, so relying on the runner image could silently skip their
+      # compilation (and miss Linux-only APIs in otherwise POSIX sources).
+      - name: Install macOS Host dependencies
+        run: brew install boost c-ares openssl@3.5
+
+      # The worker bootstrap bundles via esbuild from the locked txiki.js
+      # node_modules; without this the macOS configure fails with
+      # "esbuild is missing".
+      - name: Install locked JavaScript dependencies
+        run: |
+          set -euo pipefail
+          for directory in \
+            vendor/txiki.js \
+            examples/hono-reference \
+            examples/itty-router-reference \
+            examples/h3-v2-reference \
+            examples/elysia-reference
+          do
+            npm ci --ignore-scripts --prefix "${directory}"
+          done
+          # The vendor audit's expected tag must match cmake/build_tests.cmake
+          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
+          git -C vendor/txiki.js fetch --depth=1 origin \
+            refs/tags/v26.6.0:refs/tags/v26.6.0
+
+      # §12.5 macOS row: Host units plus the non-strict worker contracts.
+      # Linux-only strict-sandbox and managed-suite tests are not registered
+      # on macOS (they SKIP by absence, never FAIL), and the §12.3 fresh
+      # second build is excluded here to keep the job inside its time budget
+      # (the Release job runs it on Linux).
+      - name: Configure macOS host library and worker contracts
+        run: |
+          cmake -S . -B build-macos \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3.5);$(brew --prefix boost)" \
+            -DCAPSID_BUILD_HOST=ON \
+            -DCAPSID_BUILD_WORKER=ON \
+            -DCAPSID_ENABLE_LTO=ON
+
+      - name: Build macOS Host, Admin transport, and unit gates
+        run: |
+          cmake --build build-macos --parallel 2
+          # Named targets make a missing/quietly skipped Boost-backed Admin
+          # surface an explicit configuration failure.
+          cmake --build build-macos --parallel 2 --target \
+            capsid-host \
+            test-host-admin-api \
+            test-host-admin-http \
+            test-host-admin-service
+
+      - name: Run POSIX host-side matrix
+        run: |
+          ctest --test-dir build-macos \
+            --no-tests=error \
+            --output-on-failure \
+            --output-junit macos-junit.xml \
+            -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
+
+      - name: Save macOS evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: macos-host-library-evidence
+          if-no-files-found: error
+          path: build-macos/macos-junit.xml
